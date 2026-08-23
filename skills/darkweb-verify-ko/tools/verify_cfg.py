@@ -14,10 +14,26 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
-CFG = Path(__file__).with_name("verify_config.json")
+# 스크립트 옆에 쓰면 읽기 전용 컨테이너에서 실패한다.
+# 환경변수 > 집 설정 폴더 > 스크립트 옆 순서로 본다.
+def _cfg_path() -> Path:
+    env = os.environ.get("DARKCHOCO_CONFIG")
+    if env:
+        return Path(env)
+    home = Path.home() / ".config" / "darkchoco" / "verify_config.json"
+    if home.exists():
+        return home
+    beside = Path(__file__).with_name("verify_config.json")
+    if beside.exists():
+        return beside
+    return home          # 새로 만들 때는 집 쪽에
+
+
+CFG = _cfg_path()
 
 # 이름: (기본값, 고를 수 있는 값, 뜻)
 SPEC = {
@@ -85,9 +101,16 @@ def main() -> None:
         changed = True
 
     if changed:
-        CFG.write_text(json.dumps(cur, ensure_ascii=False, indent=2) + "\n",
-                       encoding="utf-8")
-        print("바꿨다")
+        try:
+            CFG.parent.mkdir(parents=True, exist_ok=True)
+            CFG.write_text(json.dumps(cur, ensure_ascii=False, indent=2) + "\n",
+                           encoding="utf-8")
+            print("바꿨다  %s" % CFG)
+        except OSError as e:
+            print("설정을 저장 못 했다. %s" % e, file=sys.stderr)
+            print("읽기 전용 환경이면 DARKCHOCO_CONFIG 로 쓸 수 있는 경로를 준다.",
+                  file=sys.stderr)
+            print("이번 실행에만 적용된 값은 아래와 같다.", file=sys.stderr)
     show(cur)
 
 

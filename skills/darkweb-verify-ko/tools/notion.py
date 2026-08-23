@@ -1,7 +1,16 @@
 """노션 API 얇은 래퍼.
 
 토큰은 저장소 밖 파일에서 읽는다. 값을 출력하거나 로그에 남기지 않는다.
-환경변수 NOTION_TOKEN_FILE 로 경로를 바꿀 수 있다.
+
+찾는 순서는 넷이다. 먼저 걸리는 것을 쓴다.
+
+    1. NOTION_TOKEN_FILE 환경변수가 가리키는 파일
+    2. /run/secrets/notion_token          도커 관례
+    3. ~/.config/darkchoco/notion_token   사람마다 하나
+    4. ./.notion_token.txt                지금 폴더
+
+**토큰 값을 환경변수로 받지 않는다.** 값을 넣으면 `docker inspect` 와
+셸 히스토리에 남는다. 파일을 마운트하고 그 경로를 준다.
 
     python tools/notion.py search 검증
     python tools/notion.py blocks <page_id>
@@ -19,15 +28,37 @@ from pathlib import Path
 
 API = "https://api.notion.com/v1"
 VERSION = "2025-09-03"
-DEFAULT_TOKEN_FILE = Path(r"C:\Users\kevin\Documents\Q.E.D\.notion_token.txt")
+# 토큰을 찾는 자리. 위에서부터 본다.
+TOKEN_PLACES = [
+    Path("/run/secrets/notion_token"),
+    Path.home() / ".config" / "darkchoco" / "notion_token",
+    Path.home() / ".config" / "darkchoco" / "notion_token.txt",
+    Path.cwd() / ".notion_token.txt",
+]
 TIMEOUT = 30
 RETRY = 3
 
 
+def _token_file() -> Path:
+    """토큰 파일을 찾는다. 못 찾으면 어디를 봤는지 전부 알린다."""
+    env = os.environ.get("NOTION_TOKEN_FILE")
+    places = ([Path(env)] if env else []) + TOKEN_PLACES
+    for p in places:
+        try:
+            if p.is_file():
+                return p
+        except OSError:
+            continue
+    raise SystemExit(
+        "토큰 파일을 못 찾았다. 아래를 봤다.\n  "
+        + "\n  ".join(str(p) for p in places)
+        + "\n\n하나를 만들거나 NOTION_TOKEN_FILE 로 경로를 준다.\n"
+          "도커면 -v <토큰파일>:/run/secrets/notion_token:ro 로 붙인다.\n"
+          "노션 없이도 ③④⑤⑥ 은 돈다. 그 절을 안 봄 으로 적고 진행하면 된다.")
+
+
 def _token() -> str:
-    p = Path(os.environ.get("NOTION_TOKEN_FILE", DEFAULT_TOKEN_FILE))
-    if not p.exists():
-        raise SystemExit(f"토큰 파일이 없다: {p}")
+    p = _token_file()
     t = p.read_text(encoding="utf-8").strip()
     if not t:
         raise SystemExit(f"토큰 파일이 비어 있다: {p}")
