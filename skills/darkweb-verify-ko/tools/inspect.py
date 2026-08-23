@@ -190,8 +190,22 @@ def main() -> None:
         raise SystemExit("폴더가 아니다: %s" % case)
 
     # 케이스 폴더 옆에 두지 않는다. 공유폴더는 분석이 끝나면 비우는 자리다.
-    out = Path(args.out).resolve() if args.out else Path.cwd() / "07_케이스" / case.name
-    out.mkdir(parents=True, exist_ok=True)
+    if args.out:
+        out = Path(args.out).resolve()
+    else:
+        # 기본값은 지금 폴더 아래다. 컨테이너에서 cwd 가 / 면 뿌리에 쓰게 된다.
+        cwd = Path.cwd()
+        if cwd == Path(cwd.anchor):
+            raise SystemExit(
+                "지금 폴더가 뿌리(%s)라 결과를 둘 자리를 못 정한다.\n"
+                "--out 으로 쓸 폴더를 준다. 도커면 -v 로 붙인 자리다.\n"
+                "  예) --out /out/%s" % (cwd, case.name))
+        out = cwd / "07_케이스" / case.name
+    try:
+        out.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        raise SystemExit("결과 폴더를 못 만든다: %s\n  %s\n"
+                         "--out 으로 쓸 수 있는 자리를 준다." % (out, e))
     if out.resolve() == case.resolve() or case.resolve() in out.resolve().parents:
         raise SystemExit("결과 폴더가 케이스 폴더 안이다. --out 으로 밖을 지정할 것")
 

@@ -26,6 +26,53 @@ codex
 
 둘 다 같은 `skills/darkweb-verify-ko/references/` 를 읽는다.
 
+### 도커
+
+받은 데이터를 격리해서 다루고 싶으면 쓴다.
+
+```bash
+docker build -t darkchoco-verify .
+```
+
+**컨테이너는 VM 이 아니다.** 호스트와 커널을 함께 쓴다.
+압축을 풀거나 처음 여는 일은 VM 에서 하고, 여기에는 텍스트로 확인된 것만 넣는다.
+
+```bash
+docker run --rm \
+  --network none \
+  --user 1000:1000 \
+  --cap-drop ALL \
+  --security-opt no-new-privileges \
+  --memory 2g --pids-limit 128 \
+  -v "$PWD/재료:/data:ro" \
+  -v "$PWD/결과:/out" \
+  darkchoco-verify \
+  python /tools/inspect.py /data/<케이스> --out /out/<케이스>
+```
+
+| 옵션 | 막는 것 |
+|---|---|
+| `--network none` | 밖으로 나가는 것 전부 |
+| `:ro` | 재료 폴더에 쓰기 |
+| `--user 1000:1000` | 루트 실행. 붙인 폴더에 루트 소유 파일이 안 생긴다 |
+| `--cap-drop ALL` | 커널 권한 |
+| `--memory` `--pids-limit` | 압축 폭탄, 포크 폭탄 |
+
+`--network none` 이면 노션 도구가 안 돈다. 그건 정상이다.
+③ 을 `안 봄(팀 DB 없음)` 으로 적고 ⑥ 은 9번 절을 안 낸다. ④⑤ 는 그대로 돈다.
+
+노션까지 쓰려면 네트워크를 열고 토큰 파일을 붙인다.
+
+```bash
+docker run --rm \
+  -v "$HOME/.config/darkchoco/notion_token:/run/secrets/notion_token:ro" \
+  -v "$PWD/재료:/data:ro" -v "$PWD/결과:/out" \
+  darkchoco-verify python /tools/notion_find.py 수집 <대상 조직>
+```
+
+**토큰 값을 `-e` 로 넘기지 마라.** `docker inspect` 와 셸 히스토리에 남는다.
+파일을 붙이고 경로를 준다.
+
 ## 웹 조회 도구
 
 스크래핑 도구가 붙어 있으면 결과가 더 좋다. Firecrawl MCP 같은 것이다.
@@ -166,12 +213,43 @@ python tools/notion_row.py 검증 out9.txt --commit               # 실제로 �
 
 토큰은 레포 밖 파일에서 읽는다. **코드에 값을 넣지 않는다.**
 
+찾는 순서는 넷이다. 먼저 걸리는 것을 쓴다.
+
+| 순서 | 자리 | 언제 |
+|---|---|---|
+| 1 | `NOTION_TOKEN_FILE` 이 가리키는 파일 | 직접 지정할 때 |
+| 2 | `/run/secrets/notion_token` | 도커 |
+| 3 | `~/.config/darkchoco/notion_token` | 보통 |
+| 4 | `./.notion_token.txt` | 지금 폴더 |
+
+3번을 권한다. 사람마다 하나면 되고 레포 밖이다.
+
 ```bash
-export NOTION_TOKEN_FILE=/경로/.notion_token.txt
+mkdir -p ~/.config/darkchoco
+printf '%s' 'ntn_...' > ~/.config/darkchoco/notion_token
+chmod 600 ~/.config/darkchoco/notion_token
 ```
+
+**토큰 값을 환경변수로 받지 않는다.** 값을 넣으면 프로세스 목록과
+`docker inspect` 에 남는다. 파일 경로만 받는다.
+
+못 찾으면 어디를 봤는지 전부 알려준다.
 
 토큰은 notion.so/my-integrations 에서 Internal integration 으로 발급한다.
 쓸 페이지에서 Connections 에 그 integration 을 추가한다. 안 하면 404가 난다.
+
+## 출력 방식
+
+⑥ 은 로그 전부를 md 로 쓰고 화면에는 요약 네 절만 낸다.
+
+```bash
+python tools/verify_cfg.py            지금 설정
+python tools/verify_cfg.py 화면=전체   로그도 화면에
+python tools/verify_cfg.py --기본값
+```
+
+설정 파일은 `~/.config/darkchoco/verify_config.json` 이다.
+`DARKCHOCO_CONFIG` 로 자리를 바꾼다. 읽기 전용 환경이면 그쪽을 쓴다.
 
 ## 구성
 
