@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import codecs
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -74,6 +75,71 @@ HIDDEN = {
 def hidden_chars(s: str) -> list[str]:
     """이름에 숨은 방향 제어 문자. 있으면 확장자가 거짓말일 수 있다."""
     return sorted({HIDDEN[c] for c in s if c in HIDDEN})
+
+
+# 윈도우가 못 쓰는 문자와 예약어. 공유폴더가 호스트와 이어져 있어서 걸린다.
+BAD_CHARS = set('<>:"|?*') | {chr(c) for c in range(32)}
+RESERVED = {"con", "prn", "aux", "nul"} | {"com%d" % i for i in range(1, 10)} \
+    | {"lpt%d" % i for i in range(1, 10)}
+
+
+def win_unsafe(name: str) -> list[str]:
+    """윈도우에서 문제가 되는 이름인가. 리눅스 VM 에서 온 것이 걸린다."""
+    out = []
+    bad = sorted({c for c in name if c in BAD_CHARS})
+    if bad:
+        out.append("못 쓰는 문자 " + " ".join(repr(c) for c in bad))
+    stem = name.split(".")[0].lower().rstrip(" ")
+    if stem in RESERVED:
+        out.append("예약된 장치 이름 %s" % stem.upper())
+    if name != name.rstrip(" ."):
+        out.append("끝에 공백이나 점")
+    return out
+
+
+def streams(path: Path) -> list[str]:
+    """NTFS 대체 데이터 스트림. 본 스트림 뒤에 숨은 것을 찾는다.
+
+    윈도우가 아니면 빈 목록을 낸다. 없다고 단정하지 않는다.
+    """
+    if os.name != "nt":
+        return []
+    try:
+        import ctypes
+        from ctypes import wintypes
+    except ImportError:
+        return []
+
+    class WIN32_FIND_STREAM_DATA(ctypes.Structure):
+        _fields_ = [("StreamSize", ctypes.c_longlong),
+                    ("cStreamName", ctypes.c_wchar * 296)]
+
+    k32 = ctypes.windll.kernel32
+    # 핸들은 포인터 크기다. 타입을 안 알려주면 int 로 넘어가 넘친다.
+    k32.FindFirstStreamW.restype = wintypes.HANDLE
+    k32.FindFirstStreamW.argtypes = [wintypes.LPCWSTR, ctypes.c_int,
+                                     ctypes.c_void_p, wintypes.DWORD]
+    k32.FindNextStreamW.restype = wintypes.BOOL
+    k32.FindNextStreamW.argtypes = [wintypes.HANDLE, ctypes.c_void_p]
+    k32.FindClose.restype = wintypes.BOOL
+    k32.FindClose.argtypes = [wintypes.HANDLE]
+
+    INVALID = ctypes.cast(ctypes.c_void_p(-1), wintypes.HANDLE).value
+    data = WIN32_FIND_STREAM_DATA()
+    h = k32.FindFirstStreamW(str(path), 0, ctypes.byref(data), 0)
+    if not h or h == INVALID:
+        return []
+    out = []
+    try:
+        while True:
+            nm = data.cStreamName
+            if nm and not nm.startswith("::$DATA"):
+                out.append("%s (%d바이트)" % (nm.strip(":").split(":")[0], data.StreamSize))
+            if not k32.FindNextStreamW(h, ctypes.byref(data)):
+                break
+    finally:
+        k32.FindClose(h)
+    return out
 
 
 def escape_hidden(s: str) -> str:
@@ -221,7 +287,10 @@ def main() -> None:
         fake = lied(p, kind, tk)
         rel = p.relative_to(case).as_posix()
         hid = hidden_chars(rel)
+        unsafe = win_unsafe(p.name)
+        ads = streams(p)
         rows.append({"path": p, "rel": rel, "kind": kind,
+                     "unsafe": unsafe, "ads": ads,
                      "astext": tk[0] if tk else "", "why": why,
                      "size": p.stat().st_size, "fake": fake, "hidden": hid,
                      "tool": TOOL.get(p.suffix.lower(), "")
@@ -230,6 +299,14 @@ def main() -> None:
 
     faked = [r for r in rows if r["fake"]]
     hidden = [r for r in rows if r["hidden"]]
+    unsafe = [r for r in rows if r["unsafe"]]
+    withads = [r for r in rows if r["ads"]]
+
+    # 대소문자만 다른 이름. 리눅스에서는 둘인데 윈도우에서 하나가 덮인다.
+    seen_low: dict = {}
+    for r in rows:
+        seen_low.setdefault(r["rel"].lower(), []).append(r["rel"])
+    clash = [v for v in seen_low.values() if len(v) > 1]
     skipped_kind = [r for r in rows if r["kind"] not in (SAFE, "빈 파일")
                     and not r["fake"] and not r["hidden"]]
 
@@ -277,6 +354,41 @@ def main() -> None:
     L.append("")
     L.append("파일 %d개 · %s" % (len(rows), human(total)))
     L.append("")
+
+    if withads:
+        L.append("## 숨은 스트림이 붙은 파일 %d건" % len(withads))
+        L.append("")
+        L.append("| 파일 | 스트림 |")
+        L.append("|---|---|")
+        for r in withads:
+            L.append("| %s | %s |" % (escape_hidden(r["rel"]), ", ".join(r["ads"])))
+        L.append("")
+        L.append("**본 스트림 뒤에 다른 내용이 붙어 있다.** 도구는 본 스트림만 읽었다.")
+        L.append("`Zone.Identifier` 는 인터넷에서 받았다는 표시라 정상이다.")
+        L.append("그 밖의 이름이면 사람이 먼저 본다.")
+        L.append("")
+
+    if clash:
+        L.append("## 대소문자만 다른 이름 %d쌍" % len(clash))
+        L.append("")
+        for v in clash[:20]:
+            L.append("- " + " · ".join(escape_hidden(x) for x in v))
+        L.append("")
+        L.append("**리눅스에서는 다른 파일이고 윈도우에서는 같은 파일이다.**")
+        L.append("공유폴더로 옮길 때 하나가 조용히 덮인다. VM 안에서 이름을 갈라 놓는다.")
+        L.append("")
+
+    if unsafe:
+        L.append("## 윈도우에서 문제가 되는 이름 %d건" % len(unsafe))
+        L.append("")
+        L.append("| 파일 | 무엇 |")
+        L.append("|---|---|")
+        for r in unsafe:
+            L.append("| %s | %s |" % (escape_hidden(r["rel"]), ", ".join(r["unsafe"])))
+        L.append("")
+        L.append("**공유폴더로 옮기다 빠지거나 엉뚱한 자리로 간다.**")
+        L.append("VM 안에서 이름을 바꾼 뒤 옮긴다. 원래 이름은 따로 적어 둔다.")
+        L.append("")
 
     if hidden:
         L.append("## 이름에 숨은 문자 %d건" % len(hidden))
@@ -361,6 +473,9 @@ def main() -> None:
     print("파일     %d개 · %s" % (len(rows), human(total)))
     print("속인 것  %d건" % len(faked))
     print("숨은 문자 %d건" % len(hidden))
+    print("숨은 스트림 %d건" % len(withads))
+    print("이름 충돌  %d쌍" % len(clash))
+    print("못 쓰는 이름 %d건" % len(unsafe))
     print("안 다룸  %d건" % len(skipped_kind))
     print("만든 것  %d개" % (len(made) + (1 if tree_ok else 0)))
     print("요약     %s" % (out / "00_요약.md"))
