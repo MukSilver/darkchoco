@@ -260,7 +260,7 @@ skills/darkweb-verify-ko/
   tools/                스킬 안에 같이 설치되는 사본
 AGENTS.md               Codex 진입점
 docs/                   개정 경위
-tools/                  tree_scan, notion, notion_push, notion_find, notion_row
+  tools/                도구 전부. 스킬과 같은 자리다
 ```
 
 ## 정본
