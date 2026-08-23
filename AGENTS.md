@@ -66,7 +66,7 @@ Claude Code는 `skills/darkweb-verify-ko/SKILL.md` 를, Codex는 이 파일을 �
 | 파일 트리 | AI | `tree-analysis.md` |
 | 발행처 목록 | 참고 | `publishers.md` |
 
-도구도 마찬가지다. `tools/` 또는 `06_도구/tools/` 에 있다.
+도구는 `skills/darkweb-verify-ko/tools/` 에 있다. 스킬과 한 자리다.
 
 ## 크거나 오래 걸릴 때는 먼저 묻는다
 

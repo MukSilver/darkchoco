@@ -15,7 +15,7 @@ FROM python:3.12-slim
 
 WORKDIR /work
 
-COPY tools/ /tools/
+COPY skills/darkweb-verify-ko/tools/ /tools/
 
 # 루트로 돌지 않는다. 붙인 폴더에 루트 소유 파일을 만들지 않는다.
 RUN useradd --create-home --uid 1000 verify \
