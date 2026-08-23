@@ -29,6 +29,24 @@ from pathlib import Path
 MAX_ROWS = 0          # 0 이면 전부 읽는다
 TOP_DOMAIN = 8
 
+# 칸 이름으로 가리는 것. db_tree 의 SENSITIVE 와 같은 규칙이다.
+# 값이 적거나 평문이라 값으로는 안 걸리는 것을 이름으로 잡는다.
+# 1행짜리 관리자 표가 그렇다. 분포가 없어 값 기준으로는 아무것도 안 나온다.
+COLNAME = [
+    ("주민번호", r"jumin|ssn|rrn|resident|주민"),
+    ("이름", r"^name$|user_?name|real_?name|이름|_nm$|^nm$"),
+    ("이메일", r"e?mail|이메일"),
+    ("전화", r"tel|phone|mobile|^hp$|휴대|전화"),
+    ("주소", r"addr|주소|zip|우편"),
+    ("생년월일", r"birth|생년|생일"),
+    ("계정", r"passw|pwd|^pws$|login|userid|user_?id|account"),
+    ("카드·금융", r"card|bank|account_?no|계좌|카드"),
+    ("결제 연동", r"\bpg_|_pg\b|merchant|^mid$|_mid$|가맹"),
+    ("자격증명", r"secret|token|api_?key|private_?key|passw|pwd|^pws$"),
+]
+# 관리자 계열. 위 계정·자격증명과 같은 칸에 걸리면 무게가 다르다.
+ADMIN_COL = r"master|admin|manager|^root|super_?user|operator|관리자"
+
 PAT = {
     "이메일": re.compile(r"^[\w.+-]{1,64}@[\w-]+\.[\w.]{2,}$"),
     "휴대전화": re.compile(r"^01[016789][-. ]?\d{3,4}[-. ]?\d{4}$"),
@@ -165,6 +183,20 @@ def read_sql(path: Path, limit: int, table: str) -> tuple[list[str], list[list[s
 
 ADDR_MAX = 120     # 주소는 이보다 길지 않다
 LONG_TEXT = 1000   # 이보다 긴 값이 있고 가운뎃값도 크면 자유 서술로 본다
+
+
+def col_kind(col: str) -> str | None:
+    """칸 이름으로 가린다. 값으로 못 잡는 것을 여기서 잡는다."""
+    low = (col or "").lower()
+    for label, rx in COLNAME:
+        if re.search(rx, low):
+            return label
+    return None
+
+
+def is_admin_col(col: str) -> bool:
+    """관리자 계열 칸인가. 자격증명과 겹치면 등급이 올라간다."""
+    return bool(re.search(ADMIN_COL, (col or "").lower()))
 
 
 def guess(vals: list[str]) -> str:
@@ -320,6 +352,7 @@ def main() -> None:
     L.append("## 칸별 패턴")
     L.append("")
     risky = []
+    byname = []
     for i, name in enumerate(header):
         kind = guess(cols[i])
         L.append(f"### {name}")
@@ -327,17 +360,46 @@ def main() -> None:
         L.append("")
         if kind in ("주민번호형", "휴대전화", "유선전화", "이메일", "한글이름", "주소"):
             risky.append((name, kind, len(cols[i])))
+        # 값으로 못 잡은 것을 칸 이름으로 잡는다.
+        # 1행짜리 관리자 표는 분포가 없어 값 기준으로는 아무것도 안 나온다.
+        ck = col_kind(name)
+        if ck and not any(name == r[0] for r in risky):
+            byname.append((name, ck, is_admin_col(name), len(cols[i])))
 
     L.append("## 개인정보로 보이는 칸")
     L.append("")
     if risky:
+        L.append("값에서 잡은 것이다. 실제로 그 형식의 값이 들어 있다.")
+        L.append("")
         L.append("| 칸 | 종류 | 채운 행 |")
         L.append("|---|---|---|")
         for name, kind, c in risky:
             L.append(f"| {name} | {kind} | {c:,} |")
     else:
-        L.append("없음")
+        L.append("값에서 잡은 것 없음")
     L.append("")
+
+    if byname:
+        adm = [x for x in byname if x[2]]
+        L.append(f"### 칸 이름으로 잡은 것 {len(byname)}개")
+        L.append("")
+        L.append("**값으로는 안 걸렸다.** 행이 적거나 평문이라 형식이 안 잡히는 경우다.")
+        L.append("1행짜리 관리자 표가 그렇다. 분포가 없어 값 기준으로는 아무것도 안 나온다.")
+        L.append("")
+        L.append("| 칸 | 종류 | 관리자 계열 | 채운 행 |")
+        L.append("|---|---|---|---|")
+        for name, kind, admin, c in byname[:40]:
+            L.append(f"| {name} | {kind} | {'**예**' if admin else '-'} | {c:,} |")
+        if len(byname) > 40:
+            L.append(f"| 외 {len(byname) - 40}개 | | | |")
+        L.append("")
+        if adm:
+            L.append(f"**관리자 계열 칸이 {len(adm)}개다.** "
+                     + ", ".join(x[0] for x in adm[:8])
+                     + (" ..." if len(adm) > 8 else ""))
+            L.append("자격증명이 함께 있으면 자산 민감도 치명 후보다.")
+            L.append("그 값으로 시스템에 들어갈 수 있는지가 기준이다. 개인정보의 양이 아니다.")
+            L.append("")
     L.append("## 합성 의심 정리")
     L.append("")
     synth = []

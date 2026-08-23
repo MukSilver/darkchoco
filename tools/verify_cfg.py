@@ -80,6 +80,10 @@ def show(cur: dict) -> None:
 
 def main() -> None:
     args = [a for a in sys.argv[1:]]
+    if {"-h", "--help", "--도움말"} & set(args):
+        print(__doc__)
+        show(load())
+        return
     if "--기본값" in args:
         if CFG.exists():
             CFG.unlink()
