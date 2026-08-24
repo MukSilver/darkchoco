@@ -43,6 +43,7 @@ docker run --rm \
   --user 1000:1000 \
   --cap-drop ALL \
   --security-opt no-new-privileges \
+  --read-only --tmpfs /tmp \
   --memory 2g --pids-limit 128 \
   -v "$PWD/재료:/data:ro" \
   -v "$PWD/결과:/out" \
@@ -56,7 +57,24 @@ docker run --rm \
 | `:ro` | 재료 폴더에 쓰기 |
 | `--user 1000:1000` | 루트 실행. 붙인 폴더에 루트 소유 파일이 안 생긴다 |
 | `--cap-drop ALL` | 커널 권한 |
-| `--memory` `--pids-limit` | 압축 폭탄, 포크 폭탄 |
+| `--read-only` | 컨테이너 파일시스템에 쓰기. 쓸 수 있는 곳은 `/tmp` 와 `/out` 뿐이다 |
+| `--memory` `--pids-limit` | 메모리 폭탄, 포크 폭탄 |
+
+**`--tmpfs /tmp` 를 빼면 안 된다.** `--read-only` 와 짝이다.
+`verify_cfg.py` 가 설정을 `/tmp` 에 쓰는데 그 자리가 막히면 죽는다.
+
+**디스크는 못 막는다.** bind mount 에는 크기 제한이 안 걸린다.
+`/out` 이 차면 호스트 디스크가 찬다. 그래서 **압축을 컨테이너에서 풀지 않는다.**
+
+    -v /var/run/docker.sock:/var/run/docker.sock     ← 절대 붙이지 마라
+
+붙이면 컨테이너 안에서 호스트에 루트로 컨테이너를 띄울 수 있다. 격리가 없어진다.
+
+베이스 이미지를 고정하고 싶으면 태그 대신 다이제스트를 쓴다. 태그는 내용이 바뀐다.
+
+    FROM python:3.12-slim@sha256:<...>
+
+무엇이 VM 과 같고 무엇이 다른지는 `docs/도커와_VM_대조_20260824.md` 에 있다.
 
 `--network none` 이면 노션 도구가 안 돈다. 그건 정상이다.
 ③ 을 `안 봄(팀 DB 없음)` 으로 적고 ⑥ 은 9번 절을 안 낸다. ④⑤ 는 그대로 돈다.
@@ -65,6 +83,8 @@ docker run --rm \
 
 ```bash
 docker run --rm \
+  --user 1000:1000 --cap-drop ALL --security-opt no-new-privileges \
+  --read-only --tmpfs /tmp \
   -v "$HOME/.config/darkchoco/notion_token:/run/secrets/notion_token:ro" \
   -v "$PWD/재료:/data:ro" -v "$PWD/결과:/out" \
   darkchoco-verify python /tools/notion_find.py 수집 <대상 조직>
