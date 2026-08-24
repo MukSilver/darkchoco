@@ -93,6 +93,27 @@ docker run --rm \
 **토큰 값을 `-e` 로 넘기지 마라.** `docker inspect` 와 셸 히스토리에 남는다.
 파일을 붙이고 경로를 준다.
 
+#### 윈도우 Git Bash 에서
+
+`/tmp` 같은 경로를 윈도우 경로로 바꿔 버린다. 앞에 이것을 붙인다.
+
+```bash
+MSYS_NO_PATHCONV=1 docker run --rm ... --tmpfs /tmp ...
+```
+
+안 붙이면 `invalid mount path: 'C' mount path must be absolute` 가 난다.
+PowerShell 과 리눅스에서는 필요 없다.
+
+#### 2026-08-24 확인함
+
+| 확인 | 결과 |
+|---|---|
+| `/` 와 `/tools` 에 쓰기 | 막힘 |
+| `/tmp` 에 쓰기 | 됨. `verify_cfg.py` 가 여기 쓴다 |
+| 밖으로 나가는 요청 | 막힘 |
+| 루트로 도는가 | 아니다. `uid=1000(verify)` |
+| `inspect.py` 로 케이스 하나 | 산출물 다섯 개가 `/out` 에 나옴 |
+
 ## 웹 조회 도구
 
 스크래핑 도구가 붙어 있으면 결과가 더 좋다. Firecrawl MCP 같은 것이다.
