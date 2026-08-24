@@ -215,6 +215,7 @@ mysqldump 는 한 줄이 수 MB 다. 앞부분만 읽으면 표 구조도 규모
 
 `tools/` 가 이 스킬 폴더 안에 함께 설치된다. 프로젝트 폴더 밖에서 불려도 돈다.
 
+    tools/alert_parse.py    유출 알림 한 덩어리를 ③ 입력으로
     tools/notion_find.py    팀 DB 조회
     tools/notion_row.py     DB 행 생성
     tools/notion_push.py    페이지 올리기
