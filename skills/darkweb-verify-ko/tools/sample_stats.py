@@ -199,6 +199,22 @@ def is_admin_col(col: str) -> bool:
     return bool(re.search(ADMIN_COL, (col or "").lower()))
 
 
+def grade_of(table: str, cols: list[str]) -> tuple[str, str]:
+    """자산 민감도 등급. db_tree 의 규칙을 그대로 빌린다.
+
+    같은 규칙을 두 곳에 적으면 어긋난다. 그래서 부른다.
+    못 부르면 등급을 내지 않고 그 사실을 적는다. 조용히 넘어가지 않는다.
+    """
+    try:
+        d = str(Path(__file__).parent)
+        if d not in sys.path:
+            sys.path.insert(0, d)
+        from db_tree import grade_of as _g
+        return _g(table, cols)
+    except Exception as e:
+        return "", "db_tree 를 못 불러와 등급을 못 냈다 (%s)" % type(e).__name__
+
+
 def guess(vals: list[str]) -> str:
     """빈 값을 뺀 값들로 종류를 고른다. 가장 많이 맞는 하나."""
     if not vals:
@@ -400,6 +416,23 @@ def main() -> None:
             L.append("자격증명이 함께 있으면 자산 민감도 치명 후보다.")
             L.append("그 값으로 시스템에 들어갈 수 있는지가 기준이다. 개인정보의 양이 아니다.")
             L.append("")
+
+    # 표 단위 자산 민감도. CSV 로 온 표는 db_tree 가 안 보므로 여기서 낸다
+    tname = args.table or path.stem
+    g, why = grade_of(tname, header)
+    L.append("## 자산 민감도 (표 단위)")
+    L.append("")
+    if g:
+        L.append(f"**{g}** — {why}")
+        L.append("")
+        L.append(f"표 이름은 `{tname}` 로 봤다. 칸 이름만 보고 매긴 것이라 "
+                 "값이 실제로 들어 있는지는 못 본다.")
+    else:
+        L.append(f"등급 못 냄 — {why}")
+    L.append("")
+    L.append("**파일 단위 등급과 축이 다르다. 합치지 마라.** "
+             "파일 단위는 `tree_scan` 이 낸다. 둘 다 적는다.")
+    L.append("")
     L.append("## 합성 의심 정리")
     L.append("")
     synth = []
