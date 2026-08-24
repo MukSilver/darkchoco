@@ -7,8 +7,15 @@
     python bookmarklets/build_bookmarklet.py                       같은 폴더의 .js 전부
     python bookmarklets/build_bookmarklet.py bookmarklets/qilin_kit.js   하나만
     python bookmarklets/build_bookmarklet.py --no-check             node 없을 때
+    python bookmarklets/build_bookmarklet.py --raw                  최소화 없이
 
 foo.js  ->  foo.bookmarklet.txt
+
+**terser 가 있으면 최소화한다.** 변수명까지 줄여 절반이 된다.
+없으면 줄만 합친다. 없다고 멈추지 않는다.
+
+최소화하면 사람이 못 읽는다. 그래서 소스를 레포에 둔다.
+forum_kit 이 소스를 잃었던 것이 그 규칙이 없어서였다.
 """
 from __future__ import annotations
 
@@ -30,6 +37,30 @@ def to_one_line(src: str) -> str:
     body = re.sub(r"\n\s*", " ", body)
     body = re.sub(r"\s{2,}", " ", body)
     return "javascript:" + body.strip()
+
+
+def minify(src: str) -> tuple[str, str]:
+    """terser 로 줄인다. (결과, 어떻게 했나). 못 부르면 원본을 그대로 준다."""
+    tmp = Path(tempfile.gettempdir()) / "_bookmarklet_min.js"
+    tmp.write_text(src, encoding="utf-8")
+    out = Path(tempfile.gettempdir()) / "_bookmarklet_min.out.js"
+    try:
+        p = subprocess.run(
+            ["npx", "-y", "terser", str(tmp), "-c", "-m", "-o", str(out)],
+            capture_output=True, timeout=180, encoding="utf-8",
+            errors="replace", shell=(sys.platform == "win32"))
+        if p.returncode == 0 and out.exists():
+            r = out.read_text(encoding="utf-8")
+            if r.strip():
+                return r, "terser"
+        return src, "terser 실패. 줄만 합침"
+    except FileNotFoundError:
+        return src, "terser 없음. 줄만 합침"
+    except subprocess.TimeoutExpired:
+        return src, "terser 가 180초를 넘김. 줄만 합침"
+    finally:
+        tmp.unlink(missing_ok=True)
+        out.unlink(missing_ok=True)
 
 
 def line_comments(src: str) -> list[int]:
@@ -60,7 +91,7 @@ def node_check(code: str) -> tuple[bool, str]:
         tmp.unlink(missing_ok=True)
 
 
-def build(js: Path, do_check: bool) -> bool:
+def build(js: Path, do_check: bool, raw: bool = False) -> bool:
     out = js.with_suffix("")
     out = out.with_name(out.name + ".bookmarklet.txt")
     src = js.read_text(encoding="utf-8")
@@ -72,6 +103,13 @@ def build(js: Path, do_check: bool) -> bool:
         return False
 
     one = to_one_line(src)
+    how = "줄만 합침"
+
+    if not raw:
+        code = one[len("javascript:"):]
+        small, how = minify(code)
+        if len(small) < len(code):
+            one = "javascript:" + small.strip()
 
     if do_check:
         ok, err = node_check(one[len("javascript:"):])
@@ -88,7 +126,7 @@ def build(js: Path, do_check: bool) -> bool:
     before = len(out.read_text(encoding="utf-8")) if out.exists() else 0
     out.write_text(one, encoding="utf-8")
     delta = f"{before:,} -> " if before else ""
-    print(f"  만듦    {out.name}  {delta}{len(one):,}자{warn}")
+    print(f"  만듦    {out.name}  {delta}{len(one):,}자  [{how}]{warn}")
     return True
 
 
@@ -96,6 +134,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("files", nargs="*", help="비우면 같은 폴더의 .js 전부")
     ap.add_argument("--no-check", action="store_true", help="문법 검사를 건너뛴다")
+    ap.add_argument("--raw", action="store_true", help="최소화 없이 줄만 합친다")
     args = ap.parse_args()
 
     targets = [Path(f) for f in args.files] if args.files else sorted(HERE.glob("*.js"))
@@ -108,7 +147,7 @@ def main() -> None:
             print(f"{js}\n  없는 파일")
             continue
         print(js.name)
-        made += build(js, not args.no_check)
+        made += build(js, not args.no_check, args.raw)
 
     print(f"\n{made}/{len(targets)} 개 만듦")
     if made < len(targets):
