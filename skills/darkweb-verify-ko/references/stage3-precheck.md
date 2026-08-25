@@ -1,5 +1,9 @@
 # ③ 사전 확인
 
+    담당 스킬
+    도구 tools/alert_parse.py · tools/inspect.py · tools/notion_find.py
+    개정 2026-08-24 · 정본은 grute02/darkchoco-skills
+
 출력 범위: 관련 자료가 있는지까지만. 판정하지 않는다.
 
 돌리기 전에 두 가지를 준비한다.
