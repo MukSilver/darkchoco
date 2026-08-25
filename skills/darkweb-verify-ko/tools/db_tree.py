@@ -56,9 +56,17 @@ def split_defs(body: str) -> list[str]:
         out.append("".join(cur).strip())
     return out
 
+# 사람을 가리키는 앞말. `_name` 을 통째로 잡으면 안 된다.
+# file_name, shop_name, menu_name, table_name 이 다 사람 이름이 된다.
+# 한 케이스 cs_admin 에 shop_name 이 실제로 있었다.
+WHO = (r"user|real|writer|author|buy|sell|member|mem|cust|customer|client"
+       r"|recv|receiv|send|deliv|orderer|emp|employ|staff|guest|applicant"
+       r"|patient|student|parent|own|contact|person|holder|pay")
+
 SENSITIVE = [
     ("주민번호", r"jumin|ssn|rrn|resident|주민"),
-    ("이름", r"^name$|user_?name|real_?name|이름|_nm$|^nm$"),
+    ("여권", r"passport|여권"),
+    ("이름", r"^name$|(?:" + WHO + r")(?:er|or|ee)?_?name|이름|성명|_nm$|^nm$"),
     ("이메일", r"e?mail|이메일"),
     ("전화", r"tel|phone|mobile|^hp$|휴대|전화"),
     ("주소", r"addr|주소|zip|우편"),
@@ -116,6 +124,14 @@ INFRA = re.compile(
     r"|private_?key|access_?key|service_?account|connection_?string",
     re.I)
 PUBLIC = re.compile(r"^zip|우편|postal|^code$|region|sido|gugun|법정동|행정동", re.I)
+
+# 키-값 표. 칸이 name 과 value 뿐이면 칸 이름으로는 아무것도 안 보인다.
+# 안에 DB 접속 정보가 들어 있어도 못 잡는다. 사람이 값을 봐야 한다.
+KV_TABLE = re.compile(r"config|setting|option|env|param|propert|prefs?|환경|설정", re.I)
+KV_COL = re.compile(
+    r"^(idx|id|no|seq|num|key|k|name|var|code|type|kind|group|category|cate"
+    r"|value|val|v|content|data|txt|text|memo|desc|comment|note"
+    r"|sort|ord|use_?yn|del_?yn|created?|updated?|reg_?date|mod_?date|date)$", re.I)
 IDENT = {"이름", "이메일", "전화", "주소"}
 GRADES = ["치명", "높음", "중간", "낮음", "미분류"]
 
@@ -150,12 +166,19 @@ def grade_of(table: str, cols: list[str]) -> tuple[str, str]:
         return "치명", "인프라 접속 자격 칸이 있다 (%s)" % ", ".join(sorted(set(infra + pwd))[:3])
     if "주민번호" in kinds:
         return "높음", "주민번호 칸이 있다. 값이 들었는지는 못 봤다"
+    if "여권" in kinds:
+        return "높음", "여권번호 칸이 있다. 값이 들었는지는 못 봤다"
     if "카드·금융" in kinds:
         return "높음", "카드·금융 칸이 있다"
     if pwd:
         return "높음", "비밀번호 칸이 있다 (%s)" % ", ".join(pwd[:3])
     if PUBLIC.search(table) and not (kinds - {"주소"}):
         return "낮음", "공개 데이터로 보이는 표다"
+
+    # 키-값 표는 칸 이름으로 답이 안 나온다. 신원 판정으로 넘기지 않는다.
+    # name 칸 하나 때문에 "신원 칸이 하나다"로 잡히던 오탐을 막는다.
+    if KV_TABLE.search(table) and cols and all(KV_COL.search(c) for c in cols):
+        return "미분류", "키-값 표다. 칸 이름으로는 안 보인다. **값을 사람이 봐야 한다**"
     ident = kinds & IDENT
     if len(ident) >= 2:
         return "높음", "신원 칸이 %d종이다 (%s)" % (len(ident), ", ".join(sorted(ident)))
