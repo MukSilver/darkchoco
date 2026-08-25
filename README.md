@@ -7,8 +7,8 @@
 들어가는지, 어떤 연락 수단을 쓰는지. **유출된 데이터 자체는 수집하지 않습니다.**
 
 
-<img width="938" height="598" alt="image" src="https://github.com/user-attachments/assets/437dd419-3fc8-4ae7-9c63-e7bfaa32bc5e" />
-<img width="1046" height="1318" alt="image" src="https://github.com/user-attachments/assets/e14041f4-2e3f-484d-b98a-4025a8ca20ed" />
+<img width="738" height="398" alt="image" src="https://github.com/user-attachments/assets/437dd419-3fc8-4ae7-9c63-e7bfaa32bc5e" />
+<img width="846" height="1118" alt="image" src="https://github.com/user-attachments/assets/e14041f4-2e3f-484d-b98a-4025a8ca20ed" />
 <img width="2564" height="1402" alt="image" src="https://github.com/user-attachments/assets/eb0a371e-64d6-45f9-9ca6-2bdfcd3d97e2" />
 
 
@@ -17,11 +17,11 @@
 ## 왜 이렇게 나뉘어 있나
 
 ```
-  ┌─────────────────── 호스트 (Windows) ───────────────────┐
+  ┌─────────────────── 호스트 (Windows) ────────────────────┐
   │  dls_fill.py   노션 읽기/쓰기 · 추론 · 리포트            │
   │  dls_db.py     DB 관리 CLI                              │
   │  db.py         SQLite 스키마 · 적재                      │
-  │  sources.py    ransomware.live / ransomlook.io API       │
+  │  sources.py    ransomware.live / ransomlook.io API      │
   │  infer.py      분류 추론 (형식·개인정보·유통자리·국가)     │
   │  notion.py     Notion REST 래퍼                          │
   │                                                          │
@@ -30,7 +30,7 @@
                             ▲
                             │  probe*.json (메타데이터만)
                             │
-  ┌─────────────────── Kali VM (격리) ──────────────────────┐
+  ┌─────────────────── Kali VM (격리) ───────────────────────┐
   │  tor_probe.py  Tor 경유 수집기 (표준 라이브러리만)         │
   │  infer.py      ← 같은 파일. 본문 판정을 VM 안에서 끝냄     │
   └──────────────────────────────────────────────────────────┘
