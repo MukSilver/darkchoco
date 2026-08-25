@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import alert_parse as A  # noqa: E402
 
 SAMPLE = Path(__file__).parent / "alert_samples" / "ransom_dlm.txt"
+SAMPLE2 = Path(__file__).parent / "alert_samples" / "product_rumor_fp.txt"
 
 fails = []
 
@@ -86,10 +87,31 @@ check("지시문은 값", r["알림 문장"],
 has("지시문", r, "행위자", "문구 형식 모름")
 has("지시문", r, "원 출처")
 
+# ── 8. 두 번째 실제 캡처. 모양이 다르다 ─────────
+# 2026-08-24 디스코드 #일반. 머리 줄에 **, 모르는 키, 장식 줄, 키릴 문자.
+r = A.parse(SAMPLE2.read_text(encoding="utf-8"))
+check("루머 대상 조직", r["대상 조직"], "Samsung")
+check("루머 유형", r["유형"], "Data leak")
+check("루머 탐지 시각", r["탐지 시각"], "2026-08-24 16:55:14 KST")
+check("루머 게시 시각", r["게시 시각"], "24 Aug 2026")
+check("루머 감시 출처", r["감시 출처"], "https://4pda.to/")
+check("루머 재게시", r["재게시 URL"], "https://t.me/breachdetect/1267633")
+check("루머 판별 신뢰도", r["판별 신뢰도"], "95%")
+# 키릴 문자가 그대로 살아 있어야 한다. 알림 문장은 값이지 지시가 아니다.
+check("루머 알림 문장", r["알림 문장"],
+      "Необычный дизайн камеры Galaxy S27 Ultra "
+      "показали на инсайдерском рендере")
+has("루머", r, "원 출처", "알림은 재게시다")
+has("루머", r, "행위자", "문구 형식 모름")
+# 모르는 것을 버리지 않는다
+check("루머 모르는 키를 들고 있다", "author" in r.get("기타", {}).get("JSON 키", {}), True)
+check("루머 모르는 머리 줄을 들고 있다",
+      any("Data Leak Monitor" in x for x in r.get("기타", {}).get("머리 줄", [])), True)
+
 # ── 결과 ────────────────────────────────────────
 if fails:
     print("실패 %d" % len(fails))
     for f in fails:
         print("  - %s" % f)
     sys.exit(1)
-print("통과. 시험 7 묶음")
+print("통과. 시험 8 묶음")
