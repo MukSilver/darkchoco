@@ -90,6 +90,20 @@ def load_state() -> dict:
     return {"last_id": None, "seen": 0, "runs": []}
 
 
+def save_state(state: dict, dry: bool) -> None:
+    """확인한 시각을 남긴다. 새 알림이 없어도 남긴다.
+
+    **안 남기면 감시기가 죽은 것과 알림이 없는 것이 구별되지 않는다.**
+    토큰이 만료되거나 주기 작업이 안 돌아도 조용히 아무 일도 안 일어난다.
+    last_check 가 오래됐으면 멈춘 것이다.
+    """
+    if dry:
+        return
+    state["last_check"] = datetime.now(timezone.utc).isoformat()
+    STATE.parent.mkdir(parents=True, exist_ok=True)
+    STATE.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def marks(r: dict) -> list[str]:
     """볼 만한 신호에 표시를 붙인다. **버리지 않는다.**"""
     out = []
@@ -122,12 +136,21 @@ def main() -> int:
         q += "&after=" + str(state["last_id"])
     msgs = api("/channels/%s/messages%s" % (CHANNEL, q), tok)
     if isinstance(msgs, dict):
+        # 실패도 남긴다. 조용히 넘어가면 멈춘 것을 못 알아본다.
+        state["last_error"] = {"at": datetime.now(timezone.utc).isoformat(),
+                               "why": str(msgs)[:200]}
+        save_state(state, args.dry)
         print("디스코드 읽기 실패: %s" % msgs, file=sys.stderr)
         return 1
 
     # 디스코드는 최신부터 준다. 오래된 것부터 처리한다.
     msgs = [m for m in reversed(msgs) if (m.get("content") or "").strip()]
+    state.pop("last_error", None)
     if not msgs:
+        state.setdefault("runs", []).append({
+            "at": datetime.now(timezone.utc).isoformat(), "new": 0, "flagged": 0})
+        state["runs"] = state["runs"][-50:]
+        save_state(state, args.dry)
         print("새 알림 없음")
         return 0
 
@@ -189,7 +212,7 @@ def main() -> int:
         "at": datetime.now(timezone.utc).isoformat(),
         "new": len(rows), "flagged": len(flagged)})
     state["runs"] = state["runs"][-50:]
-    STATE.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+    save_state(state, args.dry)
 
     print("\n쌓음  %s" % md)
     print("누적 %d건" % state["seen"])
