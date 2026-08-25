@@ -91,10 +91,27 @@ def node_check(code: str) -> tuple[bool, str]:
         tmp.unlink(missing_ok=True)
 
 
+SHELL_MARK = "/* @shell */"
+SHELL_SRC = HERE / "kit_shell.js"
+
+
+def put_shell(src: str) -> str:
+    """`/* @shell */` 자리에 공통 껍데기를 넣는다.
+
+    따로 쓰는 킷은 혼자 돌아야 하므로 껍데기가 파일 안에 있어야 한다.
+    통합 킷은 build_kit.py 가 껍데기를 맨 앞에 한 번만 두고 이 표시를 지운다.
+    """
+    if SHELL_MARK not in src:
+        return src
+    if not SHELL_SRC.exists():
+        raise SystemExit("공통 껍데기가 없다: %s" % SHELL_SRC)
+    return src.replace(SHELL_MARK, SHELL_SRC.read_text(encoding="utf-8"), 1)
+
+
 def build(js: Path, do_check: bool, raw: bool = False) -> bool:
     out = js.with_suffix("")
     out = out.with_name(out.name + ".bookmarklet.txt")
-    src = js.read_text(encoding="utf-8")
+    src = put_shell(js.read_text(encoding="utf-8"))
 
     bad = line_comments(src)
     if bad:
@@ -137,7 +154,8 @@ def main() -> None:
     ap.add_argument("--raw", action="store_true", help="최소화 없이 줄만 합친다")
     args = ap.parse_args()
 
-    targets = [Path(f) for f in args.files] if args.files else sorted(HERE.glob("*.js"))
+    targets = [Path(f) for f in args.files] if args.files else [
+        p for p in sorted(HERE.glob("*.js")) if p.name != SHELL_SRC.name]
     if not targets:
         raise SystemExit("만들 .js 가 없다")
 
