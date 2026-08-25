@@ -1,5 +1,9 @@
 # ⑨ DB 입력
 
+    담당 스킬. 따로 부른다. 노션이 있을 때만
+    도구 tools/notion_row.py
+    개정 2026-08-24 · 정본은 grute02/darkchoco-skills
+
 노션 DB 에 넣는 자리다. 밖으로 내보내는 형태는 `references/publish.md` 를 본다.
 
 사람이 ⑧에서 매긴 판정을 DB 형식으로 변환한다. 판정을 만들지 않는다.
