@@ -1,0 +1,13 @@
+# Kr-Leak-alarm — 최소 의존성 원칙
+# 공급망 공격 표면을 줄이기 위해 런타임 의존성은 requests 하나만 사용합니다.
+# 나머지는 모두 Python 표준 라이브러리로 구현했습니다.
+
+requests==2.32.3
+
+# 선택: XML 파싱 강화 (ransomfeed RSS 소스를 쓸 때 권장)
+# 미설치 시 표준 xml.etree로 자동 폴백하며, 응답 크기 상한으로 방어합니다.
+defusedxml==0.7.1
+
+# ── 아래는 설치하지 않습니다 (참고용) ────────────────────────
+# Tor 크롤러(tor/onion_crawler.py)는 requests[socks]가 필요하지만,
+# VMware 격리 환경에서만 별도로 설치하도록 requirements-tor.txt 로 분리했습니다.

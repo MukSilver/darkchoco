@@ -1,0 +1,53 @@
+# ── 비밀정보 (절대 커밋 금지) ────────────────────────────────
+.env
+.env.*
+!.env.example
+config.json
+vendors.json
+*.local.json
+secrets/
+
+# ── 수집 데이터 / 상태 ──────────────────────────────────────
+# ★ 반드시 루트 기준(/)으로 고정할 것.
+#    'data/' 라고만 쓰면 collector/data/kr_keywords.json (필수 코드) 까지 제외된다.
+/data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# 수집된 피해 기업 데이터 — 공개 저장소에 절대 올라가면 안 됨
+/web/data/*
+!/web/data/.gitkeep
+
+# ── 로그 ────────────────────────────────────────────────────
+logs/
+*.log
+
+# ── Tor 모듈 산출물 (원문 스냅샷은 절대 커밋 금지) ──────────
+tor/captures/
+tor/raw/
+*.onion.html
+
+# ── Python ──────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.Python
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ── OS / 에디터 ─────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp

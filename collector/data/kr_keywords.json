@@ -1,0 +1,85 @@
+{
+  "_comment": "한국 관련성 판별 키워드. 소문자·단어경계 매칭. 오탐이 보이면 exclude 에 추가하고, 누락이 보이면 conglomerates/entities 에 추가하세요.",
+
+  "kr_tlds": [
+    ".kr", ".co.kr", ".or.kr", ".go.kr", ".ac.kr", ".re.kr",
+    ".ne.kr", ".pe.kr", ".mil.kr", ".seoul.kr", ".busan.kr", ".한국"
+  ],
+
+  "conglomerates": [
+    "samsung", "삼성",
+    "hyundai", "현대",
+    "kia motors", "kia corp", "기아",
+    "lg electronics", "lg chem", "lg display", "lg energy", "lg innotek",
+    "lg uplus", "lg cns", "lg hausys", "lg household", "엘지",
+    "sk hynix", "sk telecom", "sk innovation", "sk networks", "sk broadband",
+    "sk shieldus", "sk on", "sk ecoplant", "sk siltron", "에스케이",
+    "lotte", "롯데",
+    "posco", "포스코",
+    "hanwha", "한화",
+    "gs caltex", "gs retail", "gs engineering", "gs holdings",
+    "hanjin", "한진",
+    "doosan", "두산",
+    "kumho", "금호",
+    "cj cheiljedang", "cj logistics", "cj olive", "cj enm", "cj corp",
+    "shinsegae", "신세계",
+    "naver", "네이버",
+    "kakao", "카카오",
+    "coupang", "쿠팡",
+    "nexon", "넥슨",
+    "ncsoft", "엔씨소프트",
+    "netmarble", "넷마블",
+    "krafton", "크래프톤",
+    "celltrion", "셀트리온",
+    "amorepacific", "아모레퍼시픽",
+    "hanmi pharm", "한미약품",
+    "yuhan corp", "유한양행",
+    "daewoo", "대우",
+    "hanjin heavy", "hyosung", "효성",
+    "kolon", "코오롱",
+    "hite jinro", "하이트진로",
+    "orion corp", "오리온",
+    "nongshim", "농심",
+    "ottogi", "오뚜기",
+    "binggrae", "빙그레",
+    "e-mart", "emart", "이마트",
+    "asiana airlines", "아시아나",
+    "korean air", "대한항공",
+    "jeju air", "제주항공",
+    "t'way air", "tway air", "티웨이"
+  ],
+
+  "entities": [
+    "korea", "korean", "republic of korea", "south korea", "rok ",
+    "seoul", "busan", "incheon", "daegu", "daejeon", "gwangju", "ulsan",
+    "sejong city", "gyeonggi", "gangwon", "chungcheong", "jeolla",
+    "gyeongsang", "jeju",
+    "kookmin bank", "kb financial", "kb kookmin", "shinhan bank",
+    "shinhan financial", "woori bank", "woori financial", "hana bank",
+    "hana financial", "nonghyup", "nh bank", "ibk", "industrial bank of korea",
+    "kdb", "korea development bank",
+    "kt corporation", "kt corp", "kt telecom", "kt&g",
+    "kepco", "korea electric power",
+    "korail", "korea railroad",
+    "kbs", "mbc korea", "sbs korea", "jtbc",
+    "yonsei", "korea university", "kaist", "postech", "snu",
+    "seoul national university", "sungkyunkwan", "hanyang university",
+    "incheon national university", "konkuk university", "kyung hee",
+    "chung-ang university", "sogang university", "ewha womans",
+    "samsung medical", "asan medical", "severance hospital",
+    "seoul national university hospital"
+  ],
+
+  "weak_signals": [
+    "hangul", "hanguk", "chaebol", "won (krw)", "krw",
+    "gangnam", "yeouido", "pangyo", "songdo", "sangam"
+  ],
+
+  "exclude": [
+    "north korea", "dprk", "democratic people's republic of korea",
+    "pyongyang", "korea, north", "north korean",
+    "koreatown", "korea town",
+    "kia ora",
+    "hyundai motor america dealership directory"
+  ]
+}

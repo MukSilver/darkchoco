@@ -1,0 +1,38 @@
+{
+  "_comment": [
+    "우리 조직이 실제로 거래하는 협력사·벤더 목록입니다.",
+    "이 파일을 vendors.json 으로 복사해서 채우세요. vendors.json 은 .gitignore 로 커밋이 차단됩니다.",
+    "여기에 등록된 회사가 DLS 에 올라오면 국가와 무관하게 최상위 등급(직거래)으로 즉시 알림이 갑니다.",
+    "",
+    "매칭 규칙:",
+    "  domains  — 가장 정확합니다. 피해자 도메인과 정확히 비교합니다. 가능하면 이걸 채우세요.",
+    "  names    — 회사명 부분 매칭(단어 경계). 짧고 흔한 단어는 오탐이 나니 2단어 이상을 권장합니다.",
+    "             예: 'ABC' (X)  →  'ABC Solutions' (O)",
+    "  tier     — 자유 문자열. 대시보드에 그대로 표시됩니다. 예: '핵심', '일반', '2차'",
+    "  note     — 어떤 서비스를 받는지 메모. 침해 시 영향 범위 판단에 씁니다."
+  ],
+
+  "vendors": [
+    {
+      "name": "예시 - ERP 공급사",
+      "names": ["Example ERP Solutions", "ExampleERP"],
+      "domains": ["example-erp.com", "example-erp.co.kr"],
+      "tier": "핵심",
+      "note": "생산관리 ERP 호스팅 + 원격 유지보수 계정 보유"
+    },
+    {
+      "name": "예시 - 물류 파트너",
+      "names": ["Example Logistics"],
+      "domains": ["example-logistics.com"],
+      "tier": "일반",
+      "note": "수출 통관 대행, 선적 데이터 연동"
+    },
+    {
+      "name": "예시 - 클라우드 MSP",
+      "names": [],
+      "domains": ["example-msp.co.kr"],
+      "tier": "핵심",
+      "note": "AWS 계정 관리 위탁, 관리자 권한 보유"
+    }
+  ]
+}
