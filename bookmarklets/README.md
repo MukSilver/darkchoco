@@ -21,6 +21,29 @@
 | `photo_kit.bookmarklet.txt` | 7,374자 | 피해자 글의 증거 사진 | 개수를 정해 받는다. **유일하게 파일을 받는다** |
 | `probe_generic.bookmarklet.txt` | 4,111자 | 구조를 모르는 사이트 | DOM 진단. 무엇을 긁을지 정할 때 |
 
+## 파일이 열여섯인데 쓰는 것은 하나다
+
+역할이 넷으로 나뉜다.
+
+| 역할 | 파일 | 언제 |
+|---|---|---|
+| **북마크에 넣는 것** | `darkchoco_kit.bookmarklet.txt` | 평소 |
+| 폴백 | 나머지 `.txt` 다섯 | 통합 킷이 주소 칸에서 잘릴 때 |
+| 소스 | `.js` 여섯 | 고칠 때 |
+| 빌더 | `build_kit.py` · `build_bookmarklet.py` | 고친 뒤 |
+
+**소스 다섯은 복사본이 아니라 재료다.** 통합 킷이 그 다섯에서 만들어진다.
+
+    forum_kit.js ┐
+    qilin_kit.js │
+    index_kit.js ├─ build_kit.py ─→ darkchoco_kit.js ─→ build_bookmarklet.py ─→ .txt
+    photo_kit.js │
+    probe_generic.js ┘   kit_shell.js ┘
+
+지우면 통합 킷을 다시 못 만든다. `forum_kit` 이 소스를 잃어 압축본에서 복구한 적이 있다.
+
+**`darkchoco_kit.js` 는 손으로 고치지 마라.** `build_kit.py` 가 만든 것이라 다시 빌드하면 덮어쓴다.
+
 ## 통합 킷
 
 누르면 오른쪽 위에 작은 판이 뜬다. **판정된 것이 초록으로 켜져 있다.**
@@ -124,4 +147,5 @@
 - 403, 429, 503, Cloudflare 문구면 즉시 중단한다
 - 파일을 받는 것은 `photo_kit` 하나뿐이다. 다른 kit 에 받는 기능을 넣지 마라
 - 받는 도구는 개수 상한을 반드시 둔다. 기본을 낮게 잡는다
-- **`.txt` 를 손으로 고치지 마라.** 소스를 고치고 다시 만든다
+- **`.txt` 와 `darkchoco_kit.js` 를 손으로 고치지 마라.** 둘 다 만들어지는 파일이다.
+  고칠 자리는 킷 다섯과 `kit_shell.js` 여섯뿐이다
