@@ -21,8 +21,12 @@ MODS = [
 
 
 def body_of(path: Path) -> str:
-    """IIFE 껍데기만 벗긴다. 안은 그대로 둔다."""
-    t = path.read_text(encoding="utf-8").rstrip()
+    """IIFE 껍데기만 벗긴다. 안은 그대로 둔다.
+
+    `/* @shell */` 표시는 지운다. 공통 껍데기는 맨 앞에 한 번만 둔다.
+    모듈마다 넣으면 세 벌이 돼서 줄이는 뜻이 없다.
+    """
+    t = path.read_text(encoding="utf-8").rstrip().replace("/* @shell */", "")
     m = re.search(r"\(\(\)\s*=>\s*\{", t)
     assert m, "%s 에서 IIFE 시작을 못 찾음" % path.name
     tail = re.search(r"\}\s*\)\s*\(\s*\)\s*;?\s*$", t)
@@ -136,7 +140,11 @@ TAIL = '''
 })();
 '''
 
-parts = [HEAD]
+SHELL = (B / "kit_shell.js").read_text(encoding="utf-8")
+assert "function mkShell" in SHELL, "공통 껍데기를 못 읽었다"
+
+parts = [HEAD, "\n  /* ── 공통 껍데기. 세 모듈이 같이 쓴다 ── */\n",
+         "\n".join("  " + l if l.strip() else l for l in SHELL.split("\n")), "\n"]
 for fn, src in MODS:
     body = body_of(B / src)
     parts.append("\n  /* ── %s ── */\n  function %s() {\n%s\n  }\n" % (src, fn, body))

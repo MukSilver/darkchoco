@@ -286,51 +286,18 @@
   };
 
   let ABORT = false, BUSY = false;
-  const box = document.createElement('div');
-  box.style.cssText = 'position:fixed;inset:4%;z-index:2147483647;background:#111;color:#eee;border:2px solid #666;padding:8px;display:flex;flex-direction:column;gap:6px;font:13px sans-serif';
-  const bar = document.createElement('div');
-  bar.style.cssText = 'display:flex;gap:6px;align-items:center;flex-wrap:wrap';
-  const st = document.createElement('span');
-  st.style.cssText = 'flex:1;min-width:200px;color:#0f0;font:12px monospace';
-  const ta = document.createElement('textarea');
-  ta.style.cssText = 'flex:1;width:100%;background:#000;color:#0f0;font:12px monospace;border:1px solid #444';
-  const say = s => { st.textContent = s; };
-  const put = s => { ta.value = s; ta.focus(); ta.select(); };
-  const mk = (label, fn, hot) => {
-    const b = document.createElement('button');
-    b.textContent = label;
-    b.style.cssText = 'padding:3px 9px;cursor:pointer;font:12px sans-serif;' + (hot ? 'background:#0a4;color:#fff;border:1px solid #0f8;font-weight:bold' : 'background:#333;color:#ddd;border:1px solid #555');
-    b.onclick = async () => {
-      if (BUSY) { say('실행 중이다. 끝나거나 중단한 뒤에 누를 것'); return; }
-      BUSY = true; ABORT = false;
-      try { const r = await fn(); put(r.md); say(r.status + ' · Ctrl+C'); }
-      catch (e) { say('오류 : ' + e); put('오류\n\n' + (e && e.stack || e)); }
-      BUSY = false;
-    };
-    return b;
-  };
-  const inp = (label, val, size) => {
-    const l = document.createElement('label');
-    l.style.cssText = 'display:flex;gap:3px;align-items:center;font:12px sans-serif;color:#aaa';
-    const i = document.createElement('input');
-    i.value = val; i.size = size;
-    i.style.cssText = 'background:#000;color:#0f0;border:1px solid #444;font:12px monospace;width:' + (9 * size) + 'px';
-    l.append(document.createTextNode(label), i);
-    l.__i = i;
-    return l;
-  };
+  /* @shell */
+  const S = mkShell({ busy: () => BUSY, setBusy: v => { BUSY = v; }, setAbort: v => { ABORT = v; }, minw: 200 });
+  const box = S.box, st = S.st, ta = S.ta;
+  const say = S.say, put = S.put, mk = S.mk, inp = S.inp;
+
+
   const maxWrap = inp('몇 쪽까지', '3', 3);
   const nameWrap = inp('확인자', '', 7);
   const MAXP = maxWrap.__i;
   const NAME = nameWrap.__i;
-  const stopB = document.createElement('button');
-  stopB.textContent = '중단';
-  stopB.style.cssText = 'padding:3px 9px;cursor:pointer;font:12px sans-serif;background:#422;color:#fdd;border:1px solid #855';
-  stopB.onclick = () => { ABORT = true; say('중단 요청. 현재 요청이 끝나면 멈춘다'); };
-  const closeB = document.createElement('button');
-  closeB.textContent = '닫기';
-  closeB.style.cssText = 'padding:3px 9px;cursor:pointer;font:12px sans-serif;background:#422;color:#fdd;border:1px solid #855';
-  closeB.onclick = () => box.remove();
+
+
 
   const isDetail = /\/site\/blog\?uuid=|\/c\/[^\/]+\/\d+/.test(location.href);
   const bList = mk('이 페이지만', listHere, !isDetail);
@@ -340,25 +307,10 @@
 
 
   /* ── 최소화. 접어도 상태와 중단은 남긴다 ────── */
-  let MINI = false;
-  const miniB = document.createElement('button');
-  miniB.textContent = '최소화';
-  miniB.setAttribute('data-mini', '1');
-  miniB.style.cssText = 'padding:3px 9px;cursor:pointer;font:12px sans-serif;background:#333;color:#ddd;border:1px solid #555';
-  const KEEP = [st, miniB, stopB, closeB];
-  miniB.onclick = () => {
-    MINI = !MINI;
-    box.style.inset = MINI ? 'auto 10px 10px auto' : '4%';
-    box.style.maxWidth = MINI ? '52vw' : '';
-    ta.style.display = MINI ? 'none' : '';
-    [...bar.children].forEach(c => { c.style.display = (MINI && KEEP.indexOf(c) < 0) ? 'none' : ''; });
-    miniB.textContent = MINI ? '펼치기' : '최소화';
-  };
 
-  bar.append(bList, bAll, bDetail, bTree, maxWrap, nameWrap, st, stopB, miniB, closeB);
-  box.append(bar, ta);
-  document.body.appendChild(box);
-  window.__QK = box;
+
+
+  window.__QK = S.mount(bList, bAll, bDetail, bTree, maxWrap, nameWrap);
 
   say(VER + ' · ' + (isDetail ? '상세 페이지로 판정' : '목록 페이지로 판정') + ' · 카드 ' + cardsOf(document).length + '개');
   ta.value = '실행 중';
