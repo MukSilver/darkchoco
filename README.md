@@ -6,6 +6,12 @@
 수집 대상은 **사이트에 대한 정보**입니다 — 살아 있는지, 어떤 성격인지, 어떻게
 들어가는지, 어떤 연락 수단을 쓰는지. **유출된 데이터 자체는 수집하지 않습니다.**
 
+
+<img width="938" height="598" alt="image" src="https://github.com/user-attachments/assets/437dd419-3fc8-4ae7-9c63-e7bfaa32bc5e" />
+<img width="1046" height="1318" alt="image" src="https://github.com/user-attachments/assets/e14041f4-2e3f-484d-b98a-4025a8ca20ed" />
+<img width="2564" height="1402" alt="image" src="https://github.com/user-attachments/assets/eb0a371e-64d6-45f9-9ca6-2bdfcd3d97e2" />
+
+
 ---
 
 ## 왜 이렇게 나뉘어 있나
