@@ -2,6 +2,8 @@
 
 **랜섬웨어 DLS(Data Leak Site) 한국 기업 · 공급망 피해 모니터링 도구**
 
+<img width="2780" height="1446" alt="image" src="https://github.com/user-attachments/assets/cbf01dbc-1331-433f-855b-f1458bef90d3" />
+
 랜섬웨어 조직이 유출 사이트에 올린 피해 기업 중 **한국과 관련된 건을 자동으로 골라내어**
 로컬 웹 대시보드의 **NEW 리스트로 갱신**하고 알림을 보냅니다.
 
