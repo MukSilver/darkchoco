@@ -1,4 +1,12 @@
 /* 다크초코 통합 킷 v1
+ *
+ * **이 파일은 손으로 고치지 마라. build_kit.py 가 만든 것이다.**
+ * 고칠 자리는 forum_kit.js · qilin_kit.js · index_kit.js · photo_kit.js ·
+ * probe_generic.js · kit_shell.js 여섯이다. 고친 뒤 아래를 돌린다.
+ *
+ *     python bookmarklets/build_kit.py
+ *     python bookmarklets/build_bookmarklet.py
+ *
  * 킷 다섯을 하나로 합쳤다. 어느 페이지에서 눌러도 된다.
  * 페이지 종류를 판정해 맞는 것을 켜 두고, 아니면 직접 고르면 된다.
  *
