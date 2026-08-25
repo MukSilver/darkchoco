@@ -12,6 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 import alert_parse as A  # noqa: E402
+import alert_watch as W  # noqa: E402
 
 SAMPLE = Path(__file__).parent / "alert_samples" / "ransom_dlm.txt"
 SAMPLE2 = Path(__file__).parent / "alert_samples" / "product_rumor_fp.txt"
@@ -108,10 +109,28 @@ check("루머 모르는 키를 들고 있다", "author" in r.get("기타", {}).g
 check("루머 모르는 머리 줄을 들고 있다",
       any("Data Leak Monitor" in x for x in r.get("기타", {}).get("머리 줄", [])), True)
 
+# ── 9. alert_watch 표시 규칙 ────────────────────
+# 표시는 거르는 것이 아니라 붙이는 것이다. 버리면 사람이 다시 못 본다.
+r = A.parse(SAMPLE.read_text(encoding="utf-8"))
+check("랜섬 알림은 표시가 안 붙는다", W.marks(r), [])
+
+r = A.parse(SAMPLE2.read_text(encoding="utf-8"))
+m = W.marks(r)
+check("루머 알림은 표시가 둘 붙는다", len(m), 2)
+if not any("유출 감시로 아는 곳이 아니다" in x for x in m):
+    fails.append("루머 알림에 감시 출처 표시가 없다: %r" % m)
+if not any("규모나 표 이름 표기가 없다" in x for x in m):
+    fails.append("루머 알림에 규모 표시가 없다: %r" % m)
+
+# 감시 출처를 못 뽑았을 때도 표시가 붙는다. 조용히 넘어가지 않는다
+r = A.parse("Company: 어떤회사")
+if not any("못 뽑았다" in x for x in W.marks(r)):
+    fails.append("빈 알림에 표시가 안 붙는다: %r" % W.marks(r))
+
 # ── 결과 ────────────────────────────────────────
 if fails:
     print("실패 %d" % len(fails))
     for f in fails:
         print("  - %s" % f)
     sys.exit(1)
-print("통과. 시험 8 묶음")
+print("통과. 시험 9 묶음")
