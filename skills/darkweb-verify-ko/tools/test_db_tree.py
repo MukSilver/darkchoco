@@ -229,6 +229,70 @@ class 올리지않는것(unittest.TestCase):
         self.확인("log", ["idx", "ip", "created"], "미분류", "로그")
 
 
+class 이름칸(unittest.TestCase):
+    """`_name` 을 통째로 잡으면 안 된다.
+
+    file_name, shop_name, menu_name, table_name 이 다 사람 이름이 된다.
+    한 케이스 cs_admin 에 shop_name 이 실제로 있었다.
+    사람을 가리키는 앞말이 붙은 것만 잡는다.
+    """
+
+    def 확인(self, table, cols, want, what):
+        got, why = db_tree.grade_of(table, cols)
+        self.assertEqual(got, want, "%s (%s) -> %s. 왜: %s" % (table, what, got, why))
+
+    def test_사람_앞말이_붙으면_이름이다(self):
+        for col in ["writer_name", "buyer_name", "member_name", "cust_name",
+                    "recv_name", "sender_name", "emp_name", "owner_name",
+                    "user_name", "real_name", "성명"]:
+            with self.subTest(col=col):
+                self.assertEqual(db_tree.sens_of(col), "이름")
+
+    def test_사람이_아닌_앞말은_이름이_아니다(self):
+        for col in ["file_name", "shop_name", "menu_name", "table_name",
+                    "company_name", "board_name", "category_name", "bank_name"]:
+            with self.subTest(col=col):
+                self.assertNotEqual(db_tree.sens_of(col), "이름")
+
+    def test_이름_두_종이면_높음이_된다(self):
+        """전에는 writer_name 을 못 잡아서 게시판 표가 미분류로 떨어졌다."""
+        self.확인("board", ["idx", "writer_name", "writer_tel", "content"],
+                 "높음", "이름과 전화")
+
+
+class 여권(unittest.TestCase):
+    def test_여권번호를_잡는다(self):
+        for col in ["passport", "passport_no", "여권번호"]:
+            with self.subTest(col=col):
+                self.assertEqual(db_tree.sens_of(col), "여권")
+
+    def test_여권은_자격증명이_아니다(self):
+        """passport 가 pass 로 시작하지만 비밀번호 칸이 아니다."""
+        self.assertFalse(db_tree.PWD.search("passport_no"))
+
+
+class 키값표(unittest.TestCase):
+    """칸이 name 과 value 뿐이면 칸 이름으로 아무것도 안 보인다.
+
+    안에 DB 접속 정보가 들어 있어도 못 잡는다. 사람이 값을 봐야 한다.
+    등급을 새로 만들지 않고 미분류로 두되 왜 칸에 적는다.
+    """
+
+    def test_키값표는_신원으로_잡히지_않는다(self):
+        """name 칸 하나 때문에 신원 칸이 하나다로 잡히던 오탐이다."""
+        g, why = db_tree.grade_of("config", ["idx", "name", "value"])
+        self.assertEqual(g, "미분류", why)
+        self.assertIn("값을 사람이 봐야 한다", why)
+
+    def test_설정표라도_자격증명_칸이_있으면_올린다(self):
+        g, why = db_tree.grade_of("config", ["idx", "db_host", "db_pass"])
+        self.assertEqual(g, "치명", why)
+
+    def test_설정처럼_안_생긴_표는_그대로다(self):
+        g, _ = db_tree.grade_of("board", ["idx", "name", "value"])
+        self.assertNotEqual(g, "미분류")
+
+
 class 오탐(unittest.TestCase):
     """도구가 아무 표나 치명으로 매기면 등급이 뜻을 잃는다.
 
@@ -240,11 +304,8 @@ class 오탐(unittest.TestCase):
         self.assertEqual(got, want, "%s (%s) -> %s. 왜: %s" % (table, what, got, why))
 
     def test_passport_는_자격증명이_아니다(self):
-        """치명이 아니면 된다. 도구는 여권번호를 개인정보로도 못 잡는다.
-
-        `_name` 접미와 여권번호 미탐은 따로 있는 결함이다. 이 시험의 대상이 아니다.
-        """
-        self.확인("member", ["idx", "name", "passport_no"], "중간", "여권 번호")
+        """여권번호는 개인정보이되 자격증명은 아니다. 치명이 아니라 높음이다."""
+        self.확인("member", ["idx", "name", "passport_no"], "높음", "여권 번호")
 
     def test_pass_yn_은_통과_여부다(self):
         self.확인("order", ["idx", "buyer_name", "pass_yn"], "중간", "통과 여부")
