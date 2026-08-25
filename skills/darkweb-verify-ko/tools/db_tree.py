@@ -82,7 +82,39 @@ def sens_of(col: str) -> str | None:
 ADMIN = re.compile(r"master|admin|manager|^root|super_?user|operator|관리자", re.I)
 # 자격증명 값이 드는 칸. 아이디만 있는 칸과 가른다.
 # order_admin_memo 같은 칸이 관리자 자격증명으로 잡히던 오탐을 막는다.
-PWD = re.compile(r"passw|pwd|^pws$|secret|token|api_?key|해시|비밀번호", re.I)
+#
+# pw·pass·hash 는 앞뒤 경계를 함께 본다. 경계가 없으면 아래가 잘못 걸린다.
+#   passport  여권. pass 로 시작하지만 자격증명이 아니다
+#   pass_yn   통과 여부. pass 로 시작하고 뒤에 밑줄이 온다
+#   hashtag   해시태그
+#
+# 그래서 pass 는 **끝 경계만** 둔다. admin_pass 는 잡고 pass_yn 은 안 잡는다.
+# pw 는 앞뒤 경계를 둔다. pw 로 시작하는 칸은 대개 비밀번호 관련이다.
+PWD = re.compile(
+    r"passw|pwd|secret|token|api_?key|private_?key|access_?key|credential|해시|비밀번호"
+    r"|(^|_)pw(d|s)?($|_)"
+    r"|(^|_)pass$"
+    r"|(^|_)hash($|_)",
+    re.I)
+
+# 결제·정산 연동. 돈이 오가는 시스템에 붙어서 치명으로 올린다.
+# 가맹점 ID 하나로는 결제를 못 일으키지만, 설정 표는 키를 같은 표에 둔다.
+# 한 케이스 cs_admin 이 그랬다. 관리자 비밀번호와 pg_id 와 은행계좌가 한 행에 있었다.
+# 브랜드 이름은 한국에서 쓰는 것만 넣는다.
+PAY = re.compile(
+    r"(^|_)pg(_|$)|(^|_)cpid(_|$)|merchant"
+    r"|(^|_)imp_(key|secret|uid)"
+    r"|iamport|inicis|nicepay|kcp|danal|tosspay|payple|allthegate|settlebank",
+    re.I)
+
+# 인프라 접근. 그 시스템 밖으로 넘어갈 수 있어서 치명으로 올린다.
+# 이 규칙만으로는 안 올린다. 자격증명 칸이 같이 있어야 한다.
+# db_name 이나 mail_addr 처럼 이름만 든 칸이 걸리는 것을 막는다.
+INFRA = re.compile(
+    r"(^|_)(db|database|mysql|mssql|oracle|smtp|imap|ftp|sftp|ssh"
+    r"|redis|mongo|aws|s3|gcp|azure|ncloud)(_|$)"
+    r"|private_?key|access_?key|service_?account|connection_?string",
+    re.I)
 PUBLIC = re.compile(r"^zip|우편|postal|^code$|region|sido|gugun|법정동|행정동", re.I)
 IDENT = {"이름", "이메일", "전화", "주소"}
 GRADES = ["치명", "높음", "중간", "낮음", "미분류"]
@@ -92,9 +124,30 @@ def grade_of(table: str, cols: list[str]) -> tuple[str, str]:
     """(등급, 왜). 칸 이름만 보고 매긴다. 값이 실제로 있는지는 못 본다."""
     kinds = {k for k in (sens_of(c) for c in cols) if k}
     pwd = [c for c in cols if PWD.search(c)]
-    # 한 칸이 관리자와 비밀번호를 둘 다 만족하거나, 표 이름이 관리자 계열이면서 비밀번호 칸이 있을 때
-    if [c for c in pwd if ADMIN.search(c)] or (ADMIN.search(table) and pwd):
-        return "치명", "관리자 자격증명 칸이 있다"
+
+    # 치명은 시스템 접근으로 가른다. 개인정보의 양이 아니다.
+    # 세 무리 다 축이 같다. 그 값으로 어딘가에 들어갈 수 있느냐다.
+
+    # 1. 관리자 자격증명. 그 시스템의 운영 권한이다.
+    #    한 칸이 관리자와 자격증명을 둘 다 만족하거나,
+    #    표 이름이 관리자 계열이면서 자격증명 칸이 있을 때.
+    adm = [c for c in pwd if ADMIN.search(c)]
+    if adm:
+        return "치명", "관리자 자격증명 칸이 있다 (%s)" % ", ".join(adm[:3])
+    if ADMIN.search(table) and pwd:
+        return "치명", "표 이름이 관리자 계열이고 자격증명 칸이 있다 (%s)" % ", ".join(pwd[:3])
+
+    # 2. 결제·정산 연동 키. 돈이 오가는 시스템에 붙는다.
+    pay = [c for c in cols if PAY.search(c)]
+    if pay:
+        return "치명", "결제 연동 칸이 있다 (%s). 키가 함께 있으면 결제를 일으킬 수 있다" % (
+            ", ".join(pay[:3]))
+
+    # 3. 인프라 접근 자격. 그 시스템 밖으로 넘어간다.
+    #    이름만 든 칸으로는 안 올린다. 자격증명 칸이 같이 있어야 한다.
+    infra = [c for c in cols if INFRA.search(c)]
+    if infra and pwd:
+        return "치명", "인프라 접속 자격 칸이 있다 (%s)" % ", ".join(sorted(set(infra + pwd))[:3])
     if "주민번호" in kinds:
         return "높음", "주민번호 칸이 있다. 값이 들었는지는 못 봤다"
     if "카드·금융" in kinds:
