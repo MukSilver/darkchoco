@@ -1,8 +1,8 @@
 # ③ 사전 확인
 
     담당 스킬
-    도구 tools/alert_parse.py · tools/inspect.py · tools/notion_find.py
-    개정 2026-08-25 · 정본은 grute02/darkchoco-skills
+    도구 tools/alert_parse.py · tools/feed_parse.py · tools/inspect.py · tools/notion_find.py
+    개정 2026-08-26 · 정본은 grute02/darkchoco-skills
 
 출력 범위: 관련 자료가 있는지까지만. 판정하지 않는다.
 
@@ -39,6 +39,14 @@
 감시 알림에서 온 건이면 아래를 먼저 돌려 그 출력을 위 칸에 앉힌다.
 
     python tools/alert_parse.py <알림파일>
+
+**Kr-Leak-alarm 대시보드에서 온 건이면 이쪽이다.** 2026-08-26 에 넣었다.
+
+    python tools/feed_parse.py <krleak.db> --out 07_케이스/_큐
+
+둘은 같은 14칸을 낸다. 어느 쪽에서 왔든 아래 절차가 같다.
+다만 대시보드 경로는 `원 출처` 와 `공식 도메인` 이 실제로 채워진다.
+알림 경로는 재게시 봇을 거쳐 와서 그 둘이 언제나 못 봄이다.
 
 **큐에 이미 쌓여 있을 수 있다.** `alert_watch.py` 가 한 시간마다 디스코드를 읽어
 13칸을 미리 채워 둔다. 그쪽을 먼저 본다.

@@ -222,9 +222,15 @@ mysqldump 는 한 줄이 수 MB 다. 앞부분만 읽으면 표 구조도 규모
 
 `tools/` 가 이 스킬 폴더 안에 함께 설치된다. 프로젝트 폴더 밖에서 불려도 돈다.
 
-    tools/alert_parse.py    유출 알림 한 덩어리를 ③ 입력으로
+    tools/alert_parse.py    유출 알림 한 덩어리를 ③ 입력 14칸으로
+    tools/feed_parse.py     Kr-Leak-alarm 의 krleak.db 를 같은 14칸으로
+    tools/kit_out.py        포럼 킷 출력을 큐의 ② 재료로
+    tools/run_queue.py      큐를 훑어 기계로 되는 부분만 돌린다
+    tools/brief.py          큐를 다섯 묶음으로 갈라 한 장으로
+    tools/alert_watch.py    디스코드 알림을 주기로 읽어 큐에 쌓는다
     tools/notion_find.py    팀 DB 조회
     tools/notion_row.py     DB 행 생성
+    tools/notion_prop.py    노션 DB 에 선택 칸 추가와 값 채우기
     tools/notion_push.py    페이지 올리기
     tools/notion.py         읽기 래퍼
     tools/tree_scan.py      파일 경로 목록 분석
@@ -233,6 +239,20 @@ mysqldump 는 한 줄이 수 MB 다. 앞부분만 읽으면 표 구조도 규모
     tools/sample_stats.py   샘플 값 분포와 합성 의심
     tools/inspect.py        케이스 폴더 하나를 통째로. 종류 판정 후 위 도구에 태운다
     tools/verify_cfg.py     ⑥ 출력 방식 설정. md 로 낼지 화면에 낼지
+    tools/stamp_refs.py     참조 문서 머리에 담당·도구·개정일 찍기
+
+### 큐를 거쳐 오는 길
+
+`feed_parse.py` 부터 `brief.py` 까지가 한 줄로 이어진다.
+**③④⑤⑥ 은 프롬프트 단계라 `run_queue.py` 가 대신 판단하지 않는다.**
+그쪽이 하는 것은 재료 판정, 팀 DB 대조, 샘플 패턴 산출, 상태 기록뿐이다.
+
+    feed_parse   krleak.db      → 07_케이스/_큐/<케이스>/재료.md · 상태.json
+    run_queue    큐             → ③_재료판정.txt · ③_팀DB대조.md · ④_샘플패턴.md · ③재료.md
+    kit_out      포럼 킷 출력    → ②본문.md · ②샘플.txt
+    brief        큐             → 브리핑 한 장
+
+**샘플은 케이스가 끝나면 큐에서 지운다.** 큐는 통로지 창고가 아니다.
 
 ### ⑥ 은 로그를 md 로 내고 화면에는 요약만 낸다
 
