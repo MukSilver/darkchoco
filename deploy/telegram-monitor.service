@@ -1,0 +1,21 @@
+[Unit]
+Description=Telegram Korea Alert Monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/telegram-monitor
+ExecStart=/home/ubuntu/telegram-monitor/.venv/bin/python /home/ubuntu/telegram-monitor/korea_alert_monitor.py
+Restart=on-failure
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+
+# Basic hardening without blocking the writable SQLite database/session directory.
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

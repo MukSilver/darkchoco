@@ -5,12 +5,15 @@ from pathlib import Path
 from telethon import TelegramClient
 from telethon.tl.types import Channel
 
+from local_config import load_local_env
+
 
 BASE_DIR = Path(__file__).resolve().parent
 SESSION_PATH = BASE_DIR / "telegram_session"
 
 
 async def main():
+    load_local_env()
     api_id = int(os.environ["TELEGRAM_API_ID"])
     api_hash = os.environ["TELEGRAM_API_HASH"]
     client = TelegramClient(str(SESSION_PATH), api_id, api_hash)

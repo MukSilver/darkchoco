@@ -7,11 +7,14 @@ import qrcode
 from telethon import TelegramClient
 from telethon.errors import SessionPasswordNeededError
 
+from local_config import load_local_env
+
 
 BASE_DIR = Path(__file__).resolve().parent
 SESSION_PATH = BASE_DIR / "telegram_session"
 QR_PATH = BASE_DIR / "telegram_login_qr.png"
 
+load_local_env()
 api_id = int(os.environ["TELEGRAM_API_ID"])
 api_hash = os.environ["TELEGRAM_API_HASH"]
 

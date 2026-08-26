@@ -5,3 +5,5 @@ telegram_login_qr.png
 output/
 __pycache__/
 *.py[cod]
+alert_monitor.db
+alert_monitor.db-*

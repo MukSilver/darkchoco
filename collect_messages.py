@@ -8,6 +8,8 @@ from zoneinfo import ZoneInfo
 
 from telethon import TelegramClient
 
+from local_config import load_local_env
+
 
 BASE_DIR = Path(__file__).resolve().parent
 SESSION_PATH = BASE_DIR / "telegram_session"
@@ -61,6 +63,7 @@ def sender_label(sender):
 
 
 async def collect(channel, limit: int, output: Path, from_date=None, to_date=None, timezone_name="Asia/Seoul"):
+    load_local_env()
     if limit < 1:
         raise ValueError("--limit은 1 이상이어야 합니다.")
     if from_date and to_date and from_date > to_date:
