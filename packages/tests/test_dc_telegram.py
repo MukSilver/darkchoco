@@ -11,6 +11,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from dc_console import use_utf8  # noqa: E402
+
+use_utf8()   # 한글 콘솔에서 결과 줄이 깨지지 않게 한다
+
 # telethon 을 안 깔아도 순수 로직은 검증할 수 있게 최소 스텁을 끼웁니다.
 if "telethon" not in sys.modules:
     t = types.ModuleType("telethon"); t.TelegramClient = object

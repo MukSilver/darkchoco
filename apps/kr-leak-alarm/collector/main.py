@@ -22,6 +22,12 @@ import sys
 from pathlib import Path
 from typing import Any
 
+# 윈도우 콘솔(cp949)에서 한글·기호로 죽는 것을 막습니다.
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "packages"))
+from dc_console import use_utf8  # noqa: E402
+
+use_utf8()
+
 from .config import load_config, load_dotenv, resolve_path
 from .export import export
 from .http_client import SafeHttpClient

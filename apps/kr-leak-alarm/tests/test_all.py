@@ -14,6 +14,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+# 윈도우 콘솔(cp949)에서 한글·기호로 죽는 것을 막습니다.
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "packages"))
+from dc_console import use_utf8  # noqa: E402
+
+use_utf8()
+
 from collector.export import export                     # noqa: E402
 from collector.http_client import (                    # noqa: E402
     BlockedHostError, HttpStatusError, NotFoundError, SafeHttpClient, _check_host,

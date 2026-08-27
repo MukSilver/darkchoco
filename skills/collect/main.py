@@ -38,6 +38,12 @@ from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+# 윈도우 콘솔(cp949)에서 한글·기호로 죽는 것을 막습니다.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "packages"))
+from dc_console import use_utf8  # noqa: E402
+
+use_utf8()
 from collect.fetch import Fetcher  # noqa: E402
 from collect.sources.telegram_web import parse, to_item  # noqa: E402
 from collect.store import Store  # noqa: E402
