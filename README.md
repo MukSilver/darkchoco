@@ -32,6 +32,26 @@ docs/         운영안 · 구축 절차 · 할 일
 
 ---
 
+## 남의 앱을 처음 돌릴 때
+
+`git clone` 다음부터 결과가 나오기까지 손으로 해야 하는 일입니다. 실측한 값입니다.
+
+| 앱 | 첫 명령 | 설치 | 비밀값 받을 곳 | 로그인 |
+|---|---|:-:|:-:|:-:|
+| kr-leak-alarm | `scripts\run.bat` | 자동 | 0곳 | 없음 |
+| dls-observatory | `python diagnose.py` | 없음 | 1곳 (노션) | 없음 |
+| forum-crawler | `docker run -e TARGET_URL=...` | docker build | 0곳 | 없음 |
+| skills/collect | `python -m collect.main --db ...` | pip | 0곳 | 없음 |
+| tg-notion-report | `python telegram_pipeline.py <url>` | pip | 2곳 | 텔레그램 |
+| tg-korea-alert | `python korea_alert_monitor.py` | pip | 4곳 | 텔레그램 |
+
+설치하기 전에 `--help` 로 먼저 훑어볼 수 있습니다. 여섯 앱 전부 됩니다.
+
+kr-leak-alarm 은 `scripts\run.bat` 이 가상환경을 만들고 설정 파일까지 복사합니다.
+`.env.example` 이 있는 앱은 그것을 `.env` 로 복사해 값을 채웁니다.
+
+---
+
 ## 공용 부품
 
 | 패키지 | 무엇 |
@@ -40,6 +60,7 @@ docs/         운영안 · 구축 절차 · 할 일
 | dc_notion | 노션 API · 토큰 |
 | dc_safety | 안전 HTTP · 텍스트 살균 |
 | dc_ransomfeed | 랜섬 피드 주소 · 가져오기 |
+| dc_console | 윈도우 한글 콘솔 대응 |
 
 사용법은 각 패키지 README 에 있습니다.
 

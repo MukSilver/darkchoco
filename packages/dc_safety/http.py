@@ -86,6 +86,11 @@ def _check_host(url: str) -> str:
     return host
 
 
+# 밖에서도 주소만 검사하고 싶을 때가 있습니다. 밑줄 이름을 직접 부르지
+# 않게 공개 이름을 하나 둡니다. 같은 함수입니다.
+check_host = _check_host
+
+
 class SafeHttpClient:
     def __init__(self, network_cfg: dict[str, Any] | None = None):
         cfg = network_cfg or {}

@@ -8,12 +8,14 @@ kr-leak-alarm 의 것을 표준으로 올렸습니다.
 """
 
 from .http import (
+    check_host,
     ALLOWED_CONTENT_TYPES, ALLOWED_HOSTS, BlockedHostError, FetchError,
     HttpStatusError, NotFoundError, SafeHttpClient,
 )
 from .text import defang_domain, defang_url, extract_domain, is_onion, sanitize_text
 
 __all__ = [
+    "check_host",
     "SafeHttpClient", "ALLOWED_HOSTS", "ALLOWED_CONTENT_TYPES",
     "FetchError", "BlockedHostError", "HttpStatusError", "NotFoundError",
     "sanitize_text", "defang_url", "defang_domain", "is_onion", "extract_domain",
