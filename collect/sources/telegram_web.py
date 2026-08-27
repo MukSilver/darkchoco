@@ -43,7 +43,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from collect.fetch import Fetcher  # noqa: E402
-from collect.store import Item, Store  # noqa: E402
+from collect.sources import tg_post  # noqa: E402
+from collect.store import Store  # noqa: E402
 
 VER = "telegram_web v1"
 
@@ -59,57 +60,12 @@ ATTR = {
     "chan": re.compile(r'tgme_widget_message_owner_name[^>]*>.*?<span[^>]*>([^<]{1,60})<', re.S),
 }
 LINK = re.compile(r'<a href="(https?://[^"]+)"')
-LABEL = re.compile(r"^[•\-\*]?\s*([A-Za-z][A-Za-z /_]{2,30})\s*:\s*(.*)$")
-
-# 글 종류를 무엇으로 가르나. **거르는 데 쓰지 않고 표시하는 데만 쓴다.**
-# 칸 이름으로 가른다. 머리 줄의 이모지는 채널이 바꾸면 깨진다
-KINDS = [
-    ("유출 알림", {"target/title", "threat actor"}, True),
-    ("랜섬 피해자", {"victim", "group"}, True),
-    ("CVE 알림", {"cve id", "cvss score"}, False),
-    ("악성코드 시그니처", {"signature", "file"}, False),
-]
-
-# 글 칸을 우리 칸으로. 없는 것은 안 넣는다
-MAP = {
-    "target/title": "target_org",
-    "victim": "target_org",
-    "threat actor": "actor",
-    "group": "actor",
-    "country": "country",
-    "intel source": "via_note",
-    "detection date": "seen_note",
-    "published": "posted_note",
-    "sector": "sector",
-}
 
 
 def plain(raw: str) -> str:
     t = re.sub(r"<br\s*/?>", "\n", raw)
     t = re.sub(r"<[^>]+>", "", t)
     return H.unescape(t).strip()
-
-
-# 값 앞에 붙은 이모지를 뗀다. 그대로 두면 대상 조직 이름 대조가 깨진다.
-# `👤 OctopusBF` 와 `OctopusBF` 는 다른 글자다
-LEAD = re.compile(r"^[\s -㌀\U0001F000-\U0001FAFF️‍]+")
-
-
-def clean(v: str) -> str:
-    return LEAD.sub("", (v or "").strip()).strip()
-
-
-def origin(links: list[str], body: str) -> str:
-    """글 안에 적힌 **원 출처**를 찾는다.
-
-    이 채널은 집계 채널이라 텔레그램 글 주소는 원 출처가 아니다.
-    글 본문에 원 게시글 주소가 적혀 있으면 그것이 원 출처다.
-    2026-08-27 실측: `Source Intelligence Link:` 아래에 포럼 주소가 있었다."""
-    cand = [u for u in links if "t.me/" not in u]
-    if cand:
-        return cand[0]
-    m = re.search(r"https?://(?!t\.me/)\S{8,}", body)
-    return m.group(0).rstrip(").,。") if m else ""
 
 
 def one(rx: re.Pattern, s: str, d: str = "") -> str:
@@ -132,19 +88,12 @@ def parse(html: str, chan: str) -> tuple[list[dict], str]:
     for p in posts:
         m = TEXT.search(p)
         body = plain(m.group(1)) if m else ""
-        fields, order = {}, []
-        for ln in body.split("\n"):
-            mm = LABEL.match(ln.strip())
-            if mm:
-                k = mm.group(1).strip().lower()
-                fields[k] = mm.group(2).strip()
-                order.append(k)
-        kind, ours = "기타", None
-        for name, need, mine in KINDS:
-            if need <= set(fields):
-                kind, ours = name, mine
-                break
+        # 읽는 규칙은 공통 자리에 있다. 채널마다 글 꼴이 다르다
+        fields, shape, note = tg_post.read_post(body)
+        kind, ours = tg_post.classify(fields)
         out.append({
+            "꼴": shape,
+            "못 읽은 것": note,
             "post": one(ATTR["post"], p),
             "when": one(ATTR["when"], p),
             "url": one(ATTR["url"], p),
@@ -152,7 +101,7 @@ def parse(html: str, chan: str) -> tuple[list[dict], str]:
             "chan": one(ATTR["chan"], p, chan),
             "body": body,
             "fields": fields,
-            "labels": order,
+            "labels": list(fields),
             "links": LINK.findall(m.group(1)) if m else [],
             "kind": kind,
             "ours": ours,
@@ -160,43 +109,15 @@ def parse(html: str, chan: str) -> tuple[list[dict], str]:
     return out, ""
 
 
-def to_item(d: dict, chan: str, today: str) -> Item:
-    f = d["fields"]
-    org = clean(f.get("target/title") or f.get("victim", ""))
-    src = origin(d["links"], d["body"])
-    venue = re.sub(r"^https?://([^/]+).*", r"\1", src) if src else ("t.me/" + chan)
-    return Item(
-        source="telegram",
-        # 채널의 글 번호. 이것 하나로 줄이 갈린다.
-        # 없으면 원 출처도 조직도 빈 글끼리 한 줄로 뭉친다
-        src_id=d["post"],
-        # 원 출처를 알면 그쪽 도메인을 적는다. 포럼명만 적지 않는다
-        venue=venue,
-        venue_kind="forum" if src and "t.me/" not in src else "telegram",
-        actor=clean(f.get("threat actor") or f.get("group", "")),
-        target_org=org,
-        target_domain=org if re.match(r"^[\w.-]+\.[a-z]{2,}$", org, re.I) else "",
-        title=(d["body"].split("\n")[0] if d["body"] else "")[:120],
-        body=d["body"],
-        # 이 채널 글은 집계 채널이 쓴 글이다. 유출 게시글 본문이 아니다
-        body_kind="집계 채널 글",
-        body_via="t.me/s",
-        posted_at=d["when"],
-        # **원 출처는 글 안에 적힌 주소다.** 텔레그램 글 주소가 아니다.
-        # 집계 채널을 독립 출처로 세면 같은 건이 여러 출처로 읽힌다
-        post_url=src,
-        via=["t.me/s/" + chan],
-        claimed_size=clean(f.get("size") or f.get("records", "")),
-        country=clean(f.get("country", "")),
-        kind={"유출 알림": "확인 못 함", "랜섬 피해자": "랜섬웨어 유출"}.get(d["kind"], ""),
-        clues={"링크": d["links"][:10]} if d["links"] else {},
-        raw={"글 번호": d["post"], "조회수": d["views"], "채널 이름": d["chan"],
-             "글 종류": d["kind"], "우리 대상": d["ours"],
-             "집계 채널 글 주소": d["url"],
-             "본문 칸": {k: clean(v) for k, v in f.items() if k in MAP},
-             "못 옮긴 칸": [k for k in d["labels"] if k not in MAP]},
-        got_by=VER,
-    )
+def to_item(d: dict, chan: str, today: str):
+    """공통 자리(`tg_post`)로 넘긴다. 실계정 길과 같은 것을 내야 한다."""
+    return tg_post.to_item(
+        chan=chan, src_id=d["post"], text=d["body"], links=d["links"],
+        when=d["when"], perma=d["url"], got_by=VER, body_via="t.me/s")
+
+
+def d_ours(posts: list, kind: str) -> bool:
+    return any(d["ours"] for d in posts if d["kind"] == kind)
 
 
 def run(chan: str, db: Path | None, dry: bool) -> int:
@@ -218,16 +139,18 @@ def run(chan: str, db: Path | None, dry: bool) -> int:
         return 1
 
     kinds: dict = {}
+    shapes: dict = {}
     for d in posts:
         kinds[d["kind"]] = kinds.get(d["kind"], 0) + 1
-    print("글 %d개" % len(posts))
+        shapes[d["꼴"]] = shapes.get(d["꼴"], 0) + 1
+    print("글 %d개 · 꼴 %s"
+          % (len(posts), " · ".join("%s %d" % kv for kv in sorted(shapes.items()))))
     for k, v in sorted(kinds.items(), key=lambda x: -x[1]):
-        mark = "우리 대상" if any(n == k and m for n, _, m in KINDS) else ""
-        print("    %-18s %2d  %s" % (k, v, mark))
+        print("    %-18s %2d  %s" % (k, v, "우리 대상" if d_ours(posts, k) else ""))
 
-    miss = sorted({k for d in posts for k in d["labels"] if k not in MAP})
-    if miss:
-        print("\n못 옮긴 칸 (버리지 않고 raw 에 넣는다): %s" % ", ".join(miss))
+    hard = [d for d in posts if d["못 읽은 것"]]
+    if hard:
+        print("\n못 읽은 글 %d개. 버리지 않고 raw 에 사유를 적었다" % len(hard))
 
     if dry or not db:
         print("\ndry run. 아무것도 안 넣었다" if dry else "\n--db 를 주면 넣는다")

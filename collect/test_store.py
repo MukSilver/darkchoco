@@ -126,10 +126,67 @@ c = s.counts()
 if "ransom" not in c:
     fails.append("소스별 갯수가 안 나온다: %r" % c)
 
+# ── 11. 다시 읽은 것으로 갈아 끼운다 ────────────
+# 파서를 고치면 열쇠 칸이 바뀐다. `put` 은 옛 줄을 놔둔 채 하나를 더 만든다
+r11 = Store(tmp / "r.db")
+BASE = dict(source="telegram", src_id="chan/1", venue="t.me/chan",
+            venue_kind="telegram", actor="", target_org="", title="{",
+            body='{"Source": "ex[.]test", "Type": "Data leak"}',
+            body_kind="집계 채널 글", body_via="t.me/s",
+            via=["t.me/chan"], got_by="v1", raw={"글 종류": "기타"})
+r11.put(Item(**BASE), "2026-08-20")
+old_uid = Item(**BASE).uid()
+r11.ack(old_uid)                       # 사람이 봤다고 표시해 둔다
+
+고친것 = dict(BASE, venue="ex.test", venue_kind="forum", actor="TestHandle",
+           title="A test claim", kind="확인 못 함", raw={"글 종류": "유출 알림"})
+new_uid = r11.replace(old_uid, Item(**고친것))
+
+check("uid 가 바뀐다", new_uid != old_uid, True)
+check("줄이 안 늘어난다", len(r11.rows()), 1)
+check("옛 줄은 없다", r11.seen(old_uid), False)
+row = r11.rows()[0]
+check("해석은 바뀐다", (row["venue"], row["actor"], row["title"]),
+      ("ex.test", "TestHandle", "A test claim"))
+check("글 종류도 바뀐다", json.loads(row["raw"])["글 종류"], "유출 알림")
+
+# **관측된 사실은 안 바뀐다.** 다시 읽는 것은 해석이지 관측이 아니다
+check("처음 본 날 그대로", row["first_seen"], "2026-08-20")
+check("사람이 봤다는 표시 그대로", row["is_new"], 0)
+
+# ── 12. 열쇠가 그대로면 제자리에서 고친다 ────────
+같은열쇠 = dict(고친것, country="Testland")
+same_uid = r11.replace(new_uid, Item(**같은열쇠))
+check("uid 가 안 바뀐다", same_uid, new_uid)
+check("여전히 한 줄", len(r11.rows()), 1)
+check("안 열쇠 칸도 고쳐진다", r11.rows()[0]["country"], "Testland")
+
+# ── 13. 다시 읽어 남과 겹치면 합친다 ────────────
+# 같은 글이 두 줄로 남는 것보다 낫다
+r11.put(Item(**dict(BASE, src_id="chan/2", title="다른 글")), "2026-08-21")
+check("이제 두 줄", len(r11.rows()), 2)
+두번째 = Item(**dict(BASE, src_id="chan/2", title="다른 글"))
+겹치게 = Item(**dict(같은열쇠, src_id="chan/2"))
+# `src_id` 가 다르니 실제로는 안 겹친다. 겹치는 것은 같은 `src_id` 일 때다
+r11.replace(두번째.uid(), 겹치게)
+check("여전히 두 줄", len(r11.rows()), 2)
+
+# 진짜로 겹치게 만든다. 두 줄을 같은 열쇠로 몰아넣는다
+r11.replace(겹치게.uid(), Item(**같은열쇠))
+check("합쳐서 한 줄", len(r11.rows()), 1)
+
+# ── 14. 없는 줄을 갈아 끼우지 않는다 ────────────
+try:
+    r11.replace("없는uid", Item(**BASE))
+    fails.append("없는 uid 인데 안 막았다")
+except KeyError:
+    pass
+r11.close()
+
 # ── 결과 ────────────────────────────────────────
 if fails:
     print("실패 %d" % len(fails))
     for f in fails:
         print("  - %s" % f)
     sys.exit(1)
-print("통과. 시험 10 묶음")
+print("통과. 시험 14 묶음")

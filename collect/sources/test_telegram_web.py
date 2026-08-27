@@ -13,7 +13,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-from collect.sources.telegram_web import clean, origin, parse, to_item  # noqa: E402
+from collect.sources.telegram_web import parse, to_item  # noqa: E402
+from collect.sources.tg_post import clean, origin  # noqa: E402
 
 fails = []
 
@@ -108,18 +109,19 @@ check("가운데는 안 건드린다", clean("A 👤 B"), "A 👤 B")
 
 # ── 5. 원 출처를 글 안에서 찾는다 ───────────────
 # 집계 채널 주소를 원 출처로 세면 안 된다
-check("링크에서", origin(["https://example-forum.test/x"], ""),
+check("링크에서", origin(["https://example-forum.test/x"], "", {}),
       "https://example-forum.test/x")
-check("t.me 는 원 출처가 아니다", origin(["https://t.me/testchan/1"], ""), "")
-check("본문에서 줍기", origin([], "보라 https://example-forum.test/y 끝"),
+check("t.me 는 원 출처가 아니다", origin(["https://t.me/testchan/1"], "", {}), "")
+check("본문에서 줍기", origin([], "보라 https://example-forum.test/y 끝", {}),
       "https://example-forum.test/y")
-check("없으면 빈칸", origin([], "아무것도 없다"), "")
+check("없으면 빈칸", origin([], "아무것도 없다", {}), "")
 
 # ── 6. 항목으로 바꾼다 ──────────────────────────
 it = to_item(posts[0], "testchan", "2026-08-27")
 check("원 출처가 포럼", it.post_url, "https://example-forum.test/Thread-SELLING-test")
 check("venue 도 포럼 도메인", it.venue, "example-forum.test")
-check("via 는 텔레그램", it.via, ["t.me/s/testchan"])
+# `/s` 를 빼야 두 길이 한 줄로 모인다. 실계정 길에는 `/s` 가 없다
+check("via 는 텔레그램", it.via, ["t.me/testchan"])
 check("행위자 이모지 없음", it.actor, "TestHandle")
 check("대상", it.target_org, "example-target.test")
 check("도메인꼴이면 도메인칸에도", it.target_domain, "example-target.test")
@@ -134,12 +136,15 @@ check("한글 조직은 도메인 아님", it2.target_domain, "")
 check("랜섬은 성격이 정해진다", it2.kind, "랜섬웨어 유출")
 check("원 출처 없으면 venue 는 채널", it2.venue, "t.me/testchan")
 
-# ── 7. 못 옮긴 칸을 버리지 않는다 ───────────────
+# ── 7. 칸을 하나도 안 버린다 ───────────────────
+# 전에는 못 옮긴 칸만 따로 적었다. 이제 본문 칸을 통째로 남긴다
 it3 = to_item(posts[2], "testchan", "2026-08-27")
-miss = it3.raw.get("못 옮긴 칸", [])
+kept = it3.raw.get("본문 칸", {})
 for k in ("cve id", "cvss score", "product"):
-    if k not in miss:
-        fails.append("못 옮긴 칸에 %s 가 없다: %r" % (k, miss))
+    if k not in kept:
+        fails.append("본문 칸에 %s 가 없다: %r" % (k, sorted(kept)))
+check("CVE 는 우리 대상이 아니다", it3.raw["우리 대상"], False)
+check("그래도 버리지 않는다", bool(it3.uid()), True)
 
 # ── 8. CVE 둘이 한 줄로 뭉치지 않는다 ───────────
 # 2026-08-27 에 실제로 스무 건이 열일곱 줄이 됐다
