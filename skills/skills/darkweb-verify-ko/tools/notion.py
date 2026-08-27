@@ -27,8 +27,27 @@ from pathlib import Path
 
 # 경로·재시도·토큰 탐색은 packages/dc_notion 이 맡습니다.
 # 환경변수로 토큰을 받지 않는 방침은 그대로입니다(allow_env_token=False).
-sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "packages"))
-from dc_notion import API, VERSION, Notion, NotionError  # noqa: E402
+#
+# 이 스킬은 cp -R 로 떼어 갈 수 있어야 하므로, 저장소 밖에서도 부품을 찾게
+# _dcpath 에 맡깁니다. 못 찾아도 import 는 되어야 합니다. 노션을 안 쓰는
+# 절(③④⑤⑥)이 그대로 돌아야 하기 때문입니다.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _dcpath import ensure_packages, missing_message, use_utf8  # noqa: E402
+
+use_utf8()
+
+if ensure_packages():
+    from dc_notion import API, VERSION, Notion, NotionError  # noqa: E402
+else:
+    API = "https://api.notion.com/v1"
+    VERSION = ""
+
+    class NotionError(RuntimeError):
+        pass
+
+    class Notion:                                        # noqa: D101
+        def __init__(self, *a, **k):
+            raise SystemExit(missing_message())
 
 _client: Notion | None = None
 
