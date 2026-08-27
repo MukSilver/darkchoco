@@ -98,39 +98,56 @@ def one(f: Fetcher, s: Store, chan: str, today: str, dry: bool) -> dict:
     return r
 
 
+def ransom(db: str, feeds: str) -> None:
+    """랜섬웨어 유출 사이트 집계를 읽는다. 유출 사이트에 직접 붙지 않는다."""
+    for feed in [x.strip() for x in feeds.split(",") if x.strip()]:
+        print("\n  ── ransomware.live / %s ──" % feed)
+        sys.stdout.flush()
+        subprocess.run([sys.executable, "-m", "collect.sources.ransomlive",
+                        feed, "--db", db],
+                       cwd=str(Path(__file__).resolve().parent.parent))
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="수집 한 바퀴")
     ap.add_argument("--db", required=True, help="수집 표 경로")
     ap.add_argument("--channels", default="", help="쉼표로 나눈 채널. 안 주면 목록 파일")
+    ap.add_argument("--ransom", default="kr",
+                    help="랜섬 집계. kr · recent · 쉼표로 둘 다. 끄려면 빈칸")
+    ap.add_argument("--no-telegram", action="store_true", help="텔레그램을 건너뛴다")
     ap.add_argument("--dry", action="store_true", help="받기만 하고 표에 안 넣는다")
     ap.add_argument("--notify", action="store_true", help="디스코드로 보낸다")
     ap.add_argument("--go", action="store_true", help="알림을 실제로 보낸다")
     ap.add_argument("--queue", help="검증 큐 폴더. 주면 케이스를 만든다")
     a = ap.parse_args()
 
-    chans = channels(a.channels)
     today = date.today().isoformat()
-    f = Fetcher()
-    s = Store(Path(a.db))
+    print("한 바퀴 · %s" % today)
 
-    print("채널 %d개 · %s\n" % (len(chans), today))
-    stuck = []
-    for c in chans:
-        r = one(f, s, c, today, a.dry)
-        if r["막힌 것"]:
-            stuck.append(r)
-            print("  %-18s 못 봄 — %s" % (c, r["막힌 것"]))
-        else:
-            kinds = " · ".join("%s %d" % (k, v)
-                               for k, v in sorted(r["종류"].items(), key=lambda x: -x[1]))
-            print("  %-18s 글 %2d · 새 것 %2d   %s" % (c, r["글"], r["새 것"], kinds))
+    if not a.no_telegram:
+        chans = channels(a.channels)
+        f = Fetcher()
+        s = Store(Path(a.db))
+        print("\n  ── 텔레그램 채널 %d개 ──" % len(chans))
+        stuck = []
+        for c in chans:
+            r = one(f, s, c, today, a.dry)
+            if r["막힌 것"]:
+                stuck.append(r)
+                print("  %-18s 못 봄 — %s" % (c, r["막힌 것"]))
+            else:
+                kinds = " · ".join("%s %d" % (k, v)
+                                   for k, v in sorted(r["종류"].items(), key=lambda x: -x[1]))
+                print("  %-18s 글 %2d · 새 것 %2d   %s" % (c, r["글"], r["새 것"], kinds))
+        s.close()
+        print()
+        print(f.report())
+        if stuck:
+            print("\n  못 본 채널 %d개. **비어서가 아니다.**" % len(stuck))
+            print("  미리보기가 꺼진 채널은 실계정 경로가 맡는다")
 
-    print()
-    print(f.report())
-    if stuck:
-        print("\n못 본 채널 %d개. **비어서가 아니다.**" % len(stuck))
-        print("미리보기가 꺼진 채널은 실계정 경로가 맡는다")
-    s.close()
+    if a.ransom and not a.dry:
+        ransom(a.db, a.ransom)
 
     if a.notify:
         print("\n── 알림 ──")
