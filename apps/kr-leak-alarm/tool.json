@@ -1,0 +1,46 @@
+{
+  "name": "kr-leak-alarm",
+  "owner": "안유빈",
+  "github": "@60secAgo",
+  "summary": "랜섬 피드 세 곳에서 한국 피해를 골라 대시보드로 냅니다",
+  "runs_in": "host",
+  "commands": {
+    "first": "scripts\\run.bat run",
+    "cli": "python -m collector.main run",
+    "doctor": "python -m collector.main doctor",
+    "serve": "python -m collector.main serve"
+  },
+  "default": "first",
+  "run_cwd": ".",
+  "install": {
+    "requirements": "requirements.txt",
+    "note": "scripts\\run.bat 이 가상환경과 설정 복사까지 혼자 합니다"
+  },
+  "preconditions": {
+    "docker": false,
+    "tor": "tor-scan 만",
+    "interactive_login": false
+  },
+  "secrets": [
+    {
+      "key": "KRLEAK_WEBHOOK_URL",
+      "where": "디스코드 웹훅. 안 넣어도 됩니다",
+      "optional": true
+    }
+  ],
+  "config_files": [
+    {
+      "path": "config.json",
+      "example": "config.example.json",
+      "note": "run.bat 이 없으면 복사합니다"
+    }
+  ],
+  "packages": [
+    "dc_console",
+    "dc_ransomfeed",
+    "dc_safety"
+  ],
+  "output": "web/data/",
+  "docs": "README.md",
+  "license": "MIT"
+}

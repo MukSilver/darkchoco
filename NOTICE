@@ -1,0 +1,42 @@
+다크초코 (darkchoco)
+Copyright 2026 TEAM 다크초코 — 화이트햇 스쿨 4기
+
+이 저장소는 Apache License 2.0 을 따릅니다. 전문은 LICENSE 에 있습니다.
+
+
+폴더마다 다른 라이선스
+──────────────────────
+
+아래 폴더는 각자 따로 만들어져 이 저장소로 들어온 것입니다. 그 폴더 안에
+LICENSE 가 있으면 그것이 먼저입니다.
+
+  apps/kr-leak-alarm/        MIT License        apps/kr-leak-alarm/LICENSE
+
+나머지 폴더에는 따로 둔 라이선스가 없으므로 루트의 Apache 2.0 을 따릅니다.
+
+
+들어온 경위
+───────────
+
+apps/ 아래 다섯과 skills/ 는 각자 다른 저장소에서 `git subtree` 로 흡수했습니다.
+원래 저장소의 커밋 기록이 그대로 남아 있습니다. 절차는 docs/구축절차.md 에
+적혀 있습니다.
+
+  apps/forum-crawler       성민서
+  apps/dls-observatory     안유빈
+  apps/kr-leak-alarm       안유빈
+  apps/tg-notion-report    이수빈
+  apps/tg-korea-alert      성민서
+  skills                   최현서
+
+각 폴더의 주인은 .github/CODEOWNERS 에 적혀 있습니다.
+
+
+밖에서 가져다 쓰는 것
+─────────────────────
+
+받아서 쓰는 라이브러리는 도구마다 다릅니다. 각 도구 폴더의 requirements.txt
+를 보십시오. 이 저장소는 그 라이브러리들을 담고 있지 않습니다.
+
+조사 대상 사이트에서 받은 자료는 이 저장소에 넣지 않습니다. .gitignore 가
+*.sqlite3 과 output/ 을 막습니다.

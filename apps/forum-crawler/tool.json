@@ -1,0 +1,34 @@
+{
+  "name": "forum-crawler",
+  "owner": "성민서",
+  "github": "@minsmiths",
+  "summary": "다크웹 포럼 한 곳을 훑어 조사 초안 MD 한 장을 냅니다",
+  "runs_in": "docker",
+  "commands": {
+    "cli": "python investigate.py <url> --type forum"
+  },
+  "default": "cli",
+  "run_cwd": ".",
+  "install": {
+    "requirements": "requirements.txt",
+    "note": "docker build 가 tor 와 playwright 브라우저를 받습니다"
+  },
+  "preconditions": {
+    "docker": true,
+    "tor": true,
+    "interactive_login": false
+  },
+  "secrets": [],
+  "config_files": [
+    {
+      "path": "whitelist.yaml",
+      "example": "whitelist.example.yaml",
+      "note": "승인된 주소만 조사합니다"
+    }
+  ],
+  "packages": [
+    "dc_console"
+  ],
+  "output": "reports/",
+  "docs": "README.md"
+}

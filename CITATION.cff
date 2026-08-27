@@ -1,0 +1,35 @@
+cff-version: 1.2.0
+title: 다크초코 — 다크웹 개인정보 유통 생태계 조사 도구 모음
+message: 이 도구 모음을 인용하실 때 아래를 써 주십시오.
+type: software
+authors:
+  - family-names: 김
+    given-names: 무근
+    alias: MukSilver
+  - family-names: 성
+    given-names: 민서
+    alias: minsmiths
+  - family-names: 안
+    given-names: 유빈
+    alias: 60secAgo
+  - family-names: 이
+    given-names: 수빈
+    alias: leesubhin060-max
+  - family-names: 최
+    given-names: 현서
+    alias: grute02
+repository-code: https://github.com/MukSilver/darkchoco
+abstract: >-
+  유출된 개인정보가 다크웹에서 어떻게 유통되는지 조사하는 도구 모음입니다.
+  포럼과 텔레그램과 랜섬웨어 유출 사이트를 각각 조사하는 도구와, 유출 주장
+  하나를 아홉 단계로 검증하는 AI 스킬로 이루어져 있습니다. 화이트햇 스쿨
+  4기 팀 프로젝트로 만들었습니다.
+keywords:
+  - dark web
+  - threat intelligence
+  - data breach
+  - ransomware
+  - OSINT
+license: Apache-2.0
+version: 0.1.0
+date-released: 2026-08-28

@@ -3,6 +3,12 @@
 다크웹 개인정보 유통 생태계 조사 도구 모음
 화이트햇 스쿨 4기 · 다크초코
 
+도구마다 주인이 있습니다. 하나만 골라 써도 되고, 필요한 것만 설치해도 됩니다.
+
+```bash
+python dc.py list
+```
+
 ---
 
 ## 처음 오셨으면
@@ -15,20 +21,26 @@
 ## 구조
 
 ```
-apps/         각자 소유. 자기 폴더에서 자유롭게 고칩니다
-packages/     공용 부품. 여기만 공유합니다
-skills/       검증 스킬
+dc.py         입구. 목록 · 사용법 · 상태를 봅니다
+apps/         도구. 각자 소유하고 자기 폴더에서 자유롭게 고칩니다
+packages/     공용 부품. 여기만 리뷰가 필요합니다
+skills/       수집기와 검증 스킬
 docs/         운영안 · 구축 절차 · 할 일
 ```
 
-| 폴더 | 담당 | 무엇 |
-|---|---|---|
-| apps/forum-crawler | 성민서 | 포럼 크롤링 |
-| apps/dls-observatory | 안유빈 | 다크웹 유출 사이트 관측 |
-| apps/kr-leak-alarm | 안유빈 | 랜섬웨어 한국 피해 알림 |
-| apps/tg-notion-report | 이수빈 | 텔레그램 수집 · 노션 반영 |
-| apps/tg-korea-alert | 성민서 | 텔레그램 한국 알림 |
-| skills | 최현서 | 유출 주장 검증 |
+도구 폴더마다 `tool.json` 이 한 장 있습니다. 아래 표는 그것으로 만듭니다.
+
+<!-- 도구표 시작 -->
+| 도구 | 담당 | 설치 | 비밀값 | 어디서 | 무엇을 하나 |
+|---|---|:-:|:-:|:-:|---|
+| [collect](skills/collect) | 최현서 | 없음 | 1곳 | 내 PC | 텔레그램·랜섬·브라우저킷 결과를 SQLite 한 표로 모읍니다 |
+| [darkweb-verify-ko](skills/skills/darkweb-verify-ko) | 최현서 | 없음 | 0곳 | 내 PC | 유출 주장 하나를 아홉 단계로 검증합니다 (AI 스킬) |
+| [dls-observatory](apps/dls-observatory) | 안유빈 | 없음 | 2곳 | 내 PC | 유출 사이트가 살아 있는지 보고 노션 명부를 갱신합니다 |
+| [forum-crawler](apps/forum-crawler) | 성민서 | 필요 | 0곳 | 도커 | 다크웹 포럼 한 곳을 훑어 조사 초안 MD 한 장을 냅니다 |
+| [kr-leak-alarm](apps/kr-leak-alarm) | 안유빈 | 필요 | 0곳 | 내 PC | 랜섬 피드 세 곳에서 한국 피해를 골라 대시보드로 냅니다 |
+| [tg-korea-alert](apps/tg-korea-alert) | 성민서 | 필요 | 5곳 | 내 PC | 텔레그램에서 한국 관련 글을 골라 디스코드로 알립니다 |
+| [tg-notion-report](apps/tg-notion-report) | 이수빈 | 필요 | 3곳 | 내 PC | 텔레그램 채널을 모아 노션 보고서로 반영합니다 |
+<!-- 도구표 끝 -->
 
 ---
 
