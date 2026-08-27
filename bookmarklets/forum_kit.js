@@ -234,7 +234,21 @@
     else { box.style.height = prevH; box.style.bottom = prevB; }
     bMin.textContent = mini ? '펼치기' : '최소화';
   });
-  row1.append(grip, bTree, bList, bHarv, bPage, bDiag, st, bStop, bMin, bClose);
+/* 홈으로. 통합 킷이 `window.__DKHOME` 을 걸어 두면 나온다.
+   낱개로 쓸 때는 돌아갈 데가 없으므로 안 나온다. 2026-08-27 */
+  const bHome = plain('홈으로', () => {
+    const h = window.__DKHOME;
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    box.remove();
+    if (h) h();
+  });
+  bHome.style.background = '#234'; bHome.style.color = '#cde';
+  bHome.style.borderColor = '#467';
+
+  row1.append(grip, bTree, bList, bHarv, bPage, bDiag, st, bStop, bMin);
+  if (window.__DKHOME) row1.append(bHome);
+  row1.append(bClose);
   row2.append(iN, iSort, iDelay, iWho, cMask, cScope, cSubs);
   box.append(row1, row2, ta);
 

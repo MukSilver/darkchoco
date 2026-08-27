@@ -114,6 +114,37 @@
       return l;
     };
 
+    /* 끌어서 옮기기. forum_kit 에만 있던 것을 여기로 옮겨 셋도 같이 쓴다.
+       상자가 화면을 거의 덮어서 아래를 보려면 옮기거나 접어야 한다. 2026-08-27 */
+    const grip = document.createElement('span');
+    grip.textContent = '⠿'; grip.title = '끌어서 옮기기';
+    grip.style.cssText = 'cursor:move;color:#888;padding:0 4px;user-select:none;font-size:15px';
+    let dx = 0, dy = 0, dragging = false;
+    grip.onmousedown = e => {
+      const r = box.getBoundingClientRect();
+      box.style.inset = ''; box.style.left = r.left + 'px'; box.style.top = r.top + 'px';
+      box.style.width = r.width + 'px'; box.style.height = r.height + 'px';
+      dx = e.clientX - r.left; dy = e.clientY - r.top; dragging = true; e.preventDefault();
+    };
+    const onMove = e => { if (!dragging) return;
+      box.style.left = (e.clientX - dx) + 'px'; box.style.top = (e.clientY - dy) + 'px'; };
+    const onUp = () => { dragging = false; };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+
+    const gone = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      box.remove();
+    };
+
+    /* 홈으로. 통합 킷이 `window.__DKHOME` 을 걸어 두면 나온다.
+       낱개 킷으로 쓸 때는 돌아갈 데가 없으므로 안 나온다. */
+    const homeB = document.createElement('button');
+    homeB.textContent = '홈으로';
+    homeB.style.cssText = 'padding:3px 9px;cursor:pointer;font:12px sans-serif;background:#234;color:#cde;border:1px solid #467';
+    homeB.onclick = () => { const h = window.__DKHOME; gone(); if (h) h(); };
+
     const stopB = document.createElement('button');
     stopB.textContent = '중단';
     stopB.style.cssText = 'padding:3px 9px;cursor:pointer;font:12px sans-serif;background:#422;color:#fdd;border:1px solid #855';
@@ -122,7 +153,7 @@
     const closeB = document.createElement('button');
     closeB.textContent = '닫기';
     closeB.style.cssText = 'padding:3px 9px;cursor:pointer;font:12px sans-serif;background:#422;color:#fdd;border:1px solid #855';
-    closeB.onclick = () => box.remove();
+    closeB.onclick = gone;
 
     /* 최소화. 접어도 상태와 중단은 남긴다.
        걸어다니는 중에 아래 페이지를 보면서 진행을 확인할 때 쓴다. */
@@ -131,7 +162,7 @@
     miniB.textContent = '최소화';
     miniB.setAttribute('data-mini', '1');
     miniB.style.cssText = 'padding:3px 9px;cursor:pointer;font:12px sans-serif;background:#333;color:#ddd;border:1px solid #555';
-    const KEEP = [st, miniB, stopB, closeB];
+    const KEEP = [grip, st, miniB, stopB, homeB, closeB];
     miniB.onclick = () => {
       MINI = !MINI;
       box.style.inset = MINI ? 'auto 10px 10px auto' : '4%';
@@ -142,15 +173,18 @@
     };
 
     const mount = (...items) => {
-      bar.append(...items, st, stopB, miniB, closeB);
+      bar.append(grip, ...items, st, stopB, miniB);
+      if (window.__DKHOME) bar.append(homeB);      /* 통합 킷일 때만 */
+      bar.append(closeB);
       box.append(bar, ta);
       document.body.appendChild(box);
+      box.__gone = gone;
       return box;
     };
 
     return { box: box, bar: bar, st: st, ta: ta, say: say, put: put,
-             mk: mk, inp: inp, stopB: stopB, miniB: miniB, closeB: closeB,
-             mount: mount };
+             mk: mk, inp: inp, grip: grip, stopB: stopB, miniB: miniB,
+             homeB: homeB, closeB: closeB, gone: gone, mount: mount };
   }
 
 
@@ -1099,22 +1133,20 @@
   const NAME = { qilin: '킬린', dirindex: '디렉터리', photo: '증거 사진', probe: '구조 진단' };
   const RUN = { qilin: modQilin, dirindex: modIndex, photo: modPhoto, probe: modProbe };
 
-  const pick = document.createElement('div');
-  pick.style.cssText = 'position:fixed;top:10px;right:10px;z-index:2147483647;background:#111;color:#eee;border:2px solid #666;padding:8px;display:flex;flex-direction:column;gap:6px;font:13px sans-serif;max-width:60vw';
-  const line = document.createElement('div');
-  line.style.cssText = 'display:flex;gap:6px;align-items:center;flex-wrap:wrap';
-  const note = document.createElement('div');
-  note.style.cssText = 'font:12px monospace;color:#0f0';
-  note.textContent = VER + ' · ' + NAME[BEST] + ' 으로 봤다';
+  const KEYS = ORDER.concat(['probe']);
 
   const go = (k) => {
-    pick.remove();
+    if (window.__DK) { try { window.__DK.remove(); } catch (e) {} window.__DK = null; }
     try {
       RUN[k]();
     } catch (e) {
       const err = document.createElement('div');
       err.style.cssText = 'position:fixed;inset:10% 20%;z-index:2147483647;background:#111;color:#fdd;border:2px solid #855;padding:12px;font:12px monospace;white-space:pre-wrap;overflow:auto';
-      err.textContent = NAME[k] + ' 모듈이 멈췄다. 다른 모듈은 멀쩡하다.\n\n' + (e && e.stack || e);
+      /* 역슬래시를 안 쓴다. TAIL 이 파이썬 문자열이라 겹이 한 번 벗겨지고,
+         셸을 거치면 또 벗겨진다. 2026-08-27 에 세 번 물렸다 */
+      const NL = String.fromCharCode(10);
+      err.textContent = [NAME[k] + ' 모듈이 멈췄다. 다른 모듈은 멀쩡하다.', '',
+                         (e && e.stack || e)].join(NL);
       const x = document.createElement('button');
       x.textContent = '닫기';
       x.style.cssText = 'display:block;margin-top:10px;padding:3px 9px;cursor:pointer';
@@ -1124,24 +1156,81 @@
     }
   };
 
-  ORDER.concat(['probe']).forEach(k => {
-    const b = document.createElement('button');
-    b.textContent = NAME[k];
-    const hot = (k === BEST);
-    b.style.cssText = 'padding:3px 9px;cursor:pointer;font:12px sans-serif;' +
-      (hot ? 'background:#0a4;color:#fff;border:1px solid #0f8;font-weight:bold'
-           : 'background:#333;color:#ddd;border:1px solid #555');
-    b.onclick = () => go(k);
-    line.append(b);
-  });
+  /* 고르는 판. 접히고 끌어 옮겨진다. 모듈 창에서 「홈으로」 로 다시 부른다 */
+  const showPick = () => {
+    if (window.__DK) { try { window.__DK.remove(); } catch (e) {} }
+    const pick = document.createElement('div');
+    pick.style.cssText = 'position:fixed;top:10px;right:10px;z-index:2147483647;background:#111;color:#eee;border:2px solid #666;padding:8px;display:flex;flex-direction:column;gap:6px;font:13px sans-serif;max-width:60vw';
+    const line = document.createElement('div');
+    line.style.cssText = 'display:flex;gap:6px;align-items:center;flex-wrap:wrap';
+    const note = document.createElement('div');
+    note.style.cssText = 'font:12px monospace;color:#0f0';
+    note.textContent = VER + ' · ' + NAME[BEST] + ' 으로 봤다';
 
-  const closeB = document.createElement('button');
-  closeB.textContent = '닫기';
-  closeB.style.cssText = 'padding:3px 9px;cursor:pointer;font:12px sans-serif;background:#422;color:#fdd;border:1px solid #855';
-  closeB.onclick = () => pick.remove();
-  line.append(closeB);
+    const grip = document.createElement('span');
+    grip.textContent = '⠿'; grip.title = '끌어서 옮기기';
+    grip.style.cssText = 'cursor:move;color:#888;padding:0 4px;user-select:none;font-size:15px';
+    let dx = 0, dy = 0, dragging = false;
+    grip.onmousedown = e => {
+      const r = pick.getBoundingClientRect();
+      pick.style.top = r.top + 'px'; pick.style.left = r.left + 'px'; pick.style.right = 'auto';
+      dx = e.clientX - r.left; dy = e.clientY - r.top; dragging = true; e.preventDefault();
+    };
+    const onMove = e => { if (!dragging) return;
+      pick.style.left = (e.clientX - dx) + 'px'; pick.style.top = (e.clientY - dy) + 'px'; };
+    const onUp = () => { dragging = false; };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    const gone = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      pick.remove();
+    };
 
-  pick.append(line, note);
-  document.body.appendChild(pick);
-  window.__DK = pick;
+    const mkB = (label, css) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.style.cssText = 'padding:3px 9px;cursor:pointer;font:12px sans-serif;' + css;
+      return b;
+    };
+
+    const picks = [];
+    KEYS.forEach(k => {
+      const hot = (k === BEST);
+      const b = mkB(NAME[k], hot ? 'background:#0a4;color:#fff;border:1px solid #0f8;font-weight:bold'
+                                 : 'background:#333;color:#ddd;border:1px solid #555');
+      b.onclick = () => { gone(); go(k); };
+      picks.push(b);
+    });
+
+    let mini = false;
+    const minB = mkB('최소화', 'background:#333;color:#ddd;border:1px solid #555');
+    minB.onclick = () => {
+      mini = !mini;
+      picks.forEach(b => { b.style.display = mini ? 'none' : ''; });
+      note.style.display = mini ? 'none' : '';
+      minB.textContent = mini ? '펼치기' : '최소화';
+    };
+
+    const closeB = mkB('닫기', 'background:#422;color:#fdd;border:1px solid #855');
+    closeB.onclick = gone;
+
+    line.append(grip);
+    picks.forEach(b => line.append(b));
+    line.append(minB, closeB);
+    pick.append(line, note);
+    document.body.appendChild(pick);
+    window.__DK = pick;
+  };
+
+/* 고를 것이 하나뿐이면 판을 건너뛴다. 검증 킷이 그렇다.
+   구조 진단은 포럼 창 안에 이미 단추로 있어서 판이 한 겹 더 있을 뜻이 없다.
+   그때는 돌아갈 데가 없으므로 __DKHOME 을 안 건다. 모듈에 홈으로가 안 나온다.
+   2026-08-27 */
+  if (ORDER.length <= 1) {
+    go(ORDER[0] || 'probe');
+  } else {
+    window.__DKHOME = showPick;
+    showPick();
+  }
 })();
