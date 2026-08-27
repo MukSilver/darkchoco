@@ -113,6 +113,13 @@ class Notion:
                 time.sleep(wait)
         raise NotionError(f"Notion API 재시도 초과: {method} {path}")
 
+    def request(self, method: str, path: str, body: dict | None = None) -> dict:
+        """아래 편의 메서드로 안 되는 경로를 직접 부를 때 씁니다.
+
+        경로는 /pages/... 처럼 /v1 뒤부터 적습니다.
+        """
+        return self._request(method, path, body)
+
     # -- 데이터베이스 / 데이터 소스 ----------------------------------------
     def database(self, database_id: str) -> dict:
         return self._request("GET", f"/databases/{database_id}")
