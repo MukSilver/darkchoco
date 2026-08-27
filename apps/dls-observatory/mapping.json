@@ -1,0 +1,119 @@
+{
+  "_comment": "Notion DB 칼럼 이름 매핑. 오른쪽 값을 노션 실제 칼럼명으로 맞추세요. \"\" 로 두면 그 필드는 채우지 않습니다.",
+  "title_property": "그룹 이름",
+  "address_property": "주소",
+  "columns": {
+    "description": "어떤 곳인지",
+    "kind": "종류",
+    "status": "상태",
+    "address": "주소",
+    "prev_addresses": "이전 주소",
+    "aliases": "이전 이름·별칭",
+    "linked": "연결된 곳",
+    "last_activity": "최근 활동",
+    "victim_targets": "피해 대상",
+    "korea_leaks": "한국 관련 유출",
+    "source": "출처",
+    "checked_date": "확인일",
+    "country": "국가",
+    "scale": "규모",
+    "note": "",
+    "language": "사용 언어",
+    "pii_leak": "개인정보 유출",
+    "format": "형식",
+    "rank": "",
+    "signup_required": "가입 필요",
+    "how_to_enter": "들어가는 법",
+    "distribution": "유통 자리",
+    "web_published": "",
+    "assignee": "",
+    "stage": "조사 단계",
+    "db_reflected": "",
+    "deliberate_hold": "",
+    "contacts": "연락수단",
+    "crypto": "",
+    "reasons": "추론 근거"
+  },
+  "_columns_note": {
+    "note": "비활성 — '비고'는 사람이 쓰는 수집 메모(504/514 사용 중)라 자동으로 건드리지 않습니다.",
+    "language": "tor_probe.py (Tor 직접 확인) 결과가 있을 때만 채워집니다. --probe 없이 실행하면 건드리지 않습니다.",
+    "assignee": "담당자 / 조사 단계 / DB 반영 / 순위 / 웹에 올림 — 운영자가 관리하는 항목",
+    "format": "추론 — 설명·제목·keywords 에서 RaaS/데이터 갈취/포럼·마켓 등을 판별. 근거가 약하면 '추정: ' 접두어가 붙습니다.",
+    "pii_leak": "추론 — fullz/CVV/SSN 등 강한 근거면 '있음', 약하면 '추정: 있음'.",
+    "distribution": "추론 — 협박 문구·카운트다운이면 '최초 유출', mirror/aggregate 면 '재배포'.",
+    "stage": "접속 확인만 한 행에 '확인만 함'. '조사 완료' 인 행은 건드리지 않습니다.",
+    "contacts": "Tor 수집이 찾은 Tox/Session/Telegram/Jabber/메일. 노션 칼럼 이름이 다르면 여기를 고치세요.",
+    "crypto": "BTC/XMR/ETH 주소. 노션에 칼럼을 만들면 여기에 이름을 넣으세요.",
+    "reasons": "자동 추론이 왜 그 값을 골랐는지. '추정: ' 붙은 값을 사람이 검수할 때 여기를 보면 근거를 바로 알 수 있습니다. 노션에 '추론 근거' 라는 텍스트 칼럼을 만들면 채워집니다. 없으면 그냥 건너뜁니다."
+  },
+  "placeholders": {
+    "_comment": "값이 있어도 '아직 안 채운 것'으로 볼 문자열. 여기 걸리면 빈 칸처럼 취급해 덮어씁니다.",
+    "_default": [
+      "미확인",
+      "미기입",
+      "-",
+      "—",
+      "?",
+      "unknown",
+      "N/A"
+    ],
+    "한국 관련 유출": [],
+    "피해 대상": [],
+    "비고": []
+  },
+  "country_overrides": {
+    "_comment": "그룹 이름(소문자, 공백·기호 무시) → 국가. 직접 조사한 내용을 적어두면 매 실행마다 반영됩니다.",
+    "lockbit3": "러시아",
+    "qilin": "러시아",
+    "blackbasta": "러시아",
+    "clop": "러시아",
+    "alphv": "러시아",
+    "play": "러시아"
+  },
+  "kind_values": {
+    "_comment": "이 DB 는 이미 'group' / 'market' 표기를 쓰고 있어 거기에 맞췄습니다.",
+    "ransomware_live_group": "group",
+    "ransomlook_group": "group",
+    "ransomlook_market": "market",
+    "ransomlook_forum": "forum"
+  },
+  "status_values": {
+    "online": "online",
+    "offline": "offline"
+  },
+  "source_values": {
+    "ransomware_live": "ransomware.live",
+    "ransomlook": "ransomlook.io",
+    "tor_probe": "직접 확인"
+  },
+  "name_aliases": {
+    "_comment": "노션 행 이름 → 소스(ransomware.live / ransomlook)에서 쓰는 이름. 자동 매칭이 안 되는 표기 차이를 여기서 수동으로 이어줍니다. 왼쪽은 대소문자·공백·기호 무시하고 비교합니다.",
+    "LOCKBIT 2.0 (Deep)": "lockbit2",
+    "KARAKURT 2.0 (IP)": "karakurt",
+    "DARK SHINIGAMIS": "darkshinigami",
+    "0X Thief": "0xthief",
+    "BRIAN'S CLUB": "brainsclub",
+    "PRYX (deep web)": "pyrx",
+    "_확인_필요": "아래는 같은 곳인지 애매해서 주석 처리했습니다. 확인 후 위로 옮기세요.",
+    "_BOHEMIA": "bohemian",
+    "_MEDUZA LOCKER": "medusalocker",
+    "_다른_사이트": "Hustlers≠hunters, VORON MARKET≠orion, ETERNITY≠trinity, CARDER≠card — 이름만 비슷하고 실제로 다른 곳이라 넣지 않았습니다."
+  },
+  "append_columns": [
+    "출처",
+    "국가",
+    "유통 자리"
+  ],
+  "_append_note": "여기 적힌 multi_select 칼럼만 기존 값에 덧붙입니다. '종류'처럼 값이 하나여야 하는 칼럼은 빼두세요 — 이미 market 인 행에 group 이 덧붙는 모순을 막습니다.",
+  "join_separator": " · ",
+  "stage_done_values": [
+    "조사 완료"
+  ],
+  "stage_checked_value": "확인만 함",
+  "format_overrides": {
+    "_comment": "사이트 이름(소문자·공백/기호 무시) → 형식. 규칙으로 못 잡거나 규칙이 틀리게 잡는 곳을 여기서 손으로 고정합니다. 조사하면서 한 줄씩 늘려가세요 — 여기 적힌 값은 무조건 이깁니다.",
+    "_사용가능한_값": "RaaS / 데이터 갈취 / 포럼·마켓 / 카딩 / 스틸러/로그 / 초기 접근 / 사기 도구",
+    "_예시": "\"brainsclub\": \"카딩\" 처럼 적습니다. 아래는 비워뒀으니 직접 채우세요."
+  },
+  "_format_overrides_note": "이름만 보고 제가 임의로 채우면 틀린 정보가 확정값으로 박힙니다. 유명한 마켓이라도 직접 확인하신 것만 넣으세요."
+}
