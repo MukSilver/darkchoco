@@ -462,8 +462,12 @@
     window.__QK = S.mount(bList, bAll, bDetail, bTree, maxWrap, nameWrap);
 
     say(VER + ' · ' + (isDetail ? '상세 페이지로 판정' : '목록 페이지로 판정') + ' · 카드 ' + cardsOf(document).length + '개');
-    ta.value = '실행 중';
-    (isDetail ? bDetail : bList).click();
+  /* 켜면 상자만 뜬다. 사람이 단추를 눌러 시작한다. 2026-08-27 */
+    ta.value = ['킷이 떴다. 아래 단추 중 하나를 누르면 시작한다.', '',
+                '  추천    ' + (isDetail ? '이 건 상세' : '이 페이지만'),
+                '',
+                '「전체 수집」만 요청을 낸다. 쪽을 넘겨 가며 받으므로 시간이 걸린다.',
+                '나머지는 열려 있는 문서만 읽는다.'].join('\n');
 
   }
 
