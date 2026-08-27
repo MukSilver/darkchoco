@@ -14,13 +14,13 @@ import json
 import os
 import re
 import sys
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable
-from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "packages"))
+from dc_notion import Notion  # noqa: E402
 
 
 TELEGRAM_HOSTS = {"t.me", "telegram.me", "www.t.me", "www.telegram.me"}
@@ -317,31 +317,27 @@ def run_guarded_update(
     return decision
 
 
+_clients: dict[str, "Notion"] = {}
+
+
 def notion_request(token: str, method: str, path: str, payload: dict | None = None) -> dict:
-    body = json.dumps(payload).encode("utf-8") if payload is not None else None
-    request = Request(
-        NOTION_API_BASE + path,
-        data=body,
-        method=method,
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Notion-Version": NOTION_VERSION,
-            "Content-Type": "application/json",
-        },
-    )
-    for attempt in range(3):
-        try:
-            with urlopen(request, timeout=30) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except HTTPError as error:
-            detail = error.read().decode("utf-8", errors="replace")
-            if error.code == 429 and attempt < 2:
-                time.sleep(1 + attempt)
-                continue
-            raise RuntimeError(f"Notion API 오류({error.code}): {detail}") from error
-        except URLError as error:
-            raise RuntimeError(f"Notion API 연결 실패: {error.reason}") from error
-    raise RuntimeError("Notion API 요청 재시도 횟수를 초과했습니다.")
+    """공용 dc_notion 을 쓴다. 부르는 쪽 형태는 그대로다.
+
+    직접 짜 두었던 것과 견주면 이만큼이 달라진다.
+      · 429 를 받으면 Retry-After 헤더가 말한 만큼 기다린다 (전에는 1초·2초 고정)
+      · 502·503·504 도 다시 보낸다 (전에는 한 번 끊기면 그대로 중단)
+      · 요청 사이를 벌려 초당 3건을 넘기지 않는다
+      · 재시도 3회에서 6회로 늘었다
+
+    노션 판 번호는 이 앱 것(NOTION_VERSION)을 그대로 쓴다. data_sources 는
+    판마다 응답이 달라서 공용 기본값으로 바꾸면 판정이 어긋난다.
+
+    NotionError 는 RuntimeError 를 물려받으므로 잡는 쪽은 손댈 것이 없다.
+    """
+    client = _clients.get(token)
+    if client is None:
+        client = _clients[token] = Notion(token=token, version=NOTION_VERSION)
+    return client.request(method, path, payload)
 
 
 def rich_text_value(items: object) -> list[str]:
