@@ -1,0 +1,13 @@
+# 폴더마다 주인을 정합니다.
+# 자기 앱 폴더는 본인이 바로 머지해도 됩니다.
+# packages 는 공용이라 리뷰 한 명이 필요합니다.
+
+/apps/forum-crawler/     @minsmiths
+/apps/dls-observatory/   @60secAgo
+/apps/kr-leak-alarm/     @60secAgo
+/apps/tg-notion-report/  @leesubhin060-max
+/apps/tg-korea-alert/    @minsmiths
+/skills/                 @grute02
+/packages/               @MukSilver @minsmiths @60secAgo @leesubhin060-max
+/docs/                   @MukSilver
+/.github/                @MukSilver
