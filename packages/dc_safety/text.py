@@ -9,10 +9,7 @@ VM 탐지와 Tor 게이트 판정은 앱마다 사정이 달라 옮기지 않았
 from __future__ import annotations
 
 import html
-import os
-import platform
 import re
-import subprocess
 import unicodedata
 from typing import Any
 
@@ -125,12 +122,3 @@ def extract_domain(value: Any) -> str:
     if domain.startswith("www."):
         domain = domain[4:]
     return domain
-
-
-# ─────────────────────────────────────────────────────────────
-# 4. 가상화 환경 탐지 — Tor 모듈 게이트
-# ─────────────────────────────────────────────────────────────
-
-_VMWARE_MARKERS = ("vmware", "vmw")
-
-
