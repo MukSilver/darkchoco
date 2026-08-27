@@ -47,8 +47,8 @@ class NotionError(RuntimeError):
 
 class Notion:
     def __init__(self, token: str | None = None, verbose: bool = True,
-                 version: str = VERSION):
-        token = token or find_token()
+                 version: str = VERSION, allow_env_token: bool = True):
+        token = token or find_token(allow_env=allow_env_token)
         if not token:
             raise NotionError("노션 토큰이 비어 있습니다.")
         self.token = token
