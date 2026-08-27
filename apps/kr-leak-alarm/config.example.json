@@ -1,0 +1,84 @@
+{
+  "_comment": "이 파일을 config.json 으로 복사해서 사용하세요. config.json 은 .gitignore 에 등록되어 있습니다.",
+
+  "sources": {
+    "ransomware_live": {
+      "enabled": true,
+      "_comment": "1차 소스. country 필드를 제공해 KR 판별 정확도가 가장 높습니다.",
+      "modes": ["country", "recent", "vendor_search"],
+      "country_codes": ["KR"],
+      "recent_lookback_days": 30,
+      "_vendor_search_comment": "핵심 벤더는 '최근 100건' 피드에 안 잡힐 수 있어 검색으로 따로 확인합니다. 매 실행마다 목록의 일부만 돌아 며칠에 걸쳐 전체를 훑습니다(레이트리밋 회피).",
+      "vendor_search_per_run": 5,
+      "vendor_search_delay_seconds": 3.0
+    },
+    "ransomlook": {
+      "enabled": true,
+      "_comment": "2차 소스. country 필드가 없어 도메인/키워드 판별에 의존합니다."
+    },
+    "ransomfeed": {
+      "enabled": false,
+      "_comment": "3차 소스(RSS). 노이즈가 많아 기본 비활성화."
+    }
+  },
+
+  "kr_detection": {
+    "min_tier_to_report": "likely",
+    "_comment": "confirmed > strong > likely > review 순. 이 등급 이상만 NEW 알림 대상이 됩니다.",
+    "exclude_north_korea": true,
+    "extra_keywords": [],
+    "exclude_keywords": []
+  },
+
+  "supply_detection": {
+    "enabled": true,
+    "_comment": "공급망 축. 한국 기업이 직접 피해자가 아니어도 해외 벤더·협력사 침해를 잡습니다. direct > critical > korea_ops > sector 순.",
+    "min_tier_to_store": "sector",
+    "extra_critical_vendors": [],
+    "exclude_keywords": []
+  },
+
+  "notify": {
+    "desktop_toast": true,
+    "kr_min_score": 60,
+    "_supply_min_tier_comment": "공급망 건 중 어느 등급부터 알림을 띄울지. direct(가장 엄격) / critical(권장) / korea_ops / sector(가장 느슨). 대시보드에는 등급과 무관하게 전부 표시됩니다.",
+    "supply_min_tier": "critical",
+    "webhook": {
+      "enabled": false,
+      "_comment": "URL 은 config 가 아니라 .env 의 KRLEAK_WEBHOOK_URL 에 넣으세요.",
+      "type": "slack"
+    },
+    "email": {
+      "enabled": false,
+      "_comment": "SMTP 계정은 .env 의 KRLEAK_SMTP_* 에 넣으세요.",
+      "to": []
+    },
+    "_resync_threshold_comment": "한 번에 이 건수를 넘게 신규가 잡히면 재동기화로 보고 알림을 생략합니다(DB 초기화·장기 공백 복구 시 알림 폭주 방지).",
+    "resync_threshold": 30,
+    "max_items_per_notification": 10
+  },
+
+  "network": {
+    "timeout_seconds": 30,
+    "max_response_bytes": 33554432,
+    "retries": 2,
+    "user_agent": "Kr-Leak-alarm/1.0 (CTI research; contact: security@example.org)"
+  },
+
+  "tor": {
+    "enabled": false,
+    "_comment": "★ 기본 OFF. VMware 가상머신에서 실행 중이고 require_vmware=true 조건을 통과할 때만 동작합니다. 호스트 PC에서는 절대 켜지 마세요.",
+    "require_vmware": true,
+    "socks_proxy": "socks5h://127.0.0.1:9050",
+    "targets": [],
+    "max_pages_per_target": 1,
+    "delay_seconds": 5,
+    "save_raw_html": false
+  },
+
+  "paths": {
+    "database": "data/krleak.db",
+    "web_data_dir": "web/data",
+    "log_file": "logs/collector.log"
+  }
+}

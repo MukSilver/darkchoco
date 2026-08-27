@@ -1,0 +1,154 @@
+{
+  "_comment": "공급망 위험 판별 데이터. ★ 주의: 이 이름들은 '피해 기업명/도메인/업종'에만 매칭되며 '랜섬웨어 그룹명'에는 절대 매칭되지 않는다. (실제로 Barracuda, Titan, Nova 등은 벤더명이자 랜섬웨어 그룹명이기도 하다.)",
+
+  "critical_vendors": {
+    "_comment": "침해 시 전 세계 고객사로 연쇄되는 벤더. 실제 대형 공급망 사고 이력이 있거나 동일 계층에 있는 제품군.",
+
+    "managed_file_transfer": [
+      "moveit", "progress software", "cleo communications", "cleo harmony",
+      "goanywhere", "fortra", "accellion", "ipswitch", "serv-u",
+      "crushftp", "aspera", "globalscape"
+    ],
+
+    "remote_access_rmm": [
+      "solarwinds", "kaseya", "connectwise", "screenconnect", "n-able",
+      "datto", "ninjaone", "atera", "teamviewer", "anydesk", "beyondtrust",
+      "gotoassist", "logmein", "splashtop"
+    ],
+
+    "identity_pam": [
+      "okta", "ping identity", "cyberark", "sailpoint", "lastpass",
+      "1password", "keeper security", "duo security", "onelogin",
+      "jumpcloud", "auth0"
+    ],
+
+    "network_security_appliance": [
+      "fortinet", "ivanti", "pulse secure", "citrix systems", "netscaler",
+      "sonicwall", "watchguard", "check point software", "palo alto networks",
+      "f5 networks", "zscaler", "sophos", "trend micro", "qualys", "rapid7",
+      "tenable", "crowdstrike", "sentinelone", "carbon black", "kaspersky",
+      "eset", "bitdefender", "mcafee", "trellix", "proofpoint", "mimecast",
+      "barracuda networks", "cisco systems", "juniper networks", "array networks"
+    ],
+
+    "cloud_data_platform": [
+      "snowflake", "databricks", "mongodb", "elastic n.v", "confluent",
+      "rackspace", "digitalocean", "linode", "ovhcloud", "equinix",
+      "cyxtera", "sungard availability", "iron mountain", "backblaze",
+      "veeam", "commvault", "acronis", "carbonite"
+    ],
+
+    "erp_business_software": [
+      "sap se", "sap america", "oracle corporation", "infor", "epicor",
+      "sage group", "workday", "servicenow", "salesforce", "hubspot",
+      "zendesk", "atlassian", "netsuite", "unit4", "ifs ab", "qad inc"
+    ],
+
+    "dev_supply_chain": [
+      "jetbrains", "gitlab", "github", "codecov", "circleci", "travis ci",
+      "npm inc", "docker inc", "hashicorp", "sonatype", "jfrog", "puppet labs",
+      "chef software", "ansible"
+    ],
+
+    "communications_saas": [
+      "twilio", "mailchimp", "sendgrid", "mandrill", "sinch", "vonage",
+      "ringcentral", "8x8 inc", "five9", "genesys", "nice ltd", "verint"
+    ],
+
+    "msp_it_services": [
+      "accenture", "infosys", "tata consultancy", "wipro", "hcl technologies",
+      "tech mahindra", "cognizant", "capgemini", "atos", "dxc technology",
+      "unisys", "ntt data", "fujitsu", "nec corporation", "hitachi systems",
+      "ibm consulting", "kyndryl", "rackspace technology", "sopra steria",
+      "computacenter", "softcat", "presidio", "insight enterprises", "cdw"
+    ],
+
+    "payroll_hr_finance": [
+      "adp inc", "ceridian", "dayforce", "paychex", "ultimate kronos",
+      "ukg inc", "trinet", "zellis", "sd worx", "equifax", "experian",
+      "transunion", "finastra", "fiserv", "fis global", "jack henry",
+      "temenos", "swift network"
+    ],
+
+    "logistics_freight": [
+      "expeditors international", "dsv panalpina", "kuehne + nagel",
+      "kuehne nagel", "db schenker", "ceva logistics", "geodis", "nippon express",
+      "maersk", "hapag-lloyd", "one ocean network", "evergreen marine",
+      "cma cgm", "toll group", "blue yonder", "manhattan associates",
+      "descartes systems", "e2open", "project44", "flexport"
+    ],
+
+    "semiconductor_supply": [
+      "tsmc", "taiwan semiconductor", "asml", "applied materials",
+      "lam research", "kla corporation", "tokyo electron", "advantest",
+      "teradyne", "amkor technology", "ase technology", "jcet",
+      "mediatek", "marvell technology", "broadcom", "qualcomm", "nxp semiconductors",
+      "infineon", "stmicroelectronics", "renesas", "onsemi", "microchip technology",
+      "analog devices", "texas instruments", "micron technology", "kioxia",
+      "western digital", "seagate", "shin-etsu chemical", "sumco corporation",
+      "jsr corporation", "tokyo ohka", "entegris", "mks instruments",
+      "foxconn", "hon hai precision", "pegatron", "quanta computer",
+      "wistron", "compal electronics", "inventec", "flex ltd", "jabil",
+      "sanmina", "celestica", "benchmark electronics"
+    ],
+
+    "automotive_tier1": [
+      "robert bosch", "bosch gmbh", "continental ag", "denso corporation",
+      "aptiv plc", "magna international", "zf friedrichshafen", "valeo sa",
+      "yazaki corporation", "sumitomo electric", "faurecia", "forvia",
+      "lear corporation", "adient", "brose", "hella gmbh", "marelli holdings",
+      "autoliv", "garrett motion", "borgwarner", "dana incorporated",
+      "american axle", "nexteer", "hyundai transys"
+    ],
+
+    "chemical_materials": [
+      "basf se", "dow chemical", "dupont de nemours", "covestro", "evonik",
+      "solvay sa", "arkema", "wacker chemie", "linde plc", "air liquide",
+      "air products", "mitsui chemicals", "mitsubishi chemical",
+      "asahi kasei", "toray industries", "teijin limited", "kuraray"
+    ],
+
+    "healthcare_pharma_supply": [
+      "cencora", "amerisourcebergen", "mckesson", "cardinal health",
+      "change healthcare", "optum", "iqvia", "catalent", "lonza group",
+      "thermo fisher", "danaher", "sartorius", "west pharmaceutical"
+    ]
+  },
+
+  "supply_chain_indicators": {
+    "_comment": "업종/설명문에 이 표현이 있으면 공급망 증폭 가능성이 있다고 본다(가장 낮은 등급).",
+    "terms": [
+      "managed service provider", "managed services", "msp", "mssp",
+      "it outsourcing", "system integrator", "systems integration",
+      "software vendor", "saas provider", "cloud provider", "cloud services",
+      "hosting provider", "data center", "datacenter", "colocation",
+      "payroll provider", "payment processor", "payment gateway",
+      "supply chain", "logistics provider", "third-party logistics", "3pl",
+      "freight forwarder", "customs broker", "warehouse management",
+      "contract manufacturer", "contract manufacturing", "oem supplier",
+      "tier 1 supplier", "tier-1 supplier", "component supplier",
+      "parts supplier", "raw material supplier", "distributor",
+      "semiconductor", "foundry", "wafer", "electronic manufacturing services",
+      "ems provider", "pcb assembly",
+      "erp system", "erp software", "mes system", "plm software",
+      "certificate authority", "code signing", "software development kit",
+      "api provider", "reseller", "value added reseller", "var partner"
+    ]
+  },
+
+  "korea_presence_hints": {
+    "_comment": "국가 코드가 KR 이 아니지만 한국 진출/한국 법인으로 보이는 단서. 회사명 뒤에 Korea 가 붙는 패턴이 대표적이다.",
+    "terms": [
+      "korea branch", "korea ltd", "korea inc", "korea co", "korea corp",
+      "korea limited", "korea office", "korea plant", "korea operations",
+      "korea subsidiary", "seoul office", "korea r&d"
+    ]
+  },
+
+  "exclude": {
+    "_comment": "벤더명과 철자가 겹치지만 공급망과 무관한 케이스.",
+    "terms": [
+      "oracle park", "apache county", "phoenix arizona"
+    ]
+  }
+}

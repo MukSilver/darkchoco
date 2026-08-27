@@ -1,0 +1,5 @@
+# ⚠ 이 파일은 VMware 등 격리된 가상머신 안에서만 설치하십시오.
+# 호스트 PC에 직접 설치하지 마십시오.
+-r requirements.txt
+requests[socks]==2.32.3
+PySocks==1.7.1
