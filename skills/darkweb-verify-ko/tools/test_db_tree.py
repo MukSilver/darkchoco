@@ -5,6 +5,7 @@
 
 pytest 를 안 쓴다. 표준 라이브러리만으로 돈다.
 """
+import os
 import subprocess
 import sys
 import tempfile
@@ -16,9 +17,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import db_tree  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
-# 실물 재료. 케이스가 끝나면 지워지므로 없으면 건너뛴다.
-REAL = Path.home() / "Documents" / "Q.E.D" / "화햇" / "화햇강의자료" / "프젝" / \
-    "VM공유폴더" / "유출 케이스" / "한케이스.example"
+
+# 실물 재료로 돌려 보는 시험. 없으면 건너뛴다.
+#
+# **이 레포는 공개다. 케이스 이름과 대상 도메인을 여기 적지 않는다.**
+# 2026-08-27 까지 실제 케이스 경로가 박혀 있었다. 그 한 줄이 공유폴더 구조와
+# 케이스 이름과 피해 조직의 도메인을 한꺼번에 드러냈다.
+# 돌려 보려면 환경변수로 자리를 준다.
+#
+#     DARKCHOCO_REAL_DUMP=<덤프가 든 폴더> python tools/test_db_tree.py
+_real = os.environ.get("DARKCHOCO_REAL_DUMP", "")
+REAL = Path(_real) if _real else Path(tempfile.gettempdir()) / "_없는자리_"
 
 
 def scan_sql(sql: str):
@@ -154,7 +163,7 @@ class 치명등급(unittest.TestCase):
 
     def test_관리자_자격증명은_치명이다(self):
         for cols, what in [
-            (["idx", "admin_userid", "admin_passwd"], "실제 케이스 한 케이스 cs_admin"),
+            (["idx", "admin_userid", "admin_passwd"], "실제 케이스의 관리자 표"),
             (["idx", "admin_userid", "admin_pw"], "pw 단독형"),
             (["idx", "admin_userid", "admin_pass"], "pass 단독형"),
             (["idx", "admin_userid", "admin_hash"], "hash 영문"),
@@ -170,7 +179,7 @@ class 치명등급(unittest.TestCase):
     def test_결제_연동_칸은_치명이다(self):
         """가맹점 ID 하나로는 결제를 못 일으키지만 설정 표는 키를 같은 표에 둔다.
 
-        한 케이스 cs_admin 이 그랬다. 관리자 비밀번호와 pg_id 와 은행계좌가 한 행에 있었다.
+        한 케이스가 그랬다. 관리자 비밀번호와 pg_id 와 은행계좌가 한 행에 있었다.
         """
         for table, cols, what in [
             ("cs_pg", ["idx", "pg_company", "pg_id"], "PG 가맹점"),
@@ -233,7 +242,7 @@ class 이름칸(unittest.TestCase):
     """`_name` 을 통째로 잡으면 안 된다.
 
     file_name, shop_name, menu_name, table_name 이 다 사람 이름이 된다.
-    한 케이스 cs_admin 에 shop_name 이 실제로 있었다.
+    한 케이스의 관리자 표에 shop_name 이 실제로 있었다.
     사람을 가리키는 앞말이 붙은 것만 잡는다.
     """
 
@@ -327,7 +336,8 @@ class 오탐(unittest.TestCase):
         self.확인("stat", ["idx", "pwr_usage", "created"], "미분류", "전력 사용량")
 
 
-@unittest.skipUnless(REAL.exists(), f"실물 재료 없음: {REAL}")
+@unittest.skipUnless(
+    REAL.exists(), "실물 재료 없음. DARKCHOCO_REAL_DUMP 로 자리를 준다")
 class 실물대조(unittest.TestCase):
     """같은 데이터의 CSV 사본이 옆에 있어 정답을 안다."""
 
