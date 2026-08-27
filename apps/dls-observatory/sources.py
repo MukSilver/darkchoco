@@ -13,6 +13,7 @@ import json
 import os
 import re
 import sys
+from pathlib import Path
 import time
 import urllib.error
 import urllib.parse
@@ -21,8 +22,11 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-RL_BASE = "https://api.ransomware.live/v2"
-LOOK_BASE = "https://www.ransomlook.io/api"
+# 주소는 packages/dc_ransomfeed 한곳에서 관리합니다.
+# API 가 개편되면 거기만 고치면 kr-leak-alarm 과 같이 따라갑니다.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "packages"))
+from dc_ransomfeed import RANSOMLOOK as LOOK_BASE  # noqa: E402
+from dc_ransomfeed import RANSOMWARE_LIVE as RL_BASE  # noqa: E402
 
 USER_AGENT = "notion-dls-filler/1.0 (research; +https://github.com/)"
 
