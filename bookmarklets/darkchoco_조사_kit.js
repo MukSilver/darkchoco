@@ -184,9 +184,37 @@
       }
     };
 
-    const cardsOf = doc => [...doc.querySelectorAll('div[data-key], .item_box')]
-      .map(el => (el.classList && el.classList.contains('item_box')) ? (el.closest('[data-key]') || el) : el)
-      .filter((el, i, all) => all.indexOf(el) === i);
+  /* 좁은 선택자가 0건이면 넓은 쪽으로 물러난다.
+
+     2026-08-27. 사이트가 마크업을 바꾸면 `div[data-key]` 와 `.item_box` 가
+     조용히 0건이 된다. 그러면 "카드 0개" 만 나오고 왜인지는 안 나온다.
+     parseCard 가 실제로 필요로 하는 것은 uuid 나 /c/ 로 가는 링크 하나다.
+     그것을 담은 가장 가까운 상자를 카드로 본다. */
+    const CARD_SEL = 'div[data-key], .item_box';
+    let CARD_WIDE = 0;        /* 넓은 쪽으로 물러나 찾은 개수. 0이면 좁은 쪽으로 찾았다 */
+
+    const cardsOf = doc => {
+      const tight = [...doc.querySelectorAll(CARD_SEL)]
+        .map(el => (el.classList && el.classList.contains('item_box'))
+                   ? (el.closest('[data-key]') || el) : el)
+        .filter((el, i, all) => all.indexOf(el) === i);
+      if (tight.length) return tight;
+
+      const links = [...doc.querySelectorAll('a[href*="uuid="], a[href^="/c/"]')];
+      const wide = [];
+      links.forEach(a => {
+        let e = a, d = 0;
+        while (e && e.parentElement && d < 5) {     /* 링크를 담은 상자까지 올라간다 */
+          e = e.parentElement; d++;
+          if (e.querySelectorAll('a[href*="uuid="], a[href^="/c/"]').length > 1) {
+            e = e.children.length ? a.parentElement : e; break;
+          }
+        }
+        if (e && wide.indexOf(e) < 0) wide.push(e);
+      });
+      CARD_WIDE = wide.length;      /* 어떻게 찾았는지 화면에 적는다 */
+      return wide;
+    };
 
     const parseCard = el => {
       const uuidA = [...el.querySelectorAll('a[href*="uuid="]')][0];
@@ -461,7 +489,10 @@
 
     window.__QK = S.mount(bList, bAll, bDetail, bTree, maxWrap, nameWrap);
 
-    say(VER + ' · ' + (isDetail ? '상세 페이지로 판정' : '목록 페이지로 판정') + ' · 카드 ' + cardsOf(document).length + '개');
+    const n0 = cardsOf(document).length;
+    say(VER + ' · ' + (isDetail ? '상세 페이지로 판정' : '목록 페이지로 판정')
+        + ' · 카드 ' + n0 + '개'
+        + (CARD_WIDE ? ' (아는 선택자로 0건. 링크를 담은 상자로 찾음)' : ''));
   /* 켜면 상자만 뜬다. 사람이 단추를 눌러 시작한다. 2026-08-27 */
     ta.value = ['킷이 떴다. 아래 단추 중 하나를 누르면 시작한다.', '',
                 '  추천    ' + (isDetail ? '이 건 상세' : '이 페이지만'),
@@ -755,14 +786,32 @@
     const kb = n => n >= 1048576 ? (n / 1048576).toFixed(1) + 'MB' : Math.round(n / 1024) + 'KB';
 
     /* ── 사진 주소 모으기. 네트워크를 안 쓴다 ────── */
+  /* 기본은 크기로 고른다. 주소로 거르지 않는다.
+
+     2026-08-27. 전에는 기본 거르개가 `/uploads/` 였다. 그 조각이 주소에 없는
+     이미지 호스트에서는 하나도 안 걸려서 "사진 0개" 가 나왔다.
+     imgbb 가 그렇다. 주소가 i.ibb.co/8RYNqm0/1.png 라 uploads 가 없다.
+
+     대신 실제 크기로 고른다. 아이콘과 로고는 작고 증거 사진은 크다.
+     주소 조각 칸은 좁힐 때만 쓴다. */
+    const MIN = 200;      /* 이보다 작은 것은 아이콘으로 본다 */
+
     const pick = () => {
       const pat = (patW.__i.value || '').trim();
-      const re = pat ? new RegExp(pat, 'i') : /\/uploads?\//i;
+      const re = pat ? new RegExp(pat, 'i') : null;
       const seen = new Set();
       const out = [];
       document.querySelectorAll('img[src]').forEach(im => {
         const raw = im.getAttribute('src') || '';
-        if (!raw || !re.test(raw)) return;
+        if (!raw) return;
+        if (re) {                       /* 칸에 적었으면 그것만 본다 */
+          if (!re.test(raw)) return;
+        } else {                        /* 안 적었으면 크기로 고른다 */
+          const w = im.naturalWidth || im.width || 0;
+          const h = im.naturalHeight || im.height || 0;
+          if (w < MIN && h < MIN) return;
+          if (/^data:/i.test(raw)) return;   /* 인라인 아이콘은 뺀다 */
+        }
         let u;
         try { u = new URL(raw, location.href).href; } catch (e) { return; }
         if (seen.has(u)) return;
@@ -800,8 +849,15 @@
       FOUND.forEach((f, i) => L.push(nameOf(swap(f.url), i) + '\t' + swap(f.url)
                                      + (f.w ? '\t' + f.w + 'x' + f.h : '')));
       if (!FOUND.length) {
-        L.push('못 찾았다. 주소 조각 칸에 /uploads/ 같은 것을 넣어보거나');
-        L.push('접힌 사진이 있으면 먼저 펼친다');
+        const all = document.querySelectorAll('img[src]').length;
+        L.push('못 찾았다. 이 화면의 img 는 ' + all + '개다.');
+        if (!(patW.__i.value || '').trim()) {
+          L.push('기본은 ' + MIN + 'px 이상만 고른다. 사진이 그보다 작으면');
+          L.push('주소 조각 칸에 파일 이름 조각(png · jpg · 폴더명)을 적고 다시 누른다.');
+        } else {
+          L.push('주소 조각 칸을 비우면 크기로 고른다. 지금 적힌 것과 안 맞는 듯하다.');
+        }
+        L.push('접힌 사진이 있으면 먼저 펼치고 다시 누른다.');
       }
       return { md: L.join('\n'), status: '찾음 ' + FOUND.length + '개 · 아직 안 받았다' };
     };

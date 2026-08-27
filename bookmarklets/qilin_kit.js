@@ -35,9 +35,37 @@
     }
   };
 
-  const cardsOf = doc => [...doc.querySelectorAll('div[data-key], .item_box')]
-    .map(el => (el.classList && el.classList.contains('item_box')) ? (el.closest('[data-key]') || el) : el)
-    .filter((el, i, all) => all.indexOf(el) === i);
+/* 좁은 선택자가 0건이면 넓은 쪽으로 물러난다.
+
+   2026-08-27. 사이트가 마크업을 바꾸면 `div[data-key]` 와 `.item_box` 가
+   조용히 0건이 된다. 그러면 "카드 0개" 만 나오고 왜인지는 안 나온다.
+   parseCard 가 실제로 필요로 하는 것은 uuid 나 /c/ 로 가는 링크 하나다.
+   그것을 담은 가장 가까운 상자를 카드로 본다. */
+  const CARD_SEL = 'div[data-key], .item_box';
+  let CARD_WIDE = 0;        /* 넓은 쪽으로 물러나 찾은 개수. 0이면 좁은 쪽으로 찾았다 */
+
+  const cardsOf = doc => {
+    const tight = [...doc.querySelectorAll(CARD_SEL)]
+      .map(el => (el.classList && el.classList.contains('item_box'))
+                 ? (el.closest('[data-key]') || el) : el)
+      .filter((el, i, all) => all.indexOf(el) === i);
+    if (tight.length) return tight;
+
+    const links = [...doc.querySelectorAll('a[href*="uuid="], a[href^="/c/"]')];
+    const wide = [];
+    links.forEach(a => {
+      let e = a, d = 0;
+      while (e && e.parentElement && d < 5) {     /* 링크를 담은 상자까지 올라간다 */
+        e = e.parentElement; d++;
+        if (e.querySelectorAll('a[href*="uuid="], a[href^="/c/"]').length > 1) {
+          e = e.children.length ? a.parentElement : e; break;
+        }
+      }
+      if (e && wide.indexOf(e) < 0) wide.push(e);
+    });
+    CARD_WIDE = wide.length;      /* 어떻게 찾았는지 화면에 적는다 */
+    return wide;
+  };
 
   const parseCard = el => {
     const uuidA = [...el.querySelectorAll('a[href*="uuid="]')][0];
@@ -312,7 +340,10 @@
 
   window.__QK = S.mount(bList, bAll, bDetail, bTree, maxWrap, nameWrap);
 
-  say(VER + ' · ' + (isDetail ? '상세 페이지로 판정' : '목록 페이지로 판정') + ' · 카드 ' + cardsOf(document).length + '개');
+  const n0 = cardsOf(document).length;
+  say(VER + ' · ' + (isDetail ? '상세 페이지로 판정' : '목록 페이지로 판정')
+      + ' · 카드 ' + n0 + '개'
+      + (CARD_WIDE ? ' (아는 선택자로 0건. 링크를 담은 상자로 찾음)' : ''));
 /* 켜면 상자만 뜬다. 사람이 단추를 눌러 시작한다. 2026-08-27 */
   ta.value = ['킷이 떴다. 아래 단추 중 하나를 누르면 시작한다.', '',
               '  추천    ' + (isDetail ? '이 건 상세' : '이 페이지만'),
