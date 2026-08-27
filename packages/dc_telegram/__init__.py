@@ -12,14 +12,22 @@
 
 from .client import SESSION_PATH, make_client, parse_channel
 from .collect import collect_messages
-from .meta import channel_metadata, forward_metadata, reaction_count, sender_metadata
+from .meta import (
+    channel_metadata,
+    forward_metadata,
+    reaction_count,
+    safe_peer_id,
+    sender_label,
+    sender_metadata,
+)
 from .store import load_payload, merge_records, validate_same_channel, write_json_atomic
-from .timeutil import get_timezone, isoformat, parse_day
+from .timeutil import day_bounds, get_timezone, isoformat, parse_day
 
 __all__ = [
     "SESSION_PATH", "make_client", "parse_channel",
     "collect_messages",
     "channel_metadata", "sender_metadata", "forward_metadata", "reaction_count",
+    "safe_peer_id", "sender_label",
     "load_payload", "merge_records", "validate_same_channel", "write_json_atomic",
-    "get_timezone", "isoformat", "parse_day",
+    "get_timezone", "isoformat", "parse_day", "day_bounds",
 ]
