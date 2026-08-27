@@ -134,29 +134,92 @@ def to_stage3(row: sqlite3.Row) -> dict:
     return r
 
 
+def to_stage3_items(row: sqlite3.Row) -> dict:
+    """우리 수집 표(`collect/store.py`) 한 줄을 ③ 입력 14칸으로.
+
+    Kr-Leak 과 칸 이름이 달라 따로 둔다. 소스가 늘어나면 여기에 어댑터를 더한다.
+    표를 안 바꾸고 어댑터만 갈아 끼우는 것이 이 구조의 뜻이다."""
+    raw = {}
+    try:
+        raw = json.loads(row["raw"] or "{}")
+    except (ValueError, TypeError):
+        pass
+    src = _sources(row["via"])
+    body = (row["body"] or "").strip()
+    bk = row["body_kind"] or "없음"
+
+    r = {
+        "대상 조직": row["target_org"] or _miss("target_org 비어 있음"),
+        "공식 도메인": row["target_domain"] or _miss("target_domain 비어 있음"),
+        "행위자": row["actor"] or _miss("actor 비어 있음"),
+        "유형": {"forum": "포럼", "telegram": "텔레그램",
+               "dls": "랜섬"}.get(row["venue_kind"], row["venue_kind"] or _miss("종류 모름")),
+        "주장 규모": row["claimed_size"] or _miss("claimed_size 비어 있음"),
+        "주장 시점": _miss("수집 표에 없음. posted_at 은 게시 시각이다"),
+        "게시 시각": row["posted_at"] or _miss("posted_at 비어 있음"),
+        "탐지 시각": row["seen_at"] or row["first_seen"] or _miss("본 날이 비어 있음"),
+        # 수집기가 원 출처와 알게 된 곳을 이미 갈라 두었다. 그대로 옮긴다
+        "원 출처": row["post_url"] or _miss("post_url 비어 있음"),
+        "재게시 URL": raw.get("집계 채널 글 주소") or _miss("재게시 주소 없음"),
+        "감시 출처": (", ".join(src) + "  ← 알게 된 곳이다. 독립 출처로 세지 않는다"
+                   if src else _miss("via 비어 있음")),
+        "판별 단계": "%s (%s)" % (row["got_by"] or "수집기", row["source"]),
+        "판별 신뢰도": _miss("수집 표에 신뢰도 칸이 없다"),
+        "알림 문장": (body + "  ← %s" % bk if body else _miss("body 비어 있음")),
+    }
+    misc = {"uid": row["uid"], "본문 성격": bk, "소스": row["source"],
+            "venue": row["venue"]}
+    for k in ("src_id", "country", "price", "currency", "kind", "sample_path"):
+        v = row[k] if k in row.keys() else ""
+        if v not in (None, "", 0):
+            misc[k] = v
+    if raw:
+        misc["수집기 기타"] = raw
+    r["기타"] = misc
+    return r
+
+
+# 어느 표인지에 따라 어댑터가 갈린다. 표를 안 바꾸고 여기만 는다
+ADAPTERS = [
+    ("victims", to_stage3, "COALESCE(NULLIF(discovered,''), first_seen)"),
+    ("items", to_stage3_items, "COALESCE(NULLIF(seen_at,''), first_seen)"),
+]
+
+
 def read(db: Path, only_new: bool, since: str | None) -> list[dict]:
     if not db.exists():
         raise SystemExit("파일이 없다: %s" % db)
     con = sqlite3.connect("file:%s?mode=ro" % db.as_posix(), uri=True)
     con.row_factory = sqlite3.Row
-    try:
-        con.execute("SELECT 1 FROM victims LIMIT 1")
-    except sqlite3.Error as e:
-        raise SystemExit("victims 표를 못 읽는다: %s" % e)
 
-    q, arg = "SELECT * FROM victims", []
-    where = []
+    got = None
+    for table, fn, order in ADAPTERS:
+        try:
+            con.execute("SELECT 1 FROM %s LIMIT 1" % table)
+            got = (table, fn, order)
+            break
+        except sqlite3.Error:
+            continue
+    if got is None:
+        raise SystemExit(
+            "아는 표가 없다. 본 것은 %s 다.\n"
+            "이 파일에 있는 표: %s"
+            % (" · ".join(t for t, _, _ in ADAPTERS),
+               ", ".join(r[0] for r in con.execute(
+                   "SELECT name FROM sqlite_master WHERE type='table'")) or "(없음)"))
+    table, fn, order = got
+
+    q, arg, where = "SELECT * FROM %s" % table, [], []
     if only_new:
         where.append("is_new = 1")
     if since:
-        where.append("COALESCE(NULLIF(discovered,''), first_seen) >= ?")
+        where.append("%s >= ?" % order)
         arg.append(since)
     if where:
         q += " WHERE " + " AND ".join(where)
-    q += " ORDER BY COALESCE(NULLIF(discovered,''), first_seen) DESC"
-    rows = con.execute(q, arg).fetchall()
+    rows = con.execute(q + " ORDER BY %s DESC" % order, arg).fetchall()
     con.close()
-    return [to_stage3(r) for r in rows]
+    return [fn(r) for r in rows]
 
 
 def render(r: dict) -> str:
@@ -179,16 +242,47 @@ def render(r: dict) -> str:
 
 
 def slug(s: str) -> str:
-    """폴더 이름을 만든다. 경로 전체가 260자를 넘으면 셸 도구가 못 찾으므로 짧게 둔다."""
-    s = re.sub(r"[^\w가-힣.\- ]+", "", str(s or "")).strip().replace(" ", "_")
-    return (s or "이름없음")[:40]
+    """폴더 이름을 만든다. 경로 전체가 260자를 넘으면 셸 도구가 못 찾으므로 짧게 둔다.
+
+    **못 봄 값을 이름에 쓰지 않는다.** `못_봄target_org_비어_있음` 같은 폴더가 생긴다."""
+    v = str(s or "")
+    if v.startswith(MISS):
+        return "대상미상"
+    v = re.sub(r"[^\w가-힣.\- ]+", "", v).strip().replace(" ", "_")
+    return (v or "이름없음")[:40]
 
 
-def write_queue(rows: list[dict], out: Path) -> int:
-    """케이스마다 폴더 하나. 이미 있으면 건너뛴다. 다시 돌려도 덮어쓰지 않는다."""
+# 케이스로 올릴 것. 수집 표의 `게시 성격` 이 이 중 하나일 때만 큐에 넣는다.
+# **거른 것을 버리지 않는다.** 수집 표에는 다 남아 있고 큐에만 안 올린다.
+CASE_KINDS = ("랜섬웨어 유출", "DB 판매", "DB 무료 공개", "접근 권한 판매",
+              "사기 의심", "기타", "확인 못 함")
+
+
+def case_worthy(r: dict) -> bool:
+    """케이스로 올릴 것인가.
+
+    같은 채널이 CVE 와 악성코드 시그니처도 보낸다. 그것까지 케이스 폴더를
+    만들면 사람이 볼 목록이 노이즈로 찬다. 성격이 정해진 것만 올린다.
+
+    **성격 칸이 없는 소스(Kr-Leak)는 그대로 다 올린다.**
+    성격이 빈 것과 성격 칸 자체가 없는 것을 가려야 해서 `소스` 로 판별한다.
+    빈 값은 `기타` 에 안 들어가므로 `kind` 만 봐서는 둘이 구별되지 않는다."""
+    misc = r.get("기타") or {}
+    if "소스" not in misc:          # 우리 표가 아니다. 성격이라는 개념이 없다
+        return True
+    return misc.get("kind", "") in CASE_KINDS
+
+
+def write_queue(rows: list[dict], out: Path, everything: bool = False) -> tuple[int, int]:
+    """케이스마다 폴더 하나. 이미 있으면 건너뛴다. 다시 돌려도 덮어쓰지 않는다.
+
+    돌려주는 것은 (새로 만든 수, 케이스가 아니라 안 올린 수) 다."""
     out.mkdir(parents=True, exist_ok=True)
-    made = 0
+    made = held = 0
     for r in rows:
+        if not everything and not case_worthy(r):
+            held += 1
+            continue
         uid = str(r["기타"]["uid"])
         day = str(r["탐지 시각"])[:10] or "날짜없음"
         d = out / ("%s_%s_%s" % (day, slug(r["대상 조직"]), uid[:8]))
@@ -198,7 +292,7 @@ def write_queue(rows: list[dict], out: Path) -> int:
         (d / "재료.md").write_text(render(r), encoding="utf-8")
         (d / "상태.json").write_text(json.dumps({
             "uid": uid,
-            "들어온 곳": "Kr-Leak-alarm",
+            "들어온 곳": (r["기타"].get("소스") or "Kr-Leak-alarm"),
             "칸": {k: r[k] for k in ORDER},
             "기타": r["기타"],
             "끝낸 단계": ["①"],
@@ -206,17 +300,19 @@ def write_queue(rows: list[dict], out: Path) -> int:
             "다음": "② 자료 확인. 원 게시물을 열고 포럼 킷을 누른다",
         }, ensure_ascii=False, indent=2), encoding="utf-8")
         made += 1
-    return made
+    return made, held
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(
-        description="Kr-Leak-alarm 의 krleak.db 를 ③ 입력 13칸으로 바꾼다")
-    ap.add_argument("db", help="krleak.db 경로")
+        description="수집 표를 ③ 입력 14칸으로 바꾼다. krleak.db 와 우리 표 둘 다 읽는다")
+    ap.add_argument("db", help="krleak.db 또는 우리 수집 표 경로")
     ap.add_argument("--all", action="store_true", help="본 것까지 전부. 기본은 새 건만")
     ap.add_argument("--since", help="이 날짜 이후만 (YYYY-MM-DD)")
     ap.add_argument("--json", action="store_true", help="JSON 으로")
     ap.add_argument("--out", help="큐 폴더 경로. 주면 케이스 폴더를 만든다")
+    ap.add_argument("--all-kinds", action="store_true",
+                    help="CVE·악성코드 같은 것도 케이스로 올린다. 기본은 유출 관련만")
     a = ap.parse_args()
 
     rows = read(Path(a.db), only_new=not a.all, since=a.since)
@@ -227,9 +323,12 @@ def main() -> int:
     if a.json:
         print(json.dumps(rows, ensure_ascii=False, indent=2))
     elif a.out:
-        n = write_queue(rows, Path(a.out))
+        n, held = write_queue(rows, Path(a.out), a.all_kinds)
         print("%d줄 중 %d개를 큐에 새로 넣었다  %s" % (len(rows), n, a.out))
-        if n < len(rows):
+        if held:
+            print("케이스가 아니라 안 올린 것 %d개. **버린 것이 아니다.** "
+                  "수집 표에는 다 있다. 올리려면 --all-kinds" % held)
+        if n + held < len(rows):
             print("이미 있는 것은 건드리지 않았다")
     else:
         for i, r in enumerate(rows):

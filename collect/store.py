@@ -38,6 +38,7 @@ from pathlib import Path
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS items (
     uid           TEXT PRIMARY KEY,   -- venue + 원문키 해시. 다시 봐도 같은 줄
+    src_id        TEXT DEFAULT '',    -- 소스 쪽 고유 번호. 있으면 이것 하나로 갈린다
     source        TEXT NOT NULL,      -- ransom | telegram | forum
     venue         TEXT NOT NULL,      -- 도메인까지. 포럼명만 적지 않는다
     venue_kind    TEXT DEFAULT '',    -- dls | forum | telegram | 그밖
@@ -80,14 +81,20 @@ CREATE TABLE IF NOT EXISTS runs (
 );
 """
 
-# 다시 봐도 같은 줄이 되게 하는 열쇠. 여기 있는 것만으로 uid 를 만든다
-KEY = ("venue", "post_url", "actor", "target_org", "title")
+# 다시 봐도 같은 줄이 되게 하는 열쇠. 여기 있는 것만으로 uid 를 만든다.
+#
+# `src_id` 가 맨 앞이다. 소스 쪽 고유 번호가 있으면 그것 하나로 갈린다.
+# 2026-08-27. 처음에는 이것이 없어서 CVE 알림 스무 건 중 셋이 한 줄로 뭉쳤다.
+# 원 출처도 행위자도 대상 조직도 비어 있어 나머지 열쇠가 다 같았다.
+# **줄이 뭉치면 조용히 사라진다.** 넣은 수와 나온 수를 늘 대조할 것.
+KEY = ("src_id", "venue", "post_url", "actor", "target_org", "title")
 
 
 @dataclass
 class Item:
     source: str
     venue: str
+    src_id: str = ""
     venue_kind: str = ""
     actor: str = ""
     target_org: str = ""

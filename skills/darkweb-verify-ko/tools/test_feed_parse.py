@@ -163,10 +163,20 @@ for k in ("uid", "설명 성격", "country", "sector", "kr_score"):
 
 # ── 9. 큐 폴더를 만든다. 두 번 돌려도 안 늘어난다 ──
 q = tmp / "_큐"
-n1 = F.write_queue(rows, q)
-n2 = F.write_queue(rows, q)
+n1, held1 = F.write_queue(rows, q)
+n2, held2 = F.write_queue(rows, q)
 check("처음에 넷", n1, 4)
 check("두 번째는 안 늘어난다", n2, 0)
+# Kr-Leak 표에는 성격 칸이 없다. 하나도 거르지 않아야 한다
+check("krleak 는 안 거른다", (held1, held2), (0, 0))
+check("성격 칸이 없으면 다 올린다", F.case_worthy({"기타": {"uid": "x"}}), True)
+check("우리 표인데 성격이 비면 안 올린다",
+      F.case_worthy({"기타": {"소스": "telegram"}}), False)
+check("우리 표이고 성격이 있으면 올린다",
+      F.case_worthy({"기타": {"소스": "telegram", "kind": "랜섬웨어 유출"}}), True)
+# 못 봄 값이 폴더 이름에 안 들어간다
+check("못 봄은 대상미상", F.slug("못 봄(target_org 비어 있음)"), "대상미상")
+check("정상 이름은 그대로", F.slug("가상출판"), "가상출판")
 made = sorted(p.name for p in q.iterdir())
 check("폴더 넷", len(made), 4)
 for d in q.iterdir():
