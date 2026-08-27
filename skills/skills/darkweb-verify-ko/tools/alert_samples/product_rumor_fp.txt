@@ -1,0 +1,15 @@
+**[Data Leak Monitor] Korea-related alert**
+Posted: 2026-08-24 16:55:14 KST
+Original: https://t.me/breachdetect/1267633
+Source: gemini
+Confidence: 95%
+Company: Samsung
+
+{
+  "Source": "https://4pda.to/",
+  "Content": "Необычный дизайн камеры Galaxy S27 Ultra показали на инсайдерском рендере",
+  "author": "Ксения Седна",
+  "Detection Date": "24 Aug 2026",
+  "Type": "Data leak"
+}
+🔹 t.me/breachdetect  🔹
