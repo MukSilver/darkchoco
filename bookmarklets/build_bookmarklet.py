@@ -24,6 +24,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import urllib.parse
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -37,6 +38,24 @@ def to_one_line(src: str) -> str:
     body = re.sub(r"\n\s*", " ", body)
     body = re.sub(r"\s{2,}", " ", body)
     return "javascript:" + body.strip()
+
+
+def escape_percent(url: str) -> str:
+    """코드 안의 `%` 를 `%25` 로 바꾼다. **이걸 안 하면 킷이 조용히 안 돈다.**
+
+    `javascript:` 도 URL 이라 브라우저가 실행하기 전에 퍼센트 인코딩을 푼다.
+    나머지 연산자가 뒤 두 글자와 붙어 다른 글자로 바뀐다.
+
+        e%3600/60      %36 이 '6' 으로 풀려서   e600/60      문법 오류
+        e%60+"초"       %60 이 '`' 로 풀려서     e`+"초"       문법 오류
+
+    2026-08-27 에 겪었다. 조사 킷과 사진 킷과 목록 킷이 눌러도 아무 반응이 없었고
+    콘솔에도 아무것도 안 찍혔다. 길이 문제로 오해했다.
+
+    **전체를 URL 인코딩하지 않는다.** 킷에 한글이 많아 두 배가 넘게 부푼다.
+    `%` 만 바꾸면 열한 자에 스물두 자가 는다."""
+    head, code = url[:len("javascript:")], url[len("javascript:"):]
+    return head + code.replace("%", "%25")
 
 
 def minify(src: str) -> tuple[str, str]:
@@ -138,6 +157,20 @@ def build(js: Path, do_check: bool, raw: bool = False) -> bool:
             for l in err.split("\n")[:6]:
                 print(f"          {l}")
             return False
+
+    code_before = one[len("javascript:"):]
+    one = escape_percent(one)
+
+    # 브라우저가 푸는 것과 우리가 넣은 것이 같은지 본다. 다르면 조용히 안 돈다
+    got = urllib.parse.unquote(one[len("javascript:"):], errors="strict")
+    if got != code_before:
+        print("  건너뜀  URL 로 풀면 코드가 달라진다. 옛 txt를 그대로 둔다")
+        for i, (a, b) in enumerate(zip(code_before, got)):
+            if a != b:
+                print("          %d번째 글자부터: %r 이 %r 로 바뀐다"
+                      % (i, code_before[i:i + 12], got[i:i + 12]))
+                break
+        return False
 
     warn = "  (주소 칸에서 잘릴 수 있다)" if len(one) > LIMIT else ""
     before = len(out.read_text(encoding="utf-8")) if out.exists() else 0
