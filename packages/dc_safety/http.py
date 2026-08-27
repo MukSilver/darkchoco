@@ -169,7 +169,13 @@ class SafeHttpClient:
                 location = f"{p.scheme}://{p.netloc}{location}"
             _check_host(location)  # ← 여기서 목록 밖이면 차단
             url = location
-            resp = self._session.get(url, timeout=self.timeout, stream=True, allow_redirects=False)
+            resp = self._session.get(
+                url,
+                timeout=self.timeout,
+                stream=True,
+                allow_redirects=False,
+                headers=extra_headers or {},   # 최초 요청과 같은 헤더를 유지한다
+            )
 
         try:
             if resp.status_code == 404:

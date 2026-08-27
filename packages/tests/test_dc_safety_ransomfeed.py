@@ -66,6 +66,23 @@ def test_월은_두자리로():
     assert dr.rl_victims(2026, 8).endswith("/2026/08")
 
 
+
+def test_리다이렉트를_따라가도_헤더가_유지된다():
+    """http.py 의 리다이렉트 재요청에 headers 가 빠져 있던 것을 막는다."""
+    import inspect
+    src = inspect.getsource(ds.SafeHttpClient._get_once)
+    gets = [b for b in src.split("self._session.get(")[1:]]
+    assert len(gets) == 2, "요청이 두 군데(최초·리다이렉트)여야 한다"
+    for i, g in enumerate(gets):
+        head = g[:g.index(")")]
+        assert "headers" in head, f"{i}번째 요청에 headers 가 없다"
+
+
+def test_랜섬웨어라이브_간격이_실측값이다():
+    """1req/분/엔드포인트 를 실측했다. 그보다 빠른 값이 들어오면 막는다."""
+    from dc_ransomfeed.fetch import THROTTLE
+    assert THROTTLE["ransomware.live"] >= 60.0
+
 if __name__ == "__main__":
     n = 0
     for k, v in sorted(globals().items()):
