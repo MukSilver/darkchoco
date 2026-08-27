@@ -199,8 +199,10 @@ def check() -> int:
     """준비가 됐는지만 본다. 처음이면 여기서 로그인한다."""
     print("api 키   ", end="")
     try:
-        api_id, _ = keys()
-        print("있다 (api_id %s)" % str(api_id)[:3] + "…")
+        # **값을 한 조각도 내지 않는다.** 있는지와 자릿수만 낸다.
+        # 앞자리만 찍어도 로그와 화면 캡처에 남는다. 2026-08-27 에 고쳤다
+        api_id, api_hash = keys()
+        print("있다 (api_id %d자리 · api_hash %d자)" % (len(str(api_id)), len(api_hash)))
     except SystemExit as e:
         print("없다\n%s" % e)
         return 1
