@@ -1,8 +1,10 @@
 import asyncio
-import os
+import sys
 from pathlib import Path
 
-from telethon import TelegramClient
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "packages"))
+from dc_telegram import make_client
+
 from telethon.tl.types import Channel
 
 
@@ -11,9 +13,7 @@ SESSION_PATH = BASE_DIR / "telegram_session"
 
 
 async def main():
-    api_id = int(os.environ["TELEGRAM_API_ID"])
-    api_hash = os.environ["TELEGRAM_API_HASH"]
-    client = TelegramClient(str(SESSION_PATH), api_id, api_hash)
+    client = make_client(SESSION_PATH)
 
     await client.connect()
     try:
