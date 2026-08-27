@@ -18,7 +18,7 @@ from .base import LeakRecord, Source, parse_timestamp
 
 log = logging.getLogger(__name__)
 
-BASE = "https://www.ransomlook.io/api"
+from dc_ransomfeed import RANSOMLOOK as BASE        # packages/dc_ransomfeed
 
 
 class RansomLookSource(Source):
