@@ -49,8 +49,8 @@ from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-from collect.sources.telegram_web import KINDS, LABEL, MAP, clean, origin  # noqa: E402
-from collect.store import Item, Store  # noqa: E402
+from collect.sources import tg_post  # noqa: E402
+from collect.store import Store  # noqa: E402
 
 VER = "telegram_api v1"
 
@@ -88,7 +88,10 @@ def keys() -> tuple[int, str]:
 
 def client():
     try:
-        from telethon import TelegramClient
+        # **`telethon.sync` 여야 한다.** 그냥 `telethon` 에서 가져오면
+        # 메서드가 코루틴 그대로라 `get_me()` 가 안 기다려지고 경고만 뜬다.
+        # 코루틴 객체는 참이라 `is None` 검사를 그냥 통과한다. 2026-08-27
+        from telethon.sync import TelegramClient
     except ImportError:
         raise SystemExit(
             "telethon 이 없다.  pip install telethon\n"
@@ -98,60 +101,29 @@ def client():
     return TelegramClient(str(SESSION), api_id, api_hash)
 
 
-def fields_of(text: str) -> tuple[dict, list]:
-    """`telegram_web` 과 같은 방식으로 칸을 뽑는다. 두 길이 같은 꼴을 내야 한다."""
-    f, order = {}, []
-    for ln in (text or "").split("\n"):
-        m = LABEL.match(ln.strip())
-        if m:
-            k = m.group(1).strip().lower()
-            f[k] = m.group(2).strip()
-            order.append(k)
-    return f, order
+def links_of(msg) -> list:
+    """글에 붙은 링크. telethon 이 개체로 준다."""
+    out = []
+    try:
+        for _, val in (msg.get_entities_text() or []):
+            s = str(val)
+            if s.startswith("http"):
+                out.append(s)
+    except Exception:
+        pass
+    return out
 
 
-def kind_of(f: dict) -> tuple[str, bool | None]:
-    for name, need, mine in KINDS:
-        if need <= set(f):
-            return name, mine
-    return "기타", None
-
-
-def to_item(msg, chan: str) -> Item:
-    """텔레그램 메시지 하나를 항목으로. `telegram_web.to_item` 과 같은 칸을 낸다."""
-    text = (getattr(msg, "message", "") or "").strip()
-    f, order = fields_of(text)
-    kind, ours = kind_of(f)
-    links = []
-    for ent, val in (getattr(msg, "get_entities_text", lambda: [])() or []):
-        if str(val).startswith("http"):
-            links.append(str(val))
-    src = origin(links, text)
-    org = clean(f.get("target/title") or f.get("victim", ""))
-    perma = "https://t.me/%s/%s" % (chan, getattr(msg, "id", ""))
-    return Item(
-        source="telegram",
-        src_id="%s/%s" % (chan, getattr(msg, "id", "")),
-        venue=(src.split("/")[2] if src.startswith("http") else "t.me/" + chan),
-        venue_kind="forum" if src else "telegram",
-        actor=clean(f.get("threat actor") or f.get("group", "")),
-        target_org=org,
-        title=(text.split("\n")[0] if text else "")[:120],
-        body=text,
-        body_kind="집계 채널 글",
-        body_via="telethon",
-        posted_at=(msg.date.isoformat() if getattr(msg, "date", None) else ""),
-        post_url=src,
-        via=["t.me/" + chan],
-        country=clean(f.get("country", "")),
-        kind={"유출 알림": "확인 못 함", "랜섬 피해자": "랜섬웨어 유출"}.get(kind, ""),
-        clues={"링크": links[:10]} if links else {},
-        raw={"글 번호": str(getattr(msg, "id", "")), "글 종류": kind, "우리 대상": ours,
-             "집계 채널 글 주소": perma,
-             "본문 칸": {k: clean(v) for k, v in f.items() if k in MAP},
-             "못 옮긴 칸": [k for k in order if k not in MAP]},
-        got_by=VER,
-    )
+def to_item(msg, chan: str):
+    """공통 자리(`tg_post`)로 넘긴다. 공개 미리보기 길과 같은 것을 내야 한다."""
+    mid = getattr(msg, "id", "")
+    return tg_post.to_item(
+        chan=chan, src_id="%s/%s" % (chan, mid),
+        text=(getattr(msg, "message", "") or "").strip(),
+        links=links_of(msg),
+        when=(msg.date.isoformat() if getattr(msg, "date", None) else ""),
+        perma="https://t.me/%s/%s" % (chan, mid),
+        got_by=VER, body_via="telethon")
 
 
 def run(chan: str, db: Path | None, limit: int) -> int:
@@ -178,11 +150,18 @@ def run(chan: str, db: Path | None, limit: int) -> int:
 
     items = [to_item(m, chan) for m in msgs if (getattr(m, "message", "") or "").strip()]
     kinds: dict = {}
+    shapes: dict = {}
     for it in items:
-        k = it.raw["글 종류"]
-        kinds[k] = kinds.get(k, 0) + 1
+        kinds[it.raw["글 종류"]] = kinds.get(it.raw["글 종류"], 0) + 1
+        shapes[it.raw["글 꼴"]] = shapes.get(it.raw["글 꼴"], 0) + 1
+    print("글 꼴  %s" % " · ".join("%s %d" % kv for kv in sorted(shapes.items())))
     for k, v in sorted(kinds.items(), key=lambda x: -x[1]):
-        print("    %-18s %2d" % (k, v))
+        print("    %-18s %2d  %s"
+              % (k, v, "우리 대상" if any(i.raw["우리 대상"] and i.raw["글 종류"] == k
+                                     for i in items) else ""))
+    hard = [i for i in items if i.raw.get("못 읽은 것")]
+    if hard:
+        print("\n못 읽은 글 %d개. 버리지 않고 raw 에 사유를 적었다" % len(hard))
 
     if not db:
         print("\n--db 를 주면 넣는다")

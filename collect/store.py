@@ -206,6 +206,44 @@ class Store:
         return self.con.execute("SELECT 1 FROM items WHERE uid=?",
                                 (uid,)).fetchone() is not None
 
+    # ── 다시 읽기 ───────────────────────────────
+    def replace(self, old_uid: str, it: Item) -> str:
+        """줄 하나를 다시 읽은 것으로 갈아 끼운다. 새 uid 를 돌려준다.
+
+        파서를 고치면 열쇠 칸(`venue`·`post_url`·`target_org`·`title`)이 바뀐다.
+        그러면 `put` 은 옛 줄을 놔둔 채 새 줄을 하나 더 만든다. 그래서 갈아 끼우는
+        자리를 따로 둔다.
+
+        **관측된 사실은 지킨다.** 처음 본 날, 마지막으로 본 날, 사람이 봤다는 표시는
+        다시 읽는다고 달라지지 않는다. 바뀌는 것은 해석뿐이다.
+
+        다시 읽은 결과가 이미 있는 다른 줄과 같은 열쇠가 되면, 옛 줄을 지우고
+        그쪽에 합친다. 같은 글이 두 줄로 남는 것보다 낫다."""
+        cur = self.con.execute("SELECT * FROM items WHERE uid=?",
+                               (old_uid,)).fetchone()
+        if cur is None:
+            raise KeyError(old_uid)
+        new = it.uid()
+        if new != old_uid and self.seen(new):
+            with self.con:
+                self.con.execute("DELETE FROM items WHERE uid=?", (old_uid,))
+            self.put(it, cur["last_seen"])
+            return new
+
+        d = asdict(it)
+        d["via"] = json.dumps(it.via, ensure_ascii=False)
+        d["clues"] = json.dumps(it.clues, ensure_ascii=False)
+        d["raw"] = json.dumps(it.raw, ensure_ascii=False)
+        d.update(uid=new, seen_at=cur["seen_at"], first_seen=cur["first_seen"],
+                 last_seen=cur["last_seen"], is_new=cur["is_new"],
+                 forgotten=cur["forgotten"])
+        with self.con:
+            self.con.execute("DELETE FROM items WHERE uid=?", (old_uid,))
+            self.con.execute("INSERT INTO items (%s) VALUES (%s)"
+                             % (",".join(d), ",".join("?" * len(d))),
+                             list(d.values()))
+        return new
+
     # ── 표시와 지우기 ───────────────────────────
     def ack(self, uid: str) -> None:
         """사람이 봤다고 표시한다. 줄은 안 지운다."""
