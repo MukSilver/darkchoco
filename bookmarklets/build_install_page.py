@@ -76,8 +76,19 @@ code{background:#0b0f14;border:1px solid var(--ln);border-radius:4px;
 """
 
 
+# 북마클릿이 아예 도는지 가르는 시험용. 길이가 짧아 어디서도 저장된다.
+# 이것도 안 되면 길이 문제가 아니라 브라우저가 북마클릿 자체를 막는 것이다.
+TINY = ("javascript:(()=>{const d=document.createElement('div');"
+        "d.style.cssText='position:fixed;top:10px;right:10px;z-index:2147483647;"
+        "background:#0a4;color:#fff;padding:10px 14px;font:14px sans-serif;"
+        "border:2px solid #0f8';d.textContent='북마클릿 정상 · '+location.host;"
+        "d.onclick=()=>d.remove();document.body.appendChild(d);"
+        "setTimeout(()=>d.remove(),6000)})();")
+
+
 def build() -> str:
-    got = []
+    got = [(TINY, "① 자리 시험", "**여기부터 해보세요.** 눌러서 초록 상자가 뜨면 "
+                              "북마클릿 자체는 도는 것이다. 6초 뒤 사라진다", True)]
     for stem, name, desc, core in KITS:
         f = HERE / (stem + ".bookmarklet.txt")
         if f.exists():
@@ -107,9 +118,14 @@ def build() -> str:
 
 <div class="step"><ol>
 <li><code>Ctrl</code> + <code>Shift</code> + <code>B</code> 로 북마크 도구모음을 켠다</li>
-<li>쓸 킷의 파란 단추를 도구모음으로 <b>끌어다 놓는다</b></li>
-<li>포럼 페이지에서 그 북마크를 누른다</li>
-</ol></div>
+<li><b>① 자리 시험</b>부터 끌어다 놓고 <b>아무 웹페이지에서</b> 눌러 본다</li>
+<li>초록 상자가 뜨면 북마클릿 자체는 정상이다. 위에서부터 하나씩 내려간다</li>
+<li>어느 것에서 안 되면 <b>그 크기가 벽이다.</b> 그 위 것을 쓴다</li>
+</ol>
+<b>① 자리 시험도 안 되면</b> 길이 문제가 아니다.
+북마크를 누를 때 주소창에 <code>javascript:</code> 가 잠깐 보이는지,
+아무 반응이 없는지 알려 달라. 원인이 갈린다.
+</div>
 
 <div class="step warn">
 <b>URL 칸에 붙여넣는 방법은 안 된다.</b>

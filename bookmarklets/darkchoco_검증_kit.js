@@ -926,14 +926,20 @@
     window.__FK = { ver: VER, open: () => { if (!document.body.contains(box)) document.body.appendChild(box); }, destroy: () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); box.remove(); } };
     say(`${VER} · ${KNAME[KIND]}으로 판정 · 게시판 ${uF} · 스레드 ${uT} · 본문 ${nBody}`);
     ta.value = '실행 중';
-  /* 네트워크를 쓰지 않는 것만 자동으로 돌린다. 요청을 내는 것은 버튼을 눌러야 시작한다.
+  /* 켜면 상자만 뜬다. 무엇을 할지는 사람이 단추로 고른다.
 
-     2026-08-27. 목록 페이지에서 bList 를 자동으로 눌렀는데 modList 안에 fetch 가 둘 있다.
-     킷을 켜기만 해도 쪽을 넘겨 가며 요청이 나갔다. 주석은 안 나간다고 적혀 있었고
-     코드가 반대였다. 셋이 계정을 같이 쓰므로 한 명이 막히면 셋이 같이 막힌다.
-     목록 페이지에서는 진단만 자동으로 돌리고, 목록은 사람이 눌러 시작한다.
-     modTree · modPage · modDiag 는 fetch 가 0이라 그대로 둔다. */
-    (KIND === 'index' ? bTree : KIND === 'page' ? bPage : bDiag).click();
+     2026-08-27. 전에는 판정한 모듈을 자동으로 눌렀다. 두 가지가 나빴다.
+     하나, 목록 페이지에서 눌리던 modList 안에 fetch 가 둘 있어서 켜기만 해도
+     쪽을 넘겨 가며 요청이 나갔다. 셋이 계정을 같이 쓰므로 한 명이 막히면 셋이 막힌다.
+     둘, 켜는 것과 도는 것이 섞여 있어서 상자가 안 뜰 때 설치 문제인지
+     모듈 문제인지 구별이 안 됐다.
+     추천 단추는 초록으로 강조된다. 그것을 누르면 전과 같다. */
+    ta.value = ['킷이 떴다. 아래 단추 중 하나를 누르면 시작한다.', '',
+                '  추천    ' + ({ index: '게시판 지도', list: '글 목록',
+                                  page: '이 글 본문' }[KIND] || '구조 진단'),
+                '',
+                '「글 목록」과 「본문 받기」는 요청을 낸다. 간격을 확인하고 누를 것.',
+                '나머지는 열려 있는 문서만 읽는다.'].join('\n');
 
   }
 
