@@ -1,14 +1,14 @@
 import argparse
 import asyncio
 import json
-import os
-from datetime import datetime, time, timedelta, timezone
+import sys
+from datetime import datetime, time, timezone
 from pathlib import Path
-from zoneinfo import ZoneInfo
-
-from telethon import TelegramClient
 
 from local_config import load_local_env
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "packages"))
+from dc_telegram import get_timezone, make_client, parse_channel  # noqa: E402
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -16,18 +16,26 @@ SESSION_PATH = BASE_DIR / "telegram_session"
 DEFAULT_OUTPUT = BASE_DIR / "output" / "channel_messages.json"
 
 
-def parse_channel(value: str):
-    value = value.strip().rstrip("/")
-    if value.lstrip("-").isdigit():
-        return int(value)
-    return value.removeprefix("https://t.me/").removeprefix("@")
-
-
 def parse_day(value: str):
     try:
         return datetime.strptime(value, "%Y-%m-%d").date()
     except ValueError as exc:
         raise argparse.ArgumentTypeError("날짜는 YYYY-MM-DD 형식이어야 합니다.") from exc
+
+
+def sender_label(sender):
+    """수집 JSON 의 sender_name 값. 공용 dc_telegram.sender_label 과 다르다.
+
+    공용 쪽은 알림 문구용이라 '이름 (@아이디)' 로 만들고 없으면 '알 수 없음'
+    을 돌려준다. 여기는 이름만 넣고 없으면 null 이라 형태가 맞지 않는다.
+    """
+    if sender is None:
+        return None
+    title = getattr(sender, "title", None)
+    name = " ".join(
+        part for part in (getattr(sender, "first_name", None), getattr(sender, "last_name", None)) if part
+    )
+    return title or name or getattr(sender, "username", None)
 
 
 def parse_args():
@@ -41,27 +49,6 @@ def parse_args():
     return parser.parse_args()
 
 
-def get_timezone(name: str):
-    try:
-        return ZoneInfo(name)
-    except Exception:
-        if name == "Asia/Seoul":
-            return timezone(timedelta(hours=9), name)
-        if name in {"UTC", "Etc/UTC"}:
-            return timezone.utc
-        raise ValueError(f"시간대 '{name}'을 불러올 수 없습니다. tzdata를 설치하거나 Asia/Seoul 또는 UTC를 사용하세요.")
-
-
-def sender_label(sender):
-    if sender is None:
-        return None
-    title = getattr(sender, "title", None)
-    name = " ".join(
-        part for part in (getattr(sender, "first_name", None), getattr(sender, "last_name", None)) if part
-    )
-    return title or name or getattr(sender, "username", None)
-
-
 async def collect(channel, limit: int, output: Path, from_date=None, to_date=None, timezone_name="Asia/Seoul"):
     load_local_env()
     if limit < 1:
@@ -72,9 +59,7 @@ async def collect(channel, limit: int, output: Path, from_date=None, to_date=Non
     local_tz = get_timezone(timezone_name)
     min_utc = datetime.combine(from_date, time.min, local_tz).astimezone(timezone.utc) if from_date else None
     max_utc = datetime.combine(to_date, time.max, local_tz).astimezone(timezone.utc) if to_date else None
-    api_id = int(os.environ["TELEGRAM_API_ID"])
-    api_hash = os.environ["TELEGRAM_API_HASH"]
-    client = TelegramClient(str(SESSION_PATH), api_id, api_hash)
+    client = make_client(SESSION_PATH)
 
     await client.connect()
     try:

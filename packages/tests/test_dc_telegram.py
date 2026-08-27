@@ -35,6 +35,13 @@ def test_parse_channel():
     assert dc.parse_channel(" baz/ ") == "baz"
 
 
+def test_parse_channel_숫자ID는_정수로():
+    # Telethon 은 채널 ID 를 문자열로 주면 이름으로 알아듣는다.
+    assert dc.parse_channel("-1001234567890") == -1001234567890
+    assert dc.parse_channel(-1001234567890) == -1001234567890
+    assert dc.parse_channel("1234") == 1234
+
+
 def test_merge_records_새것이_이기고_내림차순():
     old = [{"id": 3, "text": "old3"}, {"id": 1, "text": "old1"}]
     new = [{"id": 4, "text": "new4"}, {"id": 3, "text": "new3"}]
