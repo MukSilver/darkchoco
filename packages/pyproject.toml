@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "darkchoco-packages"
+version = "0.1.0"
+description = "다크초코 공용 부품 — 여러 도구가 같이 쓰는 접속·저장·안전 코드"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+
+# 기본 설치는 밖에서 받아오는 것이 없습니다.
+# dc_console 과 dc_notion 은 표준 라이브러리만 씁니다.
+dependencies = []
+
+# 필요한 것만 골라 받습니다.
+#     pip install -e packages              가벼운 둘만
+#     pip install -e "packages[safety]"    + requests
+#     pip install -e "packages[all]"       전부
+[project.optional-dependencies]
+safety = ["requests>=2.31"]
+ransomfeed = ["requests>=2.31"]          # dc_safety 를 통해 씁니다
+telegram = ["telethon>=1.36,<2"]
+all = ["requests>=2.31", "telethon>=1.36,<2"]
+
+[tool.setuptools]
+# 폴더 이름이 곧 패키지 이름입니다. 여기서만 찾습니다.
+packages = [
+    "dc_console",
+    "dc_notion",
+    "dc_ransomfeed",
+    "dc_safety",
+    "dc_telegram",
+]
+
+[tool.setuptools.package-dir]
+"" = "."
