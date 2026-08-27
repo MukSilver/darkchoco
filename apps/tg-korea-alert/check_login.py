@@ -1,20 +1,17 @@
 import asyncio
-import os
+import sys
 from pathlib import Path
 
-from telethon import TelegramClient
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "packages"))
+from dc_telegram import make_client
 
 from local_config import load_local_env
-
 
 BASE_DIR = Path(__file__).resolve().parent
 SESSION_PATH = BASE_DIR / "telegram_session"
 
 load_local_env()
-api_id = int(os.environ["TELEGRAM_API_ID"])
-api_hash = os.environ["TELEGRAM_API_HASH"]
-
-client = TelegramClient(str(SESSION_PATH), api_id, api_hash)
+client = make_client(SESSION_PATH)
 
 
 async def main():
