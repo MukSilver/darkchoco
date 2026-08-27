@@ -5,6 +5,10 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from dc_console import use_utf8  # noqa: E402
+
+use_utf8()   # 한글 콘솔에서 결과 줄이 깨지지 않게 한다
 import dc_notion as dn  # noqa: E402
 
 

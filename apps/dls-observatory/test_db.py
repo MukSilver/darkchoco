@@ -3,9 +3,16 @@
 import json
 import os
 import sys
+from pathlib import Path
 import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# 윈도우 콘솔(cp949)에서 한글·기호로 죽는 것을 막습니다.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "packages"))
+from dc_console import use_utf8  # noqa: E402
+
+use_utf8()
 import db as D  # noqa: E402
 
 TMP = tempfile.mkdtemp(prefix="dlsdb-")
