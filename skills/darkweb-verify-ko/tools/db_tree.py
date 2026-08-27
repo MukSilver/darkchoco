@@ -58,7 +58,7 @@ def split_defs(body: str) -> list[str]:
 
 # 사람을 가리키는 앞말. `_name` 을 통째로 잡으면 안 된다.
 # file_name, shop_name, menu_name, table_name 이 다 사람 이름이 된다.
-# 한 케이스 cs_admin 에 shop_name 이 실제로 있었다.
+# 한 케이스의 관리자 표에 shop_name 이 실제로 있었다.
 WHO = (r"user|real|writer|author|buy|sell|member|mem|cust|customer|client"
        r"|recv|receiv|send|deliv|orderer|emp|employ|staff|guest|applicant"
        r"|patient|student|parent|own|contact|person|holder|pay")
@@ -107,7 +107,7 @@ PWD = re.compile(
 
 # 결제·정산 연동. 돈이 오가는 시스템에 붙어서 치명으로 올린다.
 # 가맹점 ID 하나로는 결제를 못 일으키지만, 설정 표는 키를 같은 표에 둔다.
-# 한 케이스 cs_admin 이 그랬다. 관리자 비밀번호와 pg_id 와 은행계좌가 한 행에 있었다.
+# 한 케이스가 그랬다. 관리자 비밀번호와 pg_id 와 은행계좌가 한 행에 있었다.
 # 브랜드 이름은 한국에서 쓰는 것만 넣는다.
 PAY = re.compile(
     r"(^|_)pg(_|$)|(^|_)cpid(_|$)|merchant"

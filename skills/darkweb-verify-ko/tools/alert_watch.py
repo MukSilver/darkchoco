@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import urllib.error
@@ -39,11 +40,48 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import alert_parse as A  # noqa: E402
 
 # ── 자리 ────────────────────────────────────────
-TOKEN_FILE = Path.home() / ".config" / "darkchoco" / "discord_token"
-CHANNEL = "<채널번호는 설정 파일에 있다>"          # 개인 서버
-PROJ = Path.home() / "Documents" / "Q.E.D" / "화햇" / "화햇강의자료" / "프젝"
-QUEUE = PROJ / "07_케이스" / "_알림큐"
-STATE = QUEUE / "_state.json"
+# **이 레포는 공개다.** 채널 번호와 개인 폴더 경로를 여기 적지 않는다.
+# 2026-08-27 에 채널 번호와 프로젝트 경로가 박힌 채로 공개 레포에 올라가 있었다.
+# 번호 자체로 글을 읽을 수는 없지만 어느 서버의 어느 채널인지가 드러난다.
+CONF = Path(os.environ.get("DARKCHOCO_CONFIG_DIR",
+                           str(Path.home() / ".config" / "darkchoco")))
+TOKEN_FILE = CONF / "discord_token"
+CHANNEL_FILE = CONF / "discord_channel"
+
+
+def channel() -> str:
+    """읽을 채널 번호. **레포 밖 파일에서 읽는다.**"""
+    v = os.environ.get("DARKCHOCO_DISCORD_CHANNEL", "").strip()
+    if v:
+        return v
+    if CHANNEL_FILE.exists():
+        return CHANNEL_FILE.read_text(encoding="utf-8").strip()
+    raise SystemExit(
+        "읽을 채널을 못 찾았다.\n"
+        "  %s 에 채널 번호 한 줄을 넣거나\n"
+        "  DARKCHOCO_DISCORD_CHANNEL 환경변수를 준다.\n"
+        "**레포 안에 적지 마라. 이 레포는 공개다.**" % CHANNEL_FILE)
+
+
+def queue_dir() -> Path:
+    """알림 큐 자리. 개인 폴더 구조를 코드에 박지 않는다.
+
+    네 자리를 순서대로 찾는다. 자격 정보를 옮길 때 쓴 방식과 같다."""
+    for p in (os.environ.get("DARKCHOCO_ALERT_QUEUE"),
+              (os.environ.get("DARKCHOCO_PROJ") or "") and
+              str(Path(os.environ["DARKCHOCO_PROJ"]) / "07_케이스" / "_알림큐")):
+        if p:
+            return Path(p)
+    guess = Path(__file__).resolve().parents[3] / "07_케이스" / "_알림큐"
+    if guess.parent.exists():
+        return guess
+    raise SystemExit(
+        "알림 큐 자리를 못 찾았다.\n"
+        "  DARKCHOCO_ALERT_QUEUE 나 DARKCHOCO_PROJ 환경변수를 준다.")
+
+
+def state_file() -> Path:
+    return queue_dir() / "_state.json"
 
 # ── 표시 규칙 ───────────────────────────────────
 # **막는 목록이 아니라 아는 목록이다.**
@@ -82,9 +120,10 @@ def api(path: str, tok: str):
 
 
 def load_state() -> dict:
-    if STATE.exists():
+    st = state_file()
+    if st.exists():
         try:
-            return json.loads(STATE.read_text(encoding="utf-8"))
+            return json.loads(st.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             pass
     return {"last_id": None, "seen": 0, "runs": []}
@@ -100,8 +139,9 @@ def save_state(state: dict, dry: bool) -> None:
     if dry:
         return
     state["last_check"] = datetime.now(timezone.utc).isoformat()
-    STATE.parent.mkdir(parents=True, exist_ok=True)
-    STATE.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+    st = state_file()
+    st.parent.mkdir(parents=True, exist_ok=True)
+    st.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def marks(r: dict) -> list[str]:
@@ -134,7 +174,7 @@ def main() -> int:
     q = "?limit=%d" % max(1, min(100, args.limit))
     if state.get("last_id"):
         q += "&after=" + str(state["last_id"])
-    msgs = api("/channels/%s/messages%s" % (CHANNEL, q), tok)
+    msgs = api("/channels/%s/messages%s" % (channel(), q), tok)
     if isinstance(msgs, dict):
         # 실패도 남긴다. 조용히 넘어가면 멈춘 것을 못 알아본다.
         state["last_error"] = {"at": datetime.now(timezone.utc).isoformat(),
@@ -178,9 +218,10 @@ def main() -> int:
         print("\ndry run. 파일을 안 썼다.")
         return 0
 
-    QUEUE.mkdir(parents=True, exist_ok=True)
+    q_dir = queue_dir()
+    q_dir.mkdir(parents=True, exist_ok=True)
     day = datetime.now(timezone.utc).astimezone().strftime("%Y%m%d")
-    md = QUEUE / ("알림_%s.md" % day)
+    md = q_dir / ("알림_%s.md" % day)
 
     L = []
     if not md.exists():
