@@ -1,0 +1,30 @@
+# 비밀 — 절대 커밋하지 않습니다
+.env
+*.env
+!.env.example
+*token*
+!*token*.py
+!*token*.md
+
+# 수집 결과·상태 — 저장소는 코드만 관리합니다
+out/
+output/
+sessions/
+snapshots/
+web/data/*.json
+*.sqlite3
+probe*.json
+
+# 파이썬
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# 편집기·OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
