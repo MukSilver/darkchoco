@@ -111,6 +111,9 @@
 
   /* ================= 화면 ================= */
   let ABORT = false, BUSY = false;
+/* 못 가져온 URL 과 사유. 결과 꼬리에 낸다.
+   이게 없으면 요청이 막힌 게시판과 글이 없는 게시판이 결과에서 같아 보인다. */
+  const FAILED = [];
   const box = document.createElement('div');
   box.style.cssText = 'position:fixed;inset:4%;z-index:2147483647;background:#111;color:#eee;border:2px solid #666;padding:8px;display:flex;flex-direction:column;font:13px sans-serif;gap:6px';
   const row1 = document.createElement('div'); row1.style.cssText = 'display:flex;gap:6px;align-items:center;flex-wrap:wrap';
@@ -128,7 +131,7 @@
       (hot ? 'background:#0a4;color:#fff;border:1px solid #0f8;font-weight:bold' : 'background:#333;color:#ddd;border:1px solid #555');
     b.onclick = async () => {
       if (BUSY) { say('실행 중이다. 끝나거나 중단한 뒤에 누를 것'); return; }
-      BUSY = true; ABORT = false;
+      BUSY = true; ABORT = false; FAILED.length = 0;
       try { await fn(); } catch (e) { say('오류 : ' + e); put('오류\n\n' + (e && e.stack || e)); }
       BUSY = false;
     };
@@ -166,8 +169,9 @@
     '정렬을 고르면 목록을 그 순서로 다시 받아 온다. 전수를 못 받을 때 위에서부터 중요한 것만 건지는 방법이다');
   const cMask = chk('개인정보 가리기', false, '켜면 샘플로 보이는 줄을 생략하고 이메일·전화를 가린다. 기본은 원문 그대로다');
   const cScope = chk('사이드바 빼기', true, '글 목록 영역 안의 링크만 본다. 끄면 인기글 위젯까지 섞인다');
-/* 켜면 하위 게시판까지 들어가서 목록을 모아 온다. 요청이 늘어나니 기본은 꺼둔다 */
-  const cSubs = chk('하위 게시판도', true, '켜면 하위 게시판에 각각 들어가 목록을 모아 온다. 요청이 늘어난다');
+/* 켜면 하위 게시판까지 들어가서 목록을 모아 온다. 요청이 늘어나니 기본은 꺼둔다.
+   2026-08-27. 주석은 꺼둔다고 적었는데 코드가 true 였다. 코드를 주석에 맞췄다. */
+  const cSubs = chk('하위 게시판도', false, '켜면 하위 게시판에 각각 들어가 목록을 모아 온다. 요청이 늘어난다');
   const WHO = () => C(iWho.__i.value);
   const stamp = () => TODAY + (WHO() ? ' ' + WHO() : '');
   const cfg = { get n() { return Math.max(1, N(iN.__i.value) || 60); },
@@ -469,13 +473,30 @@
           try {
             await wait();
             const r = await fetch(listUrl(base, pg, cfg.sort), { credentials: 'same-origin' });
-            if (!r.ok) break;
-            const doc = new DOMParser().parseFromString(await r.text(), 'text/html');
+/* 2026-08-27. 여기에 챌린지와 레이트리밋 검사가 없었다. qilin_kit 에는 있었다.
+   챌린지 페이지가 200 으로 오면 파싱이 0건이 되어 마지막 쪽으로 읽혔고,
+   429 를 받아도 다음 쪽을 계속 두드렸다. 실패가 결과에도 안 남아
+   "글 없는 게시판" 과 구별되지 않았다. 셋이 계정을 같이 쓴다. */
+            if (r.status === 429 || r.status === 503) {
+              FAILED.push(`${listUrl(base, pg, cfg.sort)} — HTTP ${r.status} 레이트리밋 의심. 즉시 멈춤`);
+              ABORT = true; break;
+            }
+            if (!r.ok) { FAILED.push(`${listUrl(base, pg, cfg.sort)} — HTTP ${r.status}`); break; }
+            const txt = await r.text();
+            if (CHL.test(txt.slice(0, 6000))) {
+              FAILED.push(`${listUrl(base, pg, cfg.sort)} — 챌린지 화면. 즉시 멈춤`);
+              ABORT = true; break;
+            }
+            const doc = new DOMParser().parseFromString(txt, 'text/html');
             pickScope(doc).els.forEach(e => grab(e, tag, base));
-          } catch (e) { break; }
+          } catch (e) {
+            FAILED.push(`${listUrl(base, pg, cfg.sort)} — ${e && e.message || '요청 실패'}`);
+            break;
+          }
         }
         const got = targets.length - before;
         say(`목록 모으는 중 · ${tag || '이 게시판'} ${pg}쪽 · 새로 ${got}건 · 목록 누적 ${targets.length}건`);
+        if (ABORT) break;
         if (pg > 1 && got === 0) break; /* 더 안 늘면 끝. 전수로 돌릴 때의 안전장치 */
       }
 /* 할당보다 많이 담겼으면(한 쪽에 여러 건이라) 잘라 낸다 */
@@ -779,6 +800,12 @@
   window.__FK = { ver: VER, open: () => { if (!document.body.contains(box)) document.body.appendChild(box); }, destroy: () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); box.remove(); } };
   say(`${VER} · ${KNAME[KIND]}으로 판정 · 게시판 ${uF} · 스레드 ${uT} · 본문 ${nBody}`);
   ta.value = '실행 중';
-/* 네트워크를 쓰지 않는 것만 자동으로 돌린다. 본문 수집은 버튼을 눌러야 시작한다 */
-  (KIND === 'index' ? bTree : KIND === 'list' ? bList : KIND === 'page' ? bPage : bDiag).click();
+/* 네트워크를 쓰지 않는 것만 자동으로 돌린다. 요청을 내는 것은 버튼을 눌러야 시작한다.
+
+   2026-08-27. 목록 페이지에서 bList 를 자동으로 눌렀는데 modList 안에 fetch 가 둘 있다.
+   킷을 켜기만 해도 쪽을 넘겨 가며 요청이 나갔다. 주석은 안 나간다고 적혀 있었고
+   코드가 반대였다. 셋이 계정을 같이 쓰므로 한 명이 막히면 셋이 같이 막힌다.
+   목록 페이지에서는 진단만 자동으로 돌리고, 목록은 사람이 눌러 시작한다.
+   modTree · modPage · modDiag 는 fetch 가 0이라 그대로 둔다. */
+  (KIND === 'index' ? bTree : KIND === 'page' ? bPage : bDiag).click();
 })();
