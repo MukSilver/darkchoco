@@ -5,19 +5,29 @@
 #
 # 껍데기(CHAL·sleep·UI 상자)가 다섯에 겹쳐 있지만 그대로 둔다.
 # 껍데기를 뜯는 것은 브라우저에서 이 판이 도는 것을 확인한 뒤에 한다.
+import argparse
 import re
 from pathlib import Path
 
 B = Path(__file__).resolve().parent
-OUT = B / "darkchoco_kit.js"
 
+# 키         함수         파일                검증에서 얼마나 쓰나
 MODS = [
-    ("modForum", "forum_kit.js"),
-    ("modQilin", "qilin_kit.js"),
-    ("modIndex", "index_kit.js"),
-    ("modPhoto", "photo_kit.js"),
-    ("modProbe", "probe_generic.js"),
+    ("forum",    "modForum", "forum_kit.js",     "핵심. ② 재료가 여기서 나온다"),
+    ("qilin",    "modQilin", "qilin_kit.js",     "드묾. qilin 유출 사이트에서만"),
+    ("dirindex", "modIndex", "index_kit.js",     "드묾. 열린 디렉터리에서만"),
+    ("photo",    "modPhoto", "photo_kit.js",     "가끔. 증거 사진"),
+    ("probe",    "modProbe", "probe_generic.js", "받침. 판정이 안 될 때. 언제나 들어간다"),
 ]
+
+# 미리 묶어 둔 조합. 이름으로 부른다
+SETS = {
+    "검증": ["forum"],                       # 케이스 검증에 쓰는 것
+    "조사": ["qilin", "dirindex", "photo"],  # 포럼·사이트 조사에 쓰는 것
+    "전부": ["forum", "qilin", "dirindex", "photo"],
+}
+
+ALWAYS = "probe"     # 판정이 안 될 때의 받침. 빼지 않는다
 
 
 def body_of(path: Path) -> str:
@@ -82,7 +92,7 @@ HEAD = '''/* 다크초코 통합 킷 v1
     photo: document.querySelectorAll('img').length >= 6
   };
 
-  const ORDER = ['qilin', 'dirindex', 'forum', 'photo'];
+  const ORDER = @@ORDER@@;
   const BEST = ORDER.filter(k => guess[k])[0] || 'probe';
 
   /* ── 모듈. 각각 자기 상자를 만든다 ───────────── */
@@ -91,14 +101,8 @@ HEAD = '''/* 다크초코 통합 킷 v1
 TAIL = '''
   /* ── 고르는 판 ──────────────────────────────
      작게 뜬다. 하나를 고르면 사라지고 그 모듈이 자기 상자를 만든다. */
-  const NAME = {
-    forum: '포럼', qilin: '킬린', dirindex: '디렉터리',
-    photo: '증거 사진', probe: '구조 진단'
-  };
-  const RUN = {
-    forum: modForum, qilin: modQilin, dirindex: modIndex,
-    photo: modPhoto, probe: modProbe
-  };
+  const NAME = @@NAME@@;
+  const RUN = @@RUN@@;
 
   const pick = document.createElement('div');
   pick.style.cssText = 'position:fixed;top:10px;right:10px;z-index:2147483647;background:#111;color:#eee;border:2px solid #666;padding:8px;display:flex;flex-direction:column;gap:6px;font:13px sans-serif;max-width:60vw';
@@ -148,16 +152,63 @@ TAIL = '''
 })();
 '''
 
-SHELL = (B / "kit_shell.js").read_text(encoding="utf-8")
-assert "function mkShell" in SHELL, "공통 껍데기를 못 읽었다"
+KO = {"forum": "포럼", "qilin": "킬린", "dirindex": "디렉터리",
+      "photo": "증거 사진", "probe": "구조 진단"}
 
-parts = [HEAD, "\n  /* ── 공통 껍데기. 세 모듈이 같이 쓴다 ── */\n",
-         "\n".join("  " + l if l.strip() else l for l in SHELL.split("\n")), "\n"]
-for fn, src in MODS:
-    body = body_of(B / src)
-    parts.append("\n  /* ── %s ── */\n  function %s() {\n%s\n  }\n" % (src, fn, body))
-parts.append(TAIL)
 
-OUT.write_text("".join(parts), encoding="utf-8")
-print("만듦  %s  %d 자 · %d 줄" % (OUT.name, len(OUT.read_text(encoding='utf-8')),
-                                  OUT.read_text(encoding='utf-8').count("\n")))
+def build(keys: list[str], out: Path) -> None:
+    """고른 모듈만 묶는다. probe 는 언제나 들어간다."""
+    keys = [k for k in keys if k != ALWAYS] + [ALWAYS]
+    picked = [m for m in MODS if m[0] in keys]
+    got = {m[0] for m in picked}
+    missing = [k for k in keys if k not in got]
+    assert not missing, "모르는 모듈: " + ", ".join(missing)
+
+    shell = (B / "kit_shell.js").read_text(encoding="utf-8")
+    assert "function mkShell" in shell, "공통 껍데기를 못 읽었다"
+
+    # 고른 것만 판에 올린다. probe 는 TAIL 이 따로 붙이므로 여기서 뺀다
+    order = [k for k, _, _, _ in picked if k != ALWAYS]
+    head = HEAD.replace("@@ORDER@@",
+                        "[" + ", ".join("'%s'" % k for k in order) + "]")
+    tail = TAIL \
+        .replace("@@NAME@@",
+                 "{ " + ", ".join("%s: '%s'" % (k, KO[k]) for k, _, _, _ in picked) + " }") \
+        .replace("@@RUN@@",
+                 "{ " + ", ".join("%s: %s" % (k, fn) for k, fn, _, _ in picked) + " }")
+
+    parts = [head, "\n  /* ── 공통 껍데기 ── */\n",
+             "\n".join("  " + l if l.strip() else l for l in shell.split("\n")), "\n"]
+    for _, fn, src, _ in picked:
+        body = body_of(B / src)
+        parts.append("\n  /* ── %s ── */\n  function %s() {\n%s\n  }\n" % (src, fn, body))
+    parts.append(tail)
+
+    body = "".join(parts)
+    out.write_text(body, encoding="utf-8")
+    print("만듦  %-24s %7s 자 · %s" % (out.name, format(len(body), ","),
+                                     " · ".join(KO[k] for k, _, _, _ in picked)))
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(
+        description="킷을 골라 하나로 묶는다. 파이어폭스가 북마크를 길이에서 막는다")
+    ap.add_argument("--only", default="전부",
+                    help="묶을 것. 조합 이름(%s) 또는 쉼표로 나눈 모듈 키"
+                         % " · ".join(SETS))
+    ap.add_argument("--out", help="파일 이름. 안 주면 조합 이름으로")
+    a = ap.parse_args()
+
+    if a.only in SETS:
+        keys, label = SETS[a.only], a.only
+    else:
+        keys = [s.strip() for s in a.only.split(",") if s.strip()]
+        label = "-".join(keys)
+    name = a.out or ("darkchoco_kit.js" if a.only == "전부"
+                     else "darkchoco_%s_kit.js" % label)
+    build(keys, B / name)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
