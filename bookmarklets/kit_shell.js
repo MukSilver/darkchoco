@@ -62,6 +62,37 @@ function mkShell(o) {
     return l;
   };
 
+  /* 끌어서 옮기기. forum_kit 에만 있던 것을 여기로 옮겨 셋도 같이 쓴다.
+     상자가 화면을 거의 덮어서 아래를 보려면 옮기거나 접어야 한다. 2026-08-27 */
+  const grip = document.createElement('span');
+  grip.textContent = '⠿'; grip.title = '끌어서 옮기기';
+  grip.style.cssText = 'cursor:move;color:#888;padding:0 4px;user-select:none;font-size:15px';
+  let dx = 0, dy = 0, dragging = false;
+  grip.onmousedown = e => {
+    const r = box.getBoundingClientRect();
+    box.style.inset = ''; box.style.left = r.left + 'px'; box.style.top = r.top + 'px';
+    box.style.width = r.width + 'px'; box.style.height = r.height + 'px';
+    dx = e.clientX - r.left; dy = e.clientY - r.top; dragging = true; e.preventDefault();
+  };
+  const onMove = e => { if (!dragging) return;
+    box.style.left = (e.clientX - dx) + 'px'; box.style.top = (e.clientY - dy) + 'px'; };
+  const onUp = () => { dragging = false; };
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+
+  const gone = () => {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    box.remove();
+  };
+
+  /* 홈으로. 통합 킷이 `window.__DKHOME` 을 걸어 두면 나온다.
+     낱개 킷으로 쓸 때는 돌아갈 데가 없으므로 안 나온다. */
+  const homeB = document.createElement('button');
+  homeB.textContent = '홈으로';
+  homeB.style.cssText = 'padding:3px 9px;cursor:pointer;font:12px sans-serif;background:#234;color:#cde;border:1px solid #467';
+  homeB.onclick = () => { const h = window.__DKHOME; gone(); if (h) h(); };
+
   const stopB = document.createElement('button');
   stopB.textContent = '중단';
   stopB.style.cssText = 'padding:3px 9px;cursor:pointer;font:12px sans-serif;background:#422;color:#fdd;border:1px solid #855';
@@ -70,7 +101,7 @@ function mkShell(o) {
   const closeB = document.createElement('button');
   closeB.textContent = '닫기';
   closeB.style.cssText = 'padding:3px 9px;cursor:pointer;font:12px sans-serif;background:#422;color:#fdd;border:1px solid #855';
-  closeB.onclick = () => box.remove();
+  closeB.onclick = gone;
 
   /* 최소화. 접어도 상태와 중단은 남긴다.
      걸어다니는 중에 아래 페이지를 보면서 진행을 확인할 때 쓴다. */
@@ -79,7 +110,7 @@ function mkShell(o) {
   miniB.textContent = '최소화';
   miniB.setAttribute('data-mini', '1');
   miniB.style.cssText = 'padding:3px 9px;cursor:pointer;font:12px sans-serif;background:#333;color:#ddd;border:1px solid #555';
-  const KEEP = [st, miniB, stopB, closeB];
+  const KEEP = [grip, st, miniB, stopB, homeB, closeB];
   miniB.onclick = () => {
     MINI = !MINI;
     box.style.inset = MINI ? 'auto 10px 10px auto' : '4%';
@@ -90,13 +121,16 @@ function mkShell(o) {
   };
 
   const mount = (...items) => {
-    bar.append(...items, st, stopB, miniB, closeB);
+    bar.append(grip, ...items, st, stopB, miniB);
+    if (window.__DKHOME) bar.append(homeB);      /* 통합 킷일 때만 */
+    bar.append(closeB);
     box.append(bar, ta);
     document.body.appendChild(box);
+    box.__gone = gone;
     return box;
   };
 
   return { box: box, bar: bar, st: st, ta: ta, say: say, put: put,
-           mk: mk, inp: inp, stopB: stopB, miniB: miniB, closeB: closeB,
-           mount: mount };
+           mk: mk, inp: inp, grip: grip, stopB: stopB, miniB: miniB,
+           homeB: homeB, closeB: closeB, gone: gone, mount: mount };
 }

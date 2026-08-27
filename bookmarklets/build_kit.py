@@ -104,22 +104,20 @@ TAIL = '''
   const NAME = @@NAME@@;
   const RUN = @@RUN@@;
 
-  const pick = document.createElement('div');
-  pick.style.cssText = 'position:fixed;top:10px;right:10px;z-index:2147483647;background:#111;color:#eee;border:2px solid #666;padding:8px;display:flex;flex-direction:column;gap:6px;font:13px sans-serif;max-width:60vw';
-  const line = document.createElement('div');
-  line.style.cssText = 'display:flex;gap:6px;align-items:center;flex-wrap:wrap';
-  const note = document.createElement('div');
-  note.style.cssText = 'font:12px monospace;color:#0f0';
-  note.textContent = VER + ' · ' + NAME[BEST] + ' 으로 봤다';
+  const KEYS = ORDER.concat(['probe']);
 
   const go = (k) => {
-    pick.remove();
+    if (window.__DK) { try { window.__DK.remove(); } catch (e) {} window.__DK = null; }
     try {
       RUN[k]();
     } catch (e) {
       const err = document.createElement('div');
       err.style.cssText = 'position:fixed;inset:10% 20%;z-index:2147483647;background:#111;color:#fdd;border:2px solid #855;padding:12px;font:12px monospace;white-space:pre-wrap;overflow:auto';
-      err.textContent = NAME[k] + ' 모듈이 멈췄다. 다른 모듈은 멀쩡하다.\\n\\n' + (e && e.stack || e);
+      /* 역슬래시를 안 쓴다. TAIL 이 파이썬 문자열이라 겹이 한 번 벗겨지고,
+         셸을 거치면 또 벗겨진다. 2026-08-27 에 세 번 물렸다 */
+      const NL = String.fromCharCode(10);
+      err.textContent = [NAME[k] + ' 모듈이 멈췄다. 다른 모듈은 멀쩡하다.', '',
+                         (e && e.stack || e)].join(NL);
       const x = document.createElement('button');
       x.textContent = '닫기';
       x.style.cssText = 'display:block;margin-top:10px;padding:3px 9px;cursor:pointer';
@@ -129,26 +127,83 @@ TAIL = '''
     }
   };
 
-  ORDER.concat(['probe']).forEach(k => {
-    const b = document.createElement('button');
-    b.textContent = NAME[k];
-    const hot = (k === BEST);
-    b.style.cssText = 'padding:3px 9px;cursor:pointer;font:12px sans-serif;' +
-      (hot ? 'background:#0a4;color:#fff;border:1px solid #0f8;font-weight:bold'
-           : 'background:#333;color:#ddd;border:1px solid #555');
-    b.onclick = () => go(k);
-    line.append(b);
-  });
+  /* 고르는 판. 접히고 끌어 옮겨진다. 모듈 창에서 「홈으로」 로 다시 부른다 */
+  const showPick = () => {
+    if (window.__DK) { try { window.__DK.remove(); } catch (e) {} }
+    const pick = document.createElement('div');
+    pick.style.cssText = 'position:fixed;top:10px;right:10px;z-index:2147483647;background:#111;color:#eee;border:2px solid #666;padding:8px;display:flex;flex-direction:column;gap:6px;font:13px sans-serif;max-width:60vw';
+    const line = document.createElement('div');
+    line.style.cssText = 'display:flex;gap:6px;align-items:center;flex-wrap:wrap';
+    const note = document.createElement('div');
+    note.style.cssText = 'font:12px monospace;color:#0f0';
+    note.textContent = VER + ' · ' + NAME[BEST] + ' 으로 봤다';
 
-  const closeB = document.createElement('button');
-  closeB.textContent = '닫기';
-  closeB.style.cssText = 'padding:3px 9px;cursor:pointer;font:12px sans-serif;background:#422;color:#fdd;border:1px solid #855';
-  closeB.onclick = () => pick.remove();
-  line.append(closeB);
+    const grip = document.createElement('span');
+    grip.textContent = '\u283F'; grip.title = '끌어서 옮기기';
+    grip.style.cssText = 'cursor:move;color:#888;padding:0 4px;user-select:none;font-size:15px';
+    let dx = 0, dy = 0, dragging = false;
+    grip.onmousedown = e => {
+      const r = pick.getBoundingClientRect();
+      pick.style.top = r.top + 'px'; pick.style.left = r.left + 'px'; pick.style.right = 'auto';
+      dx = e.clientX - r.left; dy = e.clientY - r.top; dragging = true; e.preventDefault();
+    };
+    const onMove = e => { if (!dragging) return;
+      pick.style.left = (e.clientX - dx) + 'px'; pick.style.top = (e.clientY - dy) + 'px'; };
+    const onUp = () => { dragging = false; };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    const gone = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      pick.remove();
+    };
 
-  pick.append(line, note);
-  document.body.appendChild(pick);
-  window.__DK = pick;
+    const mkB = (label, css) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.style.cssText = 'padding:3px 9px;cursor:pointer;font:12px sans-serif;' + css;
+      return b;
+    };
+
+    const picks = [];
+    KEYS.forEach(k => {
+      const hot = (k === BEST);
+      const b = mkB(NAME[k], hot ? 'background:#0a4;color:#fff;border:1px solid #0f8;font-weight:bold'
+                                 : 'background:#333;color:#ddd;border:1px solid #555');
+      b.onclick = () => { gone(); go(k); };
+      picks.push(b);
+    });
+
+    let mini = false;
+    const minB = mkB('최소화', 'background:#333;color:#ddd;border:1px solid #555');
+    minB.onclick = () => {
+      mini = !mini;
+      picks.forEach(b => { b.style.display = mini ? 'none' : ''; });
+      note.style.display = mini ? 'none' : '';
+      minB.textContent = mini ? '펼치기' : '최소화';
+    };
+
+    const closeB = mkB('닫기', 'background:#422;color:#fdd;border:1px solid #855');
+    closeB.onclick = gone;
+
+    line.append(grip);
+    picks.forEach(b => line.append(b));
+    line.append(minB, closeB);
+    pick.append(line, note);
+    document.body.appendChild(pick);
+    window.__DK = pick;
+  };
+
+/* 고를 것이 하나뿐이면 판을 건너뛴다. 검증 킷이 그렇다.
+   구조 진단은 포럼 창 안에 이미 단추로 있어서 판이 한 겹 더 있을 뜻이 없다.
+   그때는 돌아갈 데가 없으므로 __DKHOME 을 안 건다. 모듈에 홈으로가 안 나온다.
+   2026-08-27 */
+  if (ORDER.length <= 1) {
+    go(ORDER[0] || 'probe');
+  } else {
+    window.__DKHOME = showPick;
+    showPick();
+  }
 })();
 '''
 
