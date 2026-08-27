@@ -1,0 +1,13 @@
+# 줄바꿈 규칙 — 앱별 .gitattributes 가 있으면 그쪽이 우선합니다.
+# 여기는 규칙이 없는 앱을 덮는 최소한의 안전망입니다.
+
+# 리눅스에서 실행되는 것은 LF 여야 합니다.
+# CRLF 로 체크아웃되면 "#!/bin/sh\r" 를 인터프리터 경로로 오인해 실행이 깨집니다.
+*.sh       text eol=lf
+*.service  text eol=lf
+Dockerfile text eol=lf
+
+# Windows 에서 실행되는 것은 CRLF 여야 합니다.
+*.bat      text eol=crlf
+*.cmd      text eol=crlf
+*.ps1      text eol=crlf
