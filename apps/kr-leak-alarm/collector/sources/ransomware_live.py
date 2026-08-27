@@ -23,7 +23,7 @@ from .base import LeakRecord, Source, parse_timestamp
 
 log = logging.getLogger(__name__)
 
-BASE = "https://api.ransomware.live/v2"
+from dc_ransomfeed import RANSOMWARE_LIVE as BASE   # packages/dc_ransomfeed
 
 
 class RansomwareLiveSource(Source):
