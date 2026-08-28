@@ -8,6 +8,14 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+
+# 찾는 규칙은 dc.py 것을 그대로 씁니다. 두 군데에 따로 두면 어긋납니다.
+def _tool_json들():
+    import importlib.util                       # noqa: PLC0415
+    spec = importlib.util.spec_from_file_location("_dc", ROOT / "dc.py")
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m._tool_json찾기()
 sys.path.insert(0, str(ROOT / "packages"))
 
 from dc_console import use_utf8  # noqa: E402
@@ -31,7 +39,7 @@ def test_루트문서가_다_있다():
 def test_tool_json_이_전부_읽힌다():
     필수 = {"name", "owner", "summary", "commands", "default", "run_cwd"}
     본것 = 0
-    for p in ROOT.rglob("tool.json"):
+    for p in _tool_json들():
         if ".git" in p.parts:
             continue
         d = json.loads(p.read_text(encoding="utf-8"))
@@ -44,7 +52,7 @@ def test_tool_json_이_전부_읽힌다():
 
 def test_명령에_이상문자가_없다():
     """윈도우 경로의 백슬래시가 제어문자로 바뀐 적이 있다."""
-    for p in ROOT.rglob("tool.json"):
+    for p in _tool_json들():
         if ".git" in p.parts:
             continue
         raw = p.read_text(encoding="utf-8")
