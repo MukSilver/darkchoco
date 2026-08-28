@@ -27,9 +27,33 @@ _대입 = re.compile(r"^\s*([^\s=]+)=[^=]")
 _함수 = re.compile(r"^\s*([^\s(]+)\s*\(\)\s*\{")
 
 
+# 안 뒤질 곳입니다. .venv 는 리눅스에서 만들면 심볼릭 링크가 들어 있어
+# 윈도우 파이썬이 rglob 중에 죽습니다(WinError 1920). 어차피 우리가
+# 쓴 스크립트가 아닙니다.
+_건너뜀 = {".venv", "venv", "node_modules", ".git", "__pycache__",
+        "site-packages", ".tox"}
+
+
 def 스크립트들() -> list[Path]:
-    return sorted(p for p in ROOT.rglob("*.sh")
-                  if "node_modules" not in p.parts and ".venv" not in p.parts)
+    """저장소가 가진 셸 스크립트. 받아 온 것은 안 봅니다."""
+    나온것 = []
+    스택 = [ROOT]
+    while 스택:
+        d = 스택.pop()
+        try:
+            것들 = list(d.iterdir())
+        except OSError:
+            continue                    # 못 읽는 곳은 건너뜁니다
+        for x in 것들:
+            try:
+                if x.is_dir():
+                    if x.name not in _건너뜀 and not x.is_symlink():
+                        스택.append(x)
+                elif x.suffix == ".sh":
+                    나온것.append(x)
+            except OSError:
+                continue
+    return sorted(나온것)
 
 
 def test_스크립트가_하나는_있다():

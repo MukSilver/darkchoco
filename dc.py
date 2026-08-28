@@ -46,10 +46,39 @@ for _s in (sys.stdout, sys.stderr):
 
 
 # ── 읽기 ────────────────────────────────────────────────────────────
+# 안 뒤질 폴더입니다. 우리가 쓴 것이 아니라 받아 온 것들입니다.
+# .venv 를 리눅스에서 만들면 심볼릭 링크가 들어 있어 윈도우 파이썬이
+# rglob 중에 죽습니다 — OSError: [WinError 1920]. 실제로 WSL 에서
+# .venv 를 만든 뒤 윈도우에서 dc.py 가 통째로 안 돌았습니다.
+_안뒤짐 = {".git", ".venv", "venv", "node_modules", "__pycache__",
+        "site-packages", ".tox", ".mypy_cache", ".pytest_cache"}
+
+
+def _tool_json찾기():
+    """tool.json 을 찾습니다. 못 읽는 곳은 건너뜁니다."""
+    나온것, 스택 = [], [ROOT]
+    while 스택:
+        d = 스택.pop()
+        try:
+            것들 = list(d.iterdir())
+        except OSError:
+            continue
+        for x in 것들:
+            try:
+                if x.is_dir():
+                    if x.name not in _안뒤짐 and not x.is_symlink():
+                        스택.append(x)
+                elif x.name == "tool.json":
+                    나온것.append(x)
+            except OSError:
+                continue                # 심볼릭 링크가 깨진 것 등
+    return sorted(나온것)
+
+
 def 도구들() -> list[dict]:
     """tool.json 을 전부 찾아 읽습니다. 이름 순으로 돌려줍니다."""
     out = []
-    for p in sorted(ROOT.rglob("tool.json")):
+    for p in _tool_json찾기():
         if ".git" in p.parts:
             continue
         try:
