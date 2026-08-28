@@ -3,7 +3,7 @@
 const NAV = [
   { href: "/guide/", label: "내 정보 확인" },
   { href: "/map/", label: "생태계 지도" },
-  { href: "/wiki/", label: "조사 자료" },
+  { href: "/rag/", label: "RAG DB" },
 ];
 
 // 배포 뿌리. shell.js 는 늘 <사이트루트>/assets/ 에 있으므로

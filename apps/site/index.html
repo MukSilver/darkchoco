@@ -24,8 +24,8 @@
   .door[data-area="guide"] .tag, .door[data-area="guide"] .go { color: var(--v-likely); }
   .door[data-area="map"] { border-left: 3px solid var(--k-forum); }
   .door[data-area="map"] .tag, .door[data-area="map"] .go { color: var(--k-forum); }
-  .door[data-area="wiki"] { border-left: 3px solid var(--k-broker); opacity: .72; }
-  .door[data-area="wiki"] .tag, .door[data-area="wiki"] .go { color: var(--k-broker); }
+  .door[data-area="rag"] { border-left: 3px solid var(--k-broker); opacity: .72; }
+  .door[data-area="rag"] .tag, .door[data-area="rag"] .go { color: var(--k-broker); }
 
   .note { margin-top: var(--s7); padding-top: var(--s5); border-top: 1px solid var(--line);
           font-size: var(--t-small); color: var(--faint); max-width: 72ch; }
@@ -59,12 +59,12 @@
       <div class="go">지도 보기 →</div>
     </a>
 
-    <a class="door" data-area="wiki" href="wiki/">
-      <div class="tag">다크웹 조사 자료</div>
+    <a class="door" data-area="rag" href="rag/">
+      <div class="tag">LLM 다크웹 RAG DB</div>
       <h2>근거 문서를 찾습니다</h2>
-      <p>조사 기록을 근거와 함께 찾습니다. 답변마다 어느 자리에서 나온 것인지 지도로
-         이어집니다.</p>
-      <div class="go">자료 찾으러 가기 →</div>
+      <p>조사 기록을 조각으로 쪼개 색인해 두고, 질문에 <b>문장마다 출처를 붙여</b>
+         답합니다. 근거가 없으면 답을 만들지 않습니다.</p>
+      <div class="go">물어보러 가기 →</div>
     </a>
   </nav>
 

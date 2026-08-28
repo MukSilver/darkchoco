@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>다크웹 조사 자료 — 다크초코</title>
+<title>LLM 다크웹 RAG DB — 다크초코</title>
 <link rel="stylesheet" href="../assets/tokens.css">
 <style>
   .wrap { max-width: 860px; margin: 0 auto; padding: var(--s7) var(--s5) var(--s8); }
@@ -27,9 +27,13 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>다크웹 조사 자료</h1>
-  <p class="lead">노션에 쌓은 조사 기록을 근거로, 한국어 질문에 <b>문장마다 출처를 붙인 답</b>을
-     내놓습니다. 근거가 없으면 답을 만들지 않고 「확인 못 함」으로 남깁니다.</p>
+  <h1>LLM 다크웹 RAG DB</h1>
+  <p class="lead">노션에 쌓은 조사 기록을 <b>조각으로 쪼개 색인</b>해 두고, 한국어 질문에
+     <b>문장마다 출처를 붙인 답</b>을 내놓습니다. 근거가 없으면 답을 만들지 않고
+     「확인 못 함」으로 남깁니다.</p>
+  <p class="lead" style="font-size:var(--t-small);color:var(--faint);margin-top:var(--s2)">
+     지식의 원본은 노션이고, 이것은 그 원본을 기계가 찾을 수 있게 만든 검색 계층입니다.
+     노션을 고치면 다시 가져와 다시 색인해야 반영됩니다.</p>
 
   <div class="soon">
     <h2>아직 만드는 중입니다</h2>
@@ -57,7 +61,7 @@
 </div>
 <script type="module">
   import { mountHead } from "../assets/shell.js";
-  mountHead("wiki");
+  mountHead("rag");
 </script>
 </body>
 </html>
