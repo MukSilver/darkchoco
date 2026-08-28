@@ -90,9 +90,9 @@ export function growBlob({ seed, count, cols, rows, taken, world, squash = 0.95 
   while (front.length && got.length < count) {
     front.sort((a, b) => dist(a) - dist(b));
     const cur = front.shift();
-    if (taken.has(key(cur))) continue;
-    taken.set(key(cur), true);
-    got.push(cur);
+    // 이미 임자가 있는 칸이라도 이웃은 큐에 넣습니다. 그래야 장애물을 돌아 자랍니다.
+    const mine = !taken.has(key(cur));
+    if (mine) { taken.set(key(cur), true); got.push(cur); }
     for (const nb of neighbors(cur[0], cur[1], cols, rows)) {
       if (!taken.has(key(nb)) && !seen.has(key(nb))) {
         seen.add(key(nb));

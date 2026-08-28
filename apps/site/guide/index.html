@@ -76,7 +76,12 @@
   .toolbar { display: flex; gap: var(--s4); align-items: center; padding-bottom: var(--s5); }
   .toolbar a { font-size: var(--t-small); }
 
+  .printhead { display: none; }
   @media print {
+    .printhead { display: flex; flex-direction: column; gap: 2px;
+                 border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 10px; }
+    .printhead b { font-size: 18px; color: #000; }
+    .printhead span { font-size: 11px; color: #555; }
     :root { --bg: #fff; --panel: #fff; --sunk: #fff; --ink: #000; --body: #222;
             --muted: #333; --faint: #555; --line: #bbb; --line-hard: #888; }
     .shell-head, .side, .toolbar { display: none !important; }
@@ -148,6 +153,12 @@ function renderMain() {
   const reach = REACH[(c.reach || {}).state] || REACH.unknown;
   const conf = confirmedItems(c);
   const blocked = c.gate === "blocked";
+
+  const ph = el("div", { class: "printhead" });
+  ph.append(el("b", {}, c.title),
+            el("span", {}, `기준일 ${data.meta.basis_date} · 다크초코 유출 대응 가이드라인`),
+            el("span", {}, "샘플에서 확인된 항목에만 조치를 냅니다"));
+  m.append(ph);
 
   const g = el("div", { class: "card gate" + (blocked ? " blocked" : "") });
   g.append(el("div", { class: "reach" },

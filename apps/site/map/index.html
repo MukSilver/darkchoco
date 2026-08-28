@@ -86,7 +86,7 @@
 <script type="module">
 import { mountHead, loadData, el, currentCase, linkToCase, REACH }
   from "../assets/shell.js";
-import { makeGrid, growBlob, outline, bbox, curve, polyPoints } from "../assets/hex.js";
+import { makeGrid, growBlob, outline, bbox, edgePoint, curve, polyPoints } from "../assets/hex.js";
 
 const base = mountHead("map");
 const NS = "http://www.w3.org/2000/svg";
@@ -107,22 +107,35 @@ const ROAD = {
   succession: { c: css("--road-succ"),   dash: "8 5",  w: 2.6 },
 };
 
-const { data } = await loadData(base);
+let data;
+try {
+  ({ data } = await loadData(base));
+  if (!data.places || !data.places.length) throw new Error("자리 데이터가 비어 있습니다");
+} catch (e) {
+  document.querySelector(".board").innerHTML =
+    `<p class="empty" style="margin:var(--s6)">지도를 못 읽었습니다 — ${e.message}<br>` +
+    `<small>서버로 띄웠는지, data/leak-map.json 이 있는지 확인하십시오.</small></p>`;
+  throw e;
+}
 
 
 // ── 배치. 두 층이 같은 격자를 씁니다. 그래야 같은 자리가 위아래로 겹칩니다.
-const perLayer = Math.max(...data.layers.map(l =>
-  data.places.filter(p => p.layer === l.id).length));
-const COLS = Math.ceil(Math.sqrt(perLayer * 1.55));
-const ROWS = Math.ceil(perLayer / COLS * 1.15) + 2;
+const cellsOf = p => p.investigated ? Math.max(2, Math.round((p.cases || 1) * 0.9)) : 1;
+const demand = Math.max(...data.layers.map(l =>
+  data.places.filter(p => p.layer === l.id).reduce((s, p) => s + cellsOf(p), 0)));
+// 판이 60%쯤 차게 여유를 둡니다. 꽉 채우면 덩어리가 서로를 막습니다.
+const COLS = Math.ceil(Math.sqrt(demand / 0.6 * 1.7));
+const ROWS = Math.ceil(demand / 0.6 / COLS) + 2;
 const CELL = Math.max(5.5, Math.min(13, 560 / COLS));
 const Z = Math.round(CELL * 31);
 const grid = makeGrid({ size: CELL, originX: 168, originY: 612 });
 const kindColor = Object.fromEntries(data.kinds.map(k => [k.id, k.color]));
+const kindColorFor = (kind, layer) =>
+  layer === "deep" ? (css(`--k-${kind}-deep`) || kindColor[kind]) : kindColor[kind];
 
 // 층별로 업종 덩어리를 키웁니다. 같은 업종은 두 층에서 같은 자리를 씁니다.
-const ANCHOR = { forum: [.18, .45], ransom: [.50, .30], telegram: [.80, .55],
-                 archive: [.50, .80], broker: [.86, .22] };
+const ANCHOR = { forum: [.16, .42], ransom: [.50, .28], telegram: [.82, .50],
+                 archive: [.48, .82], market: [.80, .80], broker: [.88, .20] };
 const placeCell = {};   // place.id -> [ [c,r], ... ]
 const allCells = [];
 
@@ -135,7 +148,7 @@ for (const layer of data.layers) {
     if (!here.length) continue;
     const [ax, ay] = ANCHOR[kind.id] || [.5, .5];
     // 업종 대륙을 먼저 키우고, 그 안에서 자리별로 나눠 줍니다.
-    const total = here.reduce((s, p) => s + (p.investigated ? Math.max(2, Math.round((p.cases||1)*0.9)) : 1), 0);
+    const total = here.reduce((s, p) => s + cellsOf(p), 0);
     const seed = [Math.round(ax * (COLS - 1)), Math.round(ay * (ROWS - 1))];
     const land = growBlob({ seed, count: total, cols: COLS, rows: ROWS,
                             taken, world: grid.world });
@@ -144,7 +157,7 @@ for (const layer of data.layers) {
     const sorted = [...here].sort((a, b) => (b.cases || 0) - (a.cases || 0));
     for (let si = 0; si < sorted.length; si++) {
       const p = sorted[si];
-      const n = p.investigated ? Math.max(2, Math.round((p.cases || 1) * 0.9)) : 1;
+      const n = cellsOf(p);
       // 대륙 안에서 아직 안 쓴 칸 중, 이미 쓴 칸에서 가장 먼 것을 씨앗으로
       const free = land.filter(([c, r]) => !landSet.get(c + "," + r));
       if (!free.length) { placeCell[p.id] = []; continue; }
@@ -169,9 +182,12 @@ for (const layer of data.layers) {
       placeCell[p.id] = got;
     }
     landAll.push(...land);
-    // 대륙 바탕
+    // 대륙 바탕 — 자리에 배정되지 않은 칸만. 배정된 칸은 자리가 그립니다.
+    const claimed = new Set();
+    for (const p of here) for (const [c, r] of (placeCell[p.id] || [])) claimed.add(c + "," + r);
     const g = add("g");
     for (const [c, r] of land) {
+      if (claimed.has(c + "," + r)) continue;
       const poly = document.createElementNS(NS, "polygon");
       poly.setAttribute("points", polyPoints(grid.cell(c, r, z)));
       poly.setAttribute("fill", kind.color);
@@ -231,9 +247,9 @@ for (const p of data.places) {
   for (const [c, r] of cells) {
     const poly = document.createElementNS(NS, "polygon");
     poly.setAttribute("points", polyPoints(grid.cell(c, r, z)));
-    poly.setAttribute("fill", kindColor[p.kind]);
+    poly.setAttribute("fill", kindColorFor(p.kind, p.layer));
     poly.setAttribute("fill-opacity", p.investigated ? ".95" : ".26");
-    if (!p.investigated) { poly.setAttribute("stroke", kindColor[p.kind]);
+    if (!p.investigated) { poly.setAttribute("stroke", kindColorFor(p.kind, p.layer));
                            poly.setAttribute("stroke-opacity", ".4"); }
     g.append(poly);
   }
@@ -241,7 +257,7 @@ for (const p of data.places) {
     const ln = document.createElementNS(NS, "line");
     ln.setAttribute("x1", a[0].toFixed(1)); ln.setAttribute("y1", a[1].toFixed(1));
     ln.setAttribute("x2", b[0].toFixed(1)); ln.setAttribute("y2", b[1].toFixed(1));
-    ln.setAttribute("stroke", p.investigated ? css("--bg") : kindColor[p.kind]);
+    ln.setAttribute("stroke", p.investigated ? css("--bg") : kindColorFor(p.kind, p.layer));
     ln.setAttribute("stroke-width", p.investigated ? "1.4" : "1.6");
     g.append(ln);
   }
@@ -249,19 +265,46 @@ for (const p of data.places) {
   g.addEventListener("keydown", e => { if (e.key === "Enter") pick(p); });
 }
 
-// ── 길. 선을 먼저 그리고 라벨을 나중에 그려야 글자가 안 지워집니다.
+// ── 길. 방향을 화살촉으로 답니다. 건수를 sqrt 로 굵기에 싣습니다.
+// 선은 덩어리 경계 밖에서 시작·종료해야 화살촉이 칸 밑에 안 묻힙니다.
+const flowW = f => {
+  const n = f.cases || 1, W = Math.sqrt(n);
+  return Math.max(2, Math.min(12, 2 + W * 1.4));   // sqrt 스케일, 2~12px 클램프
+};
+const roadLayer = add("g");   // 선은 한 겹에 모읍니다
 for (const f of data.flows) {
   const A = boxOf[f.from], B = boxOf[f.to];
   if (!A || !B) continue;
   const st = ROAD[f.kind] || ROAD.flat;
   const side = f.kind === "rise" ? -1 : 1;
-  const { d } = curve([A.cx, A.cy], [B.cx, B.cy], { bend: .16, side });
-  const op = f.confidence === "confirmed" ? ".9" : ".55";
-  const road = add("path", { class: "road", d, fill: "none", stroke: st.c, "stroke-width": st.w,
-                "stroke-opacity": op, "stroke-linecap": "round",
-                ...(st.dash || f.confidence !== "confirmed" ? { "stroke-dasharray": st.dash || "6 5" } : {}) });
+  const p1 = edgePoint(A, B.cx, B.cy, 4);
+  const p2 = edgePoint(B, A.cx, A.cy, 12);   // 화살촉 자리를 남깁니다
+  const cv = curve(p1, p2, { bend: .16, side });
+  const d = cv.d;
+  const w = flowW(f);
+  const confirmed = f.confidence === "confirmed";
+  const op = confirmed ? ".92" : ".62";
+  const put = (at) => { const n = document.createElementNS(NS, "path");
+    for (const [k, v] of Object.entries(at)) n.setAttribute(k, v); roadLayer.append(n); return n; };
+  // 케이싱 — 배경색 이중 스트로크. 선이 칸을 가로질러도 읽힙니다.
+  put({ d, fill: "none", stroke: css("--bg"), "stroke-width": w + 3,
+        "stroke-opacity": ".8", "stroke-linecap": "round" });
+  const road = put({ class: "road", d, fill: "none", stroke: st.c, "stroke-width": w,
+        "stroke-opacity": op, "stroke-linecap": "round",
+        ...(confirmed ? {} : { "stroke-dasharray": `${w * 2} ${w * 1.4}` }) });
   road.dataset.from = f.from; road.dataset.to = f.to;
-  road.dataset.w = st.w; road.dataset.op = op;
+  road.dataset.w = w; road.dataset.op = op;
+  // 화살촉 — 끝점에서 곡선 접선 방향으로
+  const ang = Math.atan2(p2[1] - cv.mid[1], p2[0] - cv.mid[0]);
+  const ah = Math.max(6, w * 1.6);
+  const a1 = [p2[0] - ah * Math.cos(ang - 0.42), p2[1] - ah * Math.sin(ang - 0.42)];
+  const a2 = [p2[0] - ah * Math.cos(ang + 0.42), p2[1] - ah * Math.sin(ang + 0.42)];
+  const head = document.createElementNS(NS, "polygon");
+  head.setAttribute("points", polyPoints([p2, a1, a2]));
+  head.setAttribute("fill", st.c); head.setAttribute("fill-opacity", op);
+  head.classList.add("roadhead");
+  head.dataset.from = f.from; head.dataset.to = f.to;
+  roadLayer.append(head);
 }
 
 // ── 자리 이름표
@@ -314,13 +357,18 @@ function showCase(c) {
   svg.querySelectorAll("g.place").forEach(g => {
     g.setAttribute("opacity", on.has(g.dataset.pid) ? "1" : ".16");
   });
-  svg.querySelectorAll("path.road").forEach(pt => {
-    const a = pt.dataset.from, b = pt.dataset.to;
-    let lit = false;
+  const litPair = (a, b) => {
     for (let i = 0; i < (c.hops || []).length - 1; i++)
-      if (c.hops[i].place === a && c.hops[i + 1].place === b) lit = true;
-    pt.setAttribute("stroke-opacity", lit ? "1" : ".08");
-    pt.setAttribute("stroke-width", lit ? "5.5" : pt.dataset.w);
+      if (c.hops[i].place === a && c.hops[i + 1].place === b) return true;
+    return false;
+  };
+  svg.querySelectorAll("path.road").forEach(pt => {
+    const lit = litPair(pt.dataset.from, pt.dataset.to);
+    pt.setAttribute("stroke-opacity", lit ? "1" : ".07");
+    pt.setAttribute("stroke-width", lit ? (+pt.dataset.w + 2) : pt.dataset.w);
+  });
+  svg.querySelectorAll("polygon.roadhead").forEach(h => {
+    h.setAttribute("fill-opacity", litPair(h.dataset.from, h.dataset.to) ? "1" : ".07");
   });
   svg.querySelectorAll("g.seatlabel").forEach(g => {
     g.setAttribute("opacity", on.has(g.dataset.pid) ? "1" : ".14");
@@ -336,9 +384,13 @@ function showCase(c) {
     el("p", { style: "margin-top:var(--s3);color:var(--ink);font-weight:600;font-size:var(--t-small)" },
        reach.label),
     el("p", { style: "font-size:var(--t-tiny);color:var(--faint)" }, reach.sub),
-    el("ol", { style: "margin:var(--s3) 0 0 var(--s4);font-size:var(--t-small);color:var(--muted)",
-               html: (c.hops || []).map(h =>
-                 `<li>${h.name} <span style="color:var(--faint)">· ${h.relation}</span></li>`).join("") }),
+    (() => { const ol = el("ol", { style: "margin:var(--s3) 0 0 var(--s4);font-size:var(--t-small);color:var(--muted)" });
+      for (const h of (c.hops || [])) {
+        const li = el("li", {}, document.createTextNode(h.name || "미상"));
+        li.append(el("span", { style: "color:var(--faint)" }, ` · ${h.relation}`));
+        ol.append(li);
+      }
+      return ol; })(),
     el("p", { style: "margin-top:var(--s3)" },
        el("a", { href: linkToCase(base, "guide", c.id) }, "이 사고에서 무엇을 해야 하는지 →")),
     el("p", { style: "margin-top:var(--s2)" },
@@ -353,6 +405,7 @@ function clearCase() {
     pt.setAttribute("stroke-opacity", pt.dataset.op);
     pt.setAttribute("stroke-width", pt.dataset.w);
   });
+  svg.querySelectorAll("polygon.roadhead").forEach(h => h.setAttribute("fill-opacity", h.dataset.op || ".9"));
   document.getElementById("picked").innerHTML = "";
   document.getElementById("picked").style.display = "none";
   renderCaseList();
@@ -367,67 +420,80 @@ function matches(c) {
   return true;
 }
 
-function renderCaseList() {
+let listBuilt = false;
+function buildCaseList() {
   const box = document.getElementById("caselist");
   box.innerHTML = "";
-  const hits = data.cases.filter(matches);
   const head = el("div", { class: "listhead" });
-  head.append(el("h2", {}, "사고"),
-              el("span", { class: "count" }, `${hits.length} / ${data.cases.length}`));
+  head.append(el("h2", {}, "사고"), el("span", { class: "count", id: "casecount" }, ""));
   box.append(head);
 
+  // 검색창은 딱 한 번 만듭니다. 다시 만들면 한국어 조합이 끊깁니다.
   const q = el("input", { class: "q", type: "search", placeholder: "업종이나 자료로 좁히기",
-                          value: filt.q });
-  q.addEventListener("input", e => { filt.q = e.target.value; renderCaseList();
-                                     q.focus(); });
+                          "aria-label": "사고 검색", value: filt.q });
+  let composing = false;
+  q.addEventListener("compositionstart", () => { composing = true; });
+  q.addEventListener("compositionend", () => { composing = false; filt.q = q.value; paintCaseList(); });
+  q.addEventListener("input", () => { if (composing) return; filt.q = q.value; paintCaseList(); });
   box.append(q);
 
-  // 판정과 도달로 좁힙니다. 개수는 지금 걸린 것 기준으로 셉니다.
-  const chips = el("div", { class: "chips" });
-  const add = (key, val, label) => {
+  box.append(el("div", { class: "chips", id: "chips" }));
+  box.append(el("div", { class: "rows", id: "rows" }));
+  listBuilt = true;
+}
+
+function paintCaseList() {
+  if (!listBuilt) buildCaseList();
+  const hits = data.cases.filter(matches);
+  document.getElementById("casecount").textContent = `${hits.length} / ${data.cases.length}`;
+
+  const chips = document.getElementById("chips");
+  chips.innerHTML = "";
+  const addChip = (key, val, label) => {
     const on = filt[key] === val;
-    const n = data.cases.filter(c => {
-      const save = filt[key]; filt[key] = val;
-      const ok = matches(c); filt[key] = save; return ok;
-    }).length;
+    const save = filt[key]; filt[key] = val;
+    const n = data.cases.filter(matches).length; filt[key] = save;
     if (!n && !on) return;
     const b = el("button", { class: "chip", type: "button", ...(on ? { "data-on": "1" } : {}) });
     b.append(el("span", {}, label), el("i", {}, String(n)));
-    b.addEventListener("click", () => { filt[key] = on ? null : val; renderCaseList(); });
+    b.addEventListener("click", () => { filt[key] = on ? null : val; paintCaseList(); });
     chips.append(b);
   };
-  for (const v of ["확인됨", "신뢰성 높음", "미확인", "신뢰성 낮음", "허위"]) add("verdict", v, v);
+  for (const v of ["확인됨", "신뢰성 높음", "미확인", "신뢰성 낮음", "허위"]) addChip("verdict", v, v);
   chips.append(el("div", { class: "chipbreak" }));
   for (const [k, l] of [["deep-only", "다크웹 안"], ["surfaced", "오픈웹까지"],
-                        ["public", "검색까지"]]) add("reach", k, l);
-  box.append(chips);
+                        ["public", "검색까지"]]) addChip("reach", k, l);
 
-  const list = el("div", { class: "rows" });
+  const rows = document.getElementById("rows");
+  const frag = document.createDocumentFragment();
   for (const c of hits.slice(0, 60)) {
-    const b = el("button", { class: "caserow", type: "button" });
-    if (picked && picked.id === c.id) b.setAttribute("data-on", "1");
+    const b = el("button", { class: "caserow", type: "button",
+                             ...(picked && picked.id === c.id ? { "data-on": "1" } : {}) });
     b.append(el("b", {}, c.title),
              el("span", { class: "pill", "data-verdict": c.verdict }, c.verdict),
              el("span", { class: "hops" }, `${(c.hops || []).length}곳`));
     b.addEventListener("click", () => showCase(c));
-    list.append(b);
+    frag.append(b);
   }
   if (hits.length > 60)
-    list.append(el("p", { class: "more" }, `아래로 ${hits.length - 60}건 더 있습니다. 좁혀 보십시오`));
-  if (!hits.length)
-    list.append(el("p", { class: "more" }, "걸리는 사고가 없습니다"));
-  box.append(list);
+    frag.append(el("p", { class: "more" }, `아래로 ${hits.length - 60}건 더 있습니다. 좁혀 보십시오`));
+  if (!hits.length) frag.append(el("p", { class: "more" }, "걸리는 사고가 없습니다"));
+  rows.innerHTML = ""; rows.append(frag);
 }
+
+const renderCaseList = paintCaseList;
 
 // ── 칸 고르기
 function pick(p) {
+  if (picked) clearCase();          // 사건 상태에서 자리를 누르면 먼저 빠져나옵니다
   const box = document.getElementById("picked");
+  box.style.display = "";           // 비었을 때 감춰 둔 것을 되살립니다
   const layer = data.layers.find(l => l.id === p.layer);
   const kind = data.kinds.find(k => k.id === p.kind);
   const linked = data.flows.filter(f => f.from === p.id || f.to === p.id).length;
   box.innerHTML = "<h2>고른 자리</h2>";
   box.append(
-    el("div", { class: "name", style: `color:${kind.color}` }, p.name),
+    el("div", { class: "name", style: `color:${kindColorFor(p.kind, p.layer)}` }, document.createTextNode(p.name)),
     el("div", { style: "font-size:var(--t-tiny);color:var(--faint)" },
        `${kind.name} · ${layer.name}${p.korea ? " · 한국 관련" : ""}`),
     el("dl", { html:
@@ -437,7 +503,7 @@ function pick(p) {
       `<dt>최초 확인</dt><dd>${p.first_seen || "—"}</dd>` +
       `<dt>최근 확인</dt><dd>${p.last_seen || "—"}</dd>` +
       `<dt>이어진 자리</dt><dd>${linked}곳</dd>` }));
-  if (p.note) box.append(el("p", { style: "margin-top:var(--s3);font-size:var(--t-small)" }, p.note));
+  if (p.note) box.append(el("p", { style: "margin-top:var(--s3);font-size:var(--t-small)" }, document.createTextNode(p.note)));
 }
 
 document.getElementById("picked").style.display = "none";
@@ -446,6 +512,17 @@ const wanted = currentCase();
 if (wanted != null) {
   const c = data.cases.find(x => x.id === wanted);
   if (c) showCase(c);
+}
+
+// 배치되지 못한 자리가 있으면 조용히 넘어가지 않습니다.
+{
+  const placed = Object.values(placeCell).filter(c => c && c.length).length;
+  const missing = data.places.length - placed;
+  if (missing > 0) {
+    console.warn(`[배치] ${missing}곳이 격자에 못 들어갔습니다. COLS/ROWS 를 키우십시오.`);
+    const w = add("text", { x: 8, y: 18, fill: css("--warn"), "font-size": "11" });
+    w.textContent = `⚠ ${missing}곳 미배치`;
+  }
 }
 
 // 그린 것에 맞춰 판을 자릅니다. 미리 정한 viewBox 는 늘 남거나 모자랍니다.
