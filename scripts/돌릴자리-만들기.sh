@@ -124,7 +124,22 @@ else
     if listening; then
         ok "${PORT} 열렸습니다"
     else
-        bad "${PORT} 가 안 열립니다. ${LOG} 를 보십시오"
+        bad "${PORT} 가 안 열립니다."
+        # 왜인지 로그에서 뽑아 줍니다. 파일을 보라고만 하면 팀원이
+        # 무엇을 찾아야 하는지 모릅니다.
+        WHY="$(grep -hE "\[warn\]|\[err\]" "$LOG" /var/log/tor/log 2>/dev/null | tail -4)"
+        [ -n "$WHY" ] && printf '     %s
+' "$WHY"
+        if printf '%s' "$WHY" | grep -q "Address already in use"; then
+            say ""
+            say "다른 tor 가 이미 그 포트를 쥐고 있습니다."
+            say "  · WSL 은 배포판끼리 localhost 를 함께 씁니다. 다른"
+            say "    배포판에서 tor 를 띄웠으면 여기서 부딪힙니다"
+            say "  · 이미 도는 것을 그냥 써도 됩니다:"
+            say "      export TOR_SOCKS_PROXY=http://127.0.0.1:9080"
+            say "  · 따로 띄우려면 SocksPort 도 바꾸십시오:"
+            say "      /etc/tor/torrc 에  SocksPort 9151"
+        fi
         exit 1
     fi
 fi
