@@ -18,6 +18,27 @@ use_utf8()
 from hub.crawler.place import Place, 규모합치기, 기계가_쓴_줄  # noqa: E402
 from hub.crawler.probe import forum, ransom, telegram  # noqa: E402
 
+
+class _가짜오프너:
+    """검사에서는 밖으로 안 나갑니다. _받기 를 갈아 끼우니 쓰이지 않습니다."""
+
+    def open(self, req, timeout=0):
+        raise AssertionError("검사가 실제로 밖에 나가려 했습니다")
+
+
+def _안나가게(mod):
+    """조사기의 오프너를 막습니다. Tor 설정에 검사가 흔들리지 않게 합니다."""
+    옛 = mod.오프너
+    mod.오프너 = lambda 프록시=None, 갈래="": _가짜오프너()
+    return 옛
+
+
+# 이 파일의 검사는 밖에 안 나갑니다. _받기 를 갈아 끼워 응답을 넣습니다.
+# 오프너를 막아 두면 Tor 를 켰든 껐든 결과가 같습니다. 검사가 환경에
+# 따라 달라지면 검사가 아닙니다.
+for _m in (telegram, ransom, forum):
+    _m.오프너 = lambda 프록시=None, 갈래="": _가짜오프너()
+
 사람글 = ("멤버 수·게시물 수 못 셈. 하루 새 글 수도 못 셈 — 2026-08-01 접속 시 "
         "첫 화면 최신 글 목록이 '방금 전'·'1분 전'이었습니다")
 
@@ -126,7 +147,7 @@ def test_텔레그램_응답을_읽는다():
           '<div class="tgme_widget_message">'
           '<time datetime="2026-08-27T10:00:00+00:00"></time></div>')
     옛 = telegram._받기
-    telegram._받기 = lambda url, m: (200, 본문)
+    telegram._받기 = lambda url, m, op=None: (200, 본문)
     try:
         p = telegram.한곳("@testchan", [0.0])
     finally:
@@ -140,7 +161,7 @@ def test_텔레그램_응답을_읽는다():
 
 def test_텔레그램_404_는_offline_이고_이유가_남는다():
     옛 = telegram._받기
-    telegram._받기 = lambda url, m: (404, "")
+    telegram._받기 = lambda url, m, op=None: (404, "")
     try:
         p = telegram.한곳("@없는채널", [0.0])
     finally:
@@ -152,7 +173,7 @@ def test_텔레그램_404_는_offline_이고_이유가_남는다():
 def test_텔레그램_수를_못_보면_미확인이다():
     """없음이 아니라 미확인이다. 그 둘은 다르다."""
     옛 = telegram._받기
-    telegram._받기 = lambda url, m: (200, "<html>아무것도 없음</html>")
+    telegram._받기 = lambda url, m, op=None: (200, "<html>아무것도 없음</html>")
     try:
         p = telegram.한곳("@조용한채널", [0.0])
     finally:
@@ -190,12 +211,12 @@ def test_랜섬_그룹_목록을_읽는다():
         {"group": "LockBit3", "country": "DE", "activity": "Financial Services",
          "attackdate": "2026-07-01T01:00:00+00:00"},
     ]
-    옛 = ransom._받기
-    ransom._받기 = lambda url, m: 그룹 if url.endswith("/groups") else 달
+    옛, 옛오프너 = ransom._받기, _안나가게(ransom)
+    ransom._받기 = lambda url, m, op=None: 그룹 if url.endswith("/groups") else 달
     try:
         out = list(ransom.조사(개월수=1))
     finally:
-        ransom._받기 = 옛
+        ransom._받기, ransom.오프너 = 옛, 옛오프너
 
     assert len(out) == 2, [p.이름 for p in out]
     a, b = out
@@ -214,7 +235,6 @@ def test_랜섬_그룹_목록을_읽는다():
     assert "한국 피해 1건" in a.한국유출, a.한국유출
 
     assert b.상태 == "offline" and b.형식 == "포럼·마켓"
-    assert "새 피해 없음" in b.피해대상, b.피해대상
 
     값 = a.노션값()
     assert "피해 기업 3" in 값["규모"]
@@ -227,12 +247,12 @@ def test_랜섬_한국_피해는_건수만_적는다():
     달 = [{"group": "G", "country": "KR", "victim": "어느회사",
            "domain": "example.co.kr", "activity": "Manufacturing",
            "attackdate": "2026-08-20T01:00:00+00:00"}]
-    옛 = ransom._받기
-    ransom._받기 = lambda url, m: 그룹 if url.endswith("/groups") else 달
+    옛, 옛오프너 = ransom._받기, _안나가게(ransom)
+    ransom._받기 = lambda url, m, op=None: 그룹 if url.endswith("/groups") else 달
     try:
         p = next(iter(ransom.조사(개월수=1)))
     finally:
-        ransom._받기 = 옛
+        ransom._받기, ransom.오프너 = 옛, 옛오프너
     글 = str(p.노션값())
     assert "어느회사" not in 글 and "example.co.kr" not in 글, 글
     assert "한국 피해 1건" in p.한국유출
@@ -242,8 +262,8 @@ def test_랜섬_한_달을_못_받아도_나머지를_버리지_않는다():
     """못본이유에 넣으면 노션값() 이 알아낸 것을 전부 버립니다."""
     그룹 = [{"name": "G", "altname": "별칭",
             "locations": [{"available": True, "slug": "http://g.onion"}]}]
-    옛 = ransom._받기
-    def 받기(url, m):
+    옛, 옛오프너 = ransom._받기, _안나가게(ransom)
+    def 받기(url, m, op=None):
         if url.endswith("/groups"):
             return 그룹
         raise OSError("한 달치 못 받음")
@@ -251,15 +271,15 @@ def test_랜섬_한_달을_못_받아도_나머지를_버리지_않는다():
     try:
         p = next(iter(ransom.조사(개월수=1)))
     finally:
-        ransom._받기 = 옛
+        ransom._받기, ransom.오프너 = 옛, 옛오프너
     assert p.봤나(), p.못본이유
     assert "못 받음" in p.받은곳, p.받은곳
     assert p.노션값()["이전 이름·별칭"] == "별칭"
 
 
 def test_랜섬_목록을_못_받으면_이유가_남는다():
-    옛 = ransom._받기
-    def 터짐(url, m):
+    옛, 옛오프너 = ransom._받기, _안나가게(ransom)
+    def 터짐(url, m, op=None):
         raise OSError("연결 안 됨")
     ransom._받기 = 터짐
     try:
@@ -269,12 +289,32 @@ def test_랜섬_목록을_못_받으면_이유가_남는다():
     assert len(out) == 1 and out[0].못본이유, out
 
 
-def test_포럼_어니언은_Tor_없이_안_본다():
-    out = list(forum.조사([{"이름": "X", "주소": "http://abc.onion"}]))
-    assert len(out) == 1
-    assert "Tor" in out[0].못본이유, out[0].못본이유
-    # Tor 가 없어 두드리지도 못했다. 사람이 적어 둔 상태를 안 건드린다.
-    assert out[0].노션값() == {}, out[0].노션값()
+def test_포럼은_Tor_없이_안_본다():
+    """어니언이든 아니든 같습니다. 규칙이 대상마다 다르면 빠뜨립니다."""
+    import os
+
+    from hub.crawler.probe import _나가기
+
+    참오프너 = _나가기.오프너
+    옛 = forum.오프너
+    forum.오프너 = 참오프너
+    지운것 = {k: os.environ.pop(k, None)
+            for k in ("TOR_SOCKS_PROXY", "DARKCHOCO_ALLOW_DIRECT",
+                      "DARKCHOCO_TOR_SKIP")}
+    try:
+        out = list(forum.조사([{"이름": "X", "주소": "http://abc.onion"},
+                              {"이름": "Y", "주소": "https://plain.example/"}]))
+    finally:
+        forum.오프너 = 옛
+        for k, v in 지운것.items():
+            if v is not None:
+                os.environ[k] = v
+
+    assert len(out) == 2
+    for p in out:
+        assert "Tor" in p.못본이유, p.못본이유
+        # 두드리지도 못했습니다. 사람이 적어 둔 상태를 안 건드립니다.
+        assert p.노션값() == {}, p.노션값()
 
 
 # ── 508줄을 지울 뻔한 것 ────────────────────────────────────────────
@@ -311,12 +351,12 @@ def test_랜섬이_상태를_못_읽으면_노션을_안_건드린다():
     """조사기와 Place 를 이어서 확인한다. 이 둘이 어긋나면 508줄이 날아간다."""
     가짜 = [{"name": "G1", "victims": 3},                       # 상태 표시 없음
            {"name": "G2", "locations": [{"available": False}]}]  # 있음
-    옛 = ransom._받기
-    ransom._받기 = lambda url, m: 가짜
+    옛, 옛오프너 = ransom._받기, _안나가게(ransom)
+    ransom._받기 = lambda url, m, op=None: 가짜
     try:
         out = {p.이름: p for p in ransom.조사()}
     finally:
-        ransom._받기 = 옛
+        ransom._받기, ransom.오프너 = 옛, 옛오프너
     assert out["G1"].노션값("기존") == {}, "상태를 못 읽었는데 쓰려 한다"
     assert out["G2"].노션값("기존").get("상태") == "offline"
 
@@ -332,12 +372,12 @@ def _포럼한판(본문, code=200):
         def __exit__(self, *a): return False
     class 오프너:
         def open(self, req, timeout=0): return 응답()
-    옛 = forum._오프너
-    forum._오프너 = lambda 프록시: 오프너()
+    옛 = forum.오프너
+    forum.오프너 = lambda 프록시=None, 갈래="": 오프너()
     try:
         return forum.한곳("https://f.example/", "F", [0.0])
     finally:
-        forum._오프너 = 옛
+        forum.오프너 = 옛
 
 
 def test_압수_배너를_살아있는것으로_세지_않는다():
@@ -368,7 +408,7 @@ def test_포럼_로그인벽과_언어를_읽는다():
     assert p.언어 == "러시아어", p.언어
     assert p.가입필요 is True
     assert p.어떤곳 == "Базы данных и логи", p.어떤곳
-    assert p.회원수 == 349000 and p.게시물수 == 821000
+    assert p.회원수 == 349000 and p.게시물수 == 821000, (p.회원수, p.게시물수)
 
 
 def test_라틴문자만_있으면_언어를_적지_않는다():
@@ -388,12 +428,12 @@ def test_주소가_옮겨가면_원래_주소를_남긴다():
         def __exit__(self, *a): return False
     class 오프너:
         def open(self, req, timeout=0): return 응답()
-    옛 = forum._오프너
-    forum._오프너 = lambda 프록시: 오프너()
+    옛 = forum.오프너
+    forum.오프너 = lambda 프록시=None, 갈래="": 오프너()
     try:
         p = forum.한곳("https://old.example/", "F", [0.0])
     finally:
-        forum._오프너 = 옛
+        forum.오프너 = 옛
     assert p.이전주소 == "https://old.example/", p.이전주소
     assert p.주소 == "https://new.example/", p.주소
 
@@ -403,6 +443,57 @@ def test_사람이_쓴_칸은_안_건드린다():
     from hub.crawler.place import 빈칸만칸
     assert "어떤 곳인지" in 빈칸만칸 and "사용 언어" in 빈칸만칸
     assert "상태" not in 빈칸만칸 and "확인일" not in 빈칸만칸
+
+
+def test_랜섬_피해집계는_기본으로_안_돈다():
+    """dls_fill 이 같은 칸을 채웁니다. 둘 다 쓰면 줄이 겹칩니다."""
+    from hub.crawler.probe.ransom import 개월
+    assert 개월 == 0, "기본으로 켜면 373줄에 겹치는 줄이 붙는다"
+
+    그룹 = [{"name": "G", "locations": [{"available": True, "slug": "http://g.onion"}]}]
+    친것 = []
+    옛, 옛오프너 = ransom._받기, _안나가게(ransom)
+    def 받기(url, m, op=None):
+        친것.append(url)
+        return 그룹
+    ransom._받기 = 받기
+    try:
+        p = next(iter(ransom.조사()))
+    finally:
+        ransom._받기, ransom.오프너 = 옛, 옛오프너
+    assert len(친것) == 1, 친것          # /groups 한 번뿐
+    값 = p.노션값()
+    assert "피해 대상" not in 값 and "규모" not in 값, 값
+    assert 값["상태"] == "online"
+
+
+def test_포럼_총계만_잡는다():
+    """첫 화면에는 총계 말고도 숫자가 잔뜩 있습니다.
+
+    2026-08-28 bf.st 첫 화면에서 예전 정규식이 「회원 45」를 만들었습니다.
+    실제 회원은 367,224 명입니다. 틀린 값이 사람이 조사한 규모 줄을 갈아
+    끼우기 때문에 느슨하게 잡으면 안 됩니다.
+    """
+    본문 = ("<html><body>"
+          "182 users active in the past 60 minutes (44 members, 138 guests)"
+          "<br>Board Statistics<br>"
+          "857 Threads 4584 Posts"                    # 게시판 하나
+          "<br>873955 Total Posts 85413 Total Threads 367224 Total Members"
+          "<br>honeydutch Newest Member 14,829 Most Online"
+          "</body></html>")
+    p = _포럼한판(본문)
+    assert p.회원수 == 367224, p.회원수
+    assert p.게시물수 == 873955, p.게시물수
+    assert "회원 367,224" in p.노션값()["규모"]
+
+
+def test_포럼_접속자수를_회원수로_읽지_않는다():
+    """총계가 없으면 빈칸입니다. 지어내지 않습니다."""
+    p = _포럼한판("<html><body>Currently 182 members online. "
+                "Most online today: 400</body></html>")
+    assert p.회원수 is None, p.회원수
+    assert p.게시물수 is None, p.게시물수
+    assert "규모" not in p.노션값(), p.노션값()
 
 
 if __name__ == "__main__":

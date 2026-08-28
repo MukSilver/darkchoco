@@ -27,6 +27,9 @@
 있습니다. 피해 건수는 /groups 에 아예 없어서 월별 피해 목록을 받아
 그룹별로 셉니다.
 
+**Tor 를 거칩니다.** ransomware.live 는 연구자용 공개 API 지만, 우리가
+어느 그룹을 보고 있는지가 우리 주소와 함께 남을 이유가 없습니다.
+
 표준 라이브러리만 씁니다.
 """
 
@@ -47,6 +50,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "packages"))
 from dc_ransomfeed import RANSOMWARE_LIVE, rl_victims  # noqa: E402
 
 from hub.crawler.place import Place, 지금  # noqa: E402
+from hub.crawler.probe._나가기 import 보호없음, 오프너  # noqa: E402
 
 __all__ = ["조사", "NEEDS_PACKAGES"]
 
@@ -54,7 +58,23 @@ NEEDS_PACKAGES: list[str] = []      # 표준 라이브러리만 씁니다
 
 간격 = 62.0          # 초. 1req/분/엔드포인트 (실측)
 연속실패_상한 = 3
-개월 = 3             # 피해 목록을 몇 달치 받나. 한 달에 한 요청입니다
+# 피해 목록을 몇 달치 받나. **기본은 0, 즉 안 받습니다.**
+#
+# 받아서 세 봤더니 apps/dls-observatory/dls_fill.py 가 이미 같은 일을
+# 하고 있었습니다. 그 쪽은 그룹마다 조회해서 규모 · 피해 대상 · 한국
+# 관련 유출을 채웁니다. 여기서 또 쓰면 373줄에 뜻이 겹치는 줄이 하나씩
+# 더 붙습니다. 꼴이 달라서 서로 갈아 끼우지도 못합니다.
+#
+#     dls_fill   "업종 Technology(3) / 국가 US(1) (최근 6개월 5건)"
+#     여기       "최근 3달 Technology 3 (2026-08-28 기준)"
+#
+# 그래서 포럼과 같은 방식으로 나눕니다.
+#
+#     가벼운 확인 (여기)   자주. /groups 한 번으로 392개 상태를 봅니다
+#     깊은 조사 (dls_fill) 가끔. 그룹마다 조회해 20칸 넘게 채웁니다
+#
+# 1 이상을 주면 여기서도 셉니다. 한 달에 한 요청이고 62초 간격입니다.
+개월 = 0
 UA = "darkchoco-research/1.0 (WHS4; read-only)"
 
 # locations[].type 을 노션 「형식」 칸 값으로 옮깁니다.
@@ -78,15 +98,16 @@ class 막힘(Exception):
     """연속으로 실패해 멈췄습니다. 차단 기간을 늘리지 않으려는 것입니다."""
 
 
-def _받기(url: str, 마지막: list[float]) -> object:
+def _받기(url: str, 마지막: list[float], op=None) -> object:
     """간격을 지켜 한 번 받습니다."""
     지난 = time.time() - 마지막[0]
     if 지난 < 간격:
         time.sleep(간격 - 지난)
+    op = op or 오프너(갈래="ransom")          # Tor 가 없으면 여기서 보호없음 이 납니다
     req = urllib.request.Request(url, headers={
         "User-Agent": UA, "Accept": "application/json"})
     try:
-        with urllib.request.urlopen(req, timeout=30) as r:
+        with op.open(req, timeout=30) as r:
             return json.loads(r.read().decode("utf-8", "replace"))
     finally:
         마지막[0] = time.time()
@@ -171,7 +192,7 @@ def _달들(n: int) -> list[tuple[int, int]]:
     return out
 
 
-def _피해모으기(마지막: list[float], 개월수: int) -> tuple[dict, list[str]]:
+def _피해모으기(마지막: list[float], 개월수: int, op=None) -> tuple[dict, list[str]]:
     """그룹 이름 → {건수, 마지막활동, 업종, 한국건수} 로 모읍니다.
 
     /groups 에는 피해 건수가 없습니다. 월별 목록을 받아 세는 수밖에
@@ -182,7 +203,7 @@ def _피해모으기(마지막: list[float], 개월수: int) -> tuple[dict, list
     실패 = 0
     for 년, 월 in _달들(개월수):
         try:
-            건들 = _받기(rl_victims(년, 월), 마지막)
+            건들 = _받기(rl_victims(년, 월), 마지막, op)
             실패 = 0
         except (urllib.error.URLError, OSError, ValueError) as e:
             못본달.append(f"{년}-{월:02d}({type(e).__name__})")
@@ -226,11 +247,11 @@ def _업종줄(c: collections.Counter) -> str:
 
 # ── 조사 ───────────────────────────────────────────────────────────
 def 조사(*, dry: bool = False, limit: int = 0,
-        개월수: int = 개월) -> Iterator[Place]:
+        개월수: int = 개월, 프록시: str | None = None) -> Iterator[Place]:
     """랜섬 그룹 명부를 한 바퀴 봅니다.
 
-    요청 수는 1 + 개월수 입니다. 기본 넷이고 62초 간격이라 3분 남짓
-    걸립니다. 개월수를 0 으로 주면 피해 집계를 건너뜁니다.
+    요청 수는 1 + 개월수 입니다. 기본은 개월수가 0 이라 한 번입니다.
+    피해 집계는 dls_fill 소관입니다. 위 주석을 보십시오.
     """
     if dry:
         return
@@ -238,7 +259,15 @@ def 조사(*, dry: bool = False, limit: int = 0,
     마지막 = [0.0]
 
     try:
-        그룹들 = _받기(f"{RANSOMWARE_LIVE}/groups", 마지막)
+        op = 오프너(프록시, 갈래="ransom")
+    except 보호없음 as e:
+        yield Place(갈래="ransom", 이름="(그룹 목록)",
+                    못본이유=f"Tor 가 없어 안 나갔습니다. {str(e).splitlines()[0]}",
+                    받은곳="ransomware.live/groups")
+        return
+
+    try:
+        그룹들 = _받기(f"{RANSOMWARE_LIVE}/groups", 마지막, op)
     except (urllib.error.URLError, OSError, ValueError) as e:
         yield Place(갈래="ransom", 이름="(그룹 목록)",
                     못본이유=f"그룹 목록을 못 받았습니다: {e}",
@@ -251,7 +280,7 @@ def 조사(*, dry: bool = False, limit: int = 0,
                     받은곳="ransomware.live/groups")
         return
 
-    피해, 못본달 = _피해모으기(마지막, 개월수) if 개월수 > 0 else ({}, [])
+    피해, 못본달 = _피해모으기(마지막, 개월수, op) if 개월수 > 0 else ({}, [])
     기간 = f"최근 {개월수}달" if 개월수 > 0 else ""
 
     본것 = 0
@@ -293,10 +322,6 @@ def 조사(*, dry: bool = False, limit: int = 0,
             # 이름은 안 적습니다. 건수만 남깁니다(SECURITY.md).
             if d["한국"]:
                 p.한국유출 = f"{기간} 한국 피해 {d['한국']}건"
-        elif 개월수 > 0:
-            # 피해 목록을 받았는데 이 그룹이 안 나왔습니다. 최근에 올린
-            # 것이 없다는 뜻이지 그룹이 없다는 뜻이 아닙니다.
-            p.피해대상 = f"{기간} 새 피해 없음"
 
         if 못본달:
             # 그룹은 봤습니다. 피해 목록의 한 달을 못 받았을 뿐입니다.

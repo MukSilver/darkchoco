@@ -5,6 +5,7 @@
     python dc.py info <이름>          그 도구를 어떻게 쓰는지 봅니다
     python dc.py doctor [이름]        지금 돌 수 있는 상태인지 봅니다
     python dc.py crawl [--apply]      명부를 조사해 노션에 반영합니다
+    python dc.py auto                 수집 + 명부 조사 (스케줄러가 부릅니다)
     python dc.py run [--only 이름]    수집을 한 판 돌립니다
     python dc.py plan                 무엇이 언제 도는지 봅니다
     python dc.py run --due            주기가 찬 것만 돌립니다
@@ -292,7 +293,54 @@ def cmd_doctor(args) -> int:
         print(f"\n─ 전체에서 걸린 것 {총}개\n")
     else:
         print()
+    # 밖으로 나가는 길은 도구 하나의 사정이 아니라 크롤러 전체의 조건입니다.
+    _나가는길(args.net)
     return 0
+
+def _나가는길(자세히: bool = False) -> int:
+    """밖으로 나갈 때 어떤 주소가 남는지 봅니다.
+
+    다크웹 쪽을 여는 일은 저쪽 로그에 우리 주소를 남기는 일입니다.
+    남는 것이 한국 주소이면 우리가 누구인지 좁혀집니다.
+    """
+    from hub.crawler.probe import _나가기
+
+    print()
+    print("  ── 밖으로 나가는 길 ──")
+    프록시 = _나가기.프록시주소()
+    뺀것 = _나가기.뺀갈래()
+
+    if not 프록시:
+        if _나가기.맨연결_허락():
+            print("  !! 맨 연결을 허락한 상태입니다 (DARKCHOCO_ALLOW_DIRECT=1)")
+            print("     우리 IP 가 그대로 남습니다.")
+        else:
+            print("  Tor 가 없습니다. 크롤러가 밖으로 안 나갑니다.")
+        print()
+        for 줄 in _나가기.안내.splitlines():
+            print("  " + 줄)
+        print()
+        return 1
+
+    print(f"  프록시   {프록시}")
+    if 뺀것:
+        print(f"  !! Tor 를 뺀 갈래: {' · '.join(sorted(뺀것))}"
+              f"  (이 갈래는 우리 IP 로 나갑니다)")
+
+    if not 자세히:
+        print("  실제로 무엇으로 나가는지 보려면  python dc.py doctor --net")
+        print()
+        return 0
+
+    r = _나가기.출구확인(프록시)
+    표 = "OK" if r["된다"] else "!!"
+    print(f"  {표} {r['말']}")
+    if r["된다"]:
+        print("     한국 출구를 안 쓰려면 torrc 에 ExcludeExitNodes {kr} 를 넣으십시오.")
+    print()
+    return 0 if r["된다"] else 1
+
+
 
 
 # ── crawl ────────────────────────────────────────
@@ -312,12 +360,53 @@ def cmd_crawl(args) -> int:
         print()
         print("  미리보기입니다. 노션에 안 씁니다. --apply 를 주면 씁니다.")
 
+    if args.due and not 대상:
+        때된것 = 크롤.차례()
+        if not 때된것:
+            print("  아직 때가 안 됐습니다. 돌 갈래가 없습니다.")
+            return 0
+        print("  때가 된 갈래: "
+              + " · ".join(f"{g}({이유})" for g, 이유 in 때된것))
+
     결과 = 크롤.여러갈래(대상, apply=args.apply, limit=args.limit,
-                     tor=os.environ.get("TOR_SOCKS_PROXY"))
+                     tor=os.environ.get("TOR_SOCKS_PROXY"),
+                     때된것만=args.due)
     print()
     print(크롤.표로(결과, apply=args.apply))
     print()
     return 1 if any(r.오류 for r in 결과) else 0
+
+
+def cmd_auto(args) -> int:
+    """스케줄러가 부르는 자리. 수집과 명부 조사를 한 번에 합니다.
+
+    작업을 둘로 나누면 둘 다 등록해야 하고, 하나만 걸어 두고 나머지를
+    잊습니다. 하나로 둡니다.
+
+    둘 다 **때가 된 것만** 돕니다. 스케줄러는 자주 부르고, 무엇이 언제
+    돌지는 차례표가 정합니다.
+    """
+    from hub.crawler import run as 크롤
+
+    print()
+    print("  ── 수집 ──")
+    수집끝 = cmd_run(argparse.Namespace(
+        only=None, dry=False, limit=0, due=True, db=None))
+
+    print()
+    print("  ── 명부 조사 ──")
+    때된것 = 크롤.차례()
+    if not 때된것:
+        print("  아직 때가 안 됐습니다.")
+        return 수집끝
+    print("  때가 된 갈래: "
+          + " · ".join(f"{g}({이유})" for g, 이유 in 때된것))
+    결과 = 크롤.여러갈래(None, apply=not args.dry, limit=0,
+                     tor=os.environ.get("TOR_SOCKS_PROXY"), 때된것만=True)
+    print()
+    print(크롤.표로(결과, apply=not args.dry))
+    print()
+    return 수집끝 or (1 if any(r.오류 for r in 결과) else 0)
 
 
 # ── run · plan ───────────────────────────────────
@@ -396,7 +485,7 @@ def cmd_install_task(args) -> int:
     """윈도우 작업 스케줄러에 등록합니다. 등록 명령을 만들어 줍니다."""
     이름 = "Darkchoco-Collect"
     파이썬 = sys.executable
-    작업 = f'"{파이썬}" "{ROOT / "dc.py"}" run --due'
+    작업 = f'"{파이썬}" "{ROOT / "dc.py"}" auto'
 
     if args.show:
         print()
@@ -421,7 +510,7 @@ def cmd_install_task(args) -> int:
 
     if os.name != "nt":
         print("윈도우가 아닙니다. cron 에 아래를 넣으십시오.", file=sys.stderr)
-        print(f"  */{args.every} * * * * cd {ROOT} && {파이썬} dc.py run --due")
+        print(f"  */{args.every} * * * * cd {ROOT} && {파이썬} dc.py auto")
         return 1
 
     ps = [
@@ -507,6 +596,8 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(fn=cmd_info)
 
     p = sub.add_parser("doctor", help="지금 돌 수 있는 상태인지 봅니다")
+    p.add_argument("--net", action="store_true",
+                   help="실제로 나가 보고 남는 주소를 확인합니다")
     p.add_argument("name", nargs="?")
     p.set_defaults(fn=cmd_doctor)
 
@@ -515,7 +606,14 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--apply", action="store_true",
                    help="실제로 노션에 씁니다. 없으면 미리보기입니다")
     p.add_argument("--limit", type=int, default=0, help="갈래마다 최대 몇 줄까지")
+    p.add_argument("--due", action="store_true",
+                   help="주기가 찬 갈래만. 스케줄러가 이것을 씁니다")
     p.set_defaults(fn=cmd_crawl)
+
+    p = sub.add_parser("auto", help="수집과 명부 조사를 한 번에 (스케줄러용)")
+    p.add_argument("--dry", action="store_true",
+                   help="노션에 안 씁니다. 무엇이 돌지만 봅니다")
+    p.set_defaults(fn=cmd_auto)
 
     p = sub.add_parser("run", help="수집을 한 판 돌립니다")
     p.add_argument("--only", help="쉼표로 나눈 어댑터 이름. 없으면 전부")

@@ -13,6 +13,9 @@
 **글 본문은 안 가져옵니다.** 여기는 명부를 채우는 자리입니다. 게시물
 수집은 다른 일이고 skills/collect 가 합니다.
 
+**Tor 를 거칩니다.** t.me 도 마찬가지입니다. 어느 채널을 보고 있는지가
+우리 주소와 함께 남으면 안 됩니다. Tor 가 없으면 안 나갑니다.
+
 표준 라이브러리만 씁니다.
 """
 
@@ -30,6 +33,7 @@ from typing import Iterator
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "packages"))
 
 from hub.crawler.place import Place, 지금  # noqa: E402
+from hub.crawler.probe._나가기 import 보호없음, 오프너  # noqa: E402
 from hub.crawler.probe._읽기 import 언어판별  # noqa: E402
 
 __all__ = ["조사", "NEEDS_PACKAGES"]
@@ -91,14 +95,15 @@ def _글자(s: str) -> str:
     return re.sub(r"\s+", " ", html.unescape(s)).strip()
 
 
-def _받기(url: str, 마지막: list[float]) -> tuple[int, str]:
+def _받기(url: str, 마지막: list[float], op=None) -> tuple[int, str]:
     지난 = time.time() - 마지막[0]
     if 지난 < 간격:
         time.sleep(간격 - 지난)
+    op = op or 오프너(갈래="telegram")          # Tor 가 없으면 여기서 보호없음 이 납니다
     req = urllib.request.Request(url, headers={
         "User-Agent": UA, "Accept": "text/html", "Accept-Language": "en"})
     try:
-        with urllib.request.urlopen(req, timeout=20) as r:
+        with op.open(req, timeout=20) as r:
             return r.status, r.read(2_000_000).decode("utf-8", "replace")
     except urllib.error.HTTPError as e:
         return e.code, ""
@@ -141,7 +146,8 @@ def _채널이름(값: str) -> tuple[str, str]:
     return 값, ""
 
 
-def 한곳(채널: str, 마지막: list[float], 이름표: str = "") -> Place:
+def 한곳(채널: str, 마지막: list[float], 이름표: str = "", *,
+        프록시: str | None = None) -> Place:
     """채널 하나를 봅니다. 못 봤으면 왜인지 적습니다."""
     이름, 못볼이유 = _채널이름(채널)
     p = Place(갈래="telegram", 이름=이름표 or 이름 or 채널[:40],
@@ -157,9 +163,17 @@ def 한곳(채널: str, 마지막: list[float], 이름표: str = "") -> Place:
         return p
 
     try:
-        code, body = _받기(f"https://t.me/s/{이름}", 마지막)
+        op = 오프너(프록시, 갈래="telegram")
+    except 보호없음 as e:
+        p.못본이유 = f"Tor 가 없어 안 나갔습니다. {str(e).splitlines()[0]}"
+        return p
+
+    try:
+        code, body = _받기(f"https://t.me/s/{이름}", 마지막, op)
     except (urllib.error.URLError, OSError) as e:
-        p.못본이유 = f"요청 실패: {e}"
+        # 연결이 안 된 것은 채널 상태가 아닙니다. 상태를 안 바꿉니다.
+        # 백신(V3)·Tor·망 어느 쪽이든 우리 쪽 사정입니다.
+        p.못본이유 = f"연결이 안 됩니다({type(e).__name__}): {str(e)[:80]}"
         return p
 
     p.두드림 = True          # 응답을 받았습니다
@@ -174,7 +188,7 @@ def 한곳(채널: str, 마지막: list[float], 이름표: str = "") -> Place:
     # 미리보기가 꺼져 있으면 소개 쪽으로 한 번 더 갑니다.
     if _미리보기꺼짐.search(body) and "tgme_widget_message" not in body:
         try:
-            code2, body2 = _받기(f"https://t.me/{이름}", 마지막)
+            code2, body2 = _받기(f"https://t.me/{이름}", 마지막, op)
             if code2 == 200 and body2:
                 body = body2
                 p.받은곳 = "t.me 소개 쪽 (미리보기 꺼짐)"
@@ -225,7 +239,8 @@ def 한곳(채널: str, 마지막: list[float], 이름표: str = "") -> Place:
     return p
 
 
-def 조사(채널들: list, *, dry: bool = False, limit: int = 0) -> Iterator[Place]:
+def 조사(채널들: list, *, dry: bool = False, limit: int = 0,
+        프록시: str | None = None) -> Iterator[Place]:
     """채널들은 주소 문자열이거나 {"이름": ..., "주소": ...} 입니다."""
     if dry or not 채널들:
         return

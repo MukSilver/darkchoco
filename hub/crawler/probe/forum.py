@@ -15,7 +15,11 @@
 어니언 주소는 Tor 를 거쳐야 합니다. TOR_SOCKS_PROXY 가 없으면 그 줄은
 "못 봄(Tor 없음)" 으로 남깁니다. 빈칸으로 두지 않습니다.
 
-표준 라이브러리만 씁니다. Tor 는 SOCKS 프록시 주소만 받습니다.
+**전부 Tor 를 거칩니다.** 어니언만이 아닙니다. 평범한 도메인이라도
+다크웹 포럼의 쪽을 여는 일은 저쪽 로그에 우리 주소를 남기는 일입니다.
+나가는 길은 _나가기.py 한 곳뿐이고, Tor 가 없으면 안 나갑니다.
+
+표준 라이브러리만 씁니다.
 """
 
 from __future__ import annotations
@@ -34,6 +38,7 @@ from urllib.parse import urlparse
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "packages"))
 
 from hub.crawler.place import Place, 지금  # noqa: E402
+from hub.crawler.probe._나가기 import 보호없음, 오프너  # noqa: E402
 from hub.crawler.probe._읽기 import 글자만, 언어판별  # noqa: E402
 
 __all__ = ["조사", "한곳", "NEEDS_PACKAGES"]
@@ -44,16 +49,42 @@ NEEDS_PACKAGES: list[str] = []
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/124.0 Safari/537.36")
 
-# 포럼 소프트웨어마다 첫 화면에 적는 꼴이 다릅니다. 흔한 것부터 봅니다.
-# XenForo · MyBB · vBulletin · phpBB 를 덮습니다.
+# 포럼 소프트웨어마다 총계를 적는 꼴이 다릅니다. **총계인지가 중요합니다.**
+#
+# 첫 화면에는 총계 말고도 숫자가 잔뜩 있습니다. bf.st 첫 화면에서 실제로
+# 이런 것들이 같이 나옵니다.
+#
+#     873955 Total Posts        ← 총계
+#     857 Threads 4584 Posts    ← 게시판 하나의 수
+#     182 users active           ← 지금 접속자
+#     14,829 Most Online         ← 최고 기록
+#
+# 예전 정규식은 이 사이에서 아무 숫자나 집어 「회원 45」를 만들었습니다.
+# 실제 회원은 367,224 명입니다. 틀린 값이 사람이 조사한 규모 줄을 갈아
+# 끼우기 때문에 느슨하게 잡으면 안 됩니다.
+#
+# 태그를 걷어낸 글에서 찾습니다. 마크업은 판마다 바뀌는데 글은 덜 바뀝니다.
 _회원 = [
-    re.compile(r'(?:members|Members|회원)[^\d<]{0,20}([\d,\.\s]{2,15})', re.I),
-    re.compile(r'([\d,\.\s]{2,15})[^\d<]{0,12}(?:members|registered users)', re.I),
+    re.compile(r"([\d,\.]{1,15})\s*Total\s+Members", re.I),        # MyBB
+    re.compile(r"(?:We (?:currently )?have)\s+([\d,\.]{1,15})\s+members", re.I),
+    re.compile(r"Total\s+members\s*[:\s]\s*([\d,\.]{1,15})", re.I),  # phpBB
+    re.compile(r"\bMembers\s*:\s*([\d,\.]{1,15})", re.I),          # vBulletin
+    re.compile(r"\bMembers\s+([\d,\.]{1,15})(?:\s|$)", re.I),       # XenForo
 ]
 _게시물 = [
-    re.compile(r'(?:messages|posts|Posts|게시물)[^\d<]{0,20}([\d,\.\s]{2,15})', re.I),
-    re.compile(r'([\d,\.\s]{2,15})[^\d<]{0,12}(?:messages|posts)', re.I),
+    re.compile(r"([\d,\.]{1,15})\s*Total\s+Posts", re.I),
+    re.compile(r"total of\s+([\d,\.]{1,15})\s+posts", re.I),
+    re.compile(r"Total\s+(?:posts|messages)\s*[:\s]\s*([\d,\.]{1,15})", re.I),
+    re.compile(r"\b(?:Posts|Messages)\s*:\s*([\d,\.]{1,15})", re.I),
+    re.compile(r"\b(?:Posts|Messages)\s+([\d,\.]{1,15})(?:\s|$)", re.I),
 ]
+
+# 이 말이 앞에 있으면 총계가 아닙니다. 지금 접속자거나 오늘 것이거나
+# 최고 기록입니다.
+_총계아님 = re.compile(
+    r"(?:online|active|today|newest|most|record|staff|team|birthday|"
+    r"guest|visitor|접속|오늘|최고)\D{0,24}$", re.I)
+
 _제목 = re.compile(r"<title[^>]*>(.*?)</title>", re.S | re.I)
 _소개 = re.compile(
     r'<meta[^>]+name=."?description"?.[^>]+content="([^"]{4,400})"',
@@ -88,33 +119,44 @@ def _숫자(s: str) -> int | None:
     if not s or len(s) > 12:
         return None
     n = int(s)
-    return n if 10 <= n < 10_000_000_000 else None
+    return n if 1 <= n < 10_000_000_000 else None
 
 
-def _찾기(본문: str, 규칙들) -> int | None:
+def _왜(e: Exception) -> str:
+    """연결이 왜 안 됐는지 짐작해 한 줄로 적습니다.
+
+    단정하지 않습니다. 무엇을 확인할지만 알려 줍니다.
+    """
+    말 = f"{e}".lower()
+    if "getaddrinfo" in 말 or "name or service" in 말:
+        return "이름을 못 찾습니다. 주소가 바뀌었거나 DNS 가 막혔습니다"
+    if "reset" in 말 or "aborted" in 말 or "forcibly closed" in 말:
+        return ("연결이 끊겼습니다. 백신이 막았을 수 있습니다"
+                "(V3 는 python.exe 의 접근을 막습니다)")
+    if "timed out" in 말 or "timeout" in 말:
+        return "응답이 없습니다. 느리거나 우리 쪽이 못 나갑니다"
+    if "certificate" in 말 or "ssl" in 말:
+        return "인증서 문제입니다"
+    if "proxy" in 말 or "tunnel" in 말:
+        return "Tor 가 그 쪽을 못 열었습니다"
+    return "우리 쪽 사정일 수 있어 상태를 안 바꿉니다"
+
+
+def _찾기(글: str, 규칙들) -> int | None:
+    """총계를 찾습니다. 못 찾으면 None 입니다. **지어내지 않습니다.**
+
+    앞선 규칙일수록 확실한 꼴입니다. 앞 글자를 보고 총계가 아닌 것은
+    건너뜁니다.
+    """
     for rx in 규칙들:
-        m = rx.search(본문)
-        if m:
+        for m in rx.finditer(글):
+            앞 = 글[max(0, m.start() - 40):m.start()]
+            if _총계아님.search(앞):
+                continue
             n = _숫자(m.group(1))
             if n:
                 return n
     return None
-
-
-def _오프너(프록시: str | None):
-    """Tor SOCKS 프록시를 거치는 오프너. 없으면 그냥 엽니다.
-
-    socks 라이브러리를 안 씁니다. 받을 것을 늘리지 않으려는 것입니다.
-    프록시가 필요하면 HTTP CONNECT 를 지원하는 tor 의 HTTPTunnelPort 를
-    쓰거나, 프록시 주소를 http:// 로 줍니다.
-    """
-    if not 프록시:
-        return urllib.request.build_opener()
-    if 프록시.startswith("socks"):
-        # SOCKS 는 표준 라이브러리로 못 탑니다. 쓰는 쪽에 알려 줍니다.
-        return None
-    return urllib.request.build_opener(
-        urllib.request.ProxyHandler({"http": 프록시, "https": 프록시}))
 
 
 def 한곳(주소: str, 이름: str, 마지막: list[float], *,
@@ -130,14 +172,11 @@ def 한곳(주소: str, 이름: str, 마지막: list[float], *,
     else:
         p.주소 = 주소
 
-    if 어니언 and not 프록시:
-        p.못본이유 = "Tor 가 없습니다. TOR_SOCKS_PROXY 를 주면 봅니다"
-        return p
-
-    opener = _오프너(프록시 if 어니언 else None)
-    if opener is None:
-        p.못본이유 = ("SOCKS 프록시는 표준 라이브러리로 못 탑니다. "
-                   "tor 의 HTTPTunnelPort 주소를 주십시오")
+    # 어니언이든 아니든 Tor 를 거칩니다. 없으면 안 나갑니다.
+    try:
+        opener = 오프너(프록시, 갈래="forum")
+    except 보호없음 as e:
+        p.못본이유 = f"Tor 가 없어 안 나갔습니다. {str(e).splitlines()[0]}"
         return p
 
     지난 = time.time() - 마지막[0]
@@ -155,8 +194,19 @@ def 한곳(주소: str, 이름: str, 마지막: list[float], *,
     except urllib.error.HTTPError as e:
         code, 본문 = e.code, ""
     except (urllib.error.URLError, socket.timeout, OSError) as e:
-        p.상태 = "offline"
-        p.못본이유 = f"안 열립니다: {type(e).__name__}"
+        # **연결이 안 된 것을 offline 으로 적지 않습니다.**
+        #
+        # 여기까지 오는 길에 우리 쪽 이유가 여럿 있습니다.
+        #
+        #   백신이 막음   V3 가 다크웹 도메인 접근을 막습니다. 실제로
+        #                prologic.su 를 python.exe 가 여는 것을 막았습니다
+        #   Tor 가 못 감  출구가 그 쪽을 못 열었습니다
+        #   DNS · 망      학교 망이나 집 공유기
+        #
+        # 이 중 무엇도 "포럼이 죽었다" 는 뜻이 아닙니다. offline 으로
+        # 적으면 사람이 조사해 둔 값을 우리 쪽 사정으로 덮습니다.
+        # 두드림 을 안 세우므로 노션에는 아무것도 안 씁니다.
+        p.못본이유 = f"연결이 안 됩니다({type(e).__name__}). {_왜(e)}"
         return p
     finally:
         마지막[0] = time.time()
@@ -218,8 +268,9 @@ def 한곳(주소: str, 이름: str, 마지막: list[float], *,
     else:
         p.들어가는법 = "첫 화면은 가입 없이 열립니다"
 
-    p.회원수 = _찾기(본문, _회원)
-    p.게시물수 = _찾기(본문, _게시물)
+    납작 = re.sub(r"\s+", " ", html.unescape(글))
+    p.회원수 = _찾기(납작, _회원)
+    p.게시물수 = _찾기(납작, _게시물)
     if p.회원수 is None and p.게시물수 is None:
         p.못본이유 = "살아있는 것은 봤는데 회원·게시물 수는 첫 화면에 없습니다"
     return p
