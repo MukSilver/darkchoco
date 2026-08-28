@@ -6,11 +6,14 @@ const NAV = [
   { href: "/wiki/", label: "조사 자료" },
 ];
 
+// 배포 뿌리. shell.js 는 늘 <사이트루트>/assets/ 에 있으므로
+// 한 칸 위가 사이트 뿌리입니다. 루트 배포든 /repo/ 하위든 저절로 맞습니다.
+// base 태그는 쓰지 않습니다 — SVG 의 url(#id) 참조를 문서 밖으로 재해석해
+// 나중에 해칭 패턴을 넣는 순간 지도가 깨집니다.
+export const BASE = new URL("../", import.meta.url).pathname.replace(/\/$/, "");
+
 export function mountHead(current) {
-  // 배포 뿌리. 루트 배포면 빈 문자열입니다.
-  // 하위 경로에 올릴 때만 <meta name="dc-base" content="/어디"> 한 줄을 답니다.
-  const meta = document.querySelector('meta[name="dc-base"]');
-  const base = meta ? meta.content.replace(/\/$/, "") : "";
+  const base = BASE;
   const head = document.createElement("header");
   head.className = "shell-head";
   head.innerHTML =
