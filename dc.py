@@ -4,13 +4,19 @@
     python dc.py list                 어떤 도구가 있는지 봅니다
     python dc.py info <이름>          그 도구를 어떻게 쓰는지 봅니다
     python dc.py doctor [이름]        지금 돌 수 있는 상태인지 봅니다
+    python dc.py run [--only 이름]    수집을 한 판 돌립니다
+    python dc.py plan                 어떤 어댑터가 몇 분마다 도는지 봅니다
     python dc.py readme --check       README 의 도구 표가 최신인지 봅니다
     python dc.py readme --write       README 의 도구 표를 다시 씁니다
 
-도구를 대신 실행하지 않습니다. 무엇을 치면 되는지 알려 줄 뿐입니다.
-각 도구는 만든 사람이 소유하고, 이 파일은 목록과 상태만 봅니다.
+list · info · doctor 는 도구를 대신 실행하지 않습니다. 무엇을 치면 되는지
+알려 줄 뿐입니다. 각 도구는 만든 사람이 소유합니다.
 
-표준 라이브러리만 씁니다. 받을 것이 없습니다.
+run 은 다릅니다. hub/adapters 에 등록된 것만 부르고, 결과를 한 표에 넣습니다.
+어댑터는 원래 도구를 감싼 얇은 물건이라 그 도구의 방어가 그대로 삽니다.
+
+이 파일 자체는 표준 라이브러리만 씁니다. run 이 부르는 어댑터는 각자
+필요한 것을 밝히고, 없으면 그 어댑터만 건너뜁니다.
 """
 
 from __future__ import annotations
@@ -286,6 +292,47 @@ def cmd_doctor(args) -> int:
     return 0
 
 
+# ── run · plan ───────────────────────────────────
+def cmd_run(args) -> int:
+    from hub import runner
+
+    이름들 = [n.strip() for n in (args.only or "").split(",") if n.strip()] or None
+    if args.dry:
+        print()
+        print("  미리보기입니다. 밖에 요청을 보내지 않고 표에도 안 넣습니다.")
+    결과 = runner.여러판(이름들, dry=args.dry, limit=args.limit)
+    print()
+    print(runner.표로(결과))
+    print()
+    return 1 if any(r.error for r in 결과) else 0
+
+
+def cmd_plan(args) -> int:
+    from hub import registry
+
+    es = registry.목록()
+    if not es:
+        print()
+        print("  등록된 어댑터가 없습니다. hub/adapters/ 에 파일을 놓으십시오.")
+        print()
+        return 0
+    print()
+    print(f"어댑터 {len(es)}개")
+    print()
+    print("  " + 채움("이름", 16) + 채움("담당", 8) + 채움("주기", 10)
+          + 채움("어디서", 8) + "무엇을")
+    print("  " + "─" * 74)
+    for e in es:
+        주기 = f"{e.every}분마다" if e.every else "부를 때만"
+        print("  " + 채움(e.name, 16) + 채움(e.owner or "-", 8)
+              + 채움(주기, 10) + 채움(표시.get(e.runs_in, e.runs_in), 8) + e.summary)
+    print()
+    print("  한 판 돌리기:  python dc.py run")
+    print("  하나만:        python dc.py run --only <이름>")
+    print()
+    return 0
+
+
 # ── readme ──────────────────────────────────────────────────────────
 시작, 끝 = "<!-- 도구표 시작 -->", "<!-- 도구표 끝 -->"
 
@@ -339,6 +386,15 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("doctor", help="지금 돌 수 있는 상태인지 봅니다")
     p.add_argument("name", nargs="?")
     p.set_defaults(fn=cmd_doctor)
+
+    p = sub.add_parser("run", help="수집을 한 판 돌립니다")
+    p.add_argument("--only", help="쉼표로 나눈 어댑터 이름. 없으면 전부")
+    p.add_argument("--dry", action="store_true",
+                   help="밖에 요청을 안 보내고 준비만 봅니다")
+    p.add_argument("--limit", type=int, default=0, help="어댑터마다 최대 몇 건까지")
+    p.set_defaults(fn=cmd_run)
+
+    sub.add_parser("plan", help="어떤 어댑터가 몇 분마다 도는지").set_defaults(fn=cmd_plan)
 
     p = sub.add_parser("readme", help="README 의 도구 표를 보거나 다시 씁니다")
     g = p.add_mutually_exclusive_group(required=True)

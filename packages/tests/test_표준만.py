@@ -8,6 +8,7 @@ dls-observatory 는 표준 라이브러리만 쓰는 앱입니다. 공용 부품
 같은 프로세스에서 검사하면 이미 import 된 것이 통과시켜 버립니다.
 그래서 자식 프로세스를 씁니다.
 """
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -35,7 +36,10 @@ use_utf8()
 def _돌리기(코드: str) -> tuple[int, str]:
     r = subprocess.run([sys.executable, "-c", 막기 + 코드], cwd=ROOT,
                        capture_output=True, text=True,
-                       encoding="utf-8", errors="replace", timeout=60)
+                       encoding="utf-8", errors="replace", timeout=60,
+                       # 이것이 없으면 한글 콘솔에서 자식 출력이 cp949 로 나가
+                       # 부모가 utf-8 로 읽다가 깨집니다. 검사가 거짓으로 실패합니다.
+                       env={**os.environ, "PYTHONIOENCODING": "utf-8"})
     return r.returncode, (r.stdout or "") + (r.stderr or "")
 
 
