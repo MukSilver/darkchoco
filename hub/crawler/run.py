@@ -29,7 +29,7 @@ sys.path.insert(0, str(ROOT))
 
 from hub.crawler.notion import 갈래별_DB, 명부, 반영결과  # noqa: E402
 from hub.crawler.place import Place  # noqa: E402
-from hub.crawler.probe import forum, ransom, telegram  # noqa: E402
+from hub.crawler.probe import _이음, forum, ransom, telegram  # noqa: E402
 
 __all__ = ["한갈래", "여러갈래", "표로", "기본_표", "갈래들",
            "차례", "됐다고_적기"]
@@ -99,15 +99,18 @@ def _조사(갈래: str, 줄들, ctx: dict):
     나갑니다.
     """
     프록시 = ctx.get("tor")
+    이음사전 = ctx.get("이음사전")
     if 갈래 == "telegram":
         마지막 = [0.0]
         for r in 줄들:
-            yield r, telegram.한곳(r.주소, 마지막, r.이름, 프록시=프록시)
+            yield r, telegram.한곳(r.주소, 마지막, r.이름, 프록시=프록시,
+                                 이음사전=이음사전)
 
     elif 갈래 == "forum":
         마지막 = [0.0]
         for r in 줄들:
-            yield r, forum.한곳(r.주소, r.이름, 마지막, 프록시=프록시)
+            yield r, forum.한곳(r.주소, r.이름, 마지막, 프록시=프록시,
+                              이음사전=이음사전)
 
     elif 갈래 == "ransom":
         # 랜섬은 목록을 통째로 받습니다. 그룹 하나씩 조회하면 요청이 폭발합니다.
@@ -120,8 +123,28 @@ def _조사(갈래: str, 줄들, ctx: dict):
         raise ValueError(f"모르는 갈래입니다: {갈래}")
 
 
+def 이음사전만들기(갈래들목록=None) -> dict:
+    """세 명부의 주소를 한 사전으로 모읍니다.
+
+    「연결된 곳」을 채우려면 이것이 필요합니다. 첫 화면에서 찾은 링크가
+    **우리 명부에 있는 곳일 때만** 관계로 셉니다. 처음 보는 주소를
+    관계로 적으면 그것은 잡음입니다.
+
+    한 판에 한 번만 만듭니다. 노션을 세 번 더 읽지만 그 뒤로는 안
+    읽습니다.
+    """
+    명부들 = {}
+    for g in (갈래들목록 or list(갈래들)):
+        try:
+            명부들[g] = 명부(g).줄들()
+        except Exception:  # noqa: BLE001  한 갈래가 안 읽혀도 나머지로 만듭니다
+            continue
+    return _이음.이름표만들기(명부들)
+
+
 def 한갈래(갈래: str, *, apply: bool = False, limit: int = 0,
          db: Path | None = None, tor: str | None = None,
+         이음사전: dict | None = None,
          조용히: bool = False) -> 갈래결과:
     """한 갈래를 돕니다. 예외를 밖으로 안 냅니다."""
     r = 갈래결과(갈래=갈래)
@@ -140,7 +163,8 @@ def 한갈래(갈래: str, *, apply: bool = False, limit: int = 0,
         볼것 = 볼것[:limit]
 
     본것: list[Place] = []
-    for 줄, p in _조사(갈래, 볼것, {"tor": tor, "limit": limit}):
+    for 줄, p in _조사(갈래, 볼것, {"tor": tor, "limit": limit,
+                                 "이음사전": 이음사전}):
         본것.append(p)
         if p.봤나():
             r.본것 += 1
@@ -155,6 +179,12 @@ def 한갈래(갈래: str, *, apply: bool = False, limit: int = 0,
             r.문제.append(f"{res.이름}: {res.오류}")
         if res.건너뛴칸:
             r.문제.append(f"{res.이름}: 스키마에 없는 칸 {res.건너뛴칸}")
+        if res.없는옵션:
+            # 노션 선택지에 없어 버린 값입니다. 안 올리면 조용히
+            # 사라집니다. 포럼의 「압수됨」이 그렇게 사라지고 있었습니다.
+            r.문제.append(f"{res.이름}: 선택지에 없어 안 씀 {res.없는옵션}")
+        if p.살펴볼것:
+            r.문제.append(f"{res.이름}: {p.살펴볼것}")
         if res.바뀐칸:
             r.바뀐줄 += 1
 
@@ -224,9 +254,15 @@ def 여러갈래(대상: list[str] | None = None, *, apply: bool = False,
     else:
         돌것 = list(갈래들)
 
+    # 「연결된 곳」을 채우려면 세 명부를 다 알아야 합니다. 한 판에 한 번만
+    # 만들고 갈래마다 물려 줍니다.
+    사전 = 이음사전만들기() if 돌것 else {}
+    if 사전:
+        log = f"명부 {len(사전)}곳을 이음 사전에 담았습니다"
     out = []
     for 갈래 in 돌것:
-        out.append(한갈래(갈래, apply=apply, limit=limit, db=db, tor=tor))
+        out.append(한갈래(갈래, apply=apply, limit=limit, db=db, tor=tor,
+                        이음사전=사전))
     # 미리보기는 차례를 안 건드립니다. 안 썼는데 돌았다고 적으면
     # 다음 실제 반영이 주기만큼 밀립니다.
     if apply and out:

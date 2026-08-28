@@ -35,6 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "packages"))
 from hub.crawler.place import Place, 지금  # noqa: E402
 from hub.crawler.probe._나가기 import 보호없음, 오프너  # noqa: E402
 from hub.crawler.probe._읽기 import 언어판별  # noqa: E402
+from hub.crawler.probe import _이음  # noqa: E402
 
 __all__ = ["조사", "NEEDS_PACKAGES"]
 
@@ -147,7 +148,7 @@ def _채널이름(값: str) -> tuple[str, str]:
 
 
 def 한곳(채널: str, 마지막: list[float], 이름표: str = "", *,
-        프록시: str | None = None) -> Place:
+        프록시: str | None = None, 이음사전: dict | None = None) -> Place:
     """채널 하나를 봅니다. 못 봤으면 왜인지 적습니다."""
     이름, 못볼이유 = _채널이름(채널)
     p = Place(갈래="telegram", 이름=이름표 or 이름 or 채널[:40],
@@ -225,6 +226,11 @@ def 한곳(채널: str, 마지막: list[float], 이름표: str = "", *,
     # 채널 언어가 아니라 화면 언어를 세게 됩니다.
     p.언어 = 언어판별(f"{p.이름} {p.어떤곳}", 최소=6)
 
+    # 채널이 걸어 둔 곳 중 명부에 있는 것만 셉니다. 미리보기에는
+    # 글 안의 링크도 섞이는데, 그것도 그 채널이 가리키는 곳입니다.
+    if 이음사전:
+        p.연결된곳 = _이음.찾기(body, 이음사전, f"텔레그램 DB: {p.이름}")
+
     if 수 or 글들:
         p.상태 = "online"
         # 미리보기가 열려 있으면 가입 없이 읽힙니다.
@@ -240,7 +246,8 @@ def 한곳(채널: str, 마지막: list[float], 이름표: str = "", *,
 
 
 def 조사(채널들: list, *, dry: bool = False, limit: int = 0,
-        프록시: str | None = None) -> Iterator[Place]:
+        프록시: str | None = None,
+        이음사전: dict | None = None) -> Iterator[Place]:
     """채널들은 주소 문자열이거나 {"이름": ..., "주소": ...} 입니다."""
     if dry or not 채널들:
         return

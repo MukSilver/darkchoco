@@ -172,6 +172,22 @@ def test_안내문서와_코드가_안_어긋난다():
         assert re.search(rf"{갈래}\s+{분}\s*분", 문서),             f"문서의 {갈래} 주기가 코드({분}분)와 다릅니다"
 
 
+def test_흐름문서가_코드와_안_어긋난다():
+    """문서에 적은 칸 갈래가 place.py 와 같은지 봅니다."""
+    문서 = (ROOT / "docs" / "흐름.md").read_text(encoding="utf-8")
+    from hub.crawler.place import 덮어쓰는칸, 합치는칸, 빈칸만칸
+    for 칸 in 덮어쓰는칸 | 합치는칸 | 빈칸만칸:
+        assert 칸 in 문서, f"흐름 문서에 「{칸}」 이 없습니다"
+    for 자리 in ("_나가기.py", "dc.py auto", "hub/crawler/run.py",
+                "hub/crawler/notion.py", "dls_fill.py", "hub/sched.py"):
+        assert 자리 in 문서, f"흐름 문서에 {자리} 가 없습니다"
+
+    # 그림에 나온 조사기가 실제로 다 있는지도 봅니다.
+    for g in ("telegram", "forum", "ransom"):
+        assert f"probe/{g}.py" in 문서, f"흐름 문서에 probe/{g}.py 가 없습니다"
+        assert (ROOT / f"hub/crawler/probe/{g}.py").exists()
+
+
 if __name__ == "__main__":
     n = 0
     for k, v in sorted(globals().items()):

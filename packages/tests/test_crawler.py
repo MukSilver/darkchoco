@@ -4,9 +4,11 @@
 
 밖에 요청을 보내지 않습니다. 응답을 가로채 미리 만든 것을 돌려줍니다.
 """
+import json
 import sys
 from pathlib import Path
 
+HERE = Path(__file__).resolve().parent
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "packages"))
 sys.path.insert(0, str(ROOT))
@@ -92,15 +94,57 @@ def test_사람이_쓴_옛_형식은_기계_줄이_아니다():
 
 # ── 노션에 넣는 값 ──────────────────────────────────────────────────
 def test_노션_칸을_안_늘린다():
-    """다크웹 DB 스키마가 RAG 의 근간이라 기존 칸만 써야 한다."""
-    기존칸 = {"상태", "규모", "확인일", "주소", "어니언 주소", "형식", "종류", "최근 활동"}
+    """다크웹 DB 스키마가 RAG 의 근간이라 기존 칸만 써야 한다.
+
+    옛날에는 칸 이름을 손으로 적어 두고 봤는데, 그러면 노션에 정말
+    있는지는 아무도 안 본다. 실제 스키마를 찍어 두고 그것과 댄다.
+    노션스키마.json 은 2026-08-28 에 API 로 받은 것이다.
+    """
+    스키마 = json.loads((HERE / "노션스키마.json").read_text(encoding="utf-8"))
     for 갈래 in ("forum", "telegram", "ransom"):
-        p = Place(갈래=갈래, 이름="x", 상태="online", 구독자수=10,
-                  회원수=20, 게시물수=30, 피해기업수=40,
+        있는칸 = set(스키마[갈래]["칸"])
+        p = Place(갈래=갈래, 이름="x", 상태="online", 두드림=True,
+                  구독자수=10, 회원수=20, 게시물수=30, 피해기업수=40,
                   주소="https://x", 어니언="http://y.onion",
-                  형식="RaaS", 종류="group", 최근활동="2026-08-28T00:00:00")
+                  형식="RaaS", 종류="group", 최근활동="2026-08-28T00:00:00",
+                  언어="영어", 들어가는법="열림", 이전주소="https://old",
+                  이전이름="별칭", 어떤곳="설명", 가입필요=False,
+                  피해대상="제조 3", 한국유출="한국 피해 1건",
+                  연락수단="메일", 연결된곳="포럼 DB: X",
+                  출처=["ransomware.live"])
         칸 = set(p.노션값())
-        assert 칸 <= 기존칸, f"{갈래}: 없는 칸을 쓴다 — {칸 - 기존칸}"
+        assert 칸 <= 있는칸, f"{갈래}: 노션에 없는 칸을 쓴다 — {칸 - 있는칸}"
+
+
+def test_기계칸이_세_갈래_어딘가에는_있다():
+    """기계칸 에 적어 두고 어느 DB 에도 없는 칸이면 영영 안 쓰인다."""
+    스키마 = json.loads((HERE / "노션스키마.json").read_text(encoding="utf-8"))
+    어딘가 = set().union(*(set(v["칸"]) for v in 스키마.values()))
+    from hub.crawler.place import 기계칸
+    없는것 = 기계칸 - 어딘가
+    assert not 없는것, f"어느 DB 에도 없는 칸: {없는것}"
+
+
+def test_보내는_선택지_값이_실제로_있다():
+    """선택지에 없는 값을 보내면 노션이 400 을 낸다.
+
+    포럼 DB 「상태」 에는 압수됨 이 없다. 랜섬웨어 DB 에만 있다.
+    """
+    스키마 = json.loads((HERE / "노션스키마.json").read_text(encoding="utf-8"))
+    assert "압수됨" in 스키마["ransom"]["선택지"]["상태"]
+    assert "압수됨" not in 스키마["forum"]["선택지"]["상태"]
+    assert "압수됨" not in 스키마["telegram"]["선택지"]["상태"]
+
+    # 조사기가 만드는 상태가 그 갈래에서 쓸 수 있는 값인지 본다.
+    for 갈래, 값들 in (("forum", {"online", "offline", "미확인"}),
+                     ("telegram", {"online", "offline", "미확인"}),
+                     ("ransom", {"online", "offline", "미확인", "압수됨"})):
+        있는것 = set(스키마[갈래]["선택지"]["상태"])
+        assert 값들 <= 있는것, f"{갈래}: 못 쓰는 상태 {값들 - 있는것}"
+
+    # 「조사 단계」 에 확인만 함 이 있어야 한다.
+    for 갈래 in ("forum", "telegram", "ransom"):
+        assert "확인만 함" in 스키마[갈래]["선택지"]["조사 단계"]
 
 
 def test_못_봤으면_미확인과_확인일만_남긴다():
@@ -381,9 +425,12 @@ def _포럼한판(본문, code=200):
 
 
 def test_압수_배너를_살아있는것으로_세지_않는다():
+    """포럼 DB 에는 「압수됨」 선택지가 없다. 미확인으로 두고 사람에게 올린다."""
     p = _포럼한판("<html><body>THIS HIDDEN SITE HAS BEEN SEIZED "
                 "by the Federal Bureau of Investigation</body></html>")
-    assert p.상태 == "압수됨", p.상태
+    assert p.상태 == "미확인", p.상태
+    assert "압수" in p.못본이유, p.못본이유
+    assert p.살펴볼것, "압수를 봤는데 사람에게 안 알린다"
 
 
 def test_파킹된_도메인은_포럼이_아니다():
@@ -494,6 +541,78 @@ def test_포럼_접속자수를_회원수로_읽지_않는다():
     assert p.회원수 is None, p.회원수
     assert p.게시물수 is None, p.게시물수
     assert "규모" not in p.노션값(), p.노션값()
+
+
+# ── 연결된 곳 · 조사 단계 ──────────────────────────────────────────
+def test_이음은_명부에_있는_곳만_적는다():
+    """첫 화면에는 광고와 남의 링크가 잔뜩 있습니다.
+
+    처음 보는 주소를 「연결된 곳」에 적으면 관계가 아니라 잡음입니다.
+    """
+    from hub.crawler.probe import _이음
+
+    class 줄:
+        def __init__(s, 이름, 주소="", 어니언=""):
+            s.이름, s.주소, s.어니언 = 이름, 주소, 어니언
+
+    사전 = _이음.이름표만들기({
+        "forum": [줄("BreachForums", "https://bf.st/"),
+                  줄("ZDL", "", "http://oaptxiyisljt2kv3we2we34kuudmqda7f2geffoylzpeo7ourhtz4dad.onion/")],
+        "telegram": [줄("DarkForums", "https://t.me/DarkForumsss"),
+                     줄("이상한줄", "@projectwwh")],
+    })
+    본문 = ("""<a href="https://bf.st/board">여기</a>"""
+          """<a href="https://t.me/DarkForumsss">채널</a>"""
+          """<a href="https://google.com/">구글</a>"""
+          """<a href="https://never-seen.example/">처음</a>"""
+          "http://oaptxiyisljt2kv3we2we34kuudmqda7f2geffoylzpeo7ourhtz4dad.onion/ 도 있습니다")
+    나온것 = _이음.찾기(본문, 사전, "포럼 DB: 나")
+
+    assert "포럼 DB: BreachForums" in 나온것, 나온것
+    assert "텔레그램 DB: DarkForums" in 나온것, 나온것
+    assert "포럼 DB: ZDL" in 나온것, 나온것
+    assert "google" not in 나온것, "어디에나 있는 곳을 관계로 셌다"
+    assert "never-seen" not in 나온것, "명부에 없는 곳을 적었다"
+
+
+def test_이음은_자기_자신을_안_센다():
+    from hub.crawler.probe import _이음
+
+    class 줄:
+        def __init__(s, 이름, 주소=""):
+            s.이름, s.주소, s.어니언 = 이름, 주소, ""
+
+    사전 = _이음.이름표만들기({"forum": [줄("나", "https://me.example/")]})
+    assert _이음.찾기('<a href="https://me.example/x">나</a>', 사전,
+                    "포럼 DB: 나") == ""
+
+
+def test_점_없는_값은_호스트가_아니다():
+    """명부에 @projectwwh 처럼 주소가 아닌 값이 적힌 줄이 있습니다."""
+    from hub.crawler.probe._이음 import 호스트
+    assert 호스트("@projectwwh") == ""
+    assert 호스트("https://bf.st/") == "bf.st"
+    assert 호스트("www.Example.COM") == "example.com"
+
+
+def test_두드려_본_줄에만_확인만함을_넣는다():
+    p = _포럼한판("<html><body>367224 Total Members</body></html>")
+    assert p.노션값()["조사 단계"] == "확인만 함"
+
+    from hub.crawler.place import Place, 빈칸만칸
+    # 안 두드린 줄은 아무것도 안 씁니다.
+    안봄 = Place(갈래="forum", 이름="X", 상태="미확인", 두드림=False)
+    assert 안봄.노션값() == {}
+    # 사람이 이미 「조사 중」 이라고 써 둔 줄은 안 건드립니다.
+    assert "조사 단계" in 빈칸만칸
+
+
+def test_압수는_거짓_상태로_안_적는다():
+    """포럼 DB 「상태」 선택지에 압수됨 이 없습니다. 랜섬웨어 DB 에만 있습니다."""
+    p = _포럼한판("<html><body>THIS SITE HAS BEEN SEIZED by the "
+                "Federal Bureau of Investigation</body></html>")
+    assert p.상태 == "미확인", p.상태
+    assert p.살펴볼것 and "압수" in p.살펴볼것, p.살펴볼것
 
 
 if __name__ == "__main__":

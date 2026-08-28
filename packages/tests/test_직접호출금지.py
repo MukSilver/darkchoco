@@ -40,6 +40,12 @@ use_utf8()
 요청모듈 = {"urllib", "requests", "http", "httpx", "aiohttp", "socket"}
 
 
+# 요청을 못 보내는 것들입니다. urllib.parse 는 주소를 쪼개기만 하고
+# urllib.error 는 예외 이름만 있습니다. 이것까지 막으면 주소를 다루는
+# 코드가 전부 걸립니다.
+안전한것 = {"urllib.parse", "urllib.error"}
+
+
 def _밖으로_나가나(p: Path) -> list[str]:
     """이 파일이 밖에 요청을 보내는지 봅니다."""
     try:
@@ -50,11 +56,16 @@ def _밖으로_나가나(p: Path) -> list[str]:
     for n in ast.walk(t):
         if isinstance(n, ast.Import):
             for a in n.names:
+                if a.name in 안전한것:
+                    continue
                 if a.name.split(".")[0] in 요청모듈:
                     나감.append(f"import {a.name}")
         elif isinstance(n, ast.ImportFrom):
-            if (n.module or "").split(".")[0] in 요청모듈:
-                나감.append(f"from {n.module} import …")
+            모듈 = n.module or ""
+            if 모듈 in 안전한것:
+                continue
+            if 모듈.split(".")[0] in 요청모듈:
+                나감.append(f"from {모듈} import …")
     return 나감
 
 
