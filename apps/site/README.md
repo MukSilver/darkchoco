@@ -76,7 +76,12 @@ python apps/site/tools/build_data.py --out apps/site/data/leak-map.json
 저장소가 비공개이고 조사 코드가 같이 들어 있으므로 **저장소를 공개로 돌리지 않습니다.**
 Vercel이나 Netlify에서 이 폴더만 가리켜 배포합니다. 둘 다 비공개 저장소에서 배포됩니다.
 
-`/wiki`는 배포에 포함하지 않거나 인증 뒤에 둡니다.
+`/wiki`도 공개합니다. 명세(DC-WIKI-SYS-001)가 「웹에 올리는 것은 전부 공개 가능 자료」로
+확정했습니다. 반출 대상이 아닌 자료는 노션에만 둡니다.
+
+배포는 한 도메인 네 경로입니다. `/` · `/map/` · `/guide/` · `/wiki/`.
+정적 넷은 Cloudflare Workers 자산으로 엣지에, `/api/*`만 터널을 타고 상시 PC의
+FastAPI로 갑니다. 상시 PC가 꺼져도 사라지는 것은 즉석 질의 하나입니다.
 
 ---
 

@@ -7,7 +7,10 @@ const NAV = [
 ];
 
 export function mountHead(current) {
-  const base = location.pathname.startsWith("/apps/site") ? "/apps/site" : "";
+  // 배포 뿌리. 루트 배포면 빈 문자열입니다.
+  // 하위 경로에 올릴 때만 <meta name="dc-base" content="/어디"> 한 줄을 답니다.
+  const meta = document.querySelector('meta[name="dc-base"]');
+  const base = meta ? meta.content.replace(/\/$/, "") : "";
   const head = document.createElement("header");
   head.className = "shell-head";
   head.innerHTML =

@@ -3,39 +3,56 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>조사 자료 — 다크초코</title>
+<title>다크웹 조사 자료 — 다크초코</title>
 <link rel="stylesheet" href="../assets/tokens.css">
 <style>
-  .wrap { max-width: 720px; margin: 0 auto; padding: var(--s8) var(--s5); }
+  .wrap { max-width: 860px; margin: 0 auto; padding: var(--s7) var(--s5) var(--s8); }
   h1 { font-size: var(--t-h1); }
-  .lock { margin-top: var(--s5); padding: var(--s5); border-radius: var(--r3);
-          background: var(--panel); border: 1px solid var(--k-broker); }
-  .lock h2 { color: var(--k-broker); font-size: var(--t-h3); }
-  .lock p { margin-top: var(--s3); font-size: var(--t-small); }
-  ul { margin: var(--s3) 0 0 var(--s4); font-size: var(--t-small); color: var(--muted); }
-  li { margin-bottom: 6px; }
+  .lead { margin-top: var(--s3); font-size: 17px; color: var(--body); max-width: 62ch; }
+  .soon { margin-top: var(--s6); padding: var(--s5); border-radius: var(--r3);
+          background: var(--panel); border: 1px solid var(--line);
+          border-left: 3px solid var(--k-broker); }
+  .soon h2 { font-size: var(--t-h3); color: var(--k-broker); }
+  .soon p { margin-top: var(--s2); font-size: var(--t-small); color: var(--muted); }
+  .screens { margin-top: var(--s6); display: grid; gap: 6px; }
+  .row { display: grid; grid-template-columns: 76px 1fr; gap: var(--s3);
+         padding: 10px 13px; border-radius: var(--r2); background: var(--sunk);
+         border: 1px solid var(--line); font-size: var(--t-small); }
+  .row b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .row span { color: var(--muted); }
+  .rule { margin-top: var(--s6); padding-top: var(--s5); border-top: 1px solid var(--line);
+          font-size: var(--t-small); color: var(--faint); max-width: 72ch; }
+  .rule b { color: var(--muted); }
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>다크웹 조사 자료</h1>
-  <div class="lock">
-    <h2>팀 계정이 있어야 열립니다</h2>
-    <p>조사 기록에는 어디로 들어가는지가 함께 적혀 있습니다. 그 부분은 공개하지 않습니다.
-       지도와 대응 가이드라인은 누구나 볼 수 있고, 이 구역만 문 뒤에 둡니다.</p>
+  <p class="lead">노션에 쌓은 조사 기록을 근거로, 한국어 질문에 <b>문장마다 출처를 붙인 답</b>을
+     내놓습니다. 근거가 없으면 답을 만들지 않고 「확인 못 함」으로 남깁니다.</p>
+
+  <div class="soon">
+    <h2>아직 만드는 중입니다</h2>
+    <p>지도와 대응 가이드라인은 지금 볼 수 있습니다. 이 구역은 검색과 답변 생성이
+       붙어야 해서 뒤에 옵니다.</p>
   </div>
 
-  <h2 style="margin-top:var(--s6);font-size:var(--t-h3)">여기에 들어올 것</h2>
-  <ul>
-    <li>조사 기록을 근거와 함께 찾는 검색</li>
-    <li>답변마다 어느 자리·어느 게시물에서 나온 것인지 표시</li>
-    <li>근거를 누르면 지도의 그 칸으로 이동</li>
-    <li>근거가 부족하면 답을 만들지 않고 「확인 못 함」으로 남김</li>
-  </ul>
+  <h2 style="margin-top:var(--s6);font-size:var(--t-h3)">들어올 화면 다섯</h2>
+  <div class="screens">
+    <div class="row"><b>UI-01</b><span>목록 — 종류·상태·국가·확인일로 좁히기</span></div>
+    <div class="row"><b>UI-02</b><span>상세 — 속성·검증 네 축·조각 목록</span></div>
+    <div class="row"><b>UI-03</b><span>원문 — 조각 본문, 인용한 구간 강조</span></div>
+    <div class="row"><b>UI-04</b><span>질의 — 문장마다 출처가 붙은 답변</span></div>
+    <div class="row"><b>UI-05</b><span>내려받기 — 반출 대상 전체 JSON</span></div>
+  </div>
 
-  <p style="margin-top:var(--s6);font-size:var(--t-tiny);color:var(--faint)">
-    이 구역만 서버가 필요합니다. 지도와 가이드는 JSON 하나로 도는 정적 화면입니다.
-    배포할 때 이 경로를 빼거나 인증 뒤에 둡니다.
+  <p class="rule">
+    <b>여기에는 반출 가능한 자료만 올립니다.</b>
+    어니언 주소와 들어가는 방법은 올리지 않습니다. 개인정보 원문도 올리지 않습니다.
+    반출 대상이 아닌 자료는 노션에만 두고 필요한 사람에게 따로 전달합니다.
+    <br><br>
+    <b>세 구역이 같은 열쇠로 이어집니다.</b>
+    사건 ID 하나로 지도의 경로, 가이드의 조치, 여기의 근거 문서가 같은 사고를 가리킵니다.
   </p>
 </div>
 <script type="module">
