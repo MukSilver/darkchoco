@@ -923,7 +923,7 @@ def test_클리어넷이_안_되면_어니언으로_다시_간다():
     try:
         p = forum.한곳("https://dead.example/", "X", {},
                      프록시="http://127.0.0.1:9080",
-                     어니언="http://abcd.onion/")
+                     어니언="http://" + "c" * 56 + ".onion/")
     finally:
         forum.오프너 = 옛
 
@@ -941,7 +941,7 @@ def test_어니언만_있는_줄도_본다():
     자리 = 글[글.index("볼것 = ["):글.index("r.건너뜀")]
     assert "어니언" in 자리, "어니언만 있는 줄을 안 봅니다"
 
-    out = list(forum.조사([{"이름": "X", "주소": "", "어니언": "http://a.onion/"}],
+    out = list(forum.조사([{"이름": "X", "주소": "", "어니언": "http://" + "e" * 56 + ".onion/"}],
                         dry=True))
     assert out == []          # dry 는 그냥 넘어갑니다
 
@@ -955,11 +955,109 @@ def test_어니언도_안_되면_둘_다_남긴다():
     forum.오프너 = lambda 프록시=None, 갈래="": 죽음()
     try:
         p = forum.한곳("https://a.example/", "X", {},
-                     프록시="http://127.0.0.1:9080", 어니언="http://b.onion/")
+                     프록시="http://127.0.0.1:9080", 어니언="http://" + "d" * 56 + ".onion/")
     finally:
         forum.오프너 = 옛
     assert p.상태 != "offline", "연결 실패를 죽었다고 적는다"
     assert "어니언도 안 됩니다" in (p.살펴볼것 or ""), p.살펴볼것
+    assert p.노션값() == {}, p.노션값()
+
+
+def test_수치가_없다고_나머지를_안_버린다():
+    """첫 화면을 다 읽고도 회원 수 하나가 없어 여섯 칸을 버렸습니다.
+
+    못본이유 가 차면 노션값() 이 확인일과 상태만 남깁니다. 「수치가
+    첫 화면에 없다」 는 「못 봤다」 가 아닙니다. online 83줄 중 65줄이
+    여기 해당했습니다.
+    """
+    본문 = ('<html lang="ru"><head><title>X</title>'
+          '<meta name="description" content="유출 포럼"></head><body>'
+          '<a href="forumdisplay.php?fid=3">Leaks</a>'
+          "Currently 182 members online</body></html>")     # 총계가 없습니다
+    p = _포럼한판(본문)
+    assert p.상태 == "online"
+    assert p.회원수 is None and p.게시물수 is None
+    assert p.봤나(), "수치가 없다고 못 봤다고 적는다"
+    값 = p.노션값()
+    for k in ("사용 언어", "어떤 곳인지", "유통 자리", "조사 단계"):
+        assert k in 값, f"{k} 를 버린다: {sorted(값)}"
+    assert "규모" not in 값, "수치가 없는데 규모를 쓴다"
+    assert "첫 화면에 없습니다" in p.받은곳, p.받은곳
+
+
+def test_못_본_줄에도_들어가는_법은_남긴다():
+    """무엇에 막혔는지가 바로 그 칸의 내용입니다."""
+    p = _포럼한판("<html><body>Just a moment... checking your browser</body></html>")
+    assert not p.봤나()
+    값 = p.노션값()
+    assert 값.get("들어가는 법"), 값
+    assert set(값) <= {"확인일", "상태", "들어가는 법"}, 값
+
+    # 두드리지도 못한 줄에는 안 뿌립니다.
+    from hub.crawler.place import Place
+    안봄 = Place(갈래="forum", 이름="X", 상태="미확인", 두드림=False,
+                들어가는법="아무거나", 못본이유="연결이 안 됩니다")
+    assert 안봄.노션값() == {}, 안봄.노션값()
+
+
+def test_어니언_주소를_씻는다():
+    """명부에 「— 미기입 —」·날짜 꼬리·v2 가 섞여 있습니다."""
+    from hub.crawler.probe.forum import _어니언정리
+    v3 = "http://" + "a" * 56 + ".onion/"
+    assert _어니언정리(v3) == v3
+    assert _어니언정리("a" * 56 + ".onion") == "http://" + "a" * 56 + ".onion"
+    assert _어니언정리("a" * 56 + ".onion (2026-07-30 확인)").endswith(".onion")
+    for 나쁨 in ("— 미기입 —", "— 없음 —", "", "  ",
+                "a" * 16 + ".onion", "https://example.com/"):
+        assert _어니언정리(나쁨) == "", 나쁨
+
+
+def test_주소가_비어도_어니언으로_간다():
+    """명부 37줄이 어니언만 있어 지금껏 한 번도 조사된 적이 없습니다."""
+    친것 = []
+
+    class 오프너:
+        def open(self, req, timeout=0):
+            친것.append(req.full_url)
+            class R:
+                status = 200
+                url = req.full_url
+                def read(self, n):
+                    return b"<html><body>367224 Total Members</body></html>"
+                def __enter__(self): return self
+                def __exit__(self, *a): return False
+            return R()
+
+    옛 = forum.오프너
+    forum.오프너 = lambda 프록시=None, 갈래="": 오프너()
+    try:
+        어니언 = "http://" + "b" * 56 + ".onion/"
+        p = forum.한곳("", "X", {}, 프록시="http://127.0.0.1:9080", 어니언=어니언)
+    finally:
+        forum.오프너 = 옛
+
+    assert len(친것) == 1, 친것          # 빈 주소로 헛요청을 안 보냅니다
+    assert 친것[0] == 어니언, 친것
+    assert p.상태 == "online" and p.회원수 == 367224
+    assert p.어니언 == 어니언 and not p.주소
+
+
+def test_꼴이_깨진_어니언은_안_두드린다():
+    친것 = []
+
+    class 오프너:
+        def open(self, req, timeout=0):
+            친것.append(req.full_url)
+            raise AssertionError("두드리면 안 됩니다")
+
+    옛 = forum.오프너
+    forum.오프너 = lambda 프록시=None, 갈래="": 오프너()
+    try:
+        p = forum.한곳("", "X", {}, 프록시="http://127.0.0.1:9080",
+                     어니언="— 미기입 —")
+    finally:
+        forum.오프너 = 옛
+    assert 친것 == [], 친것
     assert p.노션값() == {}, p.노션값()
 
 
