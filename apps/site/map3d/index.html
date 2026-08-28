@@ -38,6 +38,11 @@
                 border-radius: var(--r1); padding: 5px 11px; font: inherit;
                 font-size: var(--t-tiny); cursor: pointer; }
   .ctl button:hover { border-color: var(--line-hard); color: var(--ink); }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r1);
+         overflow: hidden; background: var(--sunk); }
+  .seg button { border: 0; border-radius: 0; background: transparent; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button[data-on] { background: var(--k-forum); color: #fff; }
 
   .side { height: 100%; overflow-y: auto; display: flex; flex-direction: column; gap: var(--s3); }
   .side h2 { font-size: var(--t-h3); }
@@ -62,6 +67,9 @@
     <canvas id="cv"></canvas>
     <div class="labels" id="labels"></div>
     <div class="ctl">
+      <span class="seg" id="seg">
+        <button type="button" data-l="all" data-on="1">전체</button><button type="button" data-l="sky">오픈웹</button><button type="button" data-l="deep">다크웹</button>
+      </span>
       <button type="button" id="reset">정면으로</button>
       <input type="range" id="rot" min="0" max="359" value="0" step="1" aria-label="지도 방위">
       <span class="deg" id="deg">0°</span>
@@ -122,8 +130,10 @@ function neighbors(c, r) {
   }
   return out;
 }
-function grow(seed, count, taken) {
+// allow 를 주면 그 안에서만 자랍니다. 없으면 격자 전체.
+function grow(seed, count, taken, allow) {
   const key = ([c, r]) => c + "," + r;
+  const ok = k => !allow || allow.has(k);
   const [sw, sh] = world(seed[0], seed[1], S);
   const dist = ([c, r]) => { const [x, y] = world(c, r, S);
     return (x - sw) ** 2 + ((y - sh) * 0.95) ** 2; };
@@ -131,9 +141,12 @@ function grow(seed, count, taken) {
   while (front.length && got.length < count) {
     front.sort((a, b) => dist(a) - dist(b));
     const cur = front.shift();
-    if (!taken.has(key(cur))) { taken.set(key(cur), true); got.push(cur); }
-    for (const nb of neighbors(cur[0], cur[1]))
-      if (!taken.has(key(nb)) && !seen.has(key(nb))) { seen.add(key(nb)); front.push(nb); }
+    const k = key(cur);
+    if (!taken.has(k) && ok(k)) { taken.set(k, true); got.push(cur); }
+    for (const nb of neighbors(cur[0], cur[1])) {
+      const nk = key(nb);
+      if (!taken.has(nk) && !seen.has(nk) && ok(nk)) { seen.add(nk); front.push(nb); }
+    }
   }
   return got;
 }
@@ -164,7 +177,8 @@ for (const layer of data.layers) {
         if (d > best) { best = d; seed = f; }
       }
       const sub = new Map(); for (const [k, v] of landSet) if (v) sub.set(k, true);
-      const got = grow(seed, cellsOf(p), sub).filter(([c, r]) => landSet.has(c + "," + r));
+      const allow = new Set(landSet.keys());          // 이 대륙 밖으로 안 나갑니다
+      const got = grow(seed, cellsOf(p), sub, allow);
       for (const [c, r] of got) landSet.set(c + "," + r, true);
       placeCell[p.id] = got;
     }
@@ -212,8 +226,8 @@ controls.minZoom = 0.35;
 controls.maxZoom = 6;
 
 // ── 조명. 한 바퀴 도는 동안 어느 면도 새까매지지 않게 둘을 마주 놓습니다.
-scene.add(new THREE.HemisphereLight(0xa8c0e0, 0x0b1018, 0.78));
-const key = new THREE.DirectionalLight(0xfff4e6, 1.85);
+scene.add(new THREE.HemisphereLight(0xbcd2ee, 0x1a2130, 1.10));
+const key = new THREE.DirectionalLight(0xfff4e6, 1.35);
 key.position.set(SPAN * 0.7, SPAN * 1.5, SPAN * 0.55);
 key.castShadow = true;
 key.shadow.mapSize.set(2048, 2048);
@@ -222,20 +236,22 @@ sc.left = -SPAN * 0.8; sc.right = SPAN * 0.8;
 sc.top = SPAN * 0.8; sc.bottom = -SPAN * 0.8;
 sc.near = 1; sc.far = SPAN * 5; sc.updateProjectionMatrix();
 key.shadow.bias = -0.0016; key.shadow.normalBias = 0.03;
+key.shadow.radius = 3;
 scene.add(key);
-const fill = new THREE.DirectionalLight(0x7fb2ff, 0.42);
+const fill = new THREE.DirectionalLight(0x9ec8ff, 0.72);
 fill.position.set(-SPAN * 0.8, SPAN * 0.6, -SPAN * 0.7);
 scene.add(fill);
 
 // ── 육각 기둥. 밑면이 얕아야 면적이 윗면으로만 읽힙니다.
 const THICK = 0.42, LIFT = 0.16;
-const geo = new THREE.CylinderGeometry(S * 0.94, S * 0.94, THICK, 6, 1);
-geo.rotateY(Math.PI / 6);                       // 뾰족 위(pointy-top)
+// 기본 방향이 이미 뾰족 위입니다. 30도를 더 돌리면 격자와 안 맞물립니다.
+const geo = new THREE.CylinderGeometry(S * 0.97, S * 0.97, THICK, 6, 1);
 
 const Z = { sky: SPAN * 0.95, deep: 0 };      // 화면 분리 0.79 > 판 깊이 0.56
 const dummy = new THREE.Object3D();
 const meshes = [];
 const pickTable = { sky: new Map(), deep: new Map() };
+const span = {};        // place.id -> 어느 메시의 몇 번째 인스턴스들인가
 
 for (const layer of data.layers) {
   const here = data.places.filter(p => p.layer === layer.id);
@@ -244,17 +260,19 @@ for (const layer of data.layers) {
     const ps = here.filter(p => p.kind === kind.id);
     const total = ps.reduce((s, p) => s + (placeCell[p.id] || []).length, 0);
     if (!total) continue;
+    // 재질 색을 흰색으로 두지 않으면 인스턴스 색과 곱해져 탁해집니다
     const mat = new THREE.MeshStandardMaterial({
-      color: new THREE.Color(kindColor[kind.id]),
-      roughness: 0.55, metalness: 0.06, flatShading: true });
+      color: 0xffffff, roughness: 0.5, metalness: 0.05, flatShading: true });
     const im = new THREE.InstancedMesh(geo, mat, total);
-    im.castShadow = true; im.receiveShadow = true;
+    im.castShadow = true; im.receiveShadow = false;
     im.instanceColor = null;
     let i = 0;
     const colorAttr = new Float32Array(total * 3);
     for (const p of ps) {
-      const dim = p.investigated ? 1 : 0.42;
-      const c = new THREE.Color(kindColor[kind.id]).multiplyScalar(dim);
+      const from = i;
+      // 안 본 자리는 어둡게 하되 색은 살려 둡니다(채도까지 죽이면 업종이 안 읽힙니다)
+      const c = new THREE.Color(kindColor[kind.id]);
+      if (!p.investigated) c.lerp(new THREE.Color(0x0b0e14), 0.62);
       for (const [cc, rr] of (placeCell[p.id] || [])) {
         const [wx, wy] = world(cc, rr, S);
         dummy.position.set(wx - CX, Z[layer.id] + (p.investigated ? LIFT : 0), wy - CY);
@@ -265,9 +283,14 @@ for (const layer of data.layers) {
         pickTable[layer.id].set(cc + "," + rr, p);
         i++;
       }
+      // 이 자리가 im 의 [from, i) 를 씁니다
+      span[p.id] = { im, from, to: i, layer: layer.id,
+                     base: Z[layer.id] + (p.investigated ? LIFT : 0),
+                     cells: placeCell[p.id] || [] };
     }
     im.instanceColor = new THREE.InstancedBufferAttribute(colorAttr, 3);
     im.instanceMatrix.needsUpdate = true;
+    im.userData.layer = layer.id;
     scene.add(im); meshes.push(im);
   }
 }
@@ -276,9 +299,8 @@ for (const layer of data.layers) {
 // 사각 판을 두면 세계가 거기서 끝나는 것처럼 보입니다.
 // 빈 칸을 깔아 두면 그게 「아직 안 본 세계」가 되고,
 // DB 가 채워질수록 그 들판이 색으로 메워집니다.
-const FIELD_PAD = 26;                     // 쓴 칸 바깥으로 몇 칸 더 깔까
-const ghostGeo = new THREE.CylinderGeometry(S * 0.86, S * 0.86, 0.07, 6, 1);
-ghostGeo.rotateY(Math.PI / 6);
+const FIELD_PAD = 62;                     // 쓴 칸 바깥으로 몇 칸 더 깔까
+const ghostGeo = new THREE.CylinderGeometry(S * 0.90, S * 0.90, 0.07, 6, 1);
 
 for (const layer of data.layers) {
   const used = new Set();
@@ -307,11 +329,13 @@ for (const layer of data.layers) {
     }
   }
 
-  const gm = new THREE.MeshBasicMaterial({ transparent: true, opacity: 1, vertexColors: true });
-  const ghosts = new THREE.InstancedMesh(ghostGeo, gm, spots.length);
+  const gm = new THREE.MeshLambertMaterial({
+    vertexColors: true, transparent: true, opacity: 0.55, depthWrite: false });
+  gm.opacity = layer.id === "sky" ? 0.5 : 0.8;   // 위층은 아래를 가리면 안 됩니다
+  const ghosts = new THREE.InstancedMesh(ghostGeo, gm.clone(), spots.length);
   ghosts.receiveShadow = false; ghosts.castShadow = false;
   const gcol = new Float32Array(spots.length * 3);
-  const base = new THREE.Color(layer.id === "sky" ? "#397d6d" : "#7d3a48");
+  const base = new THREE.Color(layer.id === "sky" ? "#3f8f7c" : "#8a4150");
   let gi = 0;
   for (const [c, r, d] of spots) {
     const [wx, wy] = world(c, r, S);
@@ -320,7 +344,7 @@ for (const layer of data.layers) {
     dummy.updateMatrix();
     ghosts.setMatrixAt(gi, dummy.matrix);
     // 가장자리로 갈수록 배경으로 녹습니다
-    const f = 0.30 + 0.70 * Math.pow(1 - d, 1.15);
+    const f = Math.pow(1 - d, 1.55);   // 가장자리에서 정확히 0 — 그래야 끝이 안 보입니다
     gcol[gi*3]   = base.r * f;
     gcol[gi*3+1] = base.g * f;
     gcol[gi*3+2] = base.b * f;
@@ -329,6 +353,7 @@ for (const layer of data.layers) {
   ghosts.instanceColor = new THREE.InstancedBufferAttribute(gcol, 3);
   ghosts.instanceMatrix.needsUpdate = true;
   ghosts.renderOrder = -1;
+  ghosts.userData.layer = layer.id;
   scene.add(ghosts);
 }
 
@@ -341,6 +366,7 @@ for (const p of data.places) {
   centroid[p.id] = new THREE.Vector3(sx/cs.length - CX,
     Z[p.layer] + (p.investigated ? LIFT : 0) + THICK * 0.6, sy/cs.length - CY);
 }
+const flowMeshes = [];
 const ROADC = { flat: "--road", drop: "--road-drop", rise: "--road-rise",
                 exposure: "--road-expose", succession: "--road-succ" };
 for (const f of data.flows) {
@@ -356,6 +382,9 @@ for (const f of data.flows) {
     emissive: new THREE.Color(css(ROADC[f.kind] || "--road")).multiplyScalar(0.22),
     transparent: f.confidence !== "confirmed", opacity: f.confidence === "confirmed" ? 1 : 0.5 });
   const m = new THREE.Mesh(tube, mat); m.castShadow = true;
+  m.userData.a = data.places.find(x => x.id === f.from).layer;
+  m.userData.b = data.places.find(x => x.id === f.to).layer;
+  flowMeshes.push(m);
   scene.add(m);
 }
 
@@ -388,7 +417,7 @@ function syncLabels() {
   put.sort((a, b) => b.n - a.n);
   const done = [];
   for (const it of put) {
-    if (it.off) { it.d.style.display = "none"; continue; }
+    if (it.off || it.d.dataset.off) { it.d.style.display = "none"; continue; }
     it.d.style.display = "";
     const hw = it.d.offsetWidth / 2 || 40, hh = 11;
     for (let guard = 0; guard < 24; guard++) {
@@ -473,23 +502,77 @@ cv.addEventListener("pointerup", e => {
   if (d < 5) pickAt(e);
 });
 
+// ── 호버. 그 자리의 칸만 들어올리고 그 위에 밝은 윤곽을 얹습니다.
+const HOVER_LIFT = 0.55;
+const haloGeo = new THREE.CylinderGeometry(S * 1.06, S * 1.06, 0.10, 6, 1);
+const haloMat = new THREE.MeshBasicMaterial({
+  color: 0xffffff, transparent: true, opacity: 0.85,
+  blending: THREE.AdditiveBlending, depthWrite: false });
+const HALO_MAX = 260;
+const halo = new THREE.InstancedMesh(haloGeo, haloMat, HALO_MAX);
+halo.count = 0; halo.frustumCulled = false; halo.renderOrder = 3;
+scene.add(halo);
+
+let hovered = null;
+function setInstanceY(sp, extra) {
+  const m = new THREE.Matrix4();
+  for (let i = sp.from; i < sp.to; i++) {
+    sp.im.getMatrixAt(i, m);
+    const e = m.elements;
+    e[13] = sp.base + extra;                    // y 만 갈아끼웁니다
+    sp.im.setMatrixAt(i, m);
+  }
+  sp.im.instanceMatrix.needsUpdate = true;
+}
+function setHover(p) {
+  if (hovered === p) return;
+  if (hovered && span[hovered.id]) setInstanceY(span[hovered.id], 0);
+  hovered = p;
+  if (!p || !span[p.id]) { halo.count = 0; cv.style.cursor = ""; return; }
+  const sp = span[p.id];
+  setInstanceY(sp, HOVER_LIFT);
+  const n = Math.min(sp.cells.length, HALO_MAX);
+  const col = new THREE.Color(kindColor[p.kind]).lerp(new THREE.Color(0xffffff), 0.55);
+  haloMat.color.copy(col);
+  for (let i = 0; i < n; i++) {
+    const [cc, rr] = sp.cells[i];
+    const [wx, wy] = world(cc, rr, S);
+    dummy.position.set(wx - CX, sp.base + HOVER_LIFT + 0.16, wy - CY);
+    dummy.scale.set(1, 1, 1);
+    dummy.updateMatrix();
+    halo.setMatrixAt(i, dummy.matrix);
+  }
+  halo.count = n; halo.instanceMatrix.needsUpdate = true;
+  cv.style.cursor = "pointer";
+}
+let hoverPending = false;
+cv.addEventListener("pointermove", e => {
+  if (hoverPending) return;
+  hoverPending = true;
+  requestAnimationFrame(() => { hoverPending = false; setHover(placeAt(e)); });
+});
+cv.addEventListener("pointerleave", () => setHover(null));
+
 // ── 클릭 판정. 화면 → 월드 → 격자. 회전과 무관하게 정확합니다.
 const ray = new THREE.Raycaster();
-function pickAt(e) {
+function placeAt(e) {
   const r = cv.getBoundingClientRect();
   const nx = ((e.clientX - r.left) / r.width) * 2 - 1;
   const ny = -((e.clientY - r.top) / r.height) * 2 + 1;
   ray.setFromCamera(new THREE.Vector2(nx, ny), camera);
-  // 위층이 언제나 앞입니다. 위→아래 순서로 평면과 만나는 점을 봅니다.
+  // 위층이 언제나 앞입니다. 지금 보이는 층만 봅니다.
   for (const lid of ["sky", "deep"]) {
+    if (shown !== "all" && shown !== lid) continue;
     const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -(Z[lid] + THICK * 0.5));
     const hit = new THREE.Vector3();
     if (!ray.ray.intersectPlane(plane, hit)) continue;
     const [c, rr] = worldToCell(hit.x + CX, hit.z + CY, S);
     const p = pickTable[lid].get(c + "," + rr);
-    if (p) { showPlace(p); return; }
+    if (p) return p;
   }
+  return null;
 }
+function pickAt(e) { const p = placeAt(e); if (p) showPlace(p); }
 
 function showPlace(p) {
   const box = document.getElementById("picked");
@@ -537,8 +620,44 @@ function tick() {
   readAzimuth();
   requestAnimationFrame(tick);
 }
-FOCUS.set(0, Z.sky * 0.5, 0);
-resize(); frameAll(); requestAnimationFrame(tick);
+// ── 층 고르기
+let shown = (new URLSearchParams(location.search).get("layer")) || "all";
+if (!["all","sky","deep"].includes(shown)) shown = "all";
+const layerMeshes = { sky: [], deep: [] };
+scene.traverse(o => {
+  if (o.isInstancedMesh || o.isMesh || o.isLineSegments) {
+    if (o.userData.layer) layerMeshes[o.userData.layer].push(o);
+  }
+});
+function applyShown() {
+  for (const lid of ["sky", "deep"]) {
+    const on = shown === "all" || shown === lid;
+    for (const o of layerMeshes[lid]) o.visible = on;
+    for (const { l, d } of layerEls) if (l.id === lid) d.style.opacity = on ? 1 : 0.22;
+  }
+  for (const { p, d } of labelEls) d.dataset.off = (shown !== "all" && p.layer !== shown) ? "1" : "";
+  for (const m of flowMeshes)
+    m.visible = shown === "all" || (m.userData.a === shown && m.userData.b === shown);
+  setHover(null);
+  FOCUS.set(0, shown === "all" ? Z.sky * 0.5 : Z[shown], 0);
+  controls.target.copy(FOCUS);
+  controls.update();
+}
+document.getElementById("seg").addEventListener("click", e => {
+  const b = e.target.closest("button[data-l]"); if (!b) return;
+  shown = b.dataset.l;
+  for (const x of document.querySelectorAll("#seg button"))
+    x.toggleAttribute("data-on", x === b);
+  applyShown();
+  live.textContent = b.textContent + " 보기";
+});
+
+for (const x of document.querySelectorAll("#seg button"))
+  x.toggleAttribute("data-on", x.dataset.l === shown);
+FOCUS.set(0, shown === "all" ? Z.sky * 0.5 : Z[shown], 0);
+resize(); frameAll();
+if (shown !== "all") applyShown();
+requestAnimationFrame(tick);
 </script>
 </body>
 </html>
