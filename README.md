@@ -18,6 +18,44 @@ python dc.py list
 
 ---
 
+## 통합 크롤러 — 명부를 채웁니다
+
+다크웹 DB 세 개(포럼 · 텔레그램 · 랜섬웨어)가 24~30칸을 공유합니다.
+한 명령으로 세 갈래를 조사해 그 칸들을 채웁니다.
+
+```bash
+python dc.py crawl              # 미리보기. 노션에 안 씁니다
+python dc.py crawl --apply      # 실제로 반영합니다
+python dc.py crawl --only forum --limit 5
+python dc.py auto               # 수집 + 명부 조사 (스케줄러가 부릅니다)
+```
+
+**밖으로 나가려면 Tor 가 있어야 합니다.** 없으면 요청을 아예 안 보냅니다.
+다크웹 쪽을 여는 일은 저쪽 로그에 우리 주소를 남기는 일이고, 그것이
+한국 주소면 우리가 누구인지 좁혀집니다.
+
+자리를 만드는 것은 한 줄입니다. Debian · Ubuntu · Kali 에서 됩니다.
+
+```bash
+bash scripts/돌릴자리-만들기.sh
+```
+
+tor 설치 · torrc 규칙 · 띄우기 · 실제로 나가 보기 · 파이썬 부품 ·
+환경 변수 · 점검까지 합니다. 노션 토큰만 사람이 넣습니다.
+
+```bash
+mkdir -p ~/.config/darkchoco
+echo 'ntn_...' > ~/.config/darkchoco/notion_token.txt
+python dc.py doctor --net       # 밖에 어떤 주소가 남는지 봅니다
+```
+
+**윈도우에서 그냥 돌리지 마십시오.** 다크웹 쪽이 그 PC 로 내려오고 V3 가
+막습니다. VM 이나 WSL 에서 돌립니다. 왜 그런지와 자리를 어떻게 만드는지는
+[docs/안전하게-돌리기.md](docs/안전하게-돌리기.md) 에 있습니다.
+무엇이 무엇을 부르는지는 [docs/흐름.md](docs/흐름.md) 에 있습니다.
+
+---
+
 ## 구조
 
 ```
@@ -124,6 +162,8 @@ python packages/tests/test_dc_safety_ransomfeed.py
 ## 문서
 
 - [각자 할 일](docs/각자_할일.md) — 지금 무엇을 고쳐야 하는지
+- [안전하게 돌리기](docs/안전하게-돌리기.md) — VM 과 Tor. **크롤러를 돌리기 전에 보십시오**
+- [흐름](docs/흐름.md) — 무엇이 무엇을 부르나. 막혔을 때 어디를 보나
 - [팀 GitHub 운영안](docs/팀깃헙_운영안.md) — 왜 이 구조인지
 - [구축 절차](docs/구축절차.md) — 저장소를 어떻게 만들었는지
 
