@@ -890,6 +890,79 @@ def test_요약이_얼마나_열렸는지_보여_준다():
     assert "118줄" in 글, 글
 
 
+def test_클리어넷이_안_되면_어니언으로_다시_간다():
+    """다크웹 포럼은 클리어넷 도메인이 자주 죽고 어니언은 살아 있습니다.
+
+    2026-08-28 실측에서 224줄 중 104줄이 「연결이 안 됩니다」 였고 진짜
+    죽은 곳은 3곳뿐이었습니다.
+    """
+    본것 = []
+
+    class 죽음:
+        def open(self, req, timeout=0):
+            raise OSError("연결 안 됨")
+
+    class 살음:
+        def open(self, req, timeout=0):
+            class R:
+                status = 200
+                url = req.full_url
+                def read(self, n):
+                    return b"<html><body>367224 Total Members</body></html>"
+                def __enter__(self): return self
+                def __exit__(self, *a): return False
+            return R()
+
+    def 오프너(프록시=None, 갈래=""):
+        # 첫 번째(클리어넷)는 죽고 두 번째(어니언)는 삽니다.
+        본것.append(1)
+        return 죽음() if len(본것) == 1 else 살음()
+
+    옛 = forum.오프너
+    forum.오프너 = 오프너
+    try:
+        p = forum.한곳("https://dead.example/", "X", {},
+                     프록시="http://127.0.0.1:9080",
+                     어니언="http://abcd.onion/")
+    finally:
+        forum.오프너 = 옛
+
+    assert p.상태 == "online", p.상태
+    assert p.회원수 == 367224, p.회원수
+    assert "어니언" in p.받은곳, p.받은곳
+    assert "클리어넷이 안 됩니다" in (p.살펴볼것 or ""), p.살펴볼것
+    # 명부의 클리어넷 주소는 그대로 둡니다.
+    assert p.주소 == "https://dead.example/", p.주소
+
+
+def test_어니언만_있는_줄도_본다():
+    """포럼 명부 45줄이 클리어넷 주소가 없는데 37줄에 어니언이 있습니다."""
+    글 = (ROOT / "hub" / "crawler" / "run.py").read_text(encoding="utf-8")
+    자리 = 글[글.index("볼것 = ["):글.index("r.건너뜀")]
+    assert "어니언" in 자리, "어니언만 있는 줄을 안 봅니다"
+
+    out = list(forum.조사([{"이름": "X", "주소": "", "어니언": "http://a.onion/"}],
+                        dry=True))
+    assert out == []          # dry 는 그냥 넘어갑니다
+
+
+def test_어니언도_안_되면_둘_다_남긴다():
+    class 죽음:
+        def open(self, req, timeout=0):
+            raise OSError("연결 안 됨")
+
+    옛 = forum.오프너
+    forum.오프너 = lambda 프록시=None, 갈래="": 죽음()
+    try:
+        p = forum.한곳("https://a.example/", "X", {},
+                     프록시="http://127.0.0.1:9080", 어니언="http://b.onion/")
+    finally:
+        forum.오프너 = 옛
+    assert p.상태 != "offline", "연결 실패를 죽었다고 적는다"
+    assert "어니언도 안 됩니다" in (p.살펴볼것 or ""), p.살펴볼것
+    assert p.노션값() == {}, p.노션값()
+
+
 if __name__ == "__main__":
     n = 0
     for k, v in sorted(globals().items()):

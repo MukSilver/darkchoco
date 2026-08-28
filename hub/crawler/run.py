@@ -150,14 +150,16 @@ def _조사(갈래: str, 줄들, ctx: dict):
             for r in 줄들:
                 yield r, _한줄(lambda r=r: forum.한곳(
                     r.주소, r.이름, 마지막, 프록시=프록시,
-                    이음사전=이음사전, 어니언미러=미러), r)
+                    이음사전=이음사전, 어니언미러=미러,
+                    어니언=r.어니언), r)
         else:
             import concurrent.futures as cf
 
             with cf.ThreadPoolExecutor(max_workers=동시) as 풀:
                 일 = {풀.submit(_한줄, (lambda r=r: forum.한곳(
                           r.주소, r.이름, 마지막, 프록시=프록시,
-                          이음사전=이음사전, 어니언미러=미러)), r): r
+                          이음사전=이음사전, 어니언미러=미러,
+                          어니언=r.어니언)), r): r
                      for r in 줄들}
                 for 끝난것 in cf.as_completed(일):
                     yield 일[끝난것], 끝난것.result()
@@ -207,7 +209,11 @@ def 한갈래(갈래: str, *, apply: bool = False, limit: int = 0,
         r.초 = time.time() - t0
         return r
 
-    볼것 = [x for x in 줄들 if (x.주소 or "").strip()]
+    # **어니언만 있는 줄도 봅니다.** 포럼 명부 45줄이 클리어넷 주소가
+    # 없는데, 그중 37줄에는 어니언이 적혀 있습니다. 지금까지 한 번도
+    # 안 봤습니다.
+    볼것 = [x for x in 줄들
+          if (x.주소 or "").strip() or (getattr(x, "어니언", "") or "").strip()]
     r.건너뜀 = len(줄들) - len(볼것)
     if limit:
         볼것 = 볼것[:limit]
