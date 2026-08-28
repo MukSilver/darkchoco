@@ -1,0 +1,101 @@
+name: 테스트
+
+# apps/forum-crawler/.github/ 는 깃허브가 안 봅니다. 루트에만 둡니다.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  부품:
+    name: 공용 부품과 툴킷
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # 기본 설치는 밖에서 받는 것이 없어야 합니다. 그것부터 확인합니다.
+      - name: 부품 설치 (맨몸)
+        run: pip install -e packages
+
+      - name: 표준 라이브러리만으로 되는지
+        run: python packages/tests/test_표준만.py
+
+      - name: 옵션까지 설치
+        run: pip install -e "packages[all]"
+
+      - name: 부품 테스트
+        run: |
+          for f in packages/tests/test_*.py; do
+            echo "── $f"
+            python "$f"
+          done
+        env:
+          PYTHONIOENCODING: utf-8
+
+  앱:
+    name: 앱 자체 테스트
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e "packages[all]"
+
+      - name: kr-leak-alarm
+        working-directory: apps/kr-leak-alarm
+        run: |
+          pip install -r requirements.txt
+          python -m tests.test_all
+        env:
+          PYTHONIOENCODING: utf-8
+
+      - name: dls-observatory
+        working-directory: apps/dls-observatory
+        run: |
+          python test_mock.py
+          python test_db.py
+        env:
+          PYTHONIOENCODING: utf-8
+
+  설치전:
+    name: 설치 없이 --help 가 뜨는지
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      # 일부러 아무것도 안 깝니다. 남의 도구를 훑어보는 상황입니다.
+      - name: 여섯 진입점
+        run: |
+          set -e
+          python dc.py list
+          python dc.py readme --check
+          (cd apps/forum-crawler    && python investigate.py --help > /dev/null)
+          (cd apps/tg-korea-alert   && python korea_alert_monitor.py --help > /dev/null)
+          (cd apps/tg-notion-report && python telegram_pipeline.py --help > /dev/null)
+          (cd apps/dls-observatory  && python diagnose.py --help > /dev/null)
+          echo "전부 뜹니다"
+        env:
+          PYTHONIOENCODING: utf-8
+
+  # forum-crawler 의 보안 검사는 그 앱에만 참인 규칙입니다.
+  # (requests.post 금지 · iter_content 금지 등) 저장소 전체에 걸면
+  # kr-leak-alarm/collector/notify.py 와 dc_safety/http.py 가 첫날 걸립니다.
+  # 그래서 경로를 한정해 겁니다.
+  포럼읽기전용:
+    name: forum-crawler 는 읽기만 하는지
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 쓰기 호출이 없는지
+        run: |
+          if grep -rnE "requests\.(post|put|delete)|smtplib" apps/forum-crawler --include=*.py; then
+            echo "::error::forum-crawler 는 읽기 전용입니다"
+            exit 1
+          fi
+          echo "읽기만 합니다"

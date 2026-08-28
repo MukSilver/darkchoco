@@ -164,14 +164,15 @@ def cmd_info(args) -> int:
 
 # ── doctor ──────────────────────────────────────────────────────────
 def _requirements(t: dict) -> list[str]:
+    """이 도구가 받아야 하는 것들. requirements.txt 와 직접 적은 것을 합칩니다."""
     inst = t.get("install") or {}
+    out = list(inst.get("packages") or [])      # requirements.txt 없이 적는 경우
     name = inst.get("requirements")
     if not name:
-        return []
+        return out
     p = t["_dir"] / name
     if not p.is_file():
-        return []
-    out = []
+        return out
     for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
         line = line.split("#")[0].strip()
         if not line:

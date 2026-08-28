@@ -49,8 +49,13 @@ def ensure_packages() -> bool:
 
     이미 설치되어 있으면 아무것도 하지 않습니다. 설치된 것이 우선입니다.
     """
-    if importlib.util.find_spec("dc_notion") is not None:
-        return True
+    try:
+        if importlib.util.find_spec("dc_notion") is not None:
+            return True
+    except (ImportError, ValueError):
+        # 부품이 깔려 있는데 그 안이 깨진 경우입니다. 여기서 죽지 않고
+        # 아래 다른 자리를 계속 찾습니다.
+        pass
 
     found = packages_dir()
     if found is None:
