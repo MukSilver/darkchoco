@@ -21,7 +21,11 @@ param(
     [string]$Password = "kali",
     [int]$Port     = 9080,
     [string]$Repo     = "",
-    [switch]$Sync
+    [switch]$Sync,
+    # 끝나면 VM 을 재웁니다. 2GB 를 계속 물고 있을 이유가 없습니다.
+    # savestate 는 지금 상태를 저장하므로 다음에 켤 때 부팅을 안 합니다
+    # (tor 도 그대로 살아 있습니다).
+    [switch]$Sleep_
 )
 
 $ErrorActionPreference = "Stop"
@@ -60,9 +64,11 @@ try {
     # VM 이 꺼져 있으면 켭니다.
     $state = (& $VBox showvminfo $Vm --machinereadable 2>$null |
               Select-String '^VMState=').Line
+    $WeStartedIt = $false
     if ($state -notmatch 'running') {
-        Say "VM 을 켭니다..."
+        Say "VM 을 켭니다... (창 없이)"
         & $VBox startvm $Vm --type headless | Out-Null
+        $WeStartedIt = $true
     }
     for ($i = 0; $i -lt 30; $i++) {
         $lvl = (& $VBox showvminfo $Vm --machinereadable 2>$null |
@@ -94,6 +100,8 @@ try {
         VmRun "echo '$Password' | sudo -S systemctl start tor 2>/dev/null; sleep 5" | Out-Null
     }
 
+    # 이 판에 우리가 켰나. 우리가 켰을 때만 재웁니다 — 김무근 님이
+    # 쓰고 계신 VM 을 마음대로 끄면 안 됩니다.
     $py = './.venv/bin/python'
     $cmd = "cd ~/darkchoco && [ -x $py ] || py=python3; " +
            "{ [ -x $py ] && $py dc.py $Args_ || python3 dc.py $Args_ ; } 2>&1"
@@ -101,4 +109,9 @@ try {
 }
 finally {
     Remove-Item -LiteralPath $PwFile -Force -ErrorAction SilentlyContinue
+    if ($Sleep_ -and $WeStartedIt) {
+        Say ""
+        Say "VM 을 재웁니다 (savestate). 다음에 켤 때 부팅을 안 합니다."
+        & $VBox controlvm $Vm savestate 2>&1 | Out-Null
+    }
 }

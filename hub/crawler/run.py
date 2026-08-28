@@ -189,6 +189,8 @@ def 한갈래(갈래: str, *, apply: bool = False, limit: int = 0,
             r.문제.append(f"{res.이름}: 선택지에 없어 안 씀 {res.없는옵션}")
         if p.살펴볼것:
             r.문제.append(f"{res.이름}: {p.살펴볼것}")
+        if res.사람판정:
+            r.문제.append(f"{res.이름}: {res.사람판정}")
         for h in getattr(p, "처음본곳", ()):
             r.처음본곳.setdefault(h, res.이름 or p.이름)
         if res.바뀐칸:
