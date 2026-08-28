@@ -79,13 +79,14 @@ class Fetcher:
                               f"미리 쉬는 중입니다")
                     time.sleep(wait)
 
-        self._log(f"  [http]  {url}")
+        오프너, 어떻게 = _나가는길()
+        self._log(f"  [http]  {url}  ({어떻게})")
         req = urllib.request.Request(url, headers={
             "User-Agent": USER_AGENT,
             "Accept": "application/json",
         })
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+            with 오프너.open(req, timeout=self.timeout) as resp:
                 data = json.loads(resp.read().decode("utf-8", "replace"))
         except urllib.error.HTTPError as exc:
             self._log(f"  [!]     HTTP {exc.code} — {url}")
@@ -106,6 +107,40 @@ class Fetcher:
 # --------------------------------------------------------------------------
 # 이름 정규화 / 매칭 키
 # --------------------------------------------------------------------------
+
+# ── 밖으로 나가는 길 ────────────────────────────────────────────────
+_오프너캐시: list = []
+
+
+def _나가는길():
+    """(오프너, 어떻게 나가나) 를 돌려줍니다.
+
+    **hub 크롤러와 같은 규칙을 지킵니다.** 그 쪽은 Tor 없이는 아예 안
+    나갑니다(hub/crawler/probe/_나가기.py). 여기만 맨 IP 로 나가면
+    같은 ransomware.live 를 두 도구가 다른 주소로 치게 됩니다.
+    규칙이 도구마다 다르면 반드시 빠뜨립니다.
+
+    다만 여기서 막지는 않습니다. 이 앱은 사람이 손으로도 돌리는 것이고,
+    막아 버리면 Tor 없는 자리에서 아무것도 못 합니다. 대신 **어느 길로
+    나갔는지를 매 줄에 적습니다.** 나중에 로그를 보면 압니다.
+    """
+    if _오프너캐시:
+        return _오프너캐시[0]
+
+    프록시 = (os.environ.get("TOR_SOCKS_PROXY") or "").strip()
+    if 프록시 and not 프록시.startswith("socks"):
+        # https 만 걸어 줍니다. 이 앱이 치는 곳은 전부 https 이고,
+        # http 는 CONNECT 를 안 써서 Tor 가 끊습니다.
+        것 = (urllib.request.build_opener(
+            urllib.request.ProxyHandler({"https": 프록시})), "Tor")
+    elif 프록시:
+        것 = (urllib.request.build_opener(), "맨 연결 — SOCKS 는 못 탑니다")
+    else:
+        것 = (urllib.request.build_opener(), "맨 연결 — TOR_SOCKS_PROXY 없음")
+    _오프너캐시.append(것)
+    return 것
+
+
 def _strip_heavy(obj) -> None:
     """응답 안의 base64 스크린샷('screen')처럼 큰 필드를 재귀적으로 제거."""
     if isinstance(obj, dict):
