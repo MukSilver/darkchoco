@@ -123,6 +123,69 @@ def _숫자(s: str) -> int | None:
     return n if 1 <= n < 10_000_000_000 else None
 
 
+def _제목뽑기(본문: str) -> str:
+    m = _제목.search(본문 or "")
+    if not m:
+        return ""
+    return re.sub(r"\s+", " ", html.unescape(m.group(1))).strip()
+
+
+def _닮았나(가: str, 나: str) -> bool:
+    """두 제목이 같은 곳의 것인가.
+
+    글자 그대로 같기를 바라면 안 됩니다. 어니언 쪽 제목에 " - Tor" 가
+    붙거나 순서가 다를 수 있습니다. 낱말을 견줍니다.
+    """
+    def 낱말(t):
+        return {w for w in re.findall(r"[A-Za-z0-9가-힣]{3,}", (t or "").lower())
+                if w not in ("the", "and", "for", "com", "www", "forum",
+                             "forums", "index", "home", "page", "tor",
+                             "onion", "mirror", "official")}
+    a, b = 낱말(가), 낱말(나)
+    if not a or not b:
+        return False
+    겹침 = len(a & b)
+    return 겹침 >= 2 or (겹침 >= 1 and 겹침 == min(len(a), len(b)))
+
+
+def 어니언확인(어니언: str, 원래제목: str, 마지막: list[float], *,
+           프록시: str | None = None) -> tuple[bool, str]:
+    """첫 화면에서 본 어니언이 정말 같은 곳인지 열어서 봅니다.
+
+    (같은가, 왜) 를 돌려줍니다. **추측하지 않습니다.** 남의 어니언이
+    광고로 걸려 있을 수 있어서, 열어 보고 제목을 견주는 것 말고는
+    같은 곳이라고 말할 근거가 없습니다.
+
+    Tor 가 있어야 합니다. 없으면 (False, 이유) 입니다.
+    """
+    if not 어니언 or not 원래제목:
+        return False, "견줄 것이 없습니다"
+    try:
+        opener = 오프너(프록시, 갈래="forum")
+    except 보호없음:
+        return False, "Tor 가 없어 못 열어 봤습니다"
+
+    지난 = time.time() - 마지막[0]
+    if 지난 < 간격:
+        time.sleep(간격 - 지난)
+    req = urllib.request.Request(
+        어니언, headers={"User-Agent": UA, "Accept": "text/html"})
+    try:
+        with opener.open(req, timeout=45) as r:
+            본문 = r.read(400_000).decode("utf-8", "replace")
+    except (urllib.error.URLError, socket.timeout, OSError) as e:
+        return False, f"안 열립니다({type(e).__name__})"
+    finally:
+        마지막[0] = time.time()
+
+    제목 = _제목뽑기(본문)
+    if not 제목:
+        return False, "어니언 쪽에 제목이 없습니다"
+    if _닮았나(원래제목, 제목):
+        return True, f"제목이 같습니다: {제목[:60]}"
+    return False, f"제목이 다릅니다: {제목[:60]}"
+
+
 def _왜(e: Exception) -> str:
     """연결이 왜 안 됐는지 짐작해 한 줄로 적습니다.
 
@@ -161,7 +224,8 @@ def _찾기(글: str, 규칙들) -> int | None:
 
 
 def 한곳(주소: str, 이름: str, 마지막: list[float], *,
-        프록시: str | None = None, 이음사전: dict | None = None) -> Place:
+        프록시: str | None = None, 이음사전: dict | None = None,
+        어니언미러: bool = False) -> Place:
     """포럼 한 곳의 첫 화면만 봅니다."""
     p = Place(갈래="forum", 이름=이름, 확인일=지금(),
               출처=["직접 확인"], 받은곳="첫 화면 확인")
@@ -281,6 +345,21 @@ def 한곳(주소: str, 이름: str, 마지막: list[float], *,
     납작 = re.sub(r"\s+", " ", html.unescape(글))
     if 이음사전:
         p.연결된곳 = _이음.찾기(본문, 이음사전, f"포럼 DB: {p.이름}")
+        p.처음본곳 = _이음.처음보는곳(본문, 이음사전)
+
+    # 자기 어니언 미러가 첫 화면에 걸려 있는데 명부엔 비어 있는 경우가
+    # 많습니다. **열어서 제목을 견줘 보고** 같으면 채웁니다. 추측으로
+    # 채우면 남의 어니언이 들어갑니다.
+    if 어니언미러 and not 어니언 and not p.어니언:
+        찾은것 = _이음.어니언들(본문)
+        for o in 찾은것[:2]:
+            같나, 왜 = 어니언확인(f"http://{o}", p.이름 or _제목뽑기(본문),
+                              마지막, 프록시=프록시)
+            if 같나:
+                p.어니언 = f"http://{o}"
+                p.살펴볼것 = f"어니언 미러를 찾았습니다 — {왜}"
+                break
+            p.살펴볼것 = f"어니언 후보를 못 확인했습니다 — {왜}"
 
     p.회원수 = _찾기(납작, _회원)
     p.게시물수 = _찾기(납작, _게시물)
@@ -290,8 +369,8 @@ def 한곳(주소: str, 이름: str, 마지막: list[float], *,
 
 
 def 조사(대상: list[dict], *, dry: bool = False, limit: int = 0,
-        프록시: str | None = None,
-        이음사전: dict | None = None) -> Iterator[Place]:
+        프록시: str | None = None, 이음사전: dict | None = None,
+        어니언미러: bool = False) -> Iterator[Place]:
     """대상은 [{"이름": ..., "주소": ...}, ...] 입니다."""
     if dry or not 대상:
         return
@@ -303,4 +382,5 @@ def 조사(대상: list[dict], *, dry: bool = False, limit: int = 0,
         if not 주소:
             continue
         yield 한곳(주소, (d.get("이름") or d.get("name") or "").strip(),
-                  마지막, 프록시=프록시, 이음사전=이음사전)
+                  마지막, 프록시=프록시, 이음사전=이음사전,
+                  어니언미러=어니언미러)

@@ -19,7 +19,7 @@ from __future__ import annotations
 import re
 from urllib.parse import urlparse
 
-__all__ = ["호스트", "이름표만들기", "찾기"]
+__all__ = ["호스트", "이름표만들기", "찾기", "어니언들", "처음보는곳"]
 
 # href="..." · src 는 안 봅니다(이미지·스크립트는 관계가 아닙니다).
 # 태그 밖에 맨 글자로 적힌 주소도 봅니다. 포럼 첫 화면에 흔합니다.
@@ -36,7 +36,22 @@ _흔한곳 = {
     "facebook.com", "instagram.com", "reddit.com", "cloudflare.com",
     "archive.org", "wikipedia.org", "bit.ly", "imgur.com", "gitlab.com",
     "vk.com", "medium.com", "linkedin.com", "tiktok.com",
+    # 인프라입니다. 어느 쪽이나 씁니다.
+    "cdnjs.cloudflare.com", "cdn.jsdelivr.net", "unpkg.com",
+    "fonts.googleapis.com", "fonts.gstatic.com", "ajax.googleapis.com",
+    "gravatar.com", "jquery.com", "bootstrapcdn.com", "recaptcha.net",
+    "hcaptcha.com", "gstatic.com", "googletagmanager.com",
 }
+
+# 호스트답게 생겼나. 점이 있고 끝이 글자 두 개 이상이어야 합니다.
+# t.me 처럼 짧은 것도 지나가야 하므로 앞은 한 글자부터 받습니다.
+_호스트꼴 = re.compile(r"^[a-z0-9][a-z0-9.\-]{0,250}\.[a-z]{2,24}$")
+
+# 파일 이름은 호스트가 아닙니다. 상대 주소("member.php")가 urlparse 를
+# 지나면 호스트처럼 보입니다.
+_파일끝 = (".php", ".html", ".htm", ".asp", ".aspx", ".jsp", ".cgi",
+        ".js", ".css", ".json", ".xml", ".txt", ".rss", ".pdf",
+        ".jpg", ".jpeg", ".png", ".gif", ".svg", ".webp", ".ico")
 
 
 def 호스트(값: str) -> str:
@@ -55,10 +70,12 @@ def 호스트(값: str) -> str:
     except ValueError:
         return ""
     h = h[4:] if h.startswith("www.") else h
-    # 점이 없으면 호스트가 아닙니다. 명부에 "@projectwwh" 처럼 주소가
-    # 아닌 값이 적힌 줄이 있어서, 그것이 사전에 들어가면 엉뚱한 링크와
-    # 맞을 수 있습니다.
-    return h if "." in h else ""
+    # 호스트답지 않으면 버립니다. 명부에 "@projectwwh" 처럼 주소가 아닌
+    # 값이 적힌 줄이 있고, 상대 주소("member.php")나 점 하나(".") 도
+    # urlparse 를 지나면 호스트처럼 보입니다.
+    if h.endswith(_파일끝) or not _호스트꼴.match(h):
+        return ""
+    return h
 
 
 def 이름표만들기(명부들: dict) -> dict[str, str]:
@@ -128,3 +145,37 @@ def 찾기(본문: str, 사전: dict[str, str], 나: str = "",
             break
 
     return " · ".join(나온것[:최대])
+
+
+def 어니언들(본문: str, 최대: int = 4) -> list[str]:
+    """본문에 있는 어니언 주소들. 중복을 뺍니다.
+
+    이것이 그 곳의 것인지는 **여기서 안 정합니다.** 남의 어니언이
+    광고로 걸려 있을 수 있습니다. 부르는 쪽이 열어 보고 정합니다.
+    """
+    나온것: list[str] = []
+    for m in _어니언.finditer(본문 or ""):
+        주소 = f"{m.group(1).lower()}.onion"
+        if 주소 not in 나온것:
+            나온것.append(주소)
+        if len(나온것) >= 최대:
+            break
+    return 나온것
+
+
+def 처음보는곳(본문: str, 사전: dict[str, str], 최대: int = 10) -> list[str]:
+    """명부에 없는 이웃들. 사람이 명부에 넣을지 정하라고 올립니다.
+
+    **노션에 안 씁니다.** 첫 화면에 걸린 것만으로 명부에 넣을 곳인지
+    알 수 없습니다. 다만 어느 곳이 어느 곳을 걸어 두는지는 새 곳을
+    찾는 가장 좋은 길이라 버리지 않습니다.
+    """
+    나온것: list[str] = []
+    for m in _링크.finditer(본문 or ""):
+        h = 호스트(m.group(1))
+        if not h or h in _흔한곳 or h in 사전 or h in 나온것:
+            continue
+        나온것.append(h)
+        if len(나온것) >= 최대:
+            break
+    return 나온것
