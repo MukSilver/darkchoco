@@ -84,6 +84,48 @@ def test_노션에_없는_선택지를_짚어_둔다():
     assert "추정: 사기 도구" not in 형식
 
 
+def test_dls_fill_도_Tor_를_탄다():
+    """hub 크롤러는 Tor 없이는 아예 안 나갑니다.
+
+    같은 ransomware.live 를 두 도구가 치는데 한쪽만 맨 IP 로 나가면
+    규칙이 도구마다 갈립니다. 그러면 반드시 빠뜨립니다.
+
+    여기서는 막지 않고 **어느 길로 나갔는지를 매 줄에 적습니다.**
+    이 앱은 사람이 손으로도 돌리는 것이라, 막으면 Tor 없는 자리에서
+    아무것도 못 합니다. 대신 로그를 보면 압니다.
+    """
+    글 = (앱 / "sources.py").read_text(encoding="utf-8")
+    assert "urllib.request.urlopen(req" not in 글, (
+        "프록시를 건너뛰는 urlopen 이 남아 있습니다")
+    assert "TOR_SOCKS_PROXY" in 글, "프록시를 안 봅니다"
+    assert "_나가는길" in 글
+
+    import os
+    import sys as _sys
+    _sys.path.insert(0, str(앱))
+    import sources                                   # noqa: PLC0415
+
+    옛 = os.environ.pop("TOR_SOCKS_PROXY", None)
+    try:
+        sources._오프너캐시.clear()
+        assert "맨 연결" in sources._나가는길()[1]
+        os.environ["TOR_SOCKS_PROXY"] = "http://127.0.0.1:9080"
+        sources._오프너캐시.clear()
+        오프너, 어떻게 = sources._나가는길()
+        assert 어떻게 == "Tor", 어떻게
+        # https 만 프록시로 보냅니다. http 는 CONNECT 를 안 써서 Tor 가 끊습니다.
+        import urllib.request
+        핸들러 = [h for h in 오프너.handlers
+                if isinstance(h, urllib.request.ProxyHandler)]
+        assert 핸들러 and set(핸들러[0].proxies) == {"https"}, (
+            핸들러[0].proxies if 핸들러 else "ProxyHandler 없음")
+    finally:
+        sources._오프너캐시.clear()
+        os.environ.pop("TOR_SOCKS_PROXY", None)
+        if 옛 is not None:
+            os.environ["TOR_SOCKS_PROXY"] = 옛
+
+
 if __name__ == "__main__":
     sys.path.insert(0, str(ROOT))
     n = 0
