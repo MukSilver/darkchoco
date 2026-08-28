@@ -34,6 +34,7 @@ from urllib.parse import urlparse
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "packages"))
 
 from hub.crawler.place import Place, 지금  # noqa: E402
+from hub.crawler.probe._읽기 import 글자만, 언어판별  # noqa: E402
 
 __all__ = ["조사", "한곳", "NEEDS_PACKAGES"]
 
@@ -54,6 +55,32 @@ _게시물 = [
     re.compile(r'([\d,\.\s]{2,15})[^\d<]{0,12}(?:messages|posts)', re.I),
 ]
 _제목 = re.compile(r"<title[^>]*>(.*?)</title>", re.S | re.I)
+_소개 = re.compile(
+    r'<meta[^>]+name=."?description"?.[^>]+content="([^"]{4,400})"',
+    re.S | re.I)
+
+# 첫 화면이 포럼이 아닌 경우들입니다. 살아있는 것으로 세면 안 됩니다.
+#
+#   압수    수사기관 배너로 바뀐 곳. 죽은 것과 다릅니다
+#   파킹    도메인이 팔려 광고 쪽이 된 곳. 이름만 같습니다
+#   검사    클라우드플레어 같은 앞단 검사. 포럼은 그 뒤에 있습니다
+_압수 = re.compile(
+    r"this (?:hidden )?site has been seized|domain has been seized|"
+    r"operation\s+\w+.{0,40}law enforcement|"
+    r"이 사이트는 압수|federal bureau of investigation", re.I)
+_파킹 = re.compile(
+    r"buy this domain|domain (?:is )?for sale|parkingcrew|sedoparking|"
+    r"이 도메인은 판매", re.I)
+_검사 = re.compile(
+    r"cf-browser-verification|just a moment|checking your browser|"
+    r"ddos-guard|__cf_chl|attention required", re.I)
+
+# 가입해야 안이 보이는 곳. 링크가 있는 것과 다릅니다. 「가입하세요」 링크는
+# 어느 포럼에나 있습니다. 여기서는 막혔다고 **말한** 경우만 셉니다.
+_로그인벽 = re.compile(
+    r"you must be (?:logged in|registered)|must (?:log ?in|register) to view|"
+    r"members only|login required|please log ?in to (?:view|continue)|"
+    r"로그인.{0,6}(?:해야|후에).{0,10}(?:볼|이용)", re.I)
 
 
 def _숫자(s: str) -> int | None:
@@ -119,9 +146,11 @@ def 한곳(주소: str, 이름: str, 마지막: list[float], *,
 
     req = urllib.request.Request(주소, headers={
         "User-Agent": UA, "Accept": "text/html", "Accept-Language": "en"})
+    끝주소 = 주소
     try:
         with opener.open(req, timeout=30) as r:
             code = r.status
+            끝주소 = r.url or 주소
             본문 = r.read(1_500_000).decode("utf-8", "replace")
     except urllib.error.HTTPError as e:
         code, 본문 = e.code, ""
@@ -144,19 +173,55 @@ def 한곳(주소: str, 이름: str, 마지막: list[float], *,
                    "깊은 조사는 forum-crawler 로 합니다")
         return p
 
+    # 주소가 옮겨 갔으면 원래 주소를 남깁니다. 명부에 적힌 주소가 언제부터
+    # 안 맞는지를 나중에 봐야 합니다.
+    if 끝주소 and 끝주소.rstrip("/") != 주소.rstrip("/"):
+        p.이전주소 = 주소
+        if not 어니언:
+            p.주소 = 끝주소
+
+    글 = 글자만(본문)
+
+    # 첫 화면이 포럼인지부터 봅니다. 200 이 왔다고 포럼이 있는 것은
+    # 아닙니다. 압수 배너도 200 이고 광고 쪽도 200 입니다.
+    if _압수.search(글):
+        p.상태 = "압수됨"
+        p.못본이유 = "압수 안내로 바뀌었습니다"
+        p.들어가는법 = "수사기관 안내 쪽입니다"
+        return p
+    if _파킹.search(글):
+        p.상태 = "offline"
+        p.못본이유 = "도메인이 팔려 광고 쪽이 되었습니다. 포럼이 아닙니다"
+        return p
+    if _검사.search(글):
+        p.상태 = "미확인"
+        p.못본이유 = ("앞단 검사 화면입니다. 포럼은 그 뒤에 있습니다. "
+                   "깊은 조사는 forum-crawler 로 합니다")
+        p.들어가는법 = "브라우저 검사를 지나야 합니다"
+        return p
+
     p.상태 = "online"
     m = _제목.search(본문)
     if m:
         제목 = re.sub(r"\s+", " ", html.unescape(m.group(1))).strip()
         if 제목 and not p.이름:
             p.이름 = 제목[:80]
+    m = _소개.search(본문)
+    if m:
+        p.어떤곳 = re.sub(r"\s+", " ", html.unescape(m.group(1))).strip()[:1800]
+
+    p.언어 = 언어판별(본문)
+
+    if _로그인벽.search(글):
+        p.가입필요 = True
+        p.들어가는법 = "첫 화면은 열리는데 글은 로그인해야 보입니다"
+    else:
+        p.들어가는법 = "첫 화면은 가입 없이 열립니다"
 
     p.회원수 = _찾기(본문, _회원)
     p.게시물수 = _찾기(본문, _게시물)
     if p.회원수 is None and p.게시물수 is None:
         p.못본이유 = "살아있는 것은 봤는데 회원·게시물 수는 첫 화면에 없습니다"
-    if "cf-browser-verification" in 본문 or "Just a moment" in 본문:
-        p.못본이유 = "클라우드플레어 검사 화면입니다. 깊은 조사가 필요합니다"
     return p
 
 

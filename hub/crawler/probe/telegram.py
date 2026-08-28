@@ -30,6 +30,7 @@ from typing import Iterator
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "packages"))
 
 from hub.crawler.place import Place, 지금  # noqa: E402
+from hub.crawler.probe._읽기 import 언어판별  # noqa: E402
 
 __all__ = ["조사", "NEEDS_PACKAGES"]
 
@@ -49,7 +50,13 @@ _구독자2 = re.compile(
     r'tgme_(?:header_counter|page_extra)"[^>]*>\s*([\d\s,\.]+[KMkm]?)\s*'
     r'(?:subscriber|member|명)', re.I)
 _제목 = re.compile(r'<div class="tgme_(?:page|channel_info_header)_title"[^>]*>([^<]+)')
-_소개 = re.compile(r'<div class="tgme_page_description"[^>]*>(.*?)</div>', re.S)
+# 소개 글이 있는 자리가 쪽마다 다릅니다. t.me/s/ 는 channel_info_description,
+# 소개 쪽은 page_description 을 씁니다. og:description 은 둘 다 있습니다.
+_소개 = [
+    re.compile(r'<div class="tgme_channel_info_description[^"]*"[^>]*>(.*?)</div>', re.S),
+    re.compile(r'<div class="tgme_page_description"[^>]*>(.*?)</div>', re.S),
+    re.compile(r'<meta property="og:description" content="([^"]{4,900})"'),
+]
 _마지막글 = re.compile(r'datetime="([\dT:\-\+]+)"')
 _미리보기꺼짐 = re.compile(r'tgme_page_context_link|preview is not available', re.I)
 
@@ -142,6 +149,9 @@ def 한곳(채널: str, 마지막: list[float], 이름표: str = "") -> Place:
               확인일=지금(), 출처=["직접 확인"], 받은곳="t.me 공개 미리보기")
     if 못볼이유:
         p.못본이유 = 못볼이유
+        if "초대 링크" in 못볼이유:
+            p.가입필요 = True
+            p.들어가는법 = "초대 링크로만 들어갑니다. 공개 미리보기가 없습니다"
         # 텔레그램 주소가 아니면 명부가 틀린 것입니다. 채널 상태가 아닙니다.
         p.주소이상 = "텔레그램 주소가 아닙니다" in 못볼이유 or "비어 있" in 못볼이유
         return p
@@ -190,10 +200,26 @@ def 한곳(채널: str, 마지막: list[float], 이름표: str = "") -> Place:
     if 글들:
         p.최근활동 = sorted(글들)[-1][:19]
 
+    for rx in _소개:
+        m = rx.search(body)
+        if m:
+            p.어떤곳 = _글자(m.group(1))[:1800]
+            if p.어떤곳:
+                break
+
+    # 무슨 말로 쓰는지. 제목과 소개만 봅니다. 텔레그램 UI 글자가 섞이면
+    # 채널 언어가 아니라 화면 언어를 세게 됩니다.
+    p.언어 = 언어판별(f"{p.이름} {p.어떤곳}", 최소=6)
+
     if 수 or 글들:
         p.상태 = "online"
+        # 미리보기가 열려 있으면 가입 없이 읽힙니다.
+        p.가입필요 = False
+        p.들어가는법 = f"t.me/s/{이름} 에서 가입 없이 미리보기를 봅니다"
     else:
         p.상태 = "미확인"
+        p.가입필요 = True
+        p.들어가는법 = "미리보기가 꺼져 있습니다. 실계정으로 들어가야 봅니다"
         p.못본이유 = ("미리보기가 꺼져 있고 소개 쪽에서도 수를 못 봤습니다. "
                    "실계정으로 봐야 합니다")
     return p
