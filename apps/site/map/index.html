@@ -6,13 +6,11 @@
 <title>생태계 지도 — 다크초코</title>
 <link rel="stylesheet" href="../assets/tokens.css">
 <style>
-  .lead { padding: var(--s5) var(--s5) 0; }
-  .lead h1 { font-size: var(--t-h1); }
-  .lead .claim { margin-top: var(--s2); font-size: 19px; color: var(--ink); font-weight: 600; }
-  .lead .basis { margin-top: var(--s2); font-size: var(--t-small); color: var(--faint); }
 
-  .stage { display: grid; grid-template-columns: 1fr 320px; gap: var(--s4);
-           padding: var(--s4) var(--s5) var(--s6); align-items: start; }
+  .stage { display: grid; grid-template-columns: 1fr 336px; gap: var(--s4);
+           padding: var(--s4); align-items: start; height: calc(100vh - 53px); }
+  .board { height: 100%; display: flex; align-items: center; }
+  .side { height: 100%; overflow-y: auto; }
   @media (max-width: 1100px) { .stage { grid-template-columns: 1fr; } }
 
   .board { background: var(--panel); border: 1px solid var(--line);
@@ -35,6 +33,25 @@
   .picked dt { color: var(--faint); }
   .picked dd { color: var(--muted); font-weight: 600; }
 
+  .listhead { display: flex; align-items: baseline; gap: var(--s2); }
+  .listhead .count { margin-left: auto; font-size: var(--t-tiny); color: var(--faint);
+                     font-variant-numeric: tabular-nums; }
+  .q { width: 100%; margin-top: var(--s3); padding: 8px 11px; border-radius: var(--r2);
+       background: var(--sunk); border: 1px solid var(--line); color: var(--ink);
+       font: inherit; font-size: var(--t-small); }
+  .q::placeholder { color: var(--faint); }
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: var(--s3); }
+  .chipbreak { flex-basis: 100%; height: 0; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; cursor: pointer;
+          padding: 4px 9px; border-radius: var(--r4); background: var(--sunk);
+          border: 1px solid var(--line); color: var(--muted);
+          font: inherit; font-size: var(--t-tiny); }
+  .chip i { font-style: normal; color: var(--faint); font-variant-numeric: tabular-nums; }
+  .chip[data-on] { background: var(--k-forum); border-color: var(--k-forum); color: #fff; }
+  .chip[data-on] i { color: rgba(255,255,255,.75); }
+  .rows { margin-top: var(--s3); }
+  .more { font-size: var(--t-tiny); color: var(--faint); padding: var(--s3) 0 0; }
+  .caserow[data-on] { border-color: var(--k-forum); }
   .caserow { display: block; width: 100%; text-align: left; cursor: pointer;
              background: var(--sunk); border: 1px solid var(--line); border-radius: var(--r2);
              padding: 10px 12px; margin-top: var(--s2); color: inherit; font: inherit; }
@@ -47,18 +64,9 @@
   .legend .it { display: flex; align-items: center; gap: var(--s2); font-size: var(--t-tiny);
                 color: var(--muted); }
   .legend .line { width: 30px; height: 0; border-top-width: 3px; border-top-style: solid; }
-  .foot { padding: 0 var(--s5) var(--s7); font-size: var(--t-tiny); color: var(--faint);
-          max-width: 96ch; }
-  .foot p { margin-bottom: 4px; }
 </style>
 </head>
 <body>
-
-<div class="lead">
-  <h1>개인정보 유출 생태계 지도</h1>
-  <p class="claim">유출물은 위에서 나거나 훔쳐져 아래로 내려가 팔리고, 다시 위로 올라와 남습니다.</p>
-  <p class="basis" id="basis"></p>
-</div>
 
 <div class="stage">
   <div class="board"><svg id="map" viewBox="0 0 1280 820" role="img"
@@ -69,25 +77,14 @@
       <h2>지금까지 확인한 것</h2>
       <div class="funnel" id="funnel"></div>
     </div>
-    <div class="card picked" id="picked">
-      <h2>칸을 고르면</h2>
-      <p class="empty" style="margin-top:var(--s3)">아직 아무 칸도 안 골랐습니다</p>
-    </div>
+    <div class="card picked" id="picked"></div>
     <div class="card" id="caselist"></div>
     <div class="card legend" id="legend"></div>
   </aside>
 </div>
 
-<div class="foot">
-  <p>1 · 층은 그 자리에 닿는 데 필요한 것으로 갈랐습니다. 사이트 자체의 조건이며 우리 조사 진척도가 아닙니다.</p>
-  <p>2 · 덩어리 크기는 그 자리에서 확인한 사고 수입니다. 이 그림은 원근이 아니라 평행 기울임이라
-     앞뒤 크기가 같습니다. 판 두께는 데이터가 아닙니다.</p>
-  <p>3 · 대륙 안에서 자리끼리 붙어 있는 것에는 뜻이 없습니다. 자리 사이의 관계는 선으로만 나타냅니다.</p>
-  <p>4 · 옅은 칸은 이름만 확보하고 아직 들여다보지 못한 자리입니다. 지우지 않고 그대로 둡니다.</p>
-</div>
-
 <script type="module">
-import { mountHead, mountSampleWarning, loadData, el, currentCase, linkToCase, REACH }
+import { mountHead, loadData, el, currentCase, linkToCase, REACH }
   from "../assets/shell.js";
 import { makeGrid, growBlob, outline, bbox, curve, polyPoints } from "../assets/hex.js";
 
@@ -111,13 +108,16 @@ const ROAD = {
 };
 
 const { data } = await loadData(base);
-mountSampleWarning(data.meta);
-document.getElementById("basis").textContent =
-  `기준일 ${data.meta.basis_date} · ${data.meta.edition} 판`;
+
 
 // ── 배치. 두 층이 같은 격자를 씁니다. 그래야 같은 자리가 위아래로 겹칩니다.
-const COLS = 26, ROWS = 12, Z = 268;
-const grid = makeGrid({ size: 13, originX: 168, originY: 612 });
+const perLayer = Math.max(...data.layers.map(l =>
+  data.places.filter(p => p.layer === l.id).length));
+const COLS = Math.ceil(Math.sqrt(perLayer * 1.55));
+const ROWS = Math.ceil(perLayer / COLS * 1.15) + 2;
+const CELL = Math.max(5.5, Math.min(13, 560 / COLS));
+const Z = Math.round(CELL * 31);
+const grid = makeGrid({ size: CELL, originX: 168, originY: 612 });
 const kindColor = Object.fromEntries(data.kinds.map(k => [k.id, k.color]));
 
 // 층별로 업종 덩어리를 키웁니다. 같은 업종은 두 층에서 같은 자리를 씁니다.
@@ -135,7 +135,7 @@ for (const layer of data.layers) {
     if (!here.length) continue;
     const [ax, ay] = ANCHOR[kind.id] || [.5, .5];
     // 업종 대륙을 먼저 키우고, 그 안에서 자리별로 나눠 줍니다.
-    const total = here.reduce((s, p) => s + Math.max(1, p.cases || 1), 0);
+    const total = here.reduce((s, p) => s + (p.investigated ? Math.max(2, Math.round((p.cases||1)*0.9)) : 1), 0);
     const seed = [Math.round(ax * (COLS - 1)), Math.round(ay * (ROWS - 1))];
     const land = growBlob({ seed, count: total, cols: COLS, rows: ROWS,
                             taken, world: grid.world });
@@ -144,7 +144,7 @@ for (const layer of data.layers) {
     const sorted = [...here].sort((a, b) => (b.cases || 0) - (a.cases || 0));
     for (let si = 0; si < sorted.length; si++) {
       const p = sorted[si];
-      const n = Math.max(1, p.cases || 1);
+      const n = p.investigated ? Math.max(2, Math.round((p.cases || 1) * 0.9)) : 1;
       // 대륙 안에서 아직 안 쓴 칸 중, 이미 쓴 칸에서 가장 먼 것을 씨앗으로
       const free = land.filter(([c, r]) => !landSet.get(c + "," + r));
       if (!free.length) { placeCell[p.id] = []; continue; }
@@ -237,7 +237,7 @@ for (const p of data.places) {
                            poly.setAttribute("stroke-opacity", ".4"); }
     g.append(poly);
   }
-  for (const [a, b] of outline(cells, z, grid)) {
+  for (const [a, b] of (p.investigated ? outline(cells, z, grid) : [])) {
     const ln = document.createElementNS(NS, "line");
     ln.setAttribute("x1", a[0].toFixed(1)); ln.setAttribute("y1", a[1].toFixed(1));
     ln.setAttribute("x2", b[0].toFixed(1)); ln.setAttribute("y2", b[1].toFixed(1));
@@ -327,6 +327,7 @@ function showCase(c) {
   });
   const reach = REACH[(c.reach || {}).state] || REACH.unknown;
   const box = document.getElementById("picked");
+  box.style.display = "";
   box.innerHTML = "<h2>고른 사고</h2>";
   box.append(
     el("div", { class: "name" }, c.title),
@@ -352,22 +353,70 @@ function clearCase() {
     pt.setAttribute("stroke-opacity", pt.dataset.op);
     pt.setAttribute("stroke-width", pt.dataset.w);
   });
-  document.getElementById("picked").innerHTML =
-    '<h2>칸이나 사고를 고르면</h2><p class="empty" style="margin-top:var(--s3)">아직 아무것도 안 골랐습니다</p>';
+  document.getElementById("picked").innerHTML = "";
+  document.getElementById("picked").style.display = "none";
   renderCaseList();
+}
+
+let filt = { q: "", verdict: null, reach: null };
+
+function matches(c) {
+  if (filt.verdict && c.verdict !== filt.verdict) return false;
+  if (filt.reach && (c.reach || {}).state !== filt.reach) return false;
+  if (filt.q && !(c.title + c.industry).toLowerCase().includes(filt.q.toLowerCase())) return false;
+  return true;
 }
 
 function renderCaseList() {
   const box = document.getElementById("caselist");
-  box.innerHTML = "<h2>확인한 사고</h2>";
-  for (const c of data.cases) {
+  box.innerHTML = "";
+  const hits = data.cases.filter(matches);
+  const head = el("div", { class: "listhead" });
+  head.append(el("h2", {}, "사고"),
+              el("span", { class: "count" }, `${hits.length} / ${data.cases.length}`));
+  box.append(head);
+
+  const q = el("input", { class: "q", type: "search", placeholder: "업종이나 자료로 좁히기",
+                          value: filt.q });
+  q.addEventListener("input", e => { filt.q = e.target.value; renderCaseList();
+                                     q.focus(); });
+  box.append(q);
+
+  // 판정과 도달로 좁힙니다. 개수는 지금 걸린 것 기준으로 셉니다.
+  const chips = el("div", { class: "chips" });
+  const add = (key, val, label) => {
+    const on = filt[key] === val;
+    const n = data.cases.filter(c => {
+      const save = filt[key]; filt[key] = val;
+      const ok = matches(c); filt[key] = save; return ok;
+    }).length;
+    if (!n && !on) return;
+    const b = el("button", { class: "chip", type: "button", ...(on ? { "data-on": "1" } : {}) });
+    b.append(el("span", {}, label), el("i", {}, String(n)));
+    b.addEventListener("click", () => { filt[key] = on ? null : val; renderCaseList(); });
+    chips.append(b);
+  };
+  for (const v of ["확인됨", "신뢰성 높음", "미확인", "신뢰성 낮음", "허위"]) add("verdict", v, v);
+  chips.append(el("div", { class: "chipbreak" }));
+  for (const [k, l] of [["deep-only", "다크웹 안"], ["surfaced", "오픈웹까지"],
+                        ["public", "검색까지"]]) add("reach", k, l);
+  box.append(chips);
+
+  const list = el("div", { class: "rows" });
+  for (const c of hits.slice(0, 60)) {
     const b = el("button", { class: "caserow", type: "button" });
+    if (picked && picked.id === c.id) b.setAttribute("data-on", "1");
     b.append(el("b", {}, c.title),
              el("span", { class: "pill", "data-verdict": c.verdict }, c.verdict),
-             el("span", { class: "hops" }, `${(c.hops || []).length}곳을 지남`));
+             el("span", { class: "hops" }, `${(c.hops || []).length}곳`));
     b.addEventListener("click", () => showCase(c));
-    box.append(b);
+    list.append(b);
   }
+  if (hits.length > 60)
+    list.append(el("p", { class: "more" }, `아래로 ${hits.length - 60}건 더 있습니다. 좁혀 보십시오`));
+  if (!hits.length)
+    list.append(el("p", { class: "more" }, "걸리는 사고가 없습니다"));
+  box.append(list);
 }
 
 // ── 칸 고르기
@@ -391,6 +440,7 @@ function pick(p) {
   if (p.note) box.append(el("p", { style: "margin-top:var(--s3);font-size:var(--t-small)" }, p.note));
 }
 
+document.getElementById("picked").style.display = "none";
 renderCaseList();
 const wanted = currentCase();
 if (wanted != null) {

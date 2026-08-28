@@ -6,180 +6,253 @@
 <title>유출 대응 가이드라인 — 다크초코</title>
 <link rel="stylesheet" href="../assets/tokens.css">
 <style>
-  .wrap { max-width: 1120px; margin: 0 auto; padding: var(--s5) var(--s5) var(--s8); }
-  .lead h1 { font-size: var(--t-h1); }
-  .lead p { margin-top: var(--s2); font-size: 17px; color: var(--ink); font-weight: 600; }
+  .stage { display: grid; grid-template-columns: 336px 1fr; gap: var(--s4);
+           padding: var(--s4); align-items: start; height: calc(100vh - 53px); }
+  @media (max-width: 1000px) { .stage { grid-template-columns: 1fr; height: auto; } }
+  .side { height: 100%; overflow-y: auto; }
+  .main { height: 100%; overflow-y: auto; display: flex; flex-direction: column; gap: var(--s3); }
 
-  .cases { display: grid; gap: var(--s3); margin-top: var(--s5);
-           grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
-  .case { text-align: left; cursor: pointer; background: var(--panel);
-          border: 1px solid var(--line); border-radius: var(--r3); padding: var(--s4);
-          color: inherit; font: inherit; }
-  .case:hover, .case[aria-pressed="true"] { border-color: var(--line-hard); }
-  .case[aria-pressed="true"] { background: var(--sunk); }
-  .case b { display: block; color: var(--ink); font-size: 16px; }
-  .case .meta { margin-top: 6px; font-size: var(--t-tiny); color: var(--faint); }
+  .listhead { display: flex; align-items: baseline; gap: var(--s2); }
+  .listhead .count { margin-left: auto; font-size: var(--t-tiny); color: var(--faint);
+                     font-variant-numeric: tabular-nums; }
+  .q { width: 100%; margin-top: var(--s3); padding: 8px 11px; border-radius: var(--r2);
+       background: var(--sunk); border: 1px solid var(--line); color: var(--ink);
+       font: inherit; font-size: var(--t-small); }
+  .q::placeholder { color: var(--faint); }
+  .caserow { display: block; width: 100%; text-align: left; cursor: pointer; font: inherit;
+             background: var(--sunk); border: 1px solid var(--line); border-radius: var(--r2);
+             padding: 10px 12px; margin-top: var(--s2); color: inherit; }
+  .caserow:hover { border-color: var(--line-hard); }
+  .caserow[data-on] { border-color: var(--v-likely); background: var(--panel); }
+  .caserow b { display: block; color: var(--ink); font-size: var(--t-small); margin-bottom: 5px; }
+  .caserow .n { margin-left: var(--s2); font-size: var(--t-tiny); color: var(--faint); }
+  .more { font-size: var(--t-tiny); color: var(--faint); padding-top: var(--s3); }
 
-  .gate { margin-top: var(--s5); padding: var(--s4); border-radius: var(--r3);
-          border: 1px solid var(--line); background: var(--panel); }
-  .gate.blocked { border-color: var(--v-false); background: #1e1214; }
-  .gate h2 { font-size: var(--t-h3); }
-  .gate p { margin-top: var(--s2); font-size: var(--t-small); }
+  .gate { display: flex; flex-direction: column; gap: var(--s3); }
+  .gate .reach { font-size: 21px; font-weight: 700; color: var(--ink); }
+  .gate .reachsub { font-size: var(--t-small); color: var(--muted); }
+  .gate.blocked { border-color: var(--v-false); }
+  .gate.blocked .reach { color: var(--v-false); }
+  .items { display: flex; flex-wrap: wrap; gap: 6px; }
+  .it { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px;
+        border-radius: var(--r4); font-size: var(--t-small); font-weight: 600;
+        border: 1px solid var(--line); background: var(--sunk); color: var(--faint); }
+  .it[data-s="confirmed"] { color: var(--v-confirmed); border-color: var(--v-confirmed); }
+  .it[data-s="claimed"] { color: var(--muted); border-style: dashed; }
+  .it em { font-style: normal; font-size: var(--t-tiny); opacity: .75; }
 
-  .items { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s3); }
-  .item { padding: 4px 12px; border-radius: var(--r4); font-size: var(--t-small);
-          font-weight: 600; border: 1px solid var(--line); }
-  .item.on  { color: var(--v-likely); border-color: var(--v-likely); }
-  .item.off { color: var(--faint); }
+  .combos { display: grid; gap: 6px; }
+  .combo { display: grid; grid-template-columns: auto 1fr; gap: var(--s3); align-items: center;
+           padding: 9px 12px; border-radius: var(--r2); background: var(--sunk);
+           border: 1px solid var(--line); border-left: 3px solid var(--warn); }
+  .combo b { color: var(--ink); font-size: var(--t-small); white-space: nowrap; }
+  .combo span { color: var(--muted); font-size: var(--t-small); }
 
-  table { width: 100%; border-collapse: collapse; margin-top: var(--s4); font-size: var(--t-small); }
-  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line);
-           vertical-align: top; }
-  th { font-size: var(--t-tiny); color: var(--faint); background: var(--sunk); white-space: nowrap; }
-  tr.dead td { color: var(--faint); }
-  tr.dead td.act { font-style: normal; }
-  .rowmark { width: 4px; border-radius: 2px; display: inline-block; height: 14px;
-             vertical-align: -2px; margin-right: 8px; }
+  .sect > h3 { display: flex; align-items: baseline; gap: var(--s2); margin-bottom: var(--s3); }
+  .sect > h3 .sub { font-size: var(--t-tiny); color: var(--faint); font-weight: 400; }
+  .sect > h3 .mins { margin-left: auto; font-size: var(--t-tiny); color: var(--faint); }
+  .act { display: grid; grid-template-columns: 1fr auto; gap: 4px var(--s3);
+         padding: 11px 13px; border-radius: var(--r2); background: var(--sunk);
+         border: 1px solid var(--line); margin-bottom: 6px; }
+  .act .t { color: var(--ink); font-size: var(--t-body); font-weight: 600; }
+  .act .why { grid-column: 1; color: var(--faint); font-size: var(--t-tiny); }
+  .act .tags { grid-column: 2; grid-row: 1 / span 2; display: flex; flex-direction: column;
+               align-items: flex-end; gap: 4px; }
+  .tag { font-size: 11px; padding: 2px 7px; border-radius: var(--r4);
+         border: 1px solid var(--line); color: var(--faint); white-space: nowrap; }
+  .act .desk { grid-column: 1 / -1; font-size: var(--t-tiny); color: var(--link);
+               padding-top: 3px; }
+
+  .none { color: var(--faint); font-size: var(--t-small); border: 1px dashed var(--line-hard);
+          border-radius: var(--r2); padding: var(--s4); }
+  .empty-main { display: flex; align-items: center; justify-content: center; height: 100%;
+                color: var(--faint); font-size: var(--t-h3); }
+  .desks { display: grid; gap: 6px; }
+  .desk-row { display: grid; grid-template-columns: 178px 1fr; gap: var(--s3);
+              padding: 9px 12px; border-radius: var(--r2); background: var(--sunk);
+              border: 1px solid var(--line); font-size: var(--t-small); }
+  .desk-row b { color: var(--ink); }
+  .desk-row span { color: var(--muted); }
+  .toolbar { display: flex; gap: var(--s4); align-items: center; padding-bottom: var(--s5); }
+  .toolbar a { font-size: var(--t-small); }
+
+  @media print {
+    :root { --bg: #fff; --panel: #fff; --sunk: #fff; --ink: #000; --body: #222;
+            --muted: #333; --faint: #555; --line: #bbb; --line-hard: #888; }
+    .shell-head, .side, .toolbar { display: none !important; }
+    .stage { display: block; height: auto; padding: 0; }
+    .main { height: auto; overflow: visible; }
+    .card { break-inside: avoid; border-color: #bbb; }
+  }
 </style>
 </head>
 <body>
 
-<div class="wrap">
-  <div class="lead">
-    <h1>유출 대응 가이드라인</h1>
-    <p>확인된 것에만 조치를 냅니다. 확인 안 된 항목에는 「이 사고 기준 조치 없음」이라고 적습니다.</p>
-  </div>
-
-  <h2 style="margin-top:var(--s6);font-size:var(--t-h3)">어느 사고인지 고릅니다</h2>
-  <div class="cases" id="cases"></div>
-
-  <div id="out"></div>
-
-  <p style="margin-top:var(--s6);font-size:var(--t-tiny);color:var(--faint);max-width:80ch">
-    조치의 입력은 <b>샘플에서 확인한 항목</b>입니다. 게시글이 주장한 항목이 아닙니다.
-    허위로 판정한 사고에는 조치를 만들지 않습니다. 「확인되지 않았습니다」는
-    샘플에서 못 봤다는 뜻이지 전체에 없다는 뜻이 아닙니다.
-  </p>
+<div class="stage">
+  <aside class="side"><div class="card" id="caselist"></div></aside>
+  <main class="main" id="main"></main>
 </div>
 
 <script type="module">
-import { mountHead, mountSampleWarning, loadData, currentCase, linkToCase, el,
-         confirmedItems, claimedItems, REACH } from "../assets/shell.js";
+import { mountHead, loadData, el, currentCase, linkToCase, REACH, confirmedItems }
+  from "../assets/shell.js";
 
 const base = mountHead("guide");
 const { data } = await loadData(base);
-const GUIDE = await (await fetch(`${base}/data/guide.json`)).json();
-mountSampleWarning(data.meta);
+const G = await (await fetch(`${base}/data/guide.json`)).json();
 
-// 항목 → 대응 목적 줄. 이수빈 제안서의 정보 유형별 대응 표를 옮긴 것입니다.
-const ROWS = [
-  { id: "account", name: "계정 보호",     color: "--k-forum",
-    items: ["계정", "이메일"],
-    acts: ["같은 비밀번호를 쓴 개인 계정 전부 변경",
-           "모든 기기에서 로그아웃하고 2단계 인증을 앱 인증으로",
-           "로그인·복구 알림 켜고 연결된 앱 점검"] },
-  { id: "phish", name: "사칭 · 피싱 방어", color: "--k-archive",
-    items: ["이름", "전화", "주소"],
-    acts: ["이름과 소속을 함께 아는 문자·메일 열지 않기",
-           "그 주소로 온 첨부파일 열람 금지",
-           "증거 보관 후 개인정보침해 신고센터 118"] },
-  { id: "identity", name: "명의 보호",     color: "--k-forum",
-    items: ["주민번호"],
-    acts: ["명의도용 여부 확인", "명의도용 방지 서비스 신청", "관련 기관 상담"] },
-  { id: "money", name: "금융 차단",        color: "--k-broker",
-    items: ["카드금융"],
-    acts: ["거래내역 확인", "카드 정지·재발급", "금융기관 문의"] },
-  { id: "privacy", name: "사생활 보호",    color: "--k-telegram",
-    items: ["회사 내부 자료"],
-    acts: ["내부 문서에 내 이름이 있는지 회사에 확인 요청",
-           "유출 통지서 발급 요청 후 보관",
-           "사내 계정·업무 메일 이상 접속 확인 요청"] },
-];
+const ITEM  = Object.fromEntries(G.item_types.map(i => [i.id, i]));
+const PURP  = Object.fromEntries(G.purposes.map(p => [p.id, p]));
+const DESK  = Object.fromEntries(G.desks.map(d => [d.id, d]));
+const GATE  = Object.fromEntries(G.gates.map(g => [g.id, g]));
+const css = k => getComputedStyle(document.documentElement).getPropertyValue(k).trim();
 
-const box = document.getElementById("cases");
-for (const c of data.cases) {
-  const btn = el("button", { class: "case", type: "button", "aria-pressed": "false" });
-  btn.append(el("b", {}, c.title),
+let picked = null, q = "";
+
+// ── 왼쪽. 300건을 늘어놓지 않고 좁혀서 찾습니다.
+function renderList() {
+  const box = document.getElementById("caselist");
+  box.innerHTML = "";
+  const hits = data.cases
+    .filter(c => !q || (c.title + c.industry).toLowerCase().includes(q.toLowerCase()))
+    .sort((a, b) => confirmedItems(b).length - confirmedItems(a).length);
+  const head = el("div", { class: "listhead" });
+  head.append(el("h2", {}, "어느 사고입니까"),
+              el("span", { class: "count" }, `${hits.length} / ${data.cases.length}`));
+  box.append(head);
+  const inp = el("input", { class: "q", type: "search", value: q,
+                            placeholder: "업종이나 자료로 좁히기" });
+  inp.addEventListener("input", e => { q = e.target.value; renderList();
+    const n = document.querySelector(".q"); n.focus(); n.setSelectionRange(999, 999); });
+  box.append(inp);
+  for (const c of hits.slice(0, 40)) {
+    const b = el("button", { class: "caserow", type: "button",
+                             ...(picked && picked.id === c.id ? { "data-on": "1" } : {}) });
+    b.append(el("b", {}, c.title),
              el("span", { class: "pill", "data-verdict": c.verdict }, c.verdict),
-             el("div", { class: "meta" }, `${c.org} · 게시 ${c.posted} · 주장 규모 ${c.scale || "미상"}`));
-  btn.addEventListener("click", () => show(c, btn));
-  box.append(btn);
+             el("span", { class: "n" }, `${confirmedItems(c).length}개 확인`));
+    b.addEventListener("click", () => { picked = c; renderList(); renderMain(); });
+    box.append(b);
+  }
+  if (hits.length > 40)
+    box.append(el("p", { class: "more" }, `${hits.length - 40}건 더 있습니다. 좁혀 보십시오`));
+  if (!hits.length) box.append(el("p", { class: "more" }, "걸리는 사고가 없습니다"));
 }
 
-function show(c, btn) {
-  for (const b of box.children) b.setAttribute("aria-pressed", "false");
-  btn.setAttribute("aria-pressed", "true");
-  const out = document.getElementById("out");
-  out.innerHTML = "";
-
-  // ── 게이트. 허위면 여기서 멈춥니다.
-  const blocked = c.gate === "blocked";
-  const gate = el("div", { class: "gate" + (blocked ? " blocked" : "") });
-  if (blocked) {
-    gate.append(el("h2", { style: "color:var(--v-false)" }, "이 사고에는 조치를 만들지 않습니다"),
-      el("p", {}, "검증 결과 허위로 판정했습니다. 게시글이 주장한 항목은 있지만 " +
-                  "실제 유출을 뒷받침하는 근거를 찾지 못했습니다. " +
-                  "왜 허위로 봤는지는 검증 기록에 적혀 있습니다."));
-    out.append(gate);
-    out.append(el("p", { style: "margin-top:var(--s4)" },
-      el("a", { href: linkToCase(base, "map", c.id) }, "이 주장이 어디에 올라왔는지 지도에서 보기 →")));
-    return;
-  }
-
-  const ITEM = Object.fromEntries(GUIDE.item_types.map(i => [i.id, i.label]));
-  const conf = new Set(confirmedItems(c).map(i => ITEM[i] || i));
-  const claimed = Object.keys(c.items || {}).map(i => ITEM[i] || i);
+// ── 오른쪽. 확인된 것과, 그것 때문에 생기는 할 일.
+function renderMain() {
+  const m = document.getElementById("main");
+  m.innerHTML = "";
+  if (!picked) { m.append(el("div", { class: "empty-main" }, "왼쪽에서 사고를 고르십시오")); return; }
+  const c = picked;
   const reach = REACH[(c.reach || {}).state] || REACH.unknown;
-  gate.append(el("h2", {}, `샘플에서 확인한 항목 ${conf.size}개`));
-  gate.append(el("p", { style: "margin-top:var(--s2);color:var(--ink);font-weight:600" }, reach.label));
-  gate.append(el("p", { style: "font-size:var(--t-tiny);color:var(--faint)" }, reach.sub));
-  const chips = el("div", { class: "items" });
-  for (const it of claimed) {
-    chips.append(el("span", { class: "item " + (conf.has(it) ? "on" : "off") },
-      conf.has(it) ? "확인됨 · " + it : "확인 못 함 · " + it));
-  }
-  gate.append(chips);
-  gate.append(el("p", {},
-    `게시글은 ${claimed.length}개를 주장했고 그중 ${conf.size}개를 샘플에서 확인했습니다. ` +
-    `나머지에는 이 사고 기준 조치를 내지 않습니다.`));
-  out.append(gate);
+  const conf = confirmedItems(c);
+  const blocked = c.gate === "blocked";
 
-  // ── 조치 격자
-  const t = el("table");
-  t.innerHTML = "<thead><tr><th>무엇을 지키나</th><th>확인된 항목</th><th>할 일</th></tr></thead>";
-  const tb = el("tbody");
-  for (const r of ROWS) {
-    const hit = r.items.filter(i => conf.has(i));
-    const claimedHere = r.items.filter(i => claimed.includes(i));
-    const tr = el("tr", hit.length ? {} : { class: "dead" });
-    tr.append(el("td", { html:
-      `<i class="rowmark" style="background:var(${r.color})"></i><b style="color:var(--ink)">${r.name}</b>` }));
-    if (hit.length) {
-      tr.append(el("td", { html: hit.map(i => `<span class="item on">${i}</span>`).join(" ") }));
-      tr.append(el("td", { class: "act", html: r.acts.map(a => "· " + a).join("<br>") }));
-    } else if (claimedHere.length) {
-      tr.append(el("td", { html: `<span class="item off">${claimedHere.join(" · ")}</span>` }));
-      tr.append(el("td", { class: "act" },
-        "본 사고 기준 조치 없음 — 아직 확인하지 못했습니다. 추가로 확인되면 이 줄을 살립니다."));
-    } else {
-      tr.append(el("td", { html: `<span class="item off">${r.items.join(" · ")}</span>` }));
-      tr.append(el("td", { class: "act" }, "이 사고에서는 나가지 않았습니다. 할 일이 없습니다."));
+  const g = el("div", { class: "card gate" + (blocked ? " blocked" : "") });
+  g.append(el("div", { class: "reach" },
+    blocked ? "허위로 판정한 사고입니다" : `샘플에서 확인한 항목 ${conf.length}개`));
+  g.append(el("div", { class: "reachsub" },
+    blocked ? "이 사고를 근거로는 어떤 조치도 만들지 않습니다"
+            : `${reach.label} · ${reach.sub}`));
+  if (!blocked) {
+    const box = el("div", { class: "items" });
+    for (const [id, state] of Object.entries(c.items || {})) {
+      const t = ITEM[id]; if (!t) continue;
+      box.append(el("span", { class: "it", "data-s": state },
+        el("span", {}, t.label), el("em", {}, state === "confirmed" ? "확인" : "주장만")));
     }
-    tb.append(tr);
+    g.append(box);
+    g.append(el("p", { style: "font-size:var(--t-tiny);color:var(--faint)" },
+      `게시글은 ${Object.keys(c.items || {}).length}개를 주장했고 그중 ${conf.length}개를 샘플에서 확인했습니다.`));
   }
-  t.append(tb);
-  out.append(t);
+  m.append(g);
+  if (blocked) return;
 
-  out.append(el("p", { style: "margin-top:var(--s4)" },
-    el("a", { href: linkToCase(base, "map", c.id) }, "이 사고가 어디를 거쳤는지 지도에서 보기 →")));
+  const hits = (G.combos || []).filter(cb => cb.items.every(i => conf.includes(i)));
+  if (hits.length) {
+    const box = el("div", { class: "card sect" });
+    box.append(el("h3", {}, el("span", {}, "합쳐지면 생기는 위험"),
+                            el("span", { class: "sub" }, "확인된 항목끼리만 셉니다")));
+    const grid = el("div", { class: "combos" });
+    for (const cb of hits)
+      grid.append(el("div", { class: "combo" },
+        el("b", {}, cb.items.map(i => ITEM[i].label).join(" + ")), el("span", {}, cb.harm)));
+    box.append(grid);
+    m.append(box);
+  }
+
+  const acts = (G.actions || []).filter(a => (a.items || []).some(i => conf.includes(i)));
+  for (const st of G.stages) {
+    const mine = acts.filter(a => a.stage === st.id);
+    if (!mine.length) continue;
+    const mins = mine.reduce((s, a) => s + (a.minutes || 0), 0);
+    const box = el("div", { class: "card sect" });
+    box.append(el("h3", {}, el("span", {}, st.label), el("span", { class: "sub" }, st.sub),
+                            el("span", { class: "mins" }, mins ? `약 ${mins}분` : "")));
+    for (const a of mine) {
+      const row = el("div", { class: "act" });
+      row.append(el("div", { class: "t" }, a.text));
+      if (a.why) row.append(el("div", { class: "why" }, a.why));
+      const tags = el("div", { class: "tags" });
+      const p = PURP[a.purpose];
+      if (p) tags.append(el("span", { class: "tag", style: `color:${css(p.color)};border-color:${css(p.color)}` }, p.label));
+      for (const i of (a.items || []).filter(i => conf.includes(i)))
+        tags.append(el("span", { class: "tag" }, ITEM[i].label));
+      row.append(tags);
+      if (a.desk && DESK[a.desk])
+        row.append(el("div", { class: "desk" }, `${DESK[a.desk].label} — ${DESK[a.desk].what}`));
+      box.append(row);
+    }
+    m.append(box);
+  }
+
+  if (!acts.length) {
+    const box = el("div", { class: "card sect" });
+    box.append(el("h3", {}, el("span", {}, "이 사고에서 낼 조치가 없습니다")));
+    const why = conf.length === 0
+      ? "샘플에서 확인된 항목이 없습니다. 게시글의 주장만으로는 조치를 만들지 않습니다."
+      : `확인된 것이 ${conf.map(i => (ITEM[i] || {}).label || i).join(" · ")}뿐입니다. ` +
+        "이 항목들은 단독으로는 피해로 이어지지 않아 조치를 걸지 않았습니다. " +
+        "「기타」는 무엇인지 나눈 뒤에 조치가 붙습니다.";
+    box.append(el("p", { class: "none" }, why));
+    m.append(box);
+  }
+
+  const silent = Object.keys(c.items || {}).filter(i => !conf.includes(i));
+  if (silent.length) {
+    const box = el("div", { class: "card sect" });
+    box.append(el("h3", {}, el("span", {}, "이 사고에서는 할 일이 없는 항목")));
+    box.append(el("p", { class: "none" },
+      silent.map(i => (ITEM[i] || {}).label || i).join(" · ") +
+      " — 게시글이 주장했지만 샘플에서 확인되지 않았습니다. 전체에 없다는 뜻은 아닙니다."));
+    m.append(box);
+  }
+
+  const need = new Set(acts.map(a => a.desk).filter(Boolean));
+  if (need.size) {
+    const box = el("div", { class: "card sect" });
+    box.append(el("h3", {}, el("span", {}, "어디에 말합니까")));
+    const grid = el("div", { class: "desks" });
+    for (const id of need)
+      grid.append(el("div", { class: "desk-row" },
+        el("b", {}, DESK[id].label), el("span", {}, DESK[id].what)));
+    box.append(grid);
+    m.append(box);
+  }
+
+  const bar = el("div", { class: "toolbar" });
+  bar.append(el("a", { href: linkToCase(base, "map", c.id) }, "이 사고가 어디를 거쳤는지 →"));
+  const pr = el("a", { href: "#" }, "종이 한 장으로 뽑기");
+  pr.addEventListener("click", e => { e.preventDefault(); window.print(); });
+  bar.append(pr);
+  m.append(bar);
 }
 
-// 지도에서 넘어왔으면 그 사고를 바로 엽니다.
 const wanted = currentCase();
-if (wanted != null) {
-  const i = data.cases.findIndex(c => c.id === wanted);
-  if (i >= 0) show(data.cases[i], box.children[i]);
-}
+if (wanted != null) picked = data.cases.find(c => c.id === wanted) || null;
+renderList();
+renderMain();
 </script>
 </body>
 </html>
