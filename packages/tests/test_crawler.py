@@ -819,6 +819,59 @@ def test_스킴이_없으면_붙여_준다():
     assert "https" in p.받은곳, p.받은곳
 
 
+def test_같은_호스트만_기다린다():
+    """포럼 명부 224줄이 전부 다른 호스트다. 그 사이 3초는 아무도 안 돕는다."""
+    import time as _t
+
+    from hub.crawler.probe.forum import _기다리기, 간격
+
+    마지막 = {}
+    t0 = _t.time()
+    for h in ("a.example", "b.example", "c.example"):
+        _기다리기(마지막, h)
+    assert _t.time() - t0 < 0.5, "다른 호스트끼리 기다린다"
+
+    t0 = _t.time()
+    _기다리기(마지막, "a.example")          # 같은 곳을 또 칩니다
+    assert _t.time() - t0 >= 간격 - 0.3, "같은 호스트인데 안 기다린다"
+
+
+def test_동시에_봐도_줄과_결과가_안_엇갈린다():
+    """as_completed 는 끝난 순서로 옵니다. 줄을 잘못 짝지으면 남의 값을 씁니다."""
+    from hub.crawler.run import _조사
+
+    class 가짜줄:
+        def __init__(self, 이름):
+            self.이름, self.주소, self.현재 = 이름, f"https://{이름}/", {}
+            self.page_id, self.규모, self.상태, self.어니언 = 이름, "", "", ""
+
+    줄들 = [가짜줄(f"f{i}") for i in range(12)]
+    옛 = forum.한곳
+
+    def 가짜한곳(주소, 이름, 마지막, **kw):
+        import time as _t
+        # 뒤 줄이 먼저 끝나게 해서 순서를 뒤집습니다.
+        _t.sleep(0.05 if 이름.endswith(("0", "1", "2")) else 0.001)
+        return Place(갈래="forum", 이름=이름, 주소=주소, 상태="online",
+                     두드림=True)
+
+    forum.한곳 = 가짜한곳
+    try:
+        out = list(_조사("forum", 줄들, {"tor": "http://127.0.0.1:9080"}))
+    finally:
+        forum.한곳 = 옛
+
+    assert len(out) == len(줄들)
+    for 줄, p in out:
+        assert 줄.이름 == p.이름, f"줄 {줄.이름} 에 {p.이름} 결과가 붙었다"
+
+
+def test_Tor_가_없으면_한_줄씩_본다():
+    """프록시가 없으면 어차피 안 나갑니다. 스레드를 안 만듭니다."""
+    글 = (ROOT / "hub" / "crawler" / "run.py").read_text(encoding="utf-8")
+    assert "동시 = 최대동시 if 프록시 else 1" in 글
+
+
 if __name__ == "__main__":
     n = 0
     for k, v in sorted(globals().items()):

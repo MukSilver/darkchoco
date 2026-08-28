@@ -41,6 +41,8 @@ __all__ = ["조사", "NEEDS_PACKAGES"]
 
 NEEDS_PACKAGES: list[str] = []
 
+# t.me 는 채널이 달라도 **한 서버**입니다. 그래서 여기는 간격을 그대로
+# 모든 요청 사이에 겁니다. 포럼과 다릅니다.
 간격 = 2.5
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/124.0 Safari/537.36")

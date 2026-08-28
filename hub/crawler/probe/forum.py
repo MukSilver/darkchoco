@@ -46,6 +46,15 @@ __all__ = ["조사", "한곳", "NEEDS_PACKAGES"]
 
 NEEDS_PACKAGES: list[str] = []
 
+# **같은 호스트를 연달아 칠 때만 기다립니다.**
+#
+# 간격은 상대 서버를 힘들게 하지 않으려는 것입니다. 그런데 포럼 명부
+# 224줄이 전부 서로 다른 호스트입니다 — 겹치는 것이 하나도 없습니다.
+# 서로 다른 서버 사이에 3초를 기다리면 아무도 안 도와주면서 13분을
+# 씁니다. 각 서버는 우리 요청을 딱 한 번 받습니다.
+#
+# 그래서 간격을 호스트마다 따로 셉니다. 같은 곳을 두 번 칠 때(어니언
+# 미러 확인처럼)만 기다립니다.
 간격 = 3.0
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/124.0 Safari/537.36")
@@ -148,7 +157,7 @@ def _닮았나(가: str, 나: str) -> bool:
     return 겹침 >= 2 or (겹침 >= 1 and 겹침 == min(len(a), len(b)))
 
 
-def 어니언확인(어니언: str, 원래제목: str, 마지막: list[float], *,
+def 어니언확인(어니언: str, 원래제목: str, 마지막, *,
            프록시: str | None = None) -> tuple[bool, str]:
     """첫 화면에서 본 어니언이 정말 같은 곳인지 열어서 봅니다.
 
@@ -165,18 +174,17 @@ def 어니언확인(어니언: str, 원래제목: str, 마지막: list[float], *
     except 보호없음:
         return False, "Tor 가 없어 못 열어 봤습니다"
 
-    지난 = time.time() - 마지막[0]
-    if 지난 < 간격:
-        time.sleep(간격 - 지난)
+    _기다리기(마지막, 어니언)
     req = urllib.request.Request(
         어니언, headers={"User-Agent": UA, "Accept": "text/html"})
     try:
         with opener.open(req, timeout=45) as r:
             본문 = r.read(400_000).decode("utf-8", "replace")
     except (urllib.error.URLError, socket.timeout, OSError) as e:
+        _찍기(마지막, 어니언)
         return False, f"안 열립니다({type(e).__name__})"
     finally:
-        마지막[0] = time.time()
+        _찍기(마지막, 어니언)
 
     제목 = _제목뽑기(본문)
     if not 제목:
@@ -223,7 +231,31 @@ def _찾기(글: str, 규칙들) -> int | None:
     return None
 
 
-def 한곳(주소: str, 이름: str, 마지막: list[float], *,
+def _기다리기(마지막, 열쇠: str) -> None:
+    """같은 호스트를 연달아 칠 때만 기다립니다.
+
+    마지막 은 옛 코드와의 호환을 위해 목록도 받습니다. 목록이면 옛날처럼
+    모든 요청 사이에 기다립니다.
+    """
+    if isinstance(마지막, dict):
+        지난 = time.time() - 마지막.get(열쇠, 0.0)
+        if 지난 < 간격:
+            time.sleep(간격 - 지난)
+        마지막[열쇠] = time.time()
+        return
+    지난 = time.time() - 마지막[0]
+    if 지난 < 간격:
+        time.sleep(간격 - 지난)
+
+
+def _찍기(마지막, 열쇠: str) -> None:
+    if isinstance(마지막, dict):
+        마지막[열쇠] = time.time()
+    else:
+        마지막[0] = time.time()
+
+
+def 한곳(주소: str, 이름: str, 마지막, *,
         프록시: str | None = None, 이음사전: dict | None = None,
         어니언미러: bool = False) -> Place:
     """포럼 한 곳의 첫 화면만 봅니다."""
@@ -253,9 +285,7 @@ def 한곳(주소: str, 이름: str, 마지막: list[float], *,
         p.못본이유 = f"Tor 가 없어 안 나갔습니다. {str(e).splitlines()[0]}"
         return p
 
-    지난 = time.time() - 마지막[0]
-    if 지난 < 간격:
-        time.sleep(간격 - 지난)
+    _기다리기(마지막, host or 주소)
 
     req = urllib.request.Request(주소, headers={
         "User-Agent": UA, "Accept": "text/html", "Accept-Language": "en"})
@@ -268,6 +298,7 @@ def 한곳(주소: str, 이름: str, 마지막: list[float], *,
     except urllib.error.HTTPError as e:
         code, 본문 = e.code, ""
     except (urllib.error.URLError, socket.timeout, OSError) as e:
+        _찍기(마지막, host or 주소)
         # **연결이 안 된 것을 offline 으로 적지 않습니다.**
         #
         # 여기까지 오는 길에 우리 쪽 이유가 여럿 있습니다.
@@ -391,7 +422,7 @@ def 조사(대상: list[dict], *, dry: bool = False, limit: int = 0,
     """대상은 [{"이름": ..., "주소": ...}, ...] 입니다."""
     if dry or not 대상:
         return
-    마지막 = [0.0]
+    마지막: dict = {}
     for i, d in enumerate(대상):
         if limit and i >= limit:
             return
