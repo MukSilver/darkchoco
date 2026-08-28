@@ -1061,6 +1061,66 @@ def test_꼴이_깨진_어니언은_안_두드린다():
     assert p.노션값() == {}, p.노션값()
 
 
+def test_K_M_접미사를_제대로_읽는다():
+    """1.6M 을 16 으로, 24.3K 를 243 으로 읽고 있었습니다.
+
+    점을 그냥 지워서 그랬습니다. 그 값이 사람이 조사한 규모 줄을 갈아
+    끼웁니다.
+    """
+    from hub.crawler.probe.forum import _숫자
+    for 값, 기대, 어림 in [("1.6M", 1_600_000, True),
+                        ("24.3K", 24_300, True),
+                        ("2M", 2_000_000, True),
+                        ("367,224", 367_224, False),
+                        ("185 091", 185_091, False),
+                        ("45", 45, False)]:
+        n, a = _숫자(값)
+        assert n == 기대, f"{값} → {n} (기대 {기대})"
+        assert a == 어림, f"{값} 의 어림수 표시가 {a}"
+
+
+def test_수를_중간에서_안_자른다():
+    """24.3K 에서 되물러 24 를 잡으면 안 됩니다."""
+    본문 = "<html><body>Total members: 24.3K Total posts: 1.6M</body></html>"
+    p = _포럼한판(본문)
+    assert p.회원수 == 24_300, p.회원수
+    assert p.게시물수 == 1_600_000, p.게시물수
+    assert p.어림수, "K·M 값인데 어림수 표시가 없다"
+    assert "안팎" in p.노션값()["규모"], p.노션값()["규모"]
+
+
+def test_4xx_에서_무엇이_막는지_적는다():
+    """HTTP 403 만으로는 손쓸 방법을 못 정합니다."""
+    from hub.crawler.probe.forum import _막은것
+    assert "클라우드플레어" in _막은것("error code: 1020",
+                                {"Server": "cloudflare", "CF-RAY": "x"})
+    assert "속도 제한" in _막은것("error code: 1015", {"CF-RAY": "x"})
+    assert "DDoS-Guard" in _막은것("", {"Server": "ddos-guard"})
+    assert "Sucuri" in _막은것("", {"X-Sucuri-ID": "1"})
+    assert "원서버" in _막은것("Access Denied", {"Server": "nginx"})
+    assert _막은것("", {}), "빈 값을 돌려주면 안 됩니다"
+
+
+def test_두드린_줄은_확인일만_바뀌어도_쓴다():
+    """403·404 로 막힌 줄은 상태가 계속 미확인이라, 오늘 두드렸다는
+    사실이 아예 안 남았습니다."""
+    글 = (ROOT / "hub" / "crawler" / "notion.py").read_text(encoding="utf-8")
+    assert 'set(달라진것) <= {"확인일"} and not p.두드림' in 글,         "두드린 줄인데 확인일을 안 쓴다"
+
+
+def test_텔레그램도_게시판_부품을_쓴다():
+    글 = (ROOT / "hub" / "crawler" / "probe" / "telegram.py").read_text(
+        encoding="utf-8")
+    assert "_게시판" in 글, "텔레그램에 게시판 부품이 안 물려 있다"
+    assert "유통자리" in 글 and "개인정보" in 글
+    # 글 본문은 안 씁니다. 이름과 소개만 씁니다.
+    자리 = 글[글.index("말들 = ["):글.index("말들 = [") + 260]
+    assert "p.이름" in 자리 and "p.어떤곳" in 자리, 자리[:200]
+    # 채널 이름과 소개만 넣습니다. 받아 온 쪽 전체(body)를 안 넣습니다.
+    넣는줄 = [l for l in 자리.splitlines() if l.strip().startswith("말들 = ")][0]
+    assert "body" not in 넣는줄, 넣는줄
+
+
 if __name__ == "__main__":
     n = 0
     for k, v in sorted(globals().items()):

@@ -35,7 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "packages"))
 from hub.crawler.place import Place, 지금  # noqa: E402
 from hub.crawler.probe._나가기 import 보호없음, 오프너  # noqa: E402
 from hub.crawler.probe._읽기 import 언어판별  # noqa: E402
-from hub.crawler.probe import _이음  # noqa: E402
+from hub.crawler.probe import _게시판, _이음  # noqa: E402
 
 __all__ = ["조사", "NEEDS_PACKAGES"]
 
@@ -227,6 +227,14 @@ def 한곳(채널: str, 마지막: list[float], 이름표: str = "", *,
     # 무슨 말로 쓰는지. 제목과 소개만 봅니다. 텔레그램 UI 글자가 섞이면
     # 채널 언어가 아니라 화면 언어를 세게 됩니다.
     p.언어 = 언어판별(f"{p.이름} {p.어떤곳}", 최소=6)
+
+    # 채널이 스스로 밝힌 것에서 무엇을 다루는 곳인지 봅니다.
+    # 채널 이름과 소개만 씁니다 — **글 본문은 안 씁니다.** 유출 글에는
+    # 피해 기업 이름이 들어갑니다(SECURITY.md).
+    말들 = [x for x in (p.이름, p.어떤곳) if x]
+    if 말들:
+        p.유통자리 = _게시판.유통자리(말들)
+        p.개인정보 = _게시판.개인정보증거(말들)
 
     # 채널이 걸어 둔 곳 중 명부에 있는 것만 셉니다. 미리보기에는
     # 글 안의 링크도 섞이는데, 그것도 그 채널이 가리키는 곳입니다.

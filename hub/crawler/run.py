@@ -167,9 +167,72 @@ def _조사(갈래: str, 줄들, ctx: dict):
     elif 갈래 == "ransom":
         # 랜섬은 목록을 통째로 받습니다. 그룹 하나씩 조회하면 요청이 폭발합니다.
         이름별 = {r.이름.strip().lower(): r for r in 줄들}
+        받은것: dict = {}
         for p in ransom.조사(limit=ctx.get("limit", 0), 프록시=프록시):
             r = 이름별.get(p.이름.strip().lower())
             if r is not None:
+                받은것[r.page_id] = (r, p)
+
+        # **주소를 실제로 열어 봅니다.**
+        #
+        # /groups 는 살아있는지와 형식만 줍니다. 사용 언어 · 어떤 곳인지 ·
+        # 들어가는 법 · 연결된 곳 · 규모는 그 쪽 화면을 봐야 압니다.
+        # 명부 514줄 중 507줄에 주소가 있는데 지금껏 한 번도 안 열었습니다.
+        #
+        # 마켓 101줄은 ransomware.live 에 아예 없어서 /groups 로는 상태도
+        # 못 얻습니다. 그 줄들은 여는 것 말고 길이 없습니다.
+        열것 = []
+        for r in 줄들:
+            if not 프록시:
+                break
+            주소 = (r.주소 or "").strip()
+            어니언 = (getattr(r, "어니언", "") or "").strip()
+            if 주소 or 어니언:
+                열것.append(r)
+
+        if not 열것:
+            for r, p in 받은것.values():
+                yield r, p
+            return
+
+        마지막: dict = {}
+        동시 = 최대동시
+
+        def _열기(r):
+            """포럼 조사기로 랜섬 주소를 봅니다. 뽑는 것이 같습니다."""
+            q = forum.한곳(r.주소, r.이름, 마지막, 프록시=프록시,
+                          이음사전=이음사전, 어니언미러=False,
+                          어니언=getattr(r, "어니언", ""))
+            q.갈래 = "ransom"
+            q.출처 = ["직접 확인"]
+            # /groups 가 준 것이 있으면 그것을 얹습니다. API 가 더 확실합니다.
+            앞 = 받은것.get(r.page_id)
+            if 앞:
+                _, a = 앞
+                if a.두드림:
+                    q.상태, q.두드림 = a.상태, True
+                for 칸 in ("형식", "종류", "이전이름", "이전주소", "최근활동"):
+                    v = getattr(a, 칸, "")
+                    if v and not getattr(q, 칸, ""):
+                        setattr(q, 칸, v)
+                if a.어떤곳 and not q.어떤곳:
+                    q.어떤곳 = a.어떤곳
+                q.받은곳 = f"{a.받은곳} + {q.받은곳}"
+            return q
+
+        import concurrent.futures as cf
+
+        본것 = set()
+        with cf.ThreadPoolExecutor(max_workers=동시) as 풀:
+            일 = {풀.submit(_한줄, (lambda r=r: _열기(r)), r): r for r in 열것}
+            for 끝난것 in cf.as_completed(일):
+                r = 일[끝난것]
+                본것.add(r.page_id)
+                yield r, 끝난것.result()
+
+        # 주소가 없어 못 연 줄은 /groups 가 준 것만이라도 냅니다.
+        for pid, (r, p) in 받은것.items():
+            if pid not in 본것:
                 yield r, p
     else:
         raise ValueError(f"모르는 갈래입니다: {갈래}")
