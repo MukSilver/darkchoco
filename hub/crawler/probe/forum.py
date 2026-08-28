@@ -132,6 +132,7 @@ def 한곳(주소: str, 이름: str, 마지막: list[float], *,
     finally:
         마지막[0] = time.time()
 
+    p.두드림 = True          # 응답을 받았습니다
     if code >= 500:
         p.상태 = "offline"
         p.못본이유 = f"HTTP {code}"

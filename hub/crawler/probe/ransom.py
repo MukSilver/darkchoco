@@ -86,21 +86,28 @@ def _형식으로(g: dict) -> str:
     return ""
 
 
-def _상태로(g: dict) -> str:
-    """살아있나. 값이 없으면 단정하지 않고 미확인으로 둡니다."""
+def _상태로(g: dict) -> tuple[str, bool]:
+    """(상태, 정했나) 를 돌려줍니다.
+
+    ransomware.live 는 살아있는지를 locations[].available 에 담습니다.
+    최상위만 보면 대부분 못 읽고, 그 미확인이 노션의 508줄을 덮습니다.
+    """
+    for loc in (g.get("locations") or []):
+        if isinstance(loc, dict) and isinstance(loc.get("available"), bool):
+            return ("online" if loc["available"] else "offline"), True
     for k in ("available", "online", "up", "status"):
         v = g.get(k)
         if isinstance(v, bool):
-            return "online" if v else "offline"
+            return ("online" if v else "offline"), True
         if isinstance(v, str):
             s = v.lower()
             if s in ("online", "up", "active", "true"):
-                return "online"
+                return "online", True
             if s in ("offline", "down", "inactive", "false"):
-                return "offline"
+                return "offline", True
             if "seiz" in s or "takedown" in s:
-                return "압수됨"
-    return "미확인"
+                return "압수됨", True
+    return "미확인", False
 
 
 def 조사(*, dry: bool = False, limit: int = 0) -> Iterator[Place]:
@@ -141,11 +148,12 @@ def 조사(*, dry: bool = False, limit: int = 0) -> Iterator[Place]:
         if not 주소:
             주소 = str(g.get("url") or "")
 
+        상태, 정함 = _상태로(g)
         yield Place(
             갈래="ransom",
             이름=이름,
             주소=주소,
-            상태=_상태로(g),
+            상태=상태, 두드림=정함,
             확인일=지금(),
             피해기업수=_수(g, "victims", "victim_count", "count"),
             형식=_형식으로(g),
