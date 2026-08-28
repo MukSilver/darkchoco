@@ -81,6 +81,7 @@
 
 <script type="module">
 import * as THREE from "../vendor/three.module.min.js";
+import { OrbitControls } from "../vendor/OrbitControls.js";
 import { mountHead, loadData, el } from "../assets/shell.js";
 import { world, worldToCell, SQ3 } from "../assets/hexcanvas.js";
 
@@ -184,18 +185,9 @@ scene.background = new THREE.Color(css("--bg") || "#0b0e14");
 scene.fog = new THREE.Fog(scene.background, SPAN * 2.0, SPAN * 5.0);
 
 // 직교 카메라 — 이게 「면적 = 사고 수」 약속을 지킵니다. 원근으로 바꾸면 깨집니다.
-const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 4000);
-const TILT = THREE.MathUtils.degToRad(34);   // Δz/D > tan34 = 0.67 을 만족시킵니다
-let yaw = 0, zoom = 1;
-const FOCUS = new THREE.Vector3(0, 0, 0);      // 두 층의 가운데. 배치 뒤에 채웁니다
-function placeCamera() {
-  const d = SPAN * 3.0;
-  camera.position.set(FOCUS.x + Math.sin(yaw) * Math.cos(TILT) * d,
-                      FOCUS.y + Math.sin(TILT) * d,
-                      FOCUS.z + Math.cos(yaw) * Math.cos(TILT) * d);
-  camera.up.set(0, 1, 0);
-  camera.lookAt(FOCUS);
-}
+const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 6000);
+const TILT = THREE.MathUtils.degToRad(34);   // 시작 기울기
+const FOCUS = new THREE.Vector3(0, 0, 0);    // 두 층의 가운데. 배치 뒤에 채웁니다
 
 const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: false });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -203,6 +195,21 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.06;
+
+// 권도 조작. 좌우·위아래·줌이 전부 자유롭고 관성이 붙습니다.
+const controls = new OrbitControls(camera, cv);
+controls.enableDamping = true;
+controls.dampingFactor = 0.075;
+controls.rotateSpeed = 0.65;
+controls.zoomSpeed = 0.9;
+controls.enablePan = true;
+controls.panSpeed = 0.7;
+controls.screenSpacePanning = true;
+// 판 밑으로 파고들거나 완전히 눅지만 않게 막습니다
+controls.minPolarAngle = THREE.MathUtils.degToRad(8);
+controls.maxPolarAngle = THREE.MathUtils.degToRad(86);
+controls.minZoom = 0.35;
+controls.maxZoom = 6;
 
 // ── 조명. 한 바퀴 도는 동안 어느 면도 새까매지지 않게 둘을 마주 놓습니다.
 scene.add(new THREE.HemisphereLight(0xa8c0e0, 0x0b1018, 0.78));
@@ -372,53 +379,66 @@ function syncLabels() {
 }
 
 // ── 크기
-const VSPAN = Z.sky * Math.cos(TILT) + SPAN * Math.sin(TILT);   // 화면 세로 실제 길이
+// 어느 각도에서도 안 잘리게 두 층을 감싸는 구를 기준으로 잡습니다
+const R = Math.hypot(SPAN * 0.62, Z.sky * 0.5) + SPAN * 0.10;
 function resize() {
   const w = board.clientWidth, h = board.clientHeight;
   renderer.setSize(w, h, false);
   const aspect = w / h;
-  const need = Math.max(VSPAN * 0.60, SPAN * 0.56 / Math.max(aspect, 0.9));
-  const half = need / zoom;
-  camera.left = -half * aspect; camera.right = half * aspect;
-  camera.top = half; camera.bottom = -half;
+  camera.left = -R * aspect; camera.right = R * aspect;
+  camera.top = R; camera.bottom = -R;
   camera.updateProjectionMatrix();
+}
+function frameAll() {
+  const d = R * 3.2, a = THREE.MathUtils.degToRad(28);
+  controls.target.copy(FOCUS);
+  camera.position.set(FOCUS.x + Math.sin(a) * Math.cos(TILT) * d,
+                      FOCUS.y + Math.sin(TILT) * d,
+                      FOCUS.z + Math.cos(a) * Math.cos(TILT) * d);
+  camera.zoom = 1.35;
+  camera.updateProjectionMatrix();
+  camera.lookAt(FOCUS);
+  controls.update();
 }
 new ResizeObserver(resize).observe(board);
 
 // ── 회전 조작. 드래그 + 슬라이더 + 키보드. 셋 다 없으면 SC 2.5.7(AA) 위반입니다.
 const rot = document.getElementById("rot"), degEl = document.getElementById("deg");
 const live = document.getElementById("live");
-let vel = 0, dragging = false, lastX = 0, moved = 0;
 const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+if (reduce) controls.enableDamping = false;
 
-function setYaw(deg, announce) {
-  yaw = THREE.MathUtils.degToRad(((deg % 360) + 360) % 360);
-  rot.value = Math.round(((deg % 360) + 360) % 360);
-  degEl.textContent = rot.value + "°";
-  if (announce) live.textContent = `방위 ${rot.value}도`;
+// 슬라이더는 접근성 의무입니다 — 드래그만 두면 SC 2.5.7(AA) 위반.
+let syncing = false;
+function readAzimuth() {
+  const deg = Math.round(((THREE.MathUtils.radToDeg(controls.getAzimuthalAngle()) % 360) + 360) % 360);
+  if (+rot.value !== deg) { syncing = true; rot.value = deg; syncing = false; }
+  degEl.textContent = deg + "\u00b0";
 }
-cv.style.touchAction = "none";
-cv.addEventListener("pointerdown", e => {
-  dragging = true; moved = 0; lastX = e.clientX; vel = 0;
-  cv.setPointerCapture(e.pointerId);
+function setAzimuth(deg, announce) {
+  const sph = new THREE.Spherical().setFromVector3(
+    camera.position.clone().sub(controls.target));
+  sph.theta = THREE.MathUtils.degToRad(deg);
+  camera.position.copy(controls.target).add(new THREE.Vector3().setFromSpherical(sph));
+  camera.lookAt(controls.target);
+  controls.update();
+  if (announce) live.textContent = "\ubc29\uc704 " + deg + "\ub3c4";
+}
+rot.addEventListener("input", () => { if (!syncing) setAzimuth(+rot.value, true); });
+document.getElementById("reset").addEventListener("click", () => {
+  frameAll();
+  live.textContent = "\uc815\uba74\uc73c\ub85c \ub418\ub3cc\ub838\uc2b5\ub2c8\ub2e4";
 });
-cv.addEventListener("pointermove", e => {
-  if (!dragging) return;
-  const dx = e.clientX - lastX; lastX = e.clientX; moved += Math.abs(dx);
-  vel = dx * 0.30;
-  setYaw(THREE.MathUtils.radToDeg(yaw) + vel);
-});
+
+// 끌었는지 눌렀는지 — OrbitControls 가 포인터를 가져가므로 이동량으로 가릅니다
+let downAt = null;
+cv.addEventListener("pointerdown", e => { downAt = { x: e.clientX, y: e.clientY }; });
 cv.addEventListener("pointerup", e => {
-  dragging = false; cv.releasePointerCapture(e.pointerId);
-  if (moved < 5) pickAt(e);           // 끌지 않았으면 클릭입니다
+  if (!downAt) return;
+  const d = Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y);
+  downAt = null;
+  if (d < 5) pickAt(e);
 });
-rot.addEventListener("input", () => setYaw(+rot.value, true));
-document.getElementById("reset").addEventListener("click", () => { setYaw(0, true); vel = 0; });
-cv.addEventListener("wheel", e => {
-  e.preventDefault();
-  zoom = Math.max(0.55, Math.min(3.2, zoom * (e.deltaY < 0 ? 1.09 : 0.917)));
-  resize();
-}, { passive: false });
 
 // ── 클릭 판정. 화면 → 월드 → 격자. 회전과 무관하게 정확합니다.
 const ray = new THREE.Raycaster();
@@ -477,20 +497,15 @@ g2.append(el("div", { class: "it" }, "옅은 칸 = 이름만 알고 아직 안 �
 lg.append(g2);
 
 // ── 루프
-let last = performance.now();
-function tick(now) {
-  const dt = Math.min(50, now - last); last = now;
-  if (!dragging && Math.abs(vel) > 0.01 && !reduce) {
-    vel *= Math.pow(0.88, dt / 16.7);            // 관성
-    setYaw(THREE.MathUtils.radToDeg(yaw) + vel);
-  }
-  placeCamera();
+function tick() {
+  controls.update();
   renderer.render(scene, camera);
   syncLabels();
+  readAzimuth();
   requestAnimationFrame(tick);
 }
 FOCUS.set(0, Z.sky * 0.5, 0);
-resize(); setYaw(28); requestAnimationFrame(tick);
+resize(); frameAll(); requestAnimationFrame(tick);
 </script>
 </body>
 </html>
