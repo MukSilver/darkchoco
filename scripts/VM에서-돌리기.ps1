@@ -24,6 +24,15 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+# 콘솔이 UTF-8 이어야 한글이 안 깨집니다.
+try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch {}
+
+# **윈도우 기본 tar 를 씁니다.** PATH 앞쪽에 git-bash 의 tar 가 있으면
+# "C:\..." 를 원격 호스트로 읽습니다.
+#   /usr/bin/tar: Cannot connect to C: resolve failed
+$Tar = "$env:SystemRoot/System32/tar.exe"
+if (-not (Test-Path $Tar)) { $Tar = "tar" }
 $VBox = "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe"
 if (-not (Test-Path $VBox)) { throw "VBoxManage 를 못 찾습니다: $VBox" }
 if (-not $Repo) { $Repo = Split-Path -Parent $PSScriptRoot }
@@ -57,7 +66,7 @@ try {
         Say "저장소를 다시 넣습니다..."
         $tar = Join-Path $env:TEMP ("dc-" + [guid]::NewGuid().ToString("N") + ".tar")
         Push-Location $Repo
-        tar --exclude=.git --exclude=.venv --exclude=__pycache__ --exclude=*.pyc -cf $tar .
+        & $Tar --exclude=.git --exclude=.venv --exclude=__pycache__ --exclude=*.pyc -cf $tar .
         Pop-Location
         & $VBox guestcontrol $Vm --username $User --passwordfile $PwFile `
             copyto --target-directory "/home/$User/" $tar | Out-Null

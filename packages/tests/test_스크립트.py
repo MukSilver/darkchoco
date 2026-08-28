@@ -212,6 +212,36 @@ def test_powershell_이_ps1_을_읽을_수_있나():
     assert not 깨진것, "PowerShell 이 못 읽습니다: " + " · ".join(깨진것)
 
 
+def test_스크립트에_이상한_제어문자가_없나():
+    """따옴표 안에 탭·백스페이스가 들어가면 경로와 정규식이 조용히 깨집니다.
+
+    파이썬으로 파일을 고칠 때 역슬래시가 한 겹 벗겨져 실제로 이랬습니다.
+
+        "System32\tar.exe"  →  "System32<탭>ar.exe"
+        r"\bMembers"        →  r"<백스페이스>Members"
+
+    문법 오류가 안 나고 값만 틀리므로 눈으로도 안 보입니다.
+    """
+    나쁜것 = {9: "탭", 8: "백스페이스", 11: "세로탭", 12: "폼피드",
+           13: "캐리지리턴", 0: "널", 27: "이스케이프"}
+    걸린것 = []
+    for p in 스크립트들() + ps1들():
+        글 = p.read_text(encoding="utf-8-sig", errors="replace")
+        for i, 줄 in enumerate(글.splitlines(), 1):
+            # 줄 앞의 들여쓰기 탭은 봐 줍니다. 문제는 글자 사이에 낀 것입니다.
+            몸통 = 줄.lstrip(" " + chr(9))
+            for 코드, 이름 in 나쁜것.items():
+                if chr(코드) in 몸통:
+                    걸린것.append(
+                        f"{p.relative_to(ROOT).as_posix()}:{i} "
+                        f"{이름}({코드})")
+                    break
+    assert not 걸린것, ("문자열 안에 제어문자가 들어갔습니다. 값이 조용히 "
+                     "틀립니다:
+  " + "
+  ".join(걸린것[:10]))
+
+
 if __name__ == "__main__":
     n = 0
     for k, v in sorted(globals().items()):
