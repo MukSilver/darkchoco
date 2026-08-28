@@ -23,6 +23,9 @@ jobs:
       - name: 표준 라이브러리만으로 되는지
         run: python packages/tests/test_표준만.py
 
+      - name: 조사기를 우회하는 코드가 없는지
+        run: python packages/tests/test_직접호출금지.py
+
       - name: 옵션까지 설치
         run: pip install -e "packages[all]"
 

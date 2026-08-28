@@ -4,6 +4,7 @@
     python dc.py list                 어떤 도구가 있는지 봅니다
     python dc.py info <이름>          그 도구를 어떻게 쓰는지 봅니다
     python dc.py doctor [이름]        지금 돌 수 있는 상태인지 봅니다
+    python dc.py crawl [--apply]      명부를 조사해 노션에 반영합니다
     python dc.py run [--only 이름]    수집을 한 판 돌립니다
     python dc.py plan                 무엇이 언제 도는지 봅니다
     python dc.py run --due            주기가 찬 것만 돌립니다
@@ -294,6 +295,31 @@ def cmd_doctor(args) -> int:
     return 0
 
 
+# ── crawl ────────────────────────────────────────
+def cmd_crawl(args) -> int:
+    """통합 크롤러. 세 갈래 명부를 조사해 노션에 반영합니다."""
+    from hub.crawler import run as 크롤
+
+    대상 = [x.strip() for x in (args.only or "").split(",") if x.strip()] or None
+    if 대상:
+        모름 = [x for x in 대상 if x not in 크롤.갈래들]
+        if 모름:
+            print(f"모르는 갈래입니다: {', '.join(모름)}", file=sys.stderr)
+            print(f"쓸 수 있는 것: {', '.join(크롤.갈래들)}", file=sys.stderr)
+            return 1
+
+    if not args.apply:
+        print()
+        print("  미리보기입니다. 노션에 안 씁니다. --apply 를 주면 씁니다.")
+
+    결과 = 크롤.여러갈래(대상, apply=args.apply, limit=args.limit,
+                     tor=os.environ.get("TOR_SOCKS_PROXY"))
+    print()
+    print(크롤.표로(결과, apply=args.apply))
+    print()
+    return 1 if any(r.오류 for r in 결과) else 0
+
+
 # ── run · plan ───────────────────────────────────
 def cmd_run(args) -> int:
     from hub import runner
@@ -483,6 +509,13 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("doctor", help="지금 돌 수 있는 상태인지 봅니다")
     p.add_argument("name", nargs="?")
     p.set_defaults(fn=cmd_doctor)
+
+    p = sub.add_parser("crawl", help="명부를 조사해 노션에 반영합니다")
+    p.add_argument("--only", help="쉼표로 나눈 갈래. telegram · forum · ransom")
+    p.add_argument("--apply", action="store_true",
+                   help="실제로 노션에 씁니다. 없으면 미리보기입니다")
+    p.add_argument("--limit", type=int, default=0, help="갈래마다 최대 몇 줄까지")
+    p.set_defaults(fn=cmd_crawl)
 
     p = sub.add_parser("run", help="수집을 한 판 돌립니다")
     p.add_argument("--only", help="쉼표로 나눈 어댑터 이름. 없으면 전부")
