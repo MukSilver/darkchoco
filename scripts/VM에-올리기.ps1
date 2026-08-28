@@ -127,8 +127,8 @@ try {
     # ── 5. 자리 만들기 ─────────────────────────────────────────────
     Step "5. VM 안에서 자리 만들기"
     Say "tor 설치 · torrc · 띄우기 · 나가 보기 · 부품. 몇 분 걸립니다."
-    $setup = "cd ~/darkchoco && echo '$Password' | sudo -S -v 2>/dev/null && " +
-             'bash scripts/돌릴자리-만들기.sh 2>&1 | sed "s/\x1b\[[0-9;]*m//g"'
+    $setup = "cd ~/darkchoco && DARKCHOCO_SUDO_PW='$Password' " +
+             'bash scripts/돌릴자리-만들기.sh 2>&1'
     VmRun $setup
 
     # ── 6. 노션 토큰 ───────────────────────────────────────────────
@@ -149,7 +149,7 @@ try {
 
     # ── 7. 점검 ────────────────────────────────────────────────────
     Step "7. 점검"
-    VmRun 'cd ~/darkchoco && ./.venv/bin/python dc.py doctor --net 2>&1 | sed -n "/밖으로 나가는 길/,\$p"'
+    VmRun 'cd ~/darkchoco && ./.venv/bin/python dc.py doctor --net 2>&1 | tail -12'
 
     Step "다 됐습니다"
     Say "VM 안에서 돌리려면"
