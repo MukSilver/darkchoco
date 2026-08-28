@@ -34,6 +34,32 @@ _건너뜀 = {".venv", "venv", "node_modules", ".git", "__pycache__",
         "site-packages", ".tox"}
 
 
+def _찾기(끝: str) -> list[Path]:
+    """저장소가 가진 파일. 받아 온 것은 안 봅니다."""
+    나온것 = []
+    스택 = [ROOT]
+    while 스택:
+        d = 스택.pop()
+        try:
+            것들 = list(d.iterdir())
+        except OSError:
+            continue
+        for x in 것들:
+            try:
+                if x.is_dir():
+                    if x.name not in _건너뜀 and not x.is_symlink():
+                        스택.append(x)
+                elif x.suffix == 끝:
+                    나온것.append(x)
+            except OSError:
+                continue
+    return sorted(나온것)
+
+
+def ps1들() -> list[Path]:
+    return _찾기(".ps1")
+
+
 def 스크립트들() -> list[Path]:
     """저장소가 가진 셸 스크립트. 받아 온 것은 안 봅니다."""
     나온것 = []
@@ -134,6 +160,56 @@ def test_gitattributes_가_sh_를_LF_로_묶는가():
     g = ROOT / ".gitattributes"
     assert g.exists(), ".gitattributes 가 없습니다"
     assert "*.sh text eol=lf" in g.read_text(encoding="utf-8"),         ".gitattributes 에 *.sh text eol=lf 가 없습니다"
+
+
+def test_ps1_에_BOM_이_있나():
+    """윈도우 PowerShell 5.1 은 BOM 이 없으면 UTF-8 을 ANSI 로 읽습니다.
+
+    한글이 깨지고 따옴표 짝이 어긋나 스크립트가 통째로 파싱 실패합니다.
+    실제로 VM에-올리기.ps1 이 이랬습니다.
+
+        '&&' 토큰은 이 버전에서 올바른 문 구분 기호가 아닙니다
+        'bash scripts/?릴?리-만들?sh 2>&1 | sed ...
+
+    PowerShell 7(pwsh)은 BOM 없이도 UTF-8 로 읽지만, 팀원이 무엇을 쓸지
+    모릅니다. BOM 을 붙여 둡니다.
+    """
+    BOM = bytes([0xEF, 0xBB, 0xBF])
+    한글없음, BOM없음 = [], []
+    for p in ps1들():
+        b = p.read_bytes()
+        이름 = p.relative_to(ROOT).as_posix()
+        if b.startswith(BOM):
+            continue
+        # 아스키만 있으면 BOM 이 없어도 안 깨집니다.
+        try:
+            b.decode("ascii")
+            한글없음.append(이름)
+        except UnicodeDecodeError:
+            BOM없음.append(이름)
+    assert not BOM없음, (
+        "한글이 든 .ps1 에 BOM 이 없습니다. PowerShell 5.1 이 못 읽습니다: "
+        + " · ".join(BOM없음))
+
+
+def test_powershell_이_ps1_을_읽을_수_있나():
+    """파싱만 합니다. 실행은 안 합니다."""
+    ps = shutil.which("powershell") or shutil.which("pwsh")
+    if not ps or not ps1들():
+        return
+    깨진것 = []
+    for p in ps1들():
+        코드 = (
+            "$e=$null;"
+            "[void][System.Management.Automation.Language.Parser]::ParseFile("
+            f"'{p}',[ref]$null,[ref]$e);"
+            "if($e.Count){exit 1}else{exit 0}")
+        r = subprocess.run([ps, "-NoProfile", "-Command", 코드],
+                           capture_output=True, text=True,
+                           encoding="utf-8", errors="replace")
+        if r.returncode != 0:
+            깨진것.append(p.relative_to(ROOT).as_posix())
+    assert not 깨진것, "PowerShell 이 못 읽습니다: " + " · ".join(깨진것)
 
 
 if __name__ == "__main__":
