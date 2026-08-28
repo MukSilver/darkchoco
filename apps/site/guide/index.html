@@ -99,12 +99,23 @@
 </div>
 
 <script type="module">
-import { mountHead, loadData, el, currentCase, linkToCase, REACH, confirmedItems }
+import { mountHead, loadData, el, currentCase, linkToCase, REACH, confirmedItems, mountSampleWarning }
   from "../assets/shell.js";
 
 const base = mountHead("guide");
-const { data } = await loadData(base);
-const G = await (await fetch(`${base}/data/guide.json`)).json();
+let data, G;
+try {
+  ({ data } = await loadData(base));
+  const gr = await fetch(`${base}/data/guide.json`);
+  if (!gr.ok) throw new Error(`guide.json 을 못 읽었습니다 (${gr.status})`);
+  G = await gr.json();
+  if (!data.cases || !G.item_types) throw new Error("데이터가 비어 있습니다");
+} catch (e) {
+  document.querySelector(".main").innerHTML =
+    `<div class="empty-main">가이드를 못 읽었습니다 — ${e.message}</div>`;
+  throw e;
+}
+mountSampleWarning(data.meta);
 
 const ITEM  = Object.fromEntries(G.item_types.map(i => [i.id, i]));
 const PURP  = Object.fromEntries(G.purposes.map(p => [p.id, p]));
@@ -115,34 +126,47 @@ const css = k => getComputedStyle(document.documentElement).getPropertyValue(k).
 let picked = null, q = "";
 
 // ── 왼쪽. 300건을 늘어놓지 않고 좁혀서 찾습니다.
-function renderList() {
+let listBuilt = false;
+function buildList() {
   const box = document.getElementById("caselist");
   box.innerHTML = "";
+  const head = el("div", { class: "listhead" });
+  head.append(el("h2", {}, "어느 사고입니까"),
+              el("span", { class: "count", id: "gcount" }, ""));
+  box.append(head);
+  const inp = el("input", { class: "q", type: "search", value: q, id: "gq",
+                            "aria-label": "사고 검색", placeholder: "업종이나 자료로 좁히기" });
+  let composing = false;
+  inp.addEventListener("compositionstart", () => { composing = true; });
+  inp.addEventListener("compositionend", () => { composing = false; q = inp.value; paintList(); });
+  inp.addEventListener("input", () => { if (composing) return; q = inp.value; paintList(); });
+  box.append(inp);
+  box.append(el("div", { id: "grows" }));
+  listBuilt = true;
+}
+function paintList() {
+  if (!listBuilt) buildList();
   const hits = data.cases
     .filter(c => !q || (c.title + c.industry).toLowerCase().includes(q.toLowerCase()))
     .sort((a, b) => confirmedItems(b).length - confirmedItems(a).length);
-  const head = el("div", { class: "listhead" });
-  head.append(el("h2", {}, "어느 사고입니까"),
-              el("span", { class: "count" }, `${hits.length} / ${data.cases.length}`));
-  box.append(head);
-  const inp = el("input", { class: "q", type: "search", value: q,
-                            placeholder: "업종이나 자료로 좁히기" });
-  inp.addEventListener("input", e => { q = e.target.value; renderList();
-    const n = document.querySelector(".q"); n.focus(); n.setSelectionRange(999, 999); });
-  box.append(inp);
+  document.getElementById("gcount").textContent = `${hits.length} / ${data.cases.length}`;
+  const rows = document.getElementById("grows");
+  const frag = document.createDocumentFragment();
   for (const c of hits.slice(0, 40)) {
     const b = el("button", { class: "caserow", type: "button",
                              ...(picked && picked.id === c.id ? { "data-on": "1" } : {}) });
     b.append(el("b", {}, c.title),
              el("span", { class: "pill", "data-verdict": c.verdict }, c.verdict),
              el("span", { class: "n" }, `${confirmedItems(c).length}개 확인`));
-    b.addEventListener("click", () => { picked = c; renderList(); renderMain(); });
-    box.append(b);
+    b.addEventListener("click", () => { picked = c; paintList(); renderMain(); });
+    frag.append(b);
   }
   if (hits.length > 40)
-    box.append(el("p", { class: "more" }, `${hits.length - 40}건 더 있습니다. 좁혀 보십시오`));
-  if (!hits.length) box.append(el("p", { class: "more" }, "걸리는 사고가 없습니다"));
+    frag.append(el("p", { class: "more" }, `${hits.length - 40}건 더 있습니다. 좁혀 보십시오`));
+  if (!hits.length) frag.append(el("p", { class: "more" }, "걸리는 사고가 없습니다"));
+  rows.innerHTML = ""; rows.append(frag);
 }
+const renderList = paintList;
 
 // ── 오른쪽. 확인된 것과, 그것 때문에 생기는 할 일.
 function renderMain() {
@@ -207,7 +231,7 @@ function renderMain() {
       if (a.why) row.append(el("div", { class: "why" }, a.why));
       const tags = el("div", { class: "tags" });
       const p = PURP[a.purpose];
-      if (p) tags.append(el("span", { class: "tag", style: `color:${css(p.color)};border-color:${css(p.color)}` }, p.label));
+      if (p) tags.append(el("span", { class: "tag", style: `color:var(${p.color});border-color:var(${p.color})` }, p.label));
       for (const i of (a.items || []).filter(i => conf.includes(i)))
         tags.append(el("span", { class: "tag" }, ITEM[i].label));
       row.append(tags);
