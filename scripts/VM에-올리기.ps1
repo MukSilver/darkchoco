@@ -123,7 +123,10 @@ try {
     Remove-Item -LiteralPath $tar -Force -ErrorAction SilentlyContinue
     # -join "" 으로 붙이면 여러 줄이 한 덩어리가 되어 361 이 3610 처럼
     # 보입니다. 마지막 줄만 씁니다.
-    $n = (VmRun 'find ~/darkchoco -type f | wc -l' | Select-Object -Last 1)
+    # 숫자만 있는 줄을 고릅니다. 마지막 줄은 빈 줄일 수 있고, 여러 줄을
+    # 붙이면 361 이 3610 처럼 보입니다.
+    $n = (VmRun 'find ~/darkchoco -type f | wc -l' |
+          Where-Object { "$_" -match '^\s*\d+\s*$' } | Select-Object -First 1)
     OK "$mb MB · 파일 $("$n".Trim())개 (.git 과 .venv 는 안 넣습니다)"
 
     # ── 5. 자리 만들기 ─────────────────────────────────────────────
