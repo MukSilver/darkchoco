@@ -188,6 +188,43 @@ def test_흐름문서가_코드와_안_어긋난다():
         assert (ROOT / f"hub/crawler/probe/{g}.py").exists()
 
 
+def test_http_는_CONNECT_로_보낸다():
+    """어니언은 거의 다 http:// 다. 이것이 깨지면 명부의 어니언이 전부 죽는다.
+
+    urllib 의 기본 동작은 프록시에 "GET http://그곳/" 을 그대로 보내는
+    것인데, Tor 의 HTTPTunnelPort 는 CONNECT 만 받아 그 요청을 끊는다.
+    2026-08-28 에 실제로 이랬다 — 살아 있는 Tor Project 어니언조차
+    RemoteDisconnected 였고, https:// 인 DuckDuckGo 만 열렸다.
+    """
+    import urllib.request
+
+    from hub.crawler.probe._나가기 import 오프너
+
+    op = 오프너("http://127.0.0.1:9080")
+    핸들러 = {type(h).__name__: h for h in op.handlers}
+
+    # http 를 맡는 핸들러가 우리 것이어야 한다.
+    맡은것 = [h for h in op.handlers if hasattr(h, "http_open")]
+    assert 맡은것, "http 를 맡는 핸들러가 없다"
+    우리것 = [h for h in 맡은것 if type(h).__name__ == "핸들러"]
+    assert 우리것, f"http 를 기본 핸들러가 맡고 있다: {list(핸들러)}"
+
+    # ProxyHandler 는 https 만 맡아야 한다. http 도 맡으면 그쪽이 이긴다.
+    프록시핸들러 = [h for h in op.handlers
+                if isinstance(h, urllib.request.ProxyHandler)]
+    assert 프록시핸들러, "ProxyHandler 가 없다"
+    맡은것 = set(프록시핸들러[0].proxies)
+    assert "http" not in 맡은것, f"ProxyHandler 가 http 를 맡고 있다: {맡은것}"
+    assert "https" in 맡은것
+
+
+def test_터널이_프록시_주소를_제대로_나눈다():
+    from hub.crawler.probe._나가기 import _프록시나누기
+    assert _프록시나누기("http://127.0.0.1:9080") == ("127.0.0.1", 9080)
+    assert _프록시나누기("127.0.0.1:9080") == ("127.0.0.1", 9080)
+    assert _프록시나누기("http://tor.local:9150") == ("tor.local", 9150)
+
+
 if __name__ == "__main__":
     n = 0
     for k, v in sorted(globals().items()):

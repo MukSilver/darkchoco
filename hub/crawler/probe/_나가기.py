@@ -37,6 +37,18 @@ SOCKS 가 아니라 HTTPTunnelPort 를 씁니다. 표준 라이브러리는 SOCK
 못 탑니다. socks 라이브러리를 받으면 되지만, 받을 것을 늘리면 팀원이
 그것을 안 깔고 돌렸을 때 조용히 맨 연결로 새는 길이 생깁니다.
 
+**http:// 는 손으로 터널을 뚫습니다.** urllib 은 http:// 를 프록시로
+보낼 때 CONNECT 를 안 쓰고 "GET http://그곳/ HTTP/1.1" 을 그대로
+보냅니다. Tor 의 HTTPTunnelPort 는 CONNECT 만 받으므로 그 요청을
+끊습니다. https:// 는 CONNECT 를 쓰니 그냥 됩니다.
+
+    https://duckduckgogg42xjoc...onion/   열립니다
+    http://2gzyxa5ihm7nsggfxnu...onion/   끊깁니다 (살아 있는데도)
+
+다크웹 어니언은 거의 다 http:// 입니다. 이것을 안 고치면 명부의 어니언
+줄이 전부 「안 열립니다」 가 됩니다. 그래서 http:// 일 때는
+HTTPConnection.set_tunnel 로 우리가 CONNECT 를 걸어 줍니다.
+
 `ExcludeExitNodes {kr}` 은 한국 출구를 아예 안 쓰게 합니다. Tor 에도
 한국 출구가 있어서, 안 막으면 우리 IP 는 아니어도 한국 주소가 남습니다.
 
@@ -47,9 +59,11 @@ SOCKS 가 아니라 HTTPTunnelPort 를 씁니다. 표준 라이브러리는 SOCK
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import urllib.error
+import urllib.parse
 import urllib.request
 
 __all__ = ["보호없음", "오프너", "프록시주소", "출구확인", "안내",
@@ -120,8 +134,41 @@ def 오프너(프록시: str | None = None, *, 갈래: str = ""):
 
     # 프록시를 지정한 핸들러만 답니다. 환경 변수에서 프록시를 주워 오는
     # 기본 동작을 끄려는 것입니다. 그쪽이 비어 있으면 맨 연결이 됩니다.
+    #
+    # http:// 는 우리가 만든 터널 핸들러가 맡습니다(위 설명). https:// 는
+    # ProxyHandler 가 CONNECT 를 걸어 주므로 그대로 둡니다.
     return urllib.request.build_opener(
-        urllib.request.ProxyHandler({"http": 프록시, "https": 프록시}))
+        urllib.request.ProxyHandler({"https": 프록시}),
+        _터널핸들러(프록시))
+
+
+def _프록시나누기(프록시: str) -> tuple[str, int]:
+    """http://127.0.0.1:9080 → ("127.0.0.1", 9080)"""
+    쪼갠것 = urllib.parse.urlsplit(
+        프록시 if "://" in 프록시 else f"http://{프록시}")
+    return (쪼갠것.hostname or "127.0.0.1"), int(쪼갠것.port or 8080)
+
+
+def _터널핸들러(프록시: str):
+    """http:// 요청을 CONNECT 로 감싸 보내는 핸들러.
+
+    urllib 의 기본 동작은 프록시에 "GET http://그곳/" 을 그대로 보내는
+    것입니다. Tor 는 그 꼴을 안 받습니다. 여기서 우리가 CONNECT 를
+    걸어 줍니다.
+    """
+    프록시호스트, 프록시포트 = _프록시나누기(프록시)
+
+    class 터널연결(http.client.HTTPConnection):
+        def __init__(self, host, port=None, timeout=30, **kw):
+            대상, _, 대상포트 = host.partition(":")
+            super().__init__(프록시호스트, 프록시포트, timeout=timeout)
+            self.set_tunnel(대상, int(대상포트) if 대상포트 else 80)
+
+    class 핸들러(urllib.request.HTTPHandler):
+        def http_open(self, req):
+            return self.do_open(터널연결, req)
+
+    return 핸들러()
 
 
 def 출구확인(프록시: str | None = None, *, timeout: int = 30) -> dict:

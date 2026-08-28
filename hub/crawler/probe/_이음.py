@@ -41,6 +41,9 @@ _흔한곳 = {
     "fonts.googleapis.com", "fonts.gstatic.com", "ajax.googleapis.com",
     "gravatar.com", "jquery.com", "bootstrapcdn.com", "recaptcha.net",
     "hcaptcha.com", "gstatic.com", "googletagmanager.com",
+    "pinterest.com", "whatsapp.com", "api.whatsapp.com", "wa.me",
+    "mastodon.social", "matrix.org", "keybase.io", "protonmail.com",
+    "pastebin.com", "mega.nz", "anonfiles.com",
 }
 
 # 호스트답게 생겼나. 점이 있고 끝이 글자 두 개 이상이어야 합니다.
@@ -51,7 +54,9 @@ _호스트꼴 = re.compile(r"^[a-z0-9][a-z0-9.\-]{0,250}\.[a-z]{2,24}$")
 # 지나면 호스트처럼 보입니다.
 _파일끝 = (".php", ".html", ".htm", ".asp", ".aspx", ".jsp", ".cgi",
         ".js", ".css", ".json", ".xml", ".txt", ".rss", ".pdf",
-        ".jpg", ".jpeg", ".png", ".gif", ".svg", ".webp", ".ico")
+        ".jpg", ".jpeg", ".png", ".gif", ".svg", ".webp", ".ico",
+        ".webmanifest", ".map", ".woff", ".woff2", ".ttf", ".eot",
+        ".zip", ".gz", ".mp4", ".webm", ".csv", ".yml", ".yaml")
 
 
 def 호스트(값: str) -> str:
