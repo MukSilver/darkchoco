@@ -40,19 +40,43 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/124.0 Safari/537.36")
 
 # t.me 소개 쪽의 구독자 수. "1 234 subscribers" 처럼 빈칸이 섞입니다.
+# t.me 는 수를 축약해 보냅니다. "8.12K subscribers" 처럼입니다.
+# 축약값은 정확하지 않으므로 그대로 쓰지 않고 어림수임을 밝힙니다.
 _구독자 = re.compile(
-    r'<div class="tgme_page_extra">([^<]*?)(?:subscriber|members|명)', re.I)
+    r'counter_value"[^>]*>\s*([\d\s,\.]+[KMkm]?)\s*</span>\s*'
+    r'<span class="counter_type">\s*(?:subscriber|member)', re.I)
 _구독자2 = re.compile(
-    r'"tgme_header_counter">\s*([\d\s,\.]+)\s*(?:subscriber|members)', re.I)
+    r'tgme_(?:header_counter|page_extra)"[^>]*>\s*([\d\s,\.]+[KMkm]?)\s*'
+    r'(?:subscriber|member|명)', re.I)
 _제목 = re.compile(r'<div class="tgme_(?:page|channel_info_header)_title"[^>]*>([^<]+)')
 _소개 = re.compile(r'<div class="tgme_page_description"[^>]*>(.*?)</div>', re.S)
 _마지막글 = re.compile(r'datetime="([\dT:\-\+]+)"')
 _미리보기꺼짐 = re.compile(r'tgme_page_context_link|preview is not available', re.I)
 
 
-def _숫자(s: str) -> int | None:
-    s = re.sub(r"[^\d]", "", s or "")
-    return int(s) if s else None
+def _숫자(s: str) -> tuple[int | None, bool]:
+    """(수, 어림수인가) 를 돌려줍니다.
+
+    t.me 가 8.12K 처럼 줄여 보냅니다. 그것을 8,120 으로 펴면 실제와
+    다를 수 있습니다. 그래서 어림수임을 같이 돌려줍니다.
+    """
+    s = (s or "").strip().replace(" ", "").replace(",", "")
+    if not s:
+        return None, False
+    m = re.fullmatch(r"([\d.]+)\s*([KMkm]?)", s)
+    if not m:
+        숫자 = re.sub(r"[^\d]", "", s)
+        return (int(숫자), False) if 숫자 else (None, False)
+    값, 배 = m.group(1), m.group(2).upper()
+    try:
+        n = float(값)
+    except ValueError:
+        return None, False
+    if 배 == "K":
+        return int(n * 1_000), True
+    if 배 == "M":
+        return int(n * 1_000_000), True
+    return int(n), False
 
 
 def _글자(s: str) -> str:
@@ -75,21 +99,52 @@ def _받기(url: str, 마지막: list[float]) -> tuple[int, str]:
         마지막[0] = time.time()
 
 
-def _채널이름(값: str) -> str:
+def _채널이름(값: str) -> tuple[str, str]:
+    """주소에서 채널 이름을 뽑습니다. (이름, 못 볼 이유) 를 돌려줍니다.
+
+    명부에 적힌 주소 꼴이 제각각입니다. 실제로 이런 것들이 있습니다.
+
+        https://t.me/leakforumio          보통
+        t.me/cyberbreachio                프로토콜 없음
+        @projectwwh                       골뱅이
+        https://t.me/+LV-lyCog6r42OWM0    초대 링크. 공개 미리보기가 없습니다
+        https://nulledbb.com/discord      텔레그램이 아닙니다
+    """
     값 = (값 or "").strip().rstrip("/")
-    for 앞 in ("https://t.me/s/", "https://t.me/", "http://t.me/", "t.me/s/", "t.me/", "@"):
-        if 값.startswith(앞):
+    if not 값:
+        return "", "주소가 비어 있습니다"
+
+    낮 = 값.lower()
+    # 주소 꼴이면 t.me 여야 합니다. 채널 이름만 준 것은 그대로 받습니다.
+    if "://" in 값 or "." in 값.split("/")[0]:
+        if "t.me" not in 낮:
+            return "", f"텔레그램 주소가 아닙니다: {값[:48]}"
+
+    for 앞 in ("https://t.me/s/", "http://t.me/s/", "https://t.me/",
+               "http://t.me/", "t.me/s/", "t.me/", "@"):
+        if 낮.startswith(앞):
             값 = 값[len(앞):]
             break
-    return 값.strip("/")
+    값 = 값.strip("/")
+
+    if 값.startswith("+") or 값.lower().startswith("joinchat"):
+        return "", "초대 링크입니다. 공개 미리보기가 없어 실계정으로 봐야 합니다"
+    if not 값:
+        return "", "주소에서 채널 이름을 못 뽑았습니다"
+    return 값, ""
 
 
-def 한곳(채널: str, 마지막: list[float]) -> Place:
+def 한곳(채널: str, 마지막: list[float], 이름표: str = "") -> Place:
     """채널 하나를 봅니다. 못 봤으면 왜인지 적습니다."""
-    이름 = _채널이름(채널)
-    p = Place(갈래="telegram", 이름=이름,
-              주소=f"https://t.me/{이름}", 확인일=지금(),
-              출처=["직접 확인"], 받은곳="t.me 공개 미리보기")
+    이름, 못볼이유 = _채널이름(채널)
+    p = Place(갈래="telegram", 이름=이름표 or 이름 or 채널[:40],
+              주소=f"https://t.me/{이름}" if 이름 else 채널,
+              확인일=지금(), 출처=["직접 확인"], 받은곳="t.me 공개 미리보기")
+    if 못볼이유:
+        p.못본이유 = 못볼이유
+        # 텔레그램 주소가 아니면 명부가 틀린 것입니다. 채널 상태가 아닙니다.
+        p.주소이상 = "텔레그램 주소가 아닙니다" in 못볼이유 or "비어 있" in 못볼이유
+        return p
 
     try:
         code, body = _받기(f"https://t.me/s/{이름}", 마지막)
@@ -119,15 +174,16 @@ def 한곳(채널: str, 마지막: list[float]) -> Place:
     if m:
         p.이름 = _글자(m.group(1)) or 이름
 
-    수 = None
-    for rx in (_구독자2, _구독자):
+    수, 어림 = None, False
+    for rx in (_구독자, _구독자2):
         m = rx.search(body)
         if m:
-            수 = _숫자(m.group(1))
+            수, 어림 = _숫자(m.group(1))
             if 수:
                 break
     if 수:
         p.구독자수 = 수
+        p.어림수 = 어림
 
     글들 = _마지막글.findall(body)
     if 글들:
@@ -142,11 +198,15 @@ def 한곳(채널: str, 마지막: list[float]) -> Place:
     return p
 
 
-def 조사(채널들: list[str], *, dry: bool = False, limit: int = 0) -> Iterator[Place]:
+def 조사(채널들: list, *, dry: bool = False, limit: int = 0) -> Iterator[Place]:
+    """채널들은 주소 문자열이거나 {"이름": ..., "주소": ...} 입니다."""
     if dry or not 채널들:
         return
     마지막 = [0.0]
     for i, c in enumerate(채널들):
         if limit and i >= limit:
             return
-        yield 한곳(c, 마지막)
+        if isinstance(c, dict):
+            yield 한곳(c.get("주소") or "", 마지막, c.get("이름") or "")
+        else:
+            yield 한곳(c, 마지막)
