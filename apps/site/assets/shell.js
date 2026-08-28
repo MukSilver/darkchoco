@@ -69,8 +69,17 @@ export function validate(data) {
   });
 
   for (const c of data.cases || []) {
-    const bad = (c.path || []).filter(id => !ids.has(id));
+    const bad = (c.hops || []).map(h => h.place).filter(id => !ids.has(id));
     if (bad.length) problems.push(`사건 ${c.id}의 경로에 없는 자리: ${bad.join(", ")}`);
+    // 허위로 판정한 사고에 확인된 항목이 있으면 안 됩니다
+    if (c.gate === "blocked" && Object.values(c.items || {}).includes("confirmed")) {
+      problems.push(`허위로 판정한 사건 ${c.id}에 확인된 항목이 있습니다`);
+    }
+    // 층이 자리와 어긋나면 안 됩니다
+    for (const h of c.hops || []) {
+      const pp = (data.places || []).find(x => x.id === h.place);
+      if (pp && pp.layer !== h.layer) problems.push(`사건 ${c.id}의 ${h.place} 층이 어긋납니다`);
+    }
   }
 
   const s = data.stats || {};
@@ -113,3 +122,24 @@ export function el(tag, attrs = {}, ...kids) {
   for (const kid of kids) n.append(kid);
   return n;
 }
+
+
+// 확인된 항목만 골라냅니다. 주장은 조치의 입력이 아닙니다.
+export function confirmedItems(c) {
+  return Object.entries(c.items || {}).filter(([, v]) => v === "confirmed").map(([k]) => k);
+}
+export function claimedItems(c) {
+  return Object.entries(c.items || {}).filter(([, v]) => v === "claimed").map(([k]) => k);
+}
+
+// 그 사고가 지금 어디까지 갔는가. 마지막으로 확인된 자리의 층과 대륙이 정합니다.
+export const REACH = {
+  "deep-only": { label: "아직 다크웹 안에서만 확인됐습니다",
+                 sub: "계정이나 주소를 알아야 볼 수 있는 곳까지입니다" },
+  "surfaced":  { label: "오픈웹까지 올라왔습니다",
+                 sub: "가입만 하면 볼 수 있는 곳에 있습니다" },
+  "public":    { label: "검색에 걸리는 곳까지 갔습니다",
+                 sub: "회수를 요청해도 되돌리기 어렵습니다" },
+  "unknown":   { label: "어디까지 갔는지 아직 못 봤습니다",
+                 sub: "자리를 확인하지 못했습니다" },
+};

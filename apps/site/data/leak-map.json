@@ -6,127 +6,509 @@
     "is_sample": true,
     "note": "자리 이름은 실제이고 숫자는 UI 구조 설명용입니다. tools/build_data.py 가 이 파일을 덮어씁니다."
   },
-
   "layers": [
-    { "id": "sky",  "name": "오픈웹", "sub": "검색하면 나오는 세계" },
-    { "id": "deep", "name": "다크웹", "sub": "주소나 계정을 알아야 열리는 세계" }
+    {
+      "id": "sky",
+      "name": "오픈웹",
+      "sub": "검색하면 나오는 세계"
+    },
+    {
+      "id": "deep",
+      "name": "다크웹",
+      "sub": "주소나 계정을 알아야 열리는 세계"
+    }
   ],
-
   "kinds": [
-    { "id": "forum",    "name": "해킹 포럼",     "color": "#8b6fe0" },
-    { "id": "ransom",   "name": "랜섬웨어 그룹", "color": "#dc5f4c" },
-    { "id": "telegram", "name": "텔레그램 채널", "color": "#3f9bd6" },
-    { "id": "archive",  "name": "공개 · 미러",   "color": "#3fae8f" },
-    { "id": "broker",   "name": "접근 브로커",   "color": "#d08b3a" }
+    {
+      "id": "forum",
+      "name": "해킹 포럼",
+      "color": "#8b6fe0"
+    },
+    {
+      "id": "ransom",
+      "name": "랜섬웨어 그룹",
+      "color": "#dc5f4c"
+    },
+    {
+      "id": "telegram",
+      "name": "텔레그램 채널",
+      "color": "#3f9bd6"
+    },
+    {
+      "id": "archive",
+      "name": "공개 · 미러",
+      "color": "#3fae8f"
+    },
+    {
+      "id": "broker",
+      "name": "접근 브로커",
+      "color": "#d08b3a"
+    }
   ],
-
   "places": [
-    { "id": "fo-darkforums", "name": "DarkForums", "layer": "sky", "kind": "forum",
-      "status": "online", "investigated": true, "cases": 17, "korea": true, "seized": false,
-      "first_seen": "2026-06-11", "last_seen": "2026-08-19",
-      "note": "데이터베이스 게시판이 따로 있는 곳입니다" },
-    { "id": "fo-repost", "name": "재게시 게시판", "layer": "sky", "kind": "forum",
-      "status": "online", "investigated": true, "cases": 7, "korea": false,
-      "first_seen": "2026-07-02", "last_seen": "2026-08-15" },
-    { "id": "fo-sky-rest", "name": "그 밖 클리어넷 포럼", "layer": "sky", "kind": "forum",
-      "status": "미확인", "investigated": false, "cases": 24, "korea": false },
-
-    { "id": "ar-public", "name": "공개 아카이브", "layer": "sky", "kind": "archive",
-      "status": "online", "investigated": true, "cases": 12, "korea": true,
-      "first_seen": "2026-06-20", "last_seen": "2026-08-18",
-      "note": "검색엔진에도 걸립니다" },
-    { "id": "ar-mirror", "name": "DLS 미러", "layer": "sky", "kind": "archive",
-      "status": "online", "investigated": true, "cases": 6, "korea": false },
-    { "id": "ar-exposed", "name": "노출된 저장소", "layer": "sky", "kind": "archive",
-      "status": "미확인", "investigated": true, "cases": 5, "korea": true,
-      "note": "설정 오류와 공유 링크로 열린 자리입니다. 닥스훈트 팀이 맡습니다" },
-
-    { "id": "tg-relay", "name": "유출 중계 채널", "layer": "sky", "kind": "telegram",
-      "status": "online", "investigated": true, "cases": 9, "korea": true,
-      "first_seen": "2026-07-08", "last_seen": "2026-08-17" },
-    { "id": "tg-sky-rest", "name": "그 밖 공개 채널", "layer": "sky", "kind": "telegram",
-      "status": "미확인", "investigated": false, "cases": 8, "korea": false },
-
-    { "id": "rw-qilin", "name": "Qilin", "layer": "deep", "kind": "ransom",
-      "status": "online", "investigated": true, "cases": 14, "korea": true,
-      "first_seen": "2026-05-25", "last_seen": "2026-08-19" },
-    { "id": "rw-gunra", "name": "GUNRA", "layer": "deep", "kind": "ransom",
-      "status": "online", "investigated": true, "cases": 6, "korea": false },
-    { "id": "rw-nightspire", "name": "nightspire", "layer": "deep", "kind": "ransom",
-      "status": "offline", "investigated": true, "cases": 4, "korea": false },
-    { "id": "rw-rest", "name": "그 밖 랜섬웨어 그룹", "layer": "deep", "kind": "ransom",
-      "status": "미확인", "investigated": false, "cases": 60, "korea": false,
-      "note": "이름과 상태만 확보했고 아직 들여다보지 못했습니다" },
-
-    { "id": "fo-breach", "name": "BreachForums", "layer": "deep", "kind": "forum",
-      "status": "seized", "investigated": true, "cases": 8, "korea": true, "seized": true,
-      "first_seen": "2026-05-30", "last_seen": "2026-08-12",
-      "note": "압수된 뒤 후계가 두 갈래로 갈렸습니다" },
-    { "id": "fo-xss", "name": "XSS", "layer": "deep", "kind": "forum",
-      "status": "online", "investigated": true, "cases": 5, "korea": false,
-      "note": "러시아어 포럼이고 보증이 필요합니다" },
-    { "id": "fo-exploit", "name": "Exploit", "layer": "deep", "kind": "forum",
-      "status": "online", "investigated": true, "cases": 3, "korea": false },
-    { "id": "fo-deep-rest", "name": "그 밖 어니언 포럼", "layer": "deep", "kind": "forum",
-      "status": "미확인", "investigated": false, "cases": 14, "korea": false },
-
-    { "id": "tg-private", "name": "판매 전용 채널", "layer": "deep", "kind": "telegram",
-      "status": "online", "investigated": true, "cases": 4, "korea": false },
-
-    { "id": "br-iab", "name": "초기 접근 중개자", "layer": "deep", "kind": "broker",
-      "status": "online", "investigated": true, "cases": 3, "korea": false,
-      "note": "들어갈 권한만 팔고 자료는 안 가집니다" },
-    { "id": "br-rest", "name": "그 밖 브로커", "layer": "deep", "kind": "broker",
-      "status": "미확인", "investigated": false, "cases": 6, "korea": false }
+    {
+      "id": "fo-darkforums",
+      "name": "DarkForums",
+      "layer": "sky",
+      "kind": "forum",
+      "status": "online",
+      "investigated": true,
+      "cases": 17,
+      "korea": true,
+      "seized": false,
+      "first_seen": "2026-06-11",
+      "last_seen": "2026-08-19",
+      "note": "데이터베이스 게시판이 따로 있는 곳입니다"
+    },
+    {
+      "id": "fo-repost",
+      "name": "재게시 게시판",
+      "layer": "sky",
+      "kind": "forum",
+      "status": "online",
+      "investigated": true,
+      "cases": 7,
+      "korea": false,
+      "first_seen": "2026-07-02",
+      "last_seen": "2026-08-15"
+    },
+    {
+      "id": "fo-sky-rest",
+      "name": "그 밖 클리어넷 포럼",
+      "layer": "sky",
+      "kind": "forum",
+      "status": "미확인",
+      "investigated": false,
+      "cases": 24,
+      "korea": false
+    },
+    {
+      "id": "ar-public",
+      "name": "공개 아카이브",
+      "layer": "sky",
+      "kind": "archive",
+      "status": "online",
+      "investigated": true,
+      "cases": 12,
+      "korea": true,
+      "first_seen": "2026-06-20",
+      "last_seen": "2026-08-18",
+      "note": "검색엔진에도 걸립니다"
+    },
+    {
+      "id": "ar-mirror",
+      "name": "DLS 미러",
+      "layer": "sky",
+      "kind": "archive",
+      "status": "online",
+      "investigated": true,
+      "cases": 6,
+      "korea": false
+    },
+    {
+      "id": "ar-exposed",
+      "name": "노출된 저장소",
+      "layer": "sky",
+      "kind": "archive",
+      "status": "미확인",
+      "investigated": true,
+      "cases": 5,
+      "korea": true,
+      "note": "설정 오류와 공유 링크로 열린 자리입니다. 닥스훈트 팀이 맡습니다"
+    },
+    {
+      "id": "tg-relay",
+      "name": "유출 중계 채널",
+      "layer": "sky",
+      "kind": "telegram",
+      "status": "online",
+      "investigated": true,
+      "cases": 9,
+      "korea": true,
+      "first_seen": "2026-07-08",
+      "last_seen": "2026-08-17"
+    },
+    {
+      "id": "tg-sky-rest",
+      "name": "그 밖 공개 채널",
+      "layer": "sky",
+      "kind": "telegram",
+      "status": "미확인",
+      "investigated": false,
+      "cases": 8,
+      "korea": false
+    },
+    {
+      "id": "rw-qilin",
+      "name": "Qilin",
+      "layer": "deep",
+      "kind": "ransom",
+      "status": "online",
+      "investigated": true,
+      "cases": 14,
+      "korea": true,
+      "first_seen": "2026-05-25",
+      "last_seen": "2026-08-19"
+    },
+    {
+      "id": "rw-gunra",
+      "name": "GUNRA",
+      "layer": "deep",
+      "kind": "ransom",
+      "status": "online",
+      "investigated": true,
+      "cases": 6,
+      "korea": false
+    },
+    {
+      "id": "rw-nightspire",
+      "name": "nightspire",
+      "layer": "deep",
+      "kind": "ransom",
+      "status": "offline",
+      "investigated": true,
+      "cases": 4,
+      "korea": false
+    },
+    {
+      "id": "rw-rest",
+      "name": "그 밖 랜섬웨어 그룹",
+      "layer": "deep",
+      "kind": "ransom",
+      "status": "미확인",
+      "investigated": false,
+      "cases": 60,
+      "korea": false,
+      "note": "이름과 상태만 확보했고 아직 들여다보지 못했습니다"
+    },
+    {
+      "id": "fo-breach",
+      "name": "BreachForums",
+      "layer": "deep",
+      "kind": "forum",
+      "status": "seized",
+      "investigated": true,
+      "cases": 8,
+      "korea": true,
+      "seized": true,
+      "first_seen": "2026-05-30",
+      "last_seen": "2026-08-12",
+      "note": "압수된 뒤 후계가 두 갈래로 갈렸습니다"
+    },
+    {
+      "id": "fo-xss",
+      "name": "XSS",
+      "layer": "deep",
+      "kind": "forum",
+      "status": "online",
+      "investigated": true,
+      "cases": 5,
+      "korea": false,
+      "note": "러시아어 포럼이고 보증이 필요합니다"
+    },
+    {
+      "id": "fo-exploit",
+      "name": "Exploit",
+      "layer": "deep",
+      "kind": "forum",
+      "status": "online",
+      "investigated": true,
+      "cases": 3,
+      "korea": false
+    },
+    {
+      "id": "fo-deep-rest",
+      "name": "그 밖 어니언 포럼",
+      "layer": "deep",
+      "kind": "forum",
+      "status": "미확인",
+      "investigated": false,
+      "cases": 14,
+      "korea": false
+    },
+    {
+      "id": "tg-private",
+      "name": "판매 전용 채널",
+      "layer": "deep",
+      "kind": "telegram",
+      "status": "online",
+      "investigated": true,
+      "cases": 4,
+      "korea": false
+    },
+    {
+      "id": "br-iab",
+      "name": "초기 접근 중개자",
+      "layer": "deep",
+      "kind": "broker",
+      "status": "online",
+      "investigated": true,
+      "cases": 3,
+      "korea": false,
+      "note": "들어갈 권한만 팔고 자료는 안 가집니다"
+    },
+    {
+      "id": "br-rest",
+      "name": "그 밖 브로커",
+      "layer": "deep",
+      "kind": "broker",
+      "status": "미확인",
+      "investigated": false,
+      "cases": 6,
+      "korea": false
+    }
   ],
-
   "flows": [
-    { "from": "rw-qilin", "to": "fo-breach", "kind": "flat", "cases": 8,
-      "label": "유출 사이트에서 포럼으로", "confidence": "confirmed" },
-    { "from": "fo-breach", "to": "fo-xss", "kind": "flat", "cases": 5,
-      "label": "되팔이 재게시", "confidence": "confirmed" },
-    { "from": "br-iab", "to": "rw-qilin", "kind": "flat", "cases": 3,
-      "label": "접근 권한 판매", "confidence": "probable" },
-    { "from": "fo-darkforums", "to": "fo-repost", "kind": "flat", "cases": 7,
-      "label": "같은 층 재게시", "confidence": "confirmed" },
-
-    { "from": "fo-darkforums", "to": "fo-breach", "kind": "drop", "cases": 8,
-      "label": "내려가 팔림", "confidence": "confirmed" },
-    { "from": "ar-exposed", "to": "fo-xss", "kind": "exposure", "cases": 5,
-      "label": "노출된 자료가 거래로", "confidence": "probable" },
-
-    { "from": "fo-breach", "to": "tg-relay", "kind": "rise", "cases": 8,
-      "label": "채널로 다시 풀림", "confidence": "confirmed" },
-    { "from": "fo-xss", "to": "ar-public", "kind": "rise", "cases": 5,
-      "label": "기간이 지나 무상 공개", "confidence": "confirmed" },
-
-    { "from": "fo-breach", "to": "fo-exploit", "kind": "succession", "cases": 3,
-      "label": "압수 뒤 후계로", "confidence": "probable" }
+    {
+      "from": "rw-qilin",
+      "to": "fo-breach",
+      "kind": "flat",
+      "cases": 1,
+      "label": "유출 사이트에서 포럼으로",
+      "confidence": "confirmed",
+      "from_cases": true
+    },
+    {
+      "from": "fo-breach",
+      "to": "fo-xss",
+      "kind": "flat",
+      "cases": 5,
+      "label": "되팔이 재게시",
+      "confidence": "confirmed"
+    },
+    {
+      "from": "br-iab",
+      "to": "rw-qilin",
+      "kind": "flat",
+      "cases": 3,
+      "label": "접근 권한 판매",
+      "confidence": "probable"
+    },
+    {
+      "from": "fo-darkforums",
+      "to": "fo-repost",
+      "kind": "flat",
+      "cases": 7,
+      "label": "같은 층 재게시",
+      "confidence": "confirmed"
+    },
+    {
+      "from": "fo-darkforums",
+      "to": "fo-breach",
+      "kind": "drop",
+      "cases": 8,
+      "label": "내려가 팔림",
+      "confidence": "confirmed"
+    },
+    {
+      "from": "ar-exposed",
+      "to": "fo-xss",
+      "kind": "exposure",
+      "cases": 5,
+      "label": "노출된 자료가 거래로",
+      "confidence": "probable"
+    },
+    {
+      "from": "fo-breach",
+      "to": "tg-relay",
+      "kind": "rise",
+      "cases": 1,
+      "label": "채널로 다시 풀림",
+      "confidence": "confirmed",
+      "from_cases": true
+    },
+    {
+      "from": "fo-xss",
+      "to": "ar-public",
+      "kind": "rise",
+      "cases": 1,
+      "label": "기간이 지나 무상 공개",
+      "confidence": "confirmed",
+      "from_cases": true
+    },
+    {
+      "from": "fo-breach",
+      "to": "fo-exploit",
+      "kind": "succession",
+      "cases": 3,
+      "label": "압수 뒤 후계로",
+      "confidence": "probable"
+    }
   ],
-
   "cases": [
-    { "id": 13, "title": "가나다몰 배송정보", "org": "가나다몰", "posted": "2026-08-14",
-      "verdict": "신뢰성 높음", "scale": "46.6GB",
-      "items_claimed": ["이름", "이메일", "계정", "주소", "전화"],
-      "items_confirmed": ["이름", "이메일", "계정"],
-      "path": ["rw-qilin", "fo-breach", "tg-relay", "ar-public"] },
-    { "id": 10, "title": "라마바 물류 주문내역", "org": "라마바물류", "posted": "2026-08-10",
-      "verdict": "허위", "scale": "3,320만 건",
-      "items_claimed": ["이름", "전화", "주소"],
-      "items_confirmed": [],
-      "path": ["fo-darkforums"] },
-    { "id": 17, "title": "사아자 이러닝 회원DB", "org": "사아자이러닝", "posted": "2026-08-05",
-      "verdict": "미확인", "scale": "미상",
-      "items_claimed": ["이메일", "계정"],
-      "items_confirmed": [],
-      "path": ["fo-xss", "ar-public"] }
+    {
+      "id": 13,
+      "title": "가나다몰 배송정보",
+      "org": "가나다몰",
+      "posted": "2026-08-14",
+      "verdict": "신뢰성 높음",
+      "scale": "46.6GB",
+      "hops": [
+        {
+          "place": "rw-qilin",
+          "name": "Qilin",
+          "layer": "deep",
+          "kind": "ransom",
+          "at": "2026-08-14",
+          "relation": "여기서 처음 나왔습니다"
+        },
+        {
+          "place": "fo-breach",
+          "name": "BreachForums",
+          "layer": "deep",
+          "kind": "forum",
+          "at": "2026-08-14",
+          "relation": "유출 사이트에서 포럼으로"
+        },
+        {
+          "place": "tg-relay",
+          "name": "유출 중계 채널",
+          "layer": "sky",
+          "kind": "telegram",
+          "at": "2026-08-14",
+          "relation": "채널로 다시 풀림"
+        },
+        {
+          "place": "ar-public",
+          "name": "공개 아카이브",
+          "layer": "sky",
+          "kind": "archive",
+          "at": "2026-08-14",
+          "relation": "여기로 옮겨졌습니다"
+        }
+      ],
+      "items": {
+        "name": "confirmed",
+        "email": "confirmed",
+        "account": "confirmed",
+        "address": "claimed",
+        "phone": "claimed"
+      },
+      "gate": "full",
+      "reach": {
+        "state": "public",
+        "layer": "sky",
+        "kind": "archive",
+        "places_n": 4
+      },
+      "verified_on": "2026-08-18",
+      "evidence_kind": "샘플",
+      "evidence_count": 3,
+      "risk": {
+        "exploitability": "가능"
+      }
+    },
+    {
+      "id": 10,
+      "title": "라마바 물류 주문내역",
+      "org": "라마바물류",
+      "posted": "2026-08-10",
+      "verdict": "허위",
+      "scale": "3,320만 건",
+      "hops": [
+        {
+          "place": "fo-darkforums",
+          "name": "DarkForums",
+          "layer": "sky",
+          "kind": "forum",
+          "at": "2026-08-10",
+          "relation": "여기서 처음 나왔습니다"
+        }
+      ],
+      "items": {
+        "name": "claimed",
+        "phone": "claimed",
+        "address": "claimed"
+      },
+      "gate": "blocked",
+      "reach": {
+        "state": "surfaced",
+        "layer": "sky",
+        "kind": "forum",
+        "places_n": 1
+      },
+      "verified_on": "2026-08-18",
+      "evidence_kind": "샘플",
+      "evidence_count": 0,
+      "risk": {
+        "exploitability": "확인불가"
+      }
+    },
+    {
+      "id": 17,
+      "title": "사아자 이러닝 회원DB",
+      "org": "사아자이러닝",
+      "posted": "2026-08-05",
+      "verdict": "미확인",
+      "scale": "미상",
+      "hops": [
+        {
+          "place": "fo-xss",
+          "name": "XSS",
+          "layer": "deep",
+          "kind": "forum",
+          "at": "2026-08-05",
+          "relation": "여기서 처음 나왔습니다"
+        },
+        {
+          "place": "ar-public",
+          "name": "공개 아카이브",
+          "layer": "sky",
+          "kind": "archive",
+          "at": "2026-08-05",
+          "relation": "기간이 지나 무상 공개"
+        }
+      ],
+      "items": {
+        "email": "claimed",
+        "account": "claimed"
+      },
+      "gate": "partial",
+      "reach": {
+        "state": "public",
+        "layer": "sky",
+        "kind": "archive",
+        "places_n": 2
+      },
+      "verified_on": "2026-08-18",
+      "evidence_kind": "샘플",
+      "evidence_count": 0,
+      "risk": {
+        "exploitability": "확인불가"
+      }
+    }
   ],
-
   "actors": [
-    { "handle": "max987", "role": "판매자", "places": ["fo-darkforums", "fo-breach", "fo-xss"] },
-    { "handle": "feijo", "role": "재게시", "places": ["fo-repost", "tg-relay"] },
-    { "handle": "BRKD", "role": "접근 브로커", "places": ["br-iab", "rw-qilin"] }
+    {
+      "handle": "max987",
+      "role": "판매자",
+      "places": [
+        "fo-darkforums",
+        "fo-breach",
+        "fo-xss"
+      ]
+    },
+    {
+      "handle": "feijo",
+      "role": "재게시",
+      "places": [
+        "fo-repost",
+        "tg-relay"
+      ]
+    },
+    {
+      "handle": "BRKD",
+      "role": "접근 브로커",
+      "places": [
+        "br-iab",
+        "rw-qilin"
+      ]
+    }
   ],
-
-  "stats": { "reported": 316, "matched": 199, "circulating": 108, "judged": 12 }
+  "stats": {
+    "reported": 316,
+    "matched": 199,
+    "circulating": 108,
+    "judged": 12
+  }
 }

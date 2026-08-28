@@ -63,11 +63,12 @@
 </div>
 
 <script type="module">
-import { mountHead, mountSampleWarning, loadData, currentCase, linkToCase, el }
-  from "../assets/shell.js";
+import { mountHead, mountSampleWarning, loadData, currentCase, linkToCase, el,
+         confirmedItems, claimedItems, REACH } from "../assets/shell.js";
 
 const base = mountHead("guide");
 const { data } = await loadData(base);
+const GUIDE = await (await fetch(`${base}/data/guide.json`)).json();
 mountSampleWarning(data.meta);
 
 // 항목 → 대응 목적 줄. 이수빈 제안서의 정보 유형별 대응 표를 옮긴 것입니다.
@@ -112,7 +113,7 @@ function show(c, btn) {
   out.innerHTML = "";
 
   // ── 게이트. 허위면 여기서 멈춥니다.
-  const blocked = c.verdict === "허위";
+  const blocked = c.gate === "blocked";
   const gate = el("div", { class: "gate" + (blocked ? " blocked" : "") });
   if (blocked) {
     gate.append(el("h2", { style: "color:var(--v-false)" }, "이 사고에는 조치를 만들지 않습니다"),
@@ -125,9 +126,13 @@ function show(c, btn) {
     return;
   }
 
-  const conf = new Set(c.items_confirmed || []);
-  const claimed = c.items_claimed || [];
+  const ITEM = Object.fromEntries(GUIDE.item_types.map(i => [i.id, i.label]));
+  const conf = new Set(confirmedItems(c).map(i => ITEM[i] || i));
+  const claimed = Object.keys(c.items || {}).map(i => ITEM[i] || i);
+  const reach = REACH[(c.reach || {}).state] || REACH.unknown;
   gate.append(el("h2", {}, `샘플에서 확인한 항목 ${conf.size}개`));
+  gate.append(el("p", { style: "margin-top:var(--s2);color:var(--ink);font-weight:600" }, reach.label));
+  gate.append(el("p", { style: "font-size:var(--t-tiny);color:var(--faint)" }, reach.sub));
   const chips = el("div", { class: "items" });
   for (const it of claimed) {
     chips.append(el("span", { class: "item " + (conf.has(it) ? "on" : "off") },
