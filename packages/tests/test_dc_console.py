@@ -47,9 +47,14 @@ def test_진입점에_use_utf8_이_붙어있다():
 def test_설치_안해도_help_가_뜬다():
     """무거운 import 를 함수 안으로 내린 것이 되돌아가지 않게 한다."""
     경우 = [
-        ("apps/forum-crawler", ["python", "investigate.py", "--help"]),
-        ("apps/tg-korea-alert", ["python", "korea_alert_monitor.py", "--help"]),
-        ("apps/tg-notion-report", ["python", "telegram_pipeline.py", "--help"]),
+        # sys.executable 을 씁니다. 리눅스에는 "python" 이 없고
+        # "python3" 만 있는 경우가 많습니다. VM 에서 검사가 이것 때문에
+        # 실패했습니다.
+        ("apps/forum-crawler", [sys.executable, "investigate.py", "--help"]),
+        ("apps/tg-korea-alert",
+         [sys.executable, "korea_alert_monitor.py", "--help"]),
+        ("apps/tg-notion-report",
+         [sys.executable, "telegram_pipeline.py", "--help"]),
     ]
     for cwd, cmd in 경우:
         r = subprocess.run(cmd, cwd=ROOT / cwd, capture_output=True, text=True,
