@@ -165,6 +165,7 @@ class Place:
     못본이유: str = ""              # 못 봤으면 왜인지. 빈칸으로 두지 않습니다
     받은곳: str = ""
     살펴볼것: str = ""              # 사람이 손봐야 하는 것. 화면에 올립니다
+    처음본곳: list = field(default_factory=list)   # 명부에 없는 이웃들
 
     def 봤나(self) -> bool:
         return not self.못본이유
@@ -271,7 +272,10 @@ class Place:
         out["조사 단계"] = "확인만 함"
         if self.가입필요 is not None:
             out["가입 필요"] = self.가입필요
-        if self.출처:
+        # 출처는 랜섬웨어 DB 에서만 씁니다. 포럼·텔레그램 DB 「출처」
+        # 선택지에 「직접 확인」 이 없고, 선택지를 늘리지 않기로 했습니다.
+        # 보내 봐야 매 줄 버려지고 경고만 쌓입니다.
+        if self.출처 and self.갈래 == "ransom":
             out["출처"] = list(self.출처)
 
         # 합치는 칸입니다. 기계 줄만 갈아 끼우고 사람 글은 남깁니다.

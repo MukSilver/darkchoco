@@ -587,12 +587,38 @@ def test_이음은_자기_자신을_안_센다():
                     "포럼 DB: 나") == ""
 
 
-def test_점_없는_값은_호스트가_아니다():
-    """명부에 @projectwwh 처럼 주소가 아닌 값이 적힌 줄이 있습니다."""
+def test_호스트가_아닌_것을_걸러낸다():
+    """상대 주소와 파일 이름이 urlparse 를 지나면 호스트처럼 보입니다."""
     from hub.crawler.probe._이음 import 호스트
-    assert 호스트("@projectwwh") == ""
+    for 값 in ("@projectwwh", ".", "member.php", "style.css", "search.php",
+              "logo.png", "", "  ", "localhost"):
+        assert 호스트(값) == "", f"{값!r} 를 호스트로 봤다"
+    # 짧은 호스트도 지나가야 합니다. t.me 를 떨어뜨리면 텔레그램 이음이
+    # 통째로 안 됩니다.
+    assert 호스트("https://t.me/x") == "t.me"
     assert 호스트("https://bf.st/") == "bf.st"
     assert 호스트("www.Example.COM") == "example.com"
+    assert 호스트("http://abcd.onion/x") == "abcd.onion"
+
+
+def test_인프라는_이웃으로_안_센다():
+    """CDN 은 어느 쪽이나 씁니다. 관계가 아닙니다."""
+    from hub.crawler.probe._이음 import 처음보는곳
+    본문 = ("""<a href="https://cdnjs.cloudflare.com/x.js">js</a>"""
+          """<a href="https://fonts.googleapis.com/c">font</a>"""
+          """<a href="https://newsite.example/">새 곳</a>"""
+          """<a href="member.php">상대 주소</a>""")
+    assert 처음보는곳(본문, {}) == ["newsite.example"]
+
+
+def test_어니언_제목이_다르면_남의_것으로_본다():
+    """첫 화면에 남의 어니언이 광고로 걸려 있을 수 있습니다."""
+    from hub.crawler.probe.forum import _닮았나
+    assert _닮았나("BreachForums - The premier Databreach forum",
+                 "BreachForums | Databreach")
+    assert not _닮았나("BreachForums - Databreach discussion",
+                     "Nulled - Community")
+    assert not _닮았나("Forum", "Forum")          # 흔한 낱말뿐이면 근거 없음
 
 
 def test_두드려_본_줄에만_확인만함을_넣는다():

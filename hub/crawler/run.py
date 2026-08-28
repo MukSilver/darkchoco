@@ -65,6 +65,7 @@ class 갈래결과:
     바뀐줄: int = 0
     건너뜀: int = 0          # 주소가 없어 조사 못 한 줄
     문제: list = field(default_factory=list)
+    처음본곳: dict = field(default_factory=dict)   # 호스트 → 어디서 봤나
     오류: str = ""
     초: float = 0.0
     줄별: list = field(default_factory=list)
@@ -108,9 +109,12 @@ def _조사(갈래: str, 줄들, ctx: dict):
 
     elif 갈래 == "forum":
         마지막 = [0.0]
+        # 어니언 미러 확인은 열어 보는 요청이 하나 더 듭니다. 어니언
+        # 주소가 비어 있는 줄에서만 하므로 한 판에 몇 번 안 됩니다.
+        미러 = bool(프록시)
         for r in 줄들:
             yield r, forum.한곳(r.주소, r.이름, 마지막, 프록시=프록시,
-                              이음사전=이음사전)
+                              이음사전=이음사전, 어니언미러=미러)
 
     elif 갈래 == "ransom":
         # 랜섬은 목록을 통째로 받습니다. 그룹 하나씩 조회하면 요청이 폭발합니다.
@@ -185,6 +189,8 @@ def 한갈래(갈래: str, *, apply: bool = False, limit: int = 0,
             r.문제.append(f"{res.이름}: 선택지에 없어 안 씀 {res.없는옵션}")
         if p.살펴볼것:
             r.문제.append(f"{res.이름}: {p.살펴볼것}")
+        for h in getattr(p, "처음본곳", ()):
+            r.처음본곳.setdefault(h, res.이름 or p.이름)
         if res.바뀐칸:
             r.바뀐줄 += 1
 
@@ -286,6 +292,19 @@ def 표로(결과: list[갈래결과], *, apply: bool) -> str:
         줄.append(f"  {이름:<12} {' · '.join(조각)}  {r.초:.0f}초")
         for m in r.문제[:5]:
             줄.append(f"  {'':<12} !! {m}")
+    # 명부에 없는 이웃들. 노션에 안 씁니다. 새 곳을 찾는 실마리입니다.
+    처음본것: dict = {}
+    for r in 결과:
+        for h, 어디 in getattr(r, "처음본곳", {}).items():
+            처음본것.setdefault(h, 어디)
+    if 처음본것:
+        줄.append("")
+        줄.append(f"  명부에 없는 이웃 {len(처음본것)}곳 (노션에 안 씁니다)")
+        for h, 어디 in sorted(처음본것.items())[:12]:
+            줄.append(f"    {h:<52} ← {어디}")
+        if len(처음본것) > 12:
+            줄.append(f"    … {len(처음본것) - 12}곳 더")
+
     줄.append("")
     총바뀜 = sum(r.바뀐줄 for r in 결과)
     총문제 = sum(len(r.문제) for r in 결과)
