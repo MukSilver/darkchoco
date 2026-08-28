@@ -182,7 +182,7 @@ const SPAN = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.
 // ── 씬
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(css("--bg") || "#0b0e14");
-scene.fog = new THREE.Fog(scene.background, SPAN * 2.0, SPAN * 5.0);
+scene.fog = new THREE.Fog(scene.background, SPAN * 2.2, SPAN * 6.0);
 
 // 직교 카메라 — 이게 「면적 = 사고 수」 약속을 지킵니다. 원근으로 바꾸면 깨집니다.
 const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 6000);
@@ -272,31 +272,64 @@ for (const layer of data.layers) {
   }
 }
 
-// ── 판. 층이 떠 있는 것을 보이게 하는 얇은 바닥입니다.
+// ── 끊임없는 벌집 들판.
+// 사각 판을 두면 세계가 거기서 끝나는 것처럼 보입니다.
+// 빈 칸을 깔아 두면 그게 「아직 안 본 세계」가 되고,
+// DB 가 채워질수록 그 들판이 색으로 메워집니다.
+const FIELD_PAD = 26;                     // 쓴 칸 바깥으로 몇 칸 더 깔까
+const ghostGeo = new THREE.CylinderGeometry(S * 0.86, S * 0.86, 0.07, 6, 1);
+ghostGeo.rotateY(Math.PI / 6);
+
 for (const layer of data.layers) {
-  // 그 층이 실제로 쓴 칸의 범위에 맞춥니다
-  const own = data.places.filter(p => p.layer === layer.id)
-    .flatMap(p => placeCell[p.id] || []).map(([c, r]) => world(c, r, S));
+  const used = new Set();
+  for (const pl of data.places.filter(x => x.layer === layer.id))
+    for (const [c, r] of (placeCell[pl.id] || [])) used.add(c + "," + r);
+
+  // 쓴 칸의 범위를 구하고 그 밖으로 둘러줍니다
+  const own = [...used].map(k => k.split(",").map(Number));
   if (!own.length) continue;
-  const x0 = Math.min(...own.map(o => o[0])), x1 = Math.max(...own.map(o => o[0]));
-  const y0 = Math.min(...own.map(o => o[1])), y1 = Math.max(...own.map(o => o[1]));
-  const pad = S * 2.4;
-  const g = new THREE.BoxGeometry(x1 - x0 + pad * 2, 0.09, y1 - y0 + pad * 2);
-  const m = new THREE.MeshStandardMaterial({
-    color: new THREE.Color(layer.id === "sky" ? "#0b1a17" : "#180d11"),
-    roughness: 1, metalness: 0, transparent: true, opacity: 0.72 });
-  const b = new THREE.Mesh(g, m);
-  b.position.set((x0 + x1) / 2 - CX, Z[layer.id] - THICK * 0.66, (y0 + y1) / 2 - CY);
-  b.receiveShadow = true;
-  scene.add(b);
-  // 판 가장자리에 얇은 테두리를 둘러 층 경계를 또렷하게
-  const edge = new THREE.LineSegments(
-    new THREE.EdgesGeometry(g),
-    new THREE.LineBasicMaterial({
-      color: new THREE.Color(css(layer.id === "sky" ? "--k-archive" : "--k-ransom")),
-      transparent: true, opacity: 0.5 }));
-  edge.position.copy(b.position);
-  scene.add(edge);
+  const c0 = Math.min(...own.map(o => o[0])) - FIELD_PAD;
+  const c1 = Math.max(...own.map(o => o[0])) + FIELD_PAD;
+  const r0 = Math.min(...own.map(o => o[1])) - FIELD_PAD;
+  const r1 = Math.max(...own.map(o => o[1])) + FIELD_PAD;
+
+  // 바깥으로 갈수록 희미해지게 합니다 — 테두리가 없어야 끝이 안 보입니다
+  const cxCell = (c0 + c1) / 2, cyCell = (r0 + r1) / 2;
+  const maxD = Math.hypot((c1 - c0) / 2, (r1 - r0) / 2 * 1.5);
+
+  const spots = [];
+  for (let r = r0; r <= r1; r++) {
+    for (let c = c0; c <= c1; c++) {
+      if (used.has(c + "," + r)) continue;
+      const d = Math.hypot(c - cxCell, (r - cyCell) * 1.5) / maxD;
+      if (d > 1) continue;                       // 둥글게 잘라 냅니다
+      spots.push([c, r, d]);
+    }
+  }
+
+  const gm = new THREE.MeshBasicMaterial({ transparent: true, opacity: 1, vertexColors: true });
+  const ghosts = new THREE.InstancedMesh(ghostGeo, gm, spots.length);
+  ghosts.receiveShadow = false; ghosts.castShadow = false;
+  const gcol = new Float32Array(spots.length * 3);
+  const base = new THREE.Color(layer.id === "sky" ? "#397d6d" : "#7d3a48");
+  let gi = 0;
+  for (const [c, r, d] of spots) {
+    const [wx, wy] = world(c, r, S);
+    dummy.position.set(wx - CX, Z[layer.id] - THICK * 0.48, wy - CY);
+    dummy.scale.set(1, 1, 1);
+    dummy.updateMatrix();
+    ghosts.setMatrixAt(gi, dummy.matrix);
+    // 가장자리로 갈수록 배경으로 녹습니다
+    const f = 0.30 + 0.70 * Math.pow(1 - d, 1.15);
+    gcol[gi*3]   = base.r * f;
+    gcol[gi*3+1] = base.g * f;
+    gcol[gi*3+2] = base.b * f;
+    gi++;
+  }
+  ghosts.instanceColor = new THREE.InstancedBufferAttribute(gcol, 3);
+  ghosts.instanceMatrix.needsUpdate = true;
+  ghosts.renderOrder = -1;
+  scene.add(ghosts);
 }
 
 // ── 유통선. 두 층 사이를 잇는 곡선입니다.
@@ -380,7 +413,7 @@ function syncLabels() {
 
 // ── 크기
 // 어느 각도에서도 안 잘리게 두 층을 감싸는 구를 기준으로 잡습니다
-const R = Math.hypot(SPAN * 0.62, Z.sky * 0.5) + SPAN * 0.10;
+const R = Math.hypot(SPAN * 0.62, Z.sky * 0.5) + SPAN * 0.10;   // 채워진 부분 기준
 function resize() {
   const w = board.clientWidth, h = board.clientHeight;
   renderer.setSize(w, h, false);
