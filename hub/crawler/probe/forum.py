@@ -40,7 +40,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "packages"))
 from hub.crawler.place import Place, 덧붙임, 지금  # noqa: E402
 from hub.crawler.probe._나가기 import 보호없음, 오프너  # noqa: E402
 from hub.crawler.probe._읽기 import 글자만, 언어판별  # noqa: E402
-from hub.crawler.probe import _이음  # noqa: E402
+from hub.crawler.probe import _게시판, _이음  # noqa: E402
 
 __all__ = ["조사", "한곳", "NEEDS_PACKAGES"]
 
@@ -230,6 +230,15 @@ def 한곳(주소: str, 이름: str, 마지막: list[float], *,
     p = Place(갈래="forum", 이름=이름, 확인일=지금(),
               출처=["직접 확인"], 받은곳="첫 화면 확인")
 
+    # 명부에 "nulled.to" 처럼 스킴 없이 적힌 줄이 있습니다. 그대로 주면
+    # urllib 이 ValueError 를 냅니다. 그 예외는 아래 except 에 안 걸려서
+    # 한 줄이 판 전체를 죽입니다. 실제로 포럼 269줄이 47분 돌다 한 줄
+    # 때문에 통째로 날아갔습니다.
+    주소 = (주소 or "").strip()
+    if 주소 and "://" not in 주소:
+        주소 = "https://" + 주소.lstrip("/")
+        p.받은곳 += " (주소에 https 를 붙였습니다)"
+
     host = urlparse(주소).hostname or ""
     어니언 = host.endswith(".onion")
     if 어니언:
@@ -335,6 +344,14 @@ def 한곳(주소: str, 이름: str, 마지막: list[float], *,
         p.어떤곳 = re.sub(r"\s+", " ", html.unescape(m.group(1))).strip()[:1800]
 
     p.언어 = 언어판별(본문)
+
+    # 그 쪽이 붙인 게시판 이름을 봅니다. 무엇을 다루는 곳인지에 대한
+    # 가장 좋은 증거입니다. **게시글 제목은 안 봅니다** — 유출 글
+    # 제목에는 피해 기업 이름이 들어갑니다(SECURITY.md).
+    이름들 = _게시판.게시판이름들(본문)
+    if 이름들:
+        p.유통자리 = _게시판.유통자리(이름들)
+        p.개인정보 = _게시판.개인정보증거(이름들)
 
     if _로그인벽.search(글):
         p.가입필요 = True
