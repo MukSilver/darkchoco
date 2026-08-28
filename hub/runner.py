@@ -31,8 +31,9 @@ from dc_store import Store  # noqa: E402
 
 from hub import registry  # noqa: E402
 from hub.contract import Ctx, Result, Skip  # noqa: E402
+from hub.sched import Sched  # noqa: E402
 
-__all__ = ["한판", "여러판", "기본_표"]
+__all__ = ["한판", "여러판", "기본_표", "차례"]
 
 
 def 기본_표() -> Path:
@@ -90,26 +91,58 @@ def 한판(이름: str, store: Store, *, dry: bool = False, limit: int = 0,
     return r
 
 
+def 차례(db: Path | None = None) -> list[tuple[str, str]]:
+    """지금 돌 때가 된 것들. (이름, 이유) 입니다."""
+    s = Sched(db or 기본_표())
+    try:
+        나온것 = []
+        for e in registry.목록():
+            d = s.언제(e.name, e.every)
+            if d:
+                나온것.append((d.name, d.이유))
+        return 나온것
+    finally:
+        s.close()
+
+
 def 여러판(이름들: list[str] | None = None, *, db: Path | None = None,
-         dry: bool = False, limit: int = 0) -> list[Result]:
-    """여럿을 차례로 돌립니다. 하나가 죽어도 계속합니다."""
-    대상 = 이름들 or [e.name for e in registry.목록()]
+         dry: bool = False, limit: int = 0, 때된것만: bool = False) -> list[Result]:
+    """여럿을 차례로 돌립니다. 하나가 죽어도 계속합니다.
+
+    때된것만=True 면 주기가 찬 것만 돌립니다. 스케줄러가 자주 부르는데
+    매번 전부 돌면 상대 서버를 힘들게 합니다.
+    """
     db = db or 기본_표()
     db.parent.mkdir(parents=True, exist_ok=True)
 
+    if 이름들:
+        대상 = 이름들
+    elif 때된것만:
+        대상 = [n for n, _ in 차례(db)]
+    else:
+        대상 = [e.name for e in registry.목록()]
+
     결과 = []
     store = Store(db)
+    sch = Sched(db)
     try:
         for 이름 in 대상:
             r = 한판(이름, store, dry=dry, limit=limit)
             결과.append(r)
-            if not dry:
-                store.log_run(
-                    started=datetime.now(timezone.utc).isoformat(),
-                    source=이름, got=r.got, fresh=r.fresh,
-                    note=r.skipped or r.error or "",
-                )
+            if dry:
+                continue
+            store.log_run(
+                started=datetime.now(timezone.utc).isoformat(),
+                source=이름, got=r.got, fresh=r.fresh,
+                note=r.skipped or r.error or "",
+            )
+            # 안 쓴 것은 성공도 실패도 아닙니다. 차례를 안 건드립니다.
+            if r.error:
+                sch.안됐다(이름, r.error[:200])
+            elif not r.skipped:
+                sch.됐다(이름, f"{r.got}건")
     finally:
+        sch.close()
         store.close()
     return 결과
 
