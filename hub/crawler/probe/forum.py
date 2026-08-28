@@ -40,6 +40,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "packages"))
 from hub.crawler.place import Place, 지금  # noqa: E402
 from hub.crawler.probe._나가기 import 보호없음, 오프너  # noqa: E402
 from hub.crawler.probe._읽기 import 글자만, 언어판별  # noqa: E402
+from hub.crawler.probe import _이음  # noqa: E402
 
 __all__ = ["조사", "한곳", "NEEDS_PACKAGES"]
 
@@ -160,7 +161,7 @@ def _찾기(글: str, 규칙들) -> int | None:
 
 
 def 한곳(주소: str, 이름: str, 마지막: list[float], *,
-        프록시: str | None = None) -> Place:
+        프록시: str | None = None, 이음사전: dict | None = None) -> Place:
     """포럼 한 곳의 첫 화면만 봅니다."""
     p = Place(갈래="forum", 이름=이름, 확인일=지금(),
               출처=["직접 확인"], 받은곳="첫 화면 확인")
@@ -235,13 +236,22 @@ def 한곳(주소: str, 이름: str, 마지막: list[float], *,
     # 첫 화면이 포럼인지부터 봅니다. 200 이 왔다고 포럼이 있는 것은
     # 아닙니다. 압수 배너도 200 이고 광고 쪽도 200 입니다.
     if _압수.search(글):
-        p.상태 = "압수됨"
+        # **포럼 DB 「상태」 선택지에 압수됨 이 없습니다.** 랜섬웨어 DB 에만
+        # 있습니다. 선택지를 늘리지 않기로 했으므로 이 값은 노션에 못
+        # 들어갑니다. offline 으로 바꿔 적으면 거짓입니다 — 사이트는
+        # 살아 있고 다른 것으로 바뀐 것입니다.
+        #
+        # 그래서 상태는 미확인으로 두고 사람에게 올립니다. 압수는 흔한
+        # 일이 아니고 생태계 지도에서 중요한 사건이라 놓치면 안 됩니다.
+        p.상태 = "미확인"
         p.못본이유 = "압수 안내로 바뀌었습니다"
+        p.살펴볼것 = "압수 안내로 바뀌었습니다. 상태를 손으로 「압수됨」 처리하십시오"
         p.들어가는법 = "수사기관 안내 쪽입니다"
         return p
     if _파킹.search(글):
         p.상태 = "offline"
         p.못본이유 = "도메인이 팔려 광고 쪽이 되었습니다. 포럼이 아닙니다"
+        p.살펴볼것 = "도메인이 남의 것이 되었습니다. 주소가 맞는지 보십시오"
         return p
     if _검사.search(글):
         p.상태 = "미확인"
@@ -269,6 +279,9 @@ def 한곳(주소: str, 이름: str, 마지막: list[float], *,
         p.들어가는법 = "첫 화면은 가입 없이 열립니다"
 
     납작 = re.sub(r"\s+", " ", html.unescape(글))
+    if 이음사전:
+        p.연결된곳 = _이음.찾기(본문, 이음사전, f"포럼 DB: {p.이름}")
+
     p.회원수 = _찾기(납작, _회원)
     p.게시물수 = _찾기(납작, _게시물)
     if p.회원수 is None and p.게시물수 is None:
@@ -277,7 +290,8 @@ def 한곳(주소: str, 이름: str, 마지막: list[float], *,
 
 
 def 조사(대상: list[dict], *, dry: bool = False, limit: int = 0,
-        프록시: str | None = None) -> Iterator[Place]:
+        프록시: str | None = None,
+        이음사전: dict | None = None) -> Iterator[Place]:
     """대상은 [{"이름": ..., "주소": ...}, ...] 입니다."""
     if dry or not 대상:
         return
@@ -289,4 +303,4 @@ def 조사(대상: list[dict], *, dry: bool = False, limit: int = 0,
         if not 주소:
             continue
         yield 한곳(주소, (d.get("이름") or d.get("name") or "").strip(),
-                  마지막, 프록시=프록시)
+                  마지막, 프록시=프록시, 이음사전=이음사전)
