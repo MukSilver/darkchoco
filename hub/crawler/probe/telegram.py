@@ -152,6 +152,7 @@ def 한곳(채널: str, 마지막: list[float], 이름표: str = "") -> Place:
         p.못본이유 = f"요청 실패: {e}"
         return p
 
+    p.두드림 = True          # 응답을 받았습니다
     if code == 404:
         p.상태 = "offline"
         p.못본이유 = "404. 채널이 없거나 이름이 바뀌었습니다"

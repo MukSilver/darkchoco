@@ -84,7 +84,7 @@ def test_노션_칸을_안_늘린다():
 
 def test_못_봤으면_미확인과_확인일만_남긴다():
     """언제 봤는데 못 봤는지가 그 자체로 정보다. 규모는 안 건드린다."""
-    p = Place(갈래="forum", 이름="x", 못본이유="Tor 가 없습니다")
+    p = Place(갈래="forum", 이름="x", 못본이유="봤는데 수가 없습니다", 두드림=True)
     v = p.노션값("사람이 쓴 조사 결과")
     assert v == {"확인일": p.확인일[:10], "상태": "미확인"}, v
     assert "규모" not in v, "못 봤는데 규모를 건드린다"
@@ -93,7 +93,7 @@ def test_못_봤으면_미확인과_확인일만_남긴다():
 def test_주소가_틀려도_미확인은_남긴다():
     """online 이라고 적혀 있는 것이 근거 없는 값이다. 주소와 규모는 안 건드린다."""
     p = Place(갈래="telegram", 이름="x", 주소="https://nulledbb.com/discord",
-              못본이유="텔레그램 주소가 아닙니다", 주소이상=True)
+              못본이유="텔레그램 주소가 아닙니다", 주소이상=True, 두드림=True)
     v = p.노션값("사람 글")
     assert v == {"확인일": p.확인일[:10], "상태": "미확인"}, v
     assert "주소" not in v and "규모" not in v, v
@@ -202,7 +202,52 @@ def test_포럼_어니언은_Tor_없이_안_본다():
     out = list(forum.조사([{"이름": "X", "주소": "http://abc.onion"}]))
     assert len(out) == 1
     assert "Tor" in out[0].못본이유, out[0].못본이유
-    assert out[0].노션값().get("상태") == "미확인"
+    # Tor 가 없어 두드리지도 못했다. 사람이 적어 둔 상태를 안 건드린다.
+    assert out[0].노션값() == {}, out[0].노션값()
+
+
+# ── 508줄을 지울 뻔한 것 ────────────────────────────────────────────
+def test_두드리지_못했으면_아무것도_안_쓴다():
+    """사람이 확인해 둔 online·offline 을 지우면 안 된다.
+
+    랜섬웨어 DB 508줄(online 126 · offline 379 · 압수됨 2 · 인계됨 1)이
+    이것 때문에 날아갈 뻔했다. API 는 살아있는지를 locations[].available
+    에 담는데 최상위만 보고 있었다.
+    """
+    p = Place(갈래="ransom", 이름="X", 상태="미확인", 두드림=False)
+    assert p.노션값("기존 규모") == {}, p.노션값()
+
+
+def test_두드렸는데_못_봤으면_미확인을_쓴다():
+    """미리보기가 꺼진 채널. online 이라고 적힌 것이 근거 없는 값이다."""
+    p = Place(갈래="telegram", 이름="X", 상태="미확인", 두드림=True,
+              못본이유="미리보기가 꺼져 있습니다")
+    v = p.노션값("사람 글")
+    assert v.get("상태") == "미확인", v
+    assert "규모" not in v, "못 봤는데 규모를 건드린다"
+
+
+def test_랜섬_상태를_locations_에서_읽는다():
+    """ransomware.live 는 최상위가 아니라 locations 에 담는다."""
+    from hub.crawler.probe.ransom import _상태로
+    assert _상태로({"locations": [{"fqdn": "a.onion", "available": True}]}) == ("online", True)
+    assert _상태로({"locations": [{"fqdn": "a.onion", "available": False}]}) == ("offline", True)
+    assert _상태로({"available": True}) == ("online", True)
+    assert _상태로({"victims": 5}) == ("미확인", False), "못 읽었으면 정했다고 하면 안 된다"
+
+
+def test_랜섬이_상태를_못_읽으면_노션을_안_건드린다():
+    """조사기와 Place 를 이어서 확인한다. 이 둘이 어긋나면 508줄이 날아간다."""
+    가짜 = [{"name": "G1", "victims": 3},                       # 상태 표시 없음
+           {"name": "G2", "locations": [{"available": False}]}]  # 있음
+    옛 = ransom._받기
+    ransom._받기 = lambda url, m: 가짜
+    try:
+        out = {p.이름: p for p in ransom.조사()}
+    finally:
+        ransom._받기 = 옛
+    assert out["G1"].노션값("기존") == {}, "상태를 못 읽었는데 쓰려 한다"
+    assert out["G2"].노션값("기존").get("상태") == "offline"
 
 
 if __name__ == "__main__":
