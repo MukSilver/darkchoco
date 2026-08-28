@@ -242,7 +242,9 @@ for (const p of data.places) {
   const z = p.layer === "sky" ? Z : 0;
   boxOf[p.id] = bbox(cells, z, grid);
   const g = add("g", { class: "place", tabindex: "0", role: "button",
-                       "aria-label": `${p.name} · 확인한 사고 ${p.cases || 0}건` });
+                       "aria-label": (p.investigated && p.name)
+                         ? `${p.name} · 확인한 사고 ${p.cases || 0}건`
+                         : "아직 안 본 자리" });
   g.dataset.pid = p.id;
   for (const [c, r] of cells) {
     const poly = document.createElementNS(NS, "polygon");
@@ -492,18 +494,38 @@ function pick(p) {
   const kind = data.kinds.find(k => k.id === p.kind);
   const linked = data.flows.filter(f => f.from === p.id || f.to === p.id).length;
   box.innerHTML = "<h2>고른 자리</h2>";
+
+  // 이름만 아는 자리는 name 이 없습니다. undefined 를 찍지 않고 상태를 말합니다.
+  const named = p.investigated && p.name;
   box.append(
-    el("div", { class: "name", style: `color:${kindColorFor(p.kind, p.layer)}` }, document.createTextNode(p.name)),
+    named
+      ? el("div", { class: "name", style: `color:${kindColorFor(p.kind, p.layer)}` },
+           document.createTextNode(p.name))
+      : el("div", { class: "name", style: "color:var(--muted)" }, "아직 안 본 자리"),
     el("div", { style: "font-size:var(--t-tiny);color:var(--faint)" },
-       `${kind.name} · ${layer.name}${p.korea ? " · 한국 관련" : ""}`),
-    el("dl", { html:
+       `${kind.name} · ${layer.name}${p.korea ? " · 한국 관련" : ""}`));
+
+  if (named) {
+    box.append(el("dl", { html:
       `<dt>확인한 사고</dt><dd>${p.cases || 0}건</dd>` +
-      `<dt>들여다봤나</dt><dd>${p.investigated ? "예" : "이름만 확보"}</dd>` +
+      `<dt>들여다봤나</dt><dd>예</dd>` +
       `<dt>상태</dt><dd>${p.status || "미확인"}</dd>` +
       `<dt>최초 확인</dt><dd>${p.first_seen || "—"}</dd>` +
       `<dt>최근 확인</dt><dd>${p.last_seen || "—"}</dd>` +
       `<dt>이어진 자리</dt><dd>${linked}곳</dd>` }));
-  if (p.note) box.append(el("p", { style: "margin-top:var(--s3);font-size:var(--t-small)" }, document.createTextNode(p.note)));
+    if (p.note) box.append(el("p",
+      { style: "margin-top:var(--s3);font-size:var(--t-small)" },
+      document.createTextNode(p.note)));
+  } else {
+    // 이름을 내보내지 않는 이유까지 적습니다. 빈 카드로 두지 않습니다.
+    box.append(el("p", { class: "empty", style: "margin-top:var(--s3);text-align:left" },
+      "이름만 확보하고 아직 들여다보지 못한 곳입니다. " +
+      "안 본 자리의 이름은 밖으로 내보내지 않습니다."));
+    box.append(el("dl", { html:
+      `<dt>층</dt><dd>${layer.name}</dd>` +
+      `<dt>업종</dt><dd>${kind.name}</dd>` +
+      `<dt>상태</dt><dd>${p.status || "미확인"}</dd>` }));
+  }
 }
 
 document.getElementById("picked").style.display = "none";
