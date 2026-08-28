@@ -514,14 +514,17 @@ def cmd_install_task(args) -> int:
     """윈도우 작업 스케줄러에 등록합니다. 등록 명령을 만들어 줍니다."""
     이름 = "Darkchoco-Collect"
     파이썬 = sys.executable
-    작업 = f'"{파이썬}" "{ROOT / "dc.py"}" auto'
+    # **한 곳에서만 정합니다.** 예전에는 여기서 auto 를 만들어 두고 아래
+    # 등록 명령에는 run --due 를 박아 둬서, 스케줄러가 auto 를 영영 안
+    # 불렀습니다. 크롤러 자동화가 통째로 죽어 있었습니다.
+    인자 = "auto"
 
     if args.show:
         print()
         print("  이 명령을 PowerShell 에 붙여 넣으면 등록됩니다.")
         print()
         print(f'    $a = New-ScheduledTaskAction -Execute "{파이썬}" '
-              f'-Argument \'"{ROOT / "dc.py"}" run --due\' -WorkingDirectory "{ROOT}"')
+              f'-Argument \'"{ROOT / "dc.py"}" {인자}\' -WorkingDirectory "{ROOT}"')
         print(f'    $t = New-ScheduledTaskTrigger -Once -At (Get-Date) '
               f'-RepetitionInterval (New-TimeSpan -Minutes {args.every})')
         print(f'    $s = New-ScheduledTaskSettingsSet -StartWhenAvailable '
@@ -539,12 +542,12 @@ def cmd_install_task(args) -> int:
 
     if os.name != "nt":
         print("윈도우가 아닙니다. cron 에 아래를 넣으십시오.", file=sys.stderr)
-        print(f"  */{args.every} * * * * cd {ROOT} && {파이썬} dc.py auto")
+        print(f"  */{args.every} * * * * cd {ROOT} && {파이썬} dc.py {인자}")
         return 1
 
     ps = [
         f'$a = New-ScheduledTaskAction -Execute "{파이썬}" '
-        f'-Argument \'"{ROOT / "dc.py"}" run --due\' -WorkingDirectory "{ROOT}"',
+        f'-Argument \'"{ROOT / "dc.py"}" {인자}\' -WorkingDirectory "{ROOT}"',
         f'$t = New-ScheduledTaskTrigger -Once -At (Get-Date) '
         f'-RepetitionInterval (New-TimeSpan -Minutes {args.every})',
         '$s = New-ScheduledTaskSettingsSet -StartWhenAvailable '

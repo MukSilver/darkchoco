@@ -3,6 +3,7 @@
     python packages/tests/test_toolkit.py
 """
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -88,6 +89,28 @@ def test_readme_표가_최신이다():
     code, out = _dc("readme", "--check")
     assert code == 0, out + "\n  python dc.py readme --write 를 돌리십시오"
 
+def test_스케줄러가_auto_를_부른다():
+    """만들어 둔 명령과 실제로 거는 명령이 갈라져 있었습니다.
+
+    dc.py 가 「작업」 변수에 auto 를 담아 두고, 등록 명령에는 run --due 를
+    박아 뒀습니다. 그래서 스케줄러가 auto 를 영영 안 불렀고 크롤러 자동화가
+    통째로 죽어 있었습니다. 아무도 몰랐습니다.
+
+    수집기만 도는 것과 명부 조사까지 도는 것은 전혀 다릅니다.
+    """
+    글 = (ROOT / "dc.py").read_text(encoding="utf-8")
+    assert 'dc.py"}" run --due' not in 글, (
+        "등록 명령에 run --due 가 박혀 있습니다. 인자 변수를 쓰십시오")
+
+    r = subprocess.run(
+        [sys.executable, str(ROOT / "dc.py"), "install-task", "--show"],
+        capture_output=True, text=True, cwd=str(ROOT),
+        encoding="utf-8", errors="replace",
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+    나온것 = r.stdout or ""
+    assert 'dc.py" auto' in 나온것, "등록 명령이 auto 를 안 부릅니다"
+    assert "run --due" not in 나온것, "아직 run --due 를 겁니다"
+
 
 if __name__ == "__main__":
     n = 0
@@ -95,3 +118,4 @@ if __name__ == "__main__":
         if k.startswith("test_"):
             v(); print(f"  OK  {k}"); n += 1
     print(f"\n{n}개 통과")
+

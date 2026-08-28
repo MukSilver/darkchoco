@@ -69,6 +69,8 @@ class 갈래결과:
     바뀐줄: int = 0
     건너뜀: int = 0          # 주소가 없어 조사 못 한 줄
     문제: list = field(default_factory=list)
+    상태셈: dict = field(default_factory=dict)   # online 몇 · offline 몇 …
+    이유셈: dict = field(default_factory=dict)   # 못 본 까닭별로
     처음본곳: dict = field(default_factory=dict)   # 호스트 → {어디서 봤나}
     오류: str = ""
     초: float = 0.0
@@ -218,6 +220,11 @@ def 한갈래(갈래: str, *, apply: bool = False, limit: int = 0,
     for 줄, p in _조사(갈래, 볼것, {"tor": tor, "limit": limit,
                                  "이음사전": 이음사전}):
         본것.append(p)
+        r.상태셈[p.상태] = r.상태셈.get(p.상태, 0) + 1
+        if p.못본이유:
+            # 까닭의 앞머리만 셉니다. 뒤에는 예외 이름 같은 것이 붙습니다.
+            까닭 = p.못본이유.split(".")[0].split("(")[0].strip()[:38]
+            r.이유셈[까닭] = r.이유셈.get(까닭, 0) + 1
         # **끝나야 결과가 나오면 지금 몇 줄째인지 알 수가 없습니다.**
         # 포럼 269줄이 Tor 를 거치면 한 시간 넘게 걸립니다. 사람이 볼
         # 때도, 자동으로 돌 때 로그를 볼 때도 진행이 보여야 합니다.
@@ -353,11 +360,24 @@ def 표로(결과: list[갈래결과], *, apply: bool) -> str:
         if r.오류:
             줄.append(f"  {이름:<12} 실패 — {r.오류}")
             continue
-        조각 = [f"본 것 {r.본것}", f"못 본 것 {r.못본것}",
+        # 「본 것」은 못본이유가 없는 줄입니다. 살아있는 것은 봤는데
+        # 회원 수를 못 본 줄까지 「못 본 것」에 들어가서, 얼마나 열렸는지가
+        # 안 보였습니다. 상태를 따로 셉니다.
+        열림 = r.상태셈.get("online", 0)
+        조각 = [f"열린 곳 {열림}", f"수치까지 본 것 {r.본것}",
                f"바뀐 줄 {r.바뀐줄}"]
         if r.건너뜀:
             조각.append(f"주소 없음 {r.건너뜀}")
         줄.append(f"  {이름:<12} {' · '.join(조각)}  {r.초:.0f}초")
+        if r.상태셈:
+            셈 = " · ".join(f"{k} {v}" for k, v in
+                          sorted(r.상태셈.items(), key=lambda kv: -kv[1]))
+            줄.append(f"  {'':<12} 상태  {셈}")
+        # 왜 못 봤는지를 까닭별로 셉니다. 한 줄씩 보면 안 보이는 것이
+        # 뭉쳐 놓으면 보입니다 — 절반이 같은 이유로 막혔다든가.
+        if r.이유셈:
+            for 까닭, c in sorted(r.이유셈.items(), key=lambda kv: -kv[1])[:5]:
+                줄.append(f"  {'':<12} {c:>4}줄  {까닭}")
         for m in r.문제[:5]:
             줄.append(f"  {'':<12} !! {m}")
     # 명부에 없는 이웃들. 노션에 안 씁니다. 새 곳을 찾는 실마리입니다.

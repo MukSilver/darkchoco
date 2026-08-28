@@ -872,6 +872,24 @@ def test_Tor_가_없으면_한_줄씩_본다():
     assert "동시 = 최대동시 if 프록시 else 1" in 글
 
 
+def test_요약이_얼마나_열렸는지_보여_준다():
+    """「본 것 22 · 못 본 것 202」 는 오해를 부른다.
+
+    「살아있는 것은 봤는데 회원 수가 첫 화면에 없다」 도 못 본 것으로
+    센다. 실제로 몇 곳이 열렸는지가 안 보인다.
+    """
+    from hub.crawler.run import 갈래결과, 표로
+
+    r = 갈래결과(갈래="forum", 본것=22, 못본것=202, 바뀐줄=84)
+    r.상태셈 = {"online": 140, "offline": 60, "미확인": 24}
+    r.이유셈 = {"살아있는 것은 봤는데 회원·게시물 수는 첫 화면에 없습니다": 118,
+              "연결이 안 됩니다": 60}
+    글 = 표로([r], apply=False)
+    assert "열린 곳 140" in 글, 글
+    assert "online 140" in 글, 글
+    assert "118줄" in 글, 글
+
+
 if __name__ == "__main__":
     n = 0
     for k, v in sorted(globals().items()):
