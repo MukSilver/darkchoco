@@ -28,3 +28,10 @@ venv/
 .idea/
 .DS_Store
 Thumbs.db
+
+# 수집한 것은 저장소에 넣지 않습니다. 본문에 개인정보가 들어 있습니다.
+*.db
+*.db-journal
+*.db-wal
+data/
+hub/data/

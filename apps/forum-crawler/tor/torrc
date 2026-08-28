@@ -1,0 +1,19 @@
+# forum-crawler 전용 Tor 설정.
+#
+# CLAUDE.md 5번이 이 값을 적어 두었는데 파일이 없어서 문서에만 있었습니다.
+# 기본값(10분)으로 두면 크롤 도중 exit IP 가 바뀌고, IP 에 묶인
+# cf_clearance 쿠키가 무효가 되어 로그인 세션이 끊깁니다.
+
+SocksPort 0.0.0.0:9050
+
+# 한 회선을 30분 유지합니다. cf_clearance 유효시간에 맞춘 값입니다.
+MaxCircuitDirtiness 1800
+
+# 조사 대상은 히든서비스입니다. exit 노드로 나가지 않습니다.
+# 클리어넷 포럼도 보므로 exit 를 막지는 않되, 회선 수를 줄여 둡니다.
+MaxClientCircuitsPending 4
+
+# 우리가 중계 노드가 되지 않습니다. 읽기만 합니다.
+ClientOnly 1
+
+Log notice stdout

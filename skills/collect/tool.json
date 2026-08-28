@@ -12,7 +12,10 @@
   "run_cwd": "..",
   "install": {
     "requirements": null,
-    "note": "requests 가 필요합니다"
+    "packages": [
+      "requests"
+    ],
+    "note": "requests 가 필요합니다. pip install requests"
   },
   "preconditions": {
     "docker": false,

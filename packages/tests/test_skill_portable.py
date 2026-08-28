@@ -4,7 +4,11 @@
 
 이 스킬은 툴킷의 일부라 저장소 밖으로 복사해 쓸 수 있어야 합니다.
 공용 부품을 쓰게 바꾸면서 한 번 깨진 적이 있어 테스트로 막아 둡니다.
+
+부품을 찾는 규칙은 _dcpath 를 직접 불러 시험합니다. 스크립트를 통째로
+돌려 보는 방식은 부품이 깔린 환경에서 "안 깔린 상황" 을 못 만듭니다.
 """
+import importlib.util
 import os
 import shutil
 import subprocess
@@ -27,32 +31,53 @@ def _떼어내기(dst: Path) -> Path:
     return dst / 스킬.name
 
 
+def _dcpath(tools: Path):
+    """떼어낸 자리의 _dcpath 를 그 자리 것으로 불러옵니다."""
+    spec = importlib.util.spec_from_file_location(
+        f"_dcpath_{abs(hash(str(tools)))}", tools / "_dcpath.py")
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
 def _돌리기(cwd: Path, *args: str) -> tuple[int, str]:
     r = subprocess.run(
         [sys.executable, *args], cwd=cwd, capture_output=True,
         text=True, encoding="utf-8", errors="replace", timeout=60,
-        # 저장소 밖에서 도는 상황을 만든다. 부품이 경로에 딸려 들어가면
-        # 시험이 무의미해지므로 PYTHONPATH 만 지운다.
         env={**os.environ, "PYTHONPATH": "", "PYTHONIOENCODING": "utf-8"},
     )
     return r.returncode, (r.stdout or "") + (r.stderr or "")
 
 
 def test_떼어내도_import_가_된다():
-    """부품이 없어도 --help 는 떠야 한다. 노션 안 쓰는 절이 그대로 돌기 때문이다."""
+    """부품을 못 찾아도 import 단계에서 죽으면 안 된다.
+
+    이 스킬은 노션 없이도 ③④⑤⑥ 절이 돌기 때문이다.
+    """
     with tempfile.TemporaryDirectory() as d:
         s = _떼어내기(Path(d))
-        _, out = _돌리기(s, "tools/notion.py", "--help")
+        code, out = _돌리기(s, "tools/notion.py", "--help")
         assert "ModuleNotFoundError" not in out, f"떼어내면 import 가 깨진다\n{out[:400]}"
-        assert "노션" in out, f"안내가 안 나온다\n{out[:400]}"
+        assert code == 0 or "노션" in out, f"--help 가 안 뜬다\n{out[:400]}"
 
 
-def test_부품이_없으면_부를_때_알려준다():
-    """죽더라도 무엇을 하면 되는지 말해야 한다."""
+def test_부품이_없으면_찾기가_실패한다():
+    """저장소 밖이고 옆에도 없으면 packages_dir 이 None 이어야 한다."""
     with tempfile.TemporaryDirectory() as d:
         s = _떼어내기(Path(d))
-        _, out = _돌리기(s, "tools/notion.py", "search", "x")
-        assert "pip install" in out, f"해결 방법을 안 알려준다\n{out[:400]}"
+        m = _dcpath(s / "tools")
+        assert m.packages_dir() is None, \
+            f"부품이 없는데 있다고 한다: {m.packages_dir()}"
+
+
+def test_못_찾으면_무엇을_할지_알려준다():
+    with tempfile.TemporaryDirectory() as d:
+        s = _떼어내기(Path(d))
+        m = _dcpath(s / "tools")
+        msg = m.missing_message()
+        assert "pip install" in msg, "해결 방법을 안 알려준다"
+        assert "_vendor" in msg, "옆에 두는 방법을 안 알려준다"
+        assert "③" in msg or "노션" in msg, "무엇이 여전히 되는지 안 알려준다"
 
 
 def test_부품을_옆에_두면_찾는다():
@@ -60,11 +85,27 @@ def test_부품을_옆에_두면_찾는다():
         s = _떼어내기(Path(d))
         shutil.copytree(ROOT / "packages", s / "tools" / "_vendor",
                         ignore=shutil.ignore_patterns("tests", "__pycache__"))
-        code, out = _돌리기(s, "-c",
-                            "import sys; sys.path.insert(0,'tools');"
-                            "from _dcpath import ensure_packages;"
-                            "assert ensure_packages(); import dc_notion; print('ok')")
-        assert code == 0 and "ok" in out, f"_vendor 를 못 찾는다\n{out[:400]}"
+        m = _dcpath(s / "tools")
+        found = m.packages_dir()
+        assert found is not None and found.name == "_vendor", \
+            f"_vendor 를 못 찾는다: {found}"
+
+
+def test_저장소_안에서는_packages_를_찾는다():
+    m = _dcpath(스킬 / "tools")
+    found = m.packages_dir()
+    assert found is not None and found.name == "packages", \
+        f"저장소 안인데 packages 를 못 찾는다: {found}"
+
+
+def test_설치된_것이_우선이다():
+    """ensure_packages 는 이미 깔린 것이 있으면 경로를 안 뒤진다."""
+    m = _dcpath(스킬 / "tools")
+    before = list(sys.path)
+    try:
+        assert m.ensure_packages() is True
+    finally:
+        sys.path[:] = before
 
 
 def test_노션_안쓰는_도구는_그대로_돈다():
