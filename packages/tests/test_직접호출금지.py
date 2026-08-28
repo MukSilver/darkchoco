@@ -24,6 +24,10 @@ use_utf8()
 
 # 밖에 요청을 보내도 되는 자리. 여기에만 간격과 방어가 있습니다.
 허용 = {
+    # 나가는 길 자신입니다. 여기 한 곳만 urllib 을 부르고, 나머지는
+    # 전부 이 파일의 오프너를 지납니다. 그래야 Tor 를 빠뜨리는 길이
+    # 안 생깁니다. test_맨IP금지.py 가 그것을 따로 봅니다.
+    "hub/crawler/probe/_나가기.py",
     "hub/crawler/probe/telegram.py",
     "hub/crawler/probe/forum.py",
     "hub/crawler/probe/ransom.py",
@@ -75,6 +79,9 @@ def test_조사기가_간격을_갖고_있다():
     """허용된 자리에는 반드시 간격이 있어야 합니다."""
     for rel in sorted(허용):
         if not rel.startswith("hub/"):
+            continue
+        if rel.endswith("_나가기.py"):
+            # 길을 내주는 자리입니다. 간격은 그 길을 쓰는 조사기가 갖습니다.
             continue
         s = (ROOT / rel).read_text(encoding="utf-8")
         assert "간격" in s or "min_interval" in s or "sleep" in s, \

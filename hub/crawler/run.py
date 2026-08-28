@@ -31,7 +31,8 @@ from hub.crawler.notion import 갈래별_DB, 명부, 반영결과  # noqa: E402
 from hub.crawler.place import Place  # noqa: E402
 from hub.crawler.probe import forum, ransom, telegram  # noqa: E402
 
-__all__ = ["한갈래", "여러갈래", "표로", "기본_표", "갈래들"]
+__all__ = ["한갈래", "여러갈래", "표로", "기본_표", "갈래들",
+           "차례", "됐다고_적기"]
 
 갈래들 = ("telegram", "forum", "ransom")
 
@@ -92,22 +93,26 @@ def _쌓기(db: Path, 갈래: str, 목록: list[Place]) -> None:
 
 
 def _조사(갈래: str, 줄들, ctx: dict):
-    """갈래에 맞는 조사기를 돌립니다. (줄, Place) 를 내놓습니다."""
+    """갈래에 맞는 조사기를 돌립니다. (줄, Place) 를 내놓습니다.
+
+    프록시는 셋 다 받습니다. 하나라도 빠지면 그 갈래만 우리 IP 로
+    나갑니다.
+    """
+    프록시 = ctx.get("tor")
     if 갈래 == "telegram":
         마지막 = [0.0]
         for r in 줄들:
-            yield r, telegram.한곳(r.주소, 마지막, r.이름)
+            yield r, telegram.한곳(r.주소, 마지막, r.이름, 프록시=프록시)
 
     elif 갈래 == "forum":
         마지막 = [0.0]
-        프록시 = ctx.get("tor")
         for r in 줄들:
             yield r, forum.한곳(r.주소, r.이름, 마지막, 프록시=프록시)
 
     elif 갈래 == "ransom":
         # 랜섬은 목록을 통째로 받습니다. 그룹 하나씩 조회하면 요청이 폭발합니다.
         이름별 = {r.이름.strip().lower(): r for r in 줄들}
-        for p in ransom.조사(limit=ctx.get("limit", 0)):
+        for p in ransom.조사(limit=ctx.get("limit", 0), 프록시=프록시):
             r = 이름별.get(p.이름.strip().lower())
             if r is not None:
                 yield r, p
@@ -159,12 +164,73 @@ def 한갈래(갈래: str, *, apply: bool = False, limit: int = 0,
     return r
 
 
+# ── 차례표 ─────────────────────────────────────────────────────────
+# 수집기가 쓰는 표를 같이 씁니다. 이름만 "crawl:" 을 붙여 갈라 둡니다.
+# 표를 따로 두면 언제 무엇이 돌았는지를 두 군데서 봐야 합니다.
+def _차례이름(갈래: str) -> str:
+    return f"crawl:{갈래}"
+
+
+def 차례(db: Path | None = None) -> list[tuple[str, str]]:
+    """지금 돌 때가 된 갈래들. (갈래, 이유) 입니다."""
+    from hub.sched import Sched
+
+    s = Sched(db or 기본_표())
+    try:
+        나온것 = []
+        for 갈래 in 갈래들:
+            d = s.언제(_차례이름(갈래), 주기[갈래])
+            if d:
+                나온것.append((갈래, d.이유))
+        return 나온것
+    finally:
+        s.close()
+
+
+def 됐다고_적기(결과: list[갈래결과], db: Path | None = None) -> None:
+    """돈 결과를 차례표에 적습니다.
+
+    **실패했으면 마지막 시각을 안 건드립니다.** 건드리면 실패 한 번이
+    다음 시도를 주기만큼 미룹니다. 12시간짜리는 하루가 되어 사실상
+    멈춥니다. Sched 가 대신 짧은 재시도 간격을 씁니다.
+    """
+    from hub.sched import Sched
+
+    s = Sched(db or 기본_표())
+    try:
+        for r in 결과:
+            이름 = _차례이름(r.갈래)
+            if r.오류:
+                s.안됐다(이름, r.오류[:200])
+            else:
+                s.됐다(이름, f"{r.본것}곳 · 바뀐 줄 {r.바뀐줄}")
+    finally:
+        s.close()
+
+
 def 여러갈래(대상: list[str] | None = None, *, apply: bool = False,
           limit: int = 0, db: Path | None = None,
-          tor: str | None = None) -> list[갈래결과]:
+          tor: str | None = None, 때된것만: bool = False) -> list[갈래결과]:
+    """갈래들을 차례로 돕니다.
+
+    때된것만=True 면 주기가 찬 갈래만 돕니다. 스케줄러가 자주 부르는데
+    매번 셋을 다 돌면 상대 서버를 힘들게 하고, 랜섬은 한 판에 4분씩
+    씁니다.
+    """
+    if 대상:
+        돌것 = 대상
+    elif 때된것만:
+        돌것 = [g for g, _ in 차례(db)]
+    else:
+        돌것 = list(갈래들)
+
     out = []
-    for 갈래 in (대상 or list(갈래들)):
+    for 갈래 in 돌것:
         out.append(한갈래(갈래, apply=apply, limit=limit, db=db, tor=tor))
+    # 미리보기는 차례를 안 건드립니다. 안 썼는데 돌았다고 적으면
+    # 다음 실제 반영이 주기만큼 밀립니다.
+    if apply and out:
+        됐다고_적기(out, db)
     return out
 
 
