@@ -164,26 +164,97 @@ def test_텔레그램_수를_못_보면_미확인이다():
 
 
 def test_랜섬_그룹_목록을_읽는다():
-    가짜 = [
-        {"name": "LockBit3", "victims": 412, "type": "ransomware",
-         "locations": [{"fqdn": "http://lb.onion"}],
-         "available": True, "lastseen": "2026-08-27T12:00:00"},
-        {"name": "SomeMarket", "type": "market", "available": False},
+    """실제 /groups 응답 꼴입니다. victims·type·lastseen 은 없습니다.
+
+    2026-08-28 에 392개를 받아 칸을 확인했습니다. 예전 검사는 있지도 않은
+    칸을 쓰는 가짜를 넣어서, 조사기가 헛돌고 있는 것을 못 잡았습니다.
+    """
+    그룹 = [
+        {"name": "LockBit3", "altname": "Bolt",
+         "description": "DLS 를 운영합니다",
+         "url": "https://www.ransomware.live/group/lockbit3",
+         "locations": [
+             {"available": False, "fqdn": "old.onion",
+              "slug": "http://old.onion", "title": "404", "type": "DLS"},
+             {"available": True, "fqdn": "lb.onion",
+              "slug": "http://lb.onion", "title": "LockBit", "type": "DLS"}]},
+        {"name": "SomeMarket", "locations": [
+            {"available": False, "slug": "http://m.onion", "type": "market"}]},
         {"noname": 1},
     ]
+    달 = [
+        {"group": "LockBit3", "country": "KR", "activity": "Manufacturing",
+         "attackdate": "2026-08-20T01:00:00+00:00"},
+        {"group": "LockBit3", "country": "US", "activity": "Manufacturing",
+         "attackdate": "2026-08-25T01:00:00+00:00"},
+        {"group": "LockBit3", "country": "DE", "activity": "Financial Services",
+         "attackdate": "2026-07-01T01:00:00+00:00"},
+    ]
     옛 = ransom._받기
-    ransom._받기 = lambda url, m: 가짜
+    ransom._받기 = lambda url, m: 그룹 if url.endswith("/groups") else 달
     try:
-        out = list(ransom.조사())
+        out = list(ransom.조사(개월수=1))
     finally:
         ransom._받기 = 옛
+
     assert len(out) == 2, [p.이름 for p in out]
     a, b = out
+    # 미러가 여럿이면 하나라도 살아 있으면 online 입니다.
     assert a.이름 == "LockBit3" and a.상태 == "online"
-    assert a.피해기업수 == 412 and a.형식 == "RaaS"
-    assert a.주소 == "http://lb.onion"
+    assert a.주소 == "http://lb.onion", a.주소       # 살아있는 쪽이 대표
+    assert a.이전주소 == "http://old.onion"          # 나머지는 이전 주소로
+    assert a.형식 == "DLS" and a.종류 == "group"
+    assert a.이전이름 == "Bolt"
+    assert a.어떤곳 == "DLS 를 운영합니다"
+
+    # 피해 건수는 /groups 에 없습니다. 월별 목록을 받아 셉니다.
+    assert a.피해기업수 == 3, a.피해기업수
+    assert a.최근활동 == "2026-08-25", a.최근활동
+    assert "Manufacturing 2" in a.피해대상, a.피해대상
+    assert "한국 피해 1건" in a.한국유출, a.한국유출
+
     assert b.상태 == "offline" and b.형식 == "포럼·마켓"
-    assert "피해 기업 412" in a.노션값()["규모"]
+    assert "새 피해 없음" in b.피해대상, b.피해대상
+
+    값 = a.노션값()
+    assert "피해 기업 3" in 값["규모"]
+    assert 값["출처"] == ["ransomware.live"]
+
+
+def test_랜섬_한국_피해는_건수만_적는다():
+    """SECURITY.md — 기업 이름은 안 적습니다."""
+    그룹 = [{"name": "G", "locations": [{"available": True, "slug": "http://g.onion"}]}]
+    달 = [{"group": "G", "country": "KR", "victim": "어느회사",
+           "domain": "example.co.kr", "activity": "Manufacturing",
+           "attackdate": "2026-08-20T01:00:00+00:00"}]
+    옛 = ransom._받기
+    ransom._받기 = lambda url, m: 그룹 if url.endswith("/groups") else 달
+    try:
+        p = next(iter(ransom.조사(개월수=1)))
+    finally:
+        ransom._받기 = 옛
+    글 = str(p.노션값())
+    assert "어느회사" not in 글 and "example.co.kr" not in 글, 글
+    assert "한국 피해 1건" in p.한국유출
+
+
+def test_랜섬_한_달을_못_받아도_나머지를_버리지_않는다():
+    """못본이유에 넣으면 노션값() 이 알아낸 것을 전부 버립니다."""
+    그룹 = [{"name": "G", "altname": "별칭",
+            "locations": [{"available": True, "slug": "http://g.onion"}]}]
+    옛 = ransom._받기
+    def 받기(url, m):
+        if url.endswith("/groups"):
+            return 그룹
+        raise OSError("한 달치 못 받음")
+    ransom._받기 = 받기
+    try:
+        p = next(iter(ransom.조사(개월수=1)))
+    finally:
+        ransom._받기 = 옛
+    assert p.봤나(), p.못본이유
+    assert "못 받음" in p.받은곳, p.받은곳
+    assert p.노션값()["이전 이름·별칭"] == "별칭"
 
 
 def test_랜섬_목록을_못_받으면_이유가_남는다():
@@ -248,6 +319,90 @@ def test_랜섬이_상태를_못_읽으면_노션을_안_건드린다():
         ransom._받기 = 옛
     assert out["G1"].노션값("기존") == {}, "상태를 못 읽었는데 쓰려 한다"
     assert out["G2"].노션값("기존").get("상태") == "offline"
+
+
+# ── 첫 화면이 포럼이 아닌 경우 ─────────────────────────────────────
+def _포럼한판(본문, code=200):
+    """opener 를 갈아 끼워 본문만 바꿔 봅니다."""
+    class 응답:
+        status = code
+        url = "https://f.example/"
+        def read(self, n): return 본문.encode()
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+    class 오프너:
+        def open(self, req, timeout=0): return 응답()
+    옛 = forum._오프너
+    forum._오프너 = lambda 프록시: 오프너()
+    try:
+        return forum.한곳("https://f.example/", "F", [0.0])
+    finally:
+        forum._오프너 = 옛
+
+
+def test_압수_배너를_살아있는것으로_세지_않는다():
+    p = _포럼한판("<html><body>THIS HIDDEN SITE HAS BEEN SEIZED "
+                "by the Federal Bureau of Investigation</body></html>")
+    assert p.상태 == "압수됨", p.상태
+
+
+def test_파킹된_도메인은_포럼이_아니다():
+    p = _포럼한판("<html><body>Buy this domain. The owner is offering "
+                "it for sale.</body></html>")
+    assert p.상태 == "offline" and "광고" in p.못본이유, (p.상태, p.못본이유)
+
+
+def test_앞단_검사는_죽은것이_아니다():
+    p = _포럼한판("<html><body>Just a moment... checking your browser"
+                "</body></html>")
+    assert p.상태 == "미확인", p.상태
+    assert "뒤에 있습니다" in p.못본이유, p.못본이유
+
+
+def test_포럼_로그인벽과_언어를_읽는다():
+    p = _포럼한판('<html lang="ru"><head><title>DB Forum</title>'
+                '<meta name="description" content="Базы данных и логи">'
+                '</head><body>You must be registered to view this. '
+                'Members: 349,000 Posts: 821,000</body></html>')
+    assert p.상태 == "online"
+    assert p.언어 == "러시아어", p.언어
+    assert p.가입필요 is True
+    assert p.어떤곳 == "Базы данных и логи", p.어떤곳
+    assert p.회원수 == 349000 and p.게시물수 == 821000
+
+
+def test_라틴문자만_있으면_언어를_적지_않는다():
+    """영어인지 터키어인지 문자만 보고는 못 가립니다."""
+    p = _포럼한판("<html><body>Leaked databases for sale. Members: 1,200"
+                "</body></html>")
+    assert p.언어 == "", p.언어
+    assert p.가입필요 is None, "막혔다는 말이 없는데 가입 필요로 적었다"
+
+
+def test_주소가_옮겨가면_원래_주소를_남긴다():
+    class 응답:
+        status = 200
+        url = "https://new.example/"
+        def read(self, n): return b"<html><body>Members: 500</body></html>"
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+    class 오프너:
+        def open(self, req, timeout=0): return 응답()
+    옛 = forum._오프너
+    forum._오프너 = lambda 프록시: 오프너()
+    try:
+        p = forum.한곳("https://old.example/", "F", [0.0])
+    finally:
+        forum._오프너 = 옛
+    assert p.이전주소 == "https://old.example/", p.이전주소
+    assert p.주소 == "https://new.example/", p.주소
+
+
+def test_사람이_쓴_칸은_안_건드린다():
+    """빈칸만칸 은 비어 있을 때만 채웁니다."""
+    from hub.crawler.place import 빈칸만칸
+    assert "어떤 곳인지" in 빈칸만칸 and "사용 언어" in 빈칸만칸
+    assert "상태" not in 빈칸만칸 and "확인일" not in 빈칸만칸
 
 
 if __name__ == "__main__":

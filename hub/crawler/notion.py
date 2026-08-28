@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "packages"))
 
 from dc_notion import Notion  # noqa: E402
 
-from hub.crawler.place import Place  # noqa: E402
+from hub.crawler.place import Place, 기계칸, 빈칸만칸  # noqa: E402
 
 __all__ = ["명부", "반영결과", "갈래별_DB"]
 
@@ -46,6 +46,7 @@ class 줄:
     주소: str = ""
     규모: str = ""
     상태: str = ""
+    현재: dict = field(default_factory=dict)   # 기계칸의 지금 값
 
 
 @dataclass
@@ -55,6 +56,8 @@ class 반영결과:
     건너뛴칸: list = field(default_factory=list)   # 스키마에 없는 칸
     안바뀜: bool = False
     오류: str = ""
+    없는옵션: list = field(default_factory=list)   # 스키마 선택지에 없음
+    사람글: list = field(default_factory=list)     # 사람이 이미 써 둔 칸
 
 
 class 명부:
@@ -71,31 +74,48 @@ class 명부:
             raise RuntimeError(f"{self.이름} 에 데이터 소스가 없습니다")
         self.ds = ds[0]["id"]
         self.스키마 = self.n.schema(self.ds)
+        self.옵션 = self._옵션읽기()
+
+    def _옵션읽기(self) -> dict[str, set]:
+        """select · multi_select 가 받는 값 목록입니다.
+
+        갈래마다 다릅니다. 랜섬에만 「압수됨」과 「ransomware.live」가 있고
+        포럼·텔레그램에는 없습니다. 없는 값을 보내면 노션이 400 을 냅니다.
+        """
+        raw = self.n.request("GET", f"/data_sources/{self.ds}")
+        out = {}
+        for 칸, v in (raw.get("properties") or {}).items():
+            t = v.get("type")
+            if t in ("select", "multi_select", "status"):
+                out[칸] = {o["name"] for o in (v[t].get("options") or [])}
+        return out
 
     # ── 읽기 ────────────────────────────────────────────────────────
     def 줄들(self) -> list[줄]:
         out = []
         for page in self.n.query_all(self.ds):
             props = page.get("properties", {})
+            현재 = {칸: _글자(props.get(칸)) for 칸 in 기계칸 if 칸 in props}
             out.append(줄(
                 page_id=page["id"],
                 이름=_글자(props.get(self.제목칸)),
                 주소=_글자(props.get("주소")),
                 규모=_글자(props.get("규모")),
                 상태=_글자(props.get("상태")),
+                현재=현재,
             ))
         return out
 
     # ── 쓰기 ────────────────────────────────────────────────────────
     def 반영(self, 줄: 줄, p: Place, *, apply: bool = False) -> 반영결과:
         r = 반영결과(이름=줄.이름 or p.이름)
-        값 = p.노션값(줄.규모)
+        값 = p.노션값(줄.현재 or 줄.규모)
         if not 값:
             r.안바뀜 = True
             return r
 
-        # 스키마에 없는 칸은 걸러냅니다. 여기서 안 거르면 노션이 조용히
-        # 건너뛰고, 우리는 썼다고 믿습니다.
+        # 1. 스키마에 없는 칸은 걸러냅니다. 여기서 안 거르면 노션이 조용히
+        #    건너뛰고, 우리는 썼다고 믿습니다.
         쓸것, 없는칸 = {}, []
         for 칸, v in 값.items():
             if 칸 in self.스키마:
@@ -104,11 +124,42 @@ class 명부:
                 없는칸.append(칸)
         r.건너뛴칸 = 없는칸
 
-        # 지금 값과 같으면 안 씁니다. 확인일만 바꾸려고 쓰지 않습니다.
-        달라진것 = {}
-        지금값 = {"규모": 줄.규모, "상태": 줄.상태, "주소": 줄.주소}
+        # 2. 사람이 이미 쓴 칸은 안 건드립니다. 비어 있을 때만 채웁니다.
+        #    선택지 검사보다 먼저 합니다. 어차피 안 쓸 값을 두고
+        #    「선택지에 없다」고 알릴 이유가 없습니다.
+        찬것, 사람글 = {}, []
         for 칸, v in 쓸것.items():
-            if 칸 in 지금값 and str(지금값[칸]).strip() == str(v).strip():
+            if 칸 in 빈칸만칸 and (줄.현재.get(칸) or "").strip():
+                사람글.append(칸)
+                continue
+            찬것[칸] = v
+        r.사람글 = 사람글
+
+        # 3. 선택지에 없는 값을 거릅니다. 갈래마다 선택지가 다릅니다.
+        #    포럼 DB 에는 「직접 확인」 출처도, 「압수됨」 상태도 없습니다.
+        골라낸것, 없는옵션 = {}, []
+        for 칸, v in 찬것.items():
+            받는값 = self.옵션.get(칸)
+            if 받는값 is None:
+                골라낸것[칸] = v
+                continue
+            if isinstance(v, list):
+                남 = [x for x in v if x in 받는값]
+                없는옵션 += [f"{칸}={x}" for x in v if x not in 받는값]
+                if 남:
+                    골라낸것[칸] = 남
+            elif v in 받는값:
+                골라낸것[칸] = v
+            else:
+                없는옵션.append(f"{칸}={v}")
+        r.없는옵션 = 없는옵션
+
+        # 4. 지금 값과 같으면 안 씁니다. 확인일만 바꾸려고 쓰지 않습니다.
+        달라진것 = {}
+        for 칸, v in 골라낸것.items():
+            지금 = 줄.현재.get(칸, {"규모": 줄.규모, "상태": 줄.상태,
+                                 "주소": 줄.주소}.get(칸))
+            if 지금 is not None and str(지금).strip() == str(v).strip():
                 continue
             달라진것[칸] = v
         if set(달라진것) <= {"확인일"}:
@@ -181,8 +232,13 @@ def 표로(결과: list[반영결과], *, apply: bool) -> str:
     """사람이 읽을 요약."""
     if not 결과:
         return "  바뀔 것이 없습니다."
+    # 선택지에 없는 값은 줄마다가 아니라 한 번만 알립니다. 스키마 문제라
+    # 줄 수만큼 반복해 봐야 같은 말입니다.
+    없는옵션 = sorted({x for r in 결과 for x in r.없는옵션})
     폭 = min(24, max(len(r.이름) for r in 결과) + 2)
     줄들 = []
+    if 없는옵션:
+        줄들.append(f"  !! 노션 선택지에 없어 안 쓴 값: {' · '.join(없는옵션)}")
     바뀜 = 문제 = 0
     for r in 결과:
         if r.오류:
@@ -196,6 +252,7 @@ def 표로(결과: list[반영결과], *, apply: bool) -> str:
             바뀜 += 1
         if r.건너뛴칸:
             줄들.append(f"  {' ' * 폭}!! 스키마에 없는 칸: {' · '.join(r.건너뛴칸)}")
+
             문제 += 1
     줄들.append("")
     머리 = "썼습니다" if apply else "미리보기입니다. --apply 를 주면 씁니다"
