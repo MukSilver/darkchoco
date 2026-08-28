@@ -714,6 +714,111 @@ def test_살펴볼것을_덮지_않고_붙인다():
     assert "p.살펴볼것 = " not in 글, "아직 덮어쓰는 곳이 있다"
 
 
+def test_진행이_보인다():
+    """끝나야 결과가 나오면 지금 몇 줄째인지 알 수가 없다.
+
+    포럼 269줄이 Tor 를 거치면 한 시간 넘게 걸린다. 사람이 볼 때도,
+    자동으로 돌 때 로그를 볼 때도 진행이 보여야 어디서 멈췄는지 안다.
+    """
+    글 = (ROOT / "hub" / "crawler" / "run.py").read_text(encoding="utf-8")
+    assert "분쯤 남음" in 글, "남은 시간을 안 알려 준다"
+    assert "flush=True" in 글, "버퍼에 갇히면 진행이 안 보인다"
+    # 조용히 를 주면 안 찍어야 합니다. 검사가 시끄러우면 안 됩니다.
+    import inspect
+
+    from hub.crawler.run import 여러갈래, 한갈래
+    for fn in (한갈래, 여러갈래):
+        assert "조용히" in inspect.signature(fn).parameters, fn.__name__
+
+
+def test_게시판_이름이_유통자리와_개인정보로_간다():
+    """포럼이 스스로 붙인 이름이 근거다. 우리 추측이 아니다."""
+    본문 = ("<html><body>"
+          '<a href="forumdisplay.php?fid=3">Leaks &amp; Databases</a>'
+          '<a href="forumdisplay.php?fid=4">Marketplace</a>'
+          '<a href="forumdisplay.php?fid=12">Fullz &amp; SSN</a>'
+          "367224 Total Members</body></html>")
+    p = _포럼한판(본문)
+    assert "최초 유출" in p.유통자리 and "되팔이" in p.유통자리, p.유통자리
+    assert "Fullz & SSN" in p.개인정보, p.개인정보
+    값 = p.노션값()
+    assert set(값["유통 자리"]) == {"최초 유출", "되팔이"}, 값["유통 자리"]
+    assert 값["개인정보 유출"].startswith("게시판 이름: ")
+
+
+def test_게시판_증거가_없으면_그_칸을_안_쓴다():
+    """「모름」 을 269줄에 뿌리면 그 칸이 아무것도 말하지 못한다."""
+    p = _포럼한판("<html><body>"
+                '<a href="forumdisplay.php?fid=1">Announcements</a>'
+                "367224 Total Members</body></html>")
+    값 = p.노션값()
+    assert "유통 자리" not in 값, 값
+    assert "개인정보 유출" not in 값, 값
+
+
+def test_유통자리와_개인정보는_사람이_쓴_것을_안_덮는다():
+    from hub.crawler.place import 빈칸만칸
+    assert "유통 자리" in 빈칸만칸 and "개인정보 유출" in 빈칸만칸
+
+
+def test_한_줄이_죽어도_나머지는_돈다():
+    """명부에 "nulled.to" 처럼 스킴 없는 주소가 적힌 줄이 있다.
+
+    urllib 이 ValueError 를 내는데 조사기의 except 는 연결 실패만 잡아서
+    판 전체가 죽었다. 포럼 269줄이 47분 돌다 한 줄 때문에 통째로
+    날아갔다. 결과가 하나도 안 남았다.
+    """
+    from hub.crawler.run import _조사
+
+    class 가짜줄:
+        def __init__(self, 이름, 주소):
+            self.이름, self.주소, self.현재 = 이름, 주소, {}
+            self.page_id, self.규모, self.상태, self.어니언 = "p", "", "", ""
+
+    옛 = forum.한곳
+
+    def 터짐(*a, **k):
+        raise ValueError("unknown url type: 'nulled.to'")
+
+    forum.한곳 = 터짐
+    try:
+        out = list(_조사("forum", [가짜줄("A", "a.example"),
+                                  가짜줄("B", "b.example")], {"tor": None}))
+    finally:
+        forum.한곳 = 옛
+
+    assert len(out) == 2, "한 줄이 죽으니 나머지도 안 나온다"
+    for _, p in out:
+        assert "터졌습니다" in p.못본이유, p.못본이유
+        assert p.살펴볼것, "사람에게 안 알린다"
+        assert p.노션값() == {}, "터진 줄로 노션을 건드린다"
+
+
+def test_스킴이_없으면_붙여_준다():
+    본문 = "<html><body>367224 Total Members</body></html>"
+
+    class 응답:
+        status = 200
+        url = "https://nulled.to/"
+        def read(self, n): return 본문.encode()
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    class 오프너:
+        def open(self, req, timeout=0):
+            assert req.full_url.startswith("https://"), req.full_url
+            return 응답()
+
+    옛 = forum.오프너
+    forum.오프너 = lambda 프록시=None, 갈래="": 오프너()
+    try:
+        p = forum.한곳("nulled.to", "Nulled", [0.0])
+    finally:
+        forum.오프너 = 옛
+    assert p.상태 == "online", p.상태
+    assert "https" in p.받은곳, p.받은곳
+
+
 if __name__ == "__main__":
     n = 0
     for k, v in sorted(globals().items()):

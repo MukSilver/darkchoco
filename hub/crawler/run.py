@@ -101,11 +101,28 @@ def _조사(갈래: str, 줄들, ctx: dict):
     """
     프록시 = ctx.get("tor")
     이음사전 = ctx.get("이음사전")
+
+    def _한줄(부르기, r):
+        """**한 줄이 죽어도 나머지는 돕니다.**
+
+        조사기 안의 except 는 연결 실패만 잡습니다. 명부에 이상한 값이
+        적혀 있으면 ValueError 같은 것이 올라와 판 전체를 죽입니다.
+        실제로 "nulled.to" 한 줄이 47분치 작업을 날렸습니다.
+        """
+        try:
+            return 부르기()
+        except Exception as e:  # noqa: BLE001
+            p = Place(갈래=갈래, 이름=r.이름, 주소=r.주소,
+                      못본이유=f"이 줄에서 터졌습니다: {type(e).__name__}: {e}"[:180],
+                      받은곳="조사 중 예외")
+            p.살펴볼것 = "명부의 값이 이상할 수 있습니다. 주소를 보십시오"
+            return p
+
     if 갈래 == "telegram":
         마지막 = [0.0]
         for r in 줄들:
-            yield r, telegram.한곳(r.주소, 마지막, r.이름, 프록시=프록시,
-                                 이음사전=이음사전)
+            yield r, _한줄(lambda r=r: telegram.한곳(
+                r.주소, 마지막, r.이름, 프록시=프록시, 이음사전=이음사전), r)
 
     elif 갈래 == "forum":
         마지막 = [0.0]
@@ -113,8 +130,9 @@ def _조사(갈래: str, 줄들, ctx: dict):
         # 주소가 비어 있는 줄에서만 하므로 한 판에 몇 번 안 됩니다.
         미러 = bool(프록시)
         for r in 줄들:
-            yield r, forum.한곳(r.주소, r.이름, 마지막, 프록시=프록시,
-                              이음사전=이음사전, 어니언미러=미러)
+            yield r, _한줄(lambda r=r: forum.한곳(
+                r.주소, r.이름, 마지막, 프록시=프록시,
+                이음사전=이음사전, 어니언미러=미러), r)
 
     elif 갈래 == "ransom":
         # 랜섬은 목록을 통째로 받습니다. 그룹 하나씩 조회하면 요청이 폭발합니다.
@@ -167,9 +185,22 @@ def 한갈래(갈래: str, *, apply: bool = False, limit: int = 0,
         볼것 = 볼것[:limit]
 
     본것: list[Place] = []
+    셀것 = len(볼것)
+    if not 조용히 and 셀것:
+        print(f"  {갈래}: {셀것}줄을 봅니다", flush=True)
+
     for 줄, p in _조사(갈래, 볼것, {"tor": tor, "limit": limit,
                                  "이음사전": 이음사전}):
         본것.append(p)
+        # **끝나야 결과가 나오면 지금 몇 줄째인지 알 수가 없습니다.**
+        # 포럼 269줄이 Tor 를 거치면 한 시간 넘게 걸립니다. 사람이 볼
+        # 때도, 자동으로 돌 때 로그를 볼 때도 진행이 보여야 합니다.
+        n = len(본것)
+        if not 조용히 and 셀것 and (n % 10 == 0 or n == 셀것):
+            지난 = time.time() - t0
+            남은 = 지난 / n * (셀것 - n) if n else 0
+            print(f"    {n}/{셀것}줄 · {지난 / 60:.0f}분 지남 · "
+                  f"{남은 / 60:.0f}분쯤 남음", flush=True)
         if p.봤나():
             r.본것 += 1
         else:
@@ -256,7 +287,8 @@ def 됐다고_적기(결과: list[갈래결과], db: Path | None = None) -> None
 
 def 여러갈래(대상: list[str] | None = None, *, apply: bool = False,
           limit: int = 0, db: Path | None = None,
-          tor: str | None = None, 때된것만: bool = False) -> list[갈래결과]:
+          tor: str | None = None, 때된것만: bool = False,
+          조용히: bool = False) -> list[갈래결과]:
     """갈래들을 차례로 돕니다.
 
     때된것만=True 면 주기가 찬 갈래만 돕니다. 스케줄러가 자주 부르는데
@@ -273,12 +305,12 @@ def 여러갈래(대상: list[str] | None = None, *, apply: bool = False,
     # 「연결된 곳」을 채우려면 세 명부를 다 알아야 합니다. 한 판에 한 번만
     # 만들고 갈래마다 물려 줍니다.
     사전 = 이음사전만들기() if 돌것 else {}
-    if 사전:
-        log = f"명부 {len(사전)}곳을 이음 사전에 담았습니다"
+    if 사전 and not 조용히:
+        print(f"  명부 {len(사전)}곳을 이음 사전에 담았습니다", flush=True)
     out = []
     for 갈래 in 돌것:
         out.append(한갈래(갈래, apply=apply, limit=limit, db=db, tor=tor,
-                        이음사전=사전))
+                        이음사전=사전, 조용히=조용히))
     # 미리보기는 차례를 안 건드립니다. 안 썼는데 돌았다고 적으면
     # 다음 실제 반영이 주기만큼 밀립니다.
     if apply and out:
