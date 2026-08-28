@@ -19,6 +19,7 @@ ransomware.live(v2) 와 ransomlook.io 공개 API 에서 다크웹 유출 사이�
 from __future__ import annotations
 
 import argparse
+import collections
 import json
 import os
 import shutil
@@ -266,8 +267,11 @@ def derive(name: str, onion: str | None, rl: src.RansomwareLive,
 
         kr = rl.group_kr_victims(canonical)
         if kr:
-            names = ", ".join(filter(None, (v.get("post_title") for v in kr[:6])))
-            out["korea_leaks"] = f"있음 — {len(kr)}건: {names}"
+            # **이름을 안 적습니다. 건수만 적습니다.**
+            # post_title 은 피해 기관 이름입니다. SECURITY.md 는 "나가는
+            # 것은 항목 이름과 건수" 라고 정해 두었고, hub 크롤러도 같은
+            # 칸에 건수만 씁니다. 여기만 이름을 적으면 그 규칙이 깨집니다.
+            out["korea_leaks"] = f"있음 — {len(kr)}건 (최근 {rl.months}개월)"
 
     # ---------- ransomlook.io ----------
     # 상세 조회는 행마다 HTTP 1회라 느리다. ransomware.live 에서 이미
@@ -494,9 +498,18 @@ def main() -> int:
     ds_id = picked["id"]
     try:
         schema = n.schema(ds_id)
+        # 선택지 목록입니다. 없는 값을 보내면 노션이 400 을 냅니다.
+        # infer.py 가 "추정: 이란" · "추정: 스틸러/로그" 같은 값을 낼 수
+        # 있는데 노션에는 그 선택지가 없습니다.
+        _raw = n.request("GET", f"/data_sources/{ds_id}")
+        옵션 = {칸: {o["name"] for o in (v[v["type"]].get("options") or [])}
+              for 칸, v in (_raw.get("properties") or {}).items()
+              if v.get("type") in ("select", "multi_select", "status")}
     except nt.NotionError as exc:
         print(f"\n[!] 데이터 소스 스키마 조회 실패\n{exc}\n", file=sys.stderr)
         return 1
+
+    안쓴값: list[str] = []      # 선택지에 없어 못 쓴 값들
 
     if args.schema:
         print(f"\n[노션 스키마] 데이터 소스 '{picked['name']}' — {len(schema)}개 칼럼\n")
@@ -688,6 +701,18 @@ def main() -> int:
             ptype = schema[col]
             current = nt.read_value(props.get(col))
 
+            # **사람이 압수됨·인계됨 으로 판정한 상태를 안 덮습니다.**
+            #
+            # 압수된 사이트도 수사기관 배너로 200 을 돌려주니 기계는
+            # online 이라 봅니다. --probe 를 주면 status 가 authoritative
+            # 라서 --overwrite 없이도 그 값이 들어갑니다.
+            #
+            # hub/crawler/place.py 의 사람판정_상태 와 같은 규칙입니다.
+            # 기계가 보는 것은 살아있나뿐이고, 무슨 일이 있었나는 사람이
+            # 봅니다.
+            if field == "status" and str(current).strip() in ("압수됨", "인계됨"):
+                continue
+
             phs = placeholder_set(mapping, col)
 
             if ptype == "multi_select":
@@ -710,6 +735,24 @@ def main() -> int:
 
             if same_value(ptype, value, current):
                 continue
+
+            # **선택지에 없는 값을 안 보냅니다.**
+            #
+            # infer.py 가 "추정: 이란" · "추정: 스틸러/로그" 같은 값을
+            # 낼 수 있는데 노션 선택지에는 없습니다. 보내면 400 이 나거나
+            # 조용히 사라집니다.
+            if ptype in ("select", "multi_select", "status"):
+                받는값 = 옵션.get(col)
+                if 받는값 is not None:
+                    골라낸것 = [v for v in (value if isinstance(value, list)
+                                          else [value]) if str(v) in 받는값]
+                    버린것 = [v for v in (value if isinstance(value, list)
+                                        else [value]) if str(v) not in 받는값]
+                    for v in 버린것:
+                        안쓴값.append(f"{col}={v}")
+                    if not 골라낸것:
+                        continue
+                    value = 골라낸것 if ptype == "multi_select" else 골라낸것[0]
 
             built = nt.build_value(ptype, value)
             if not built:
@@ -783,6 +826,13 @@ def main() -> int:
 
     if args.apply:
         print(f"완료: {updated}개 행 업데이트, {skipped}개 건너뜀, {failed}개 실패")
+        if 안쓴값:
+            # 조용히 사라지면 아무도 모릅니다. 어떤 값이 노션 선택지에
+            # 없어 버려졌는지 알려 줍니다.
+            셈 = collections.Counter(안쓴값)
+            print(f"선택지에 없어 안 쓴 값 {len(셈)}가지:")
+            for 값, c in 셈.most_common(10):
+                print(f"   {값}  ({c}줄)")
     else:
         print(f"DRY-RUN — 실제로 기록하려면 --apply 를 붙이세요. "
               f"(변경 예정 {len(pages) - skipped}개, 건너뜀 {skipped}개)")

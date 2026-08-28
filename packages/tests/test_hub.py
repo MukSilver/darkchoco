@@ -195,7 +195,17 @@ def test_install_task_가_명령을_만든다():
     assert code == 0, out[:400]
     assert "Register-ScheduledTask" in out
     assert "Unregister-ScheduledTask" in out, "끄는 방법을 안 알려준다"
-    assert "run --due" in out, "때 된 것만 돌리는 명령이 아니다"
+    # 예전에는 "run --due" 가 들어 있는지만 봤다. 그것이 auto 로 못 바꾸게
+    # 막고 있었다 — 스케줄러가 수집기만 부르고 명부 조사는 안 하는 상태를
+    # 이 검사가 굳혀 두고 있었다.
+    #
+    # 봐야 하는 것은 낱말이 아니라 뜻이다. **때가 된 것만 돌리는가.**
+    assert 'dc.py" auto' in out, "auto 를 안 부른다"
+    from hub.crawler.run import 여러갈래
+    import inspect
+    assert "때된것만" in inspect.signature(여러갈래).parameters
+    from hub.runner import 여러판
+    assert "때된것만" in inspect.signature(여러판).parameters
 
 
 def test_plan_이_다음차례를_보여준다():

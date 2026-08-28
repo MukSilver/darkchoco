@@ -15,7 +15,8 @@
     "korea_leaks": "한국 관련 유출",
     "source": "출처",
     "checked_date": "확인일",
-    "country": "국가",
+    "_country_왜빈칸인가": "infer.py 가 내는 추정: 이란·베트남·브라질 등이 노션 국가 선택지에 없습니다. 빈 글자면 이 칸을 안 씁니다.",
+    "country": "",
     "scale": "규모",
     "note": "",
     "language": "사용 언어",
@@ -101,7 +102,6 @@
   },
   "append_columns": [
     "출처",
-    "국가",
     "유통 자리"
   ],
   "_append_note": "여기 적힌 multi_select 칼럼만 기존 값에 덧붙입니다. '종류'처럼 값이 하나여야 하는 칼럼은 빼두세요 — 이미 market 인 행에 group 이 덧붙는 모순을 막습니다.",
