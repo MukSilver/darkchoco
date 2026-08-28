@@ -74,19 +74,33 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
 # 끼우기 때문에 느슨하게 잡으면 안 됩니다.
 #
 # 태그를 걷어낸 글에서 찾습니다. 마크업은 판마다 바뀌는데 글은 덜 바뀝니다.
+# K·M·B 접미사를 값에 포함해 잡습니다. 안 그러면 24.3K 에서 24 만 잡고
+# 그것을 243 으로 읽습니다.
+_수 = r"[\d,\.   ]{1,18}[KkMmBb]?"
+
+# **이름이 앞에 오는 꼴을 먼저 봅니다.**
+#
+# 두 꼴이 한 화면에 같이 있으면 서로 훔칩니다.
+#
+#     Total members: 24.3K Total posts: 1.6M
+#                    ^^^^^ ^^^^^^^^^^^
+#     「N Total Posts」 규칙이 24.3K 를 글 수로 읽습니다
+#
+# 이름이 앞에 오는 꼴(Total posts: N)이 더 확실하므로 먼저 봅니다.
+# 뒤에 오는 꼴(N Total Posts)은 앞에 콜론이 없을 때만 씁니다.
 _회원 = [
-    re.compile(r"([\d,\.]{1,15})\s*Total\s+Members", re.I),        # MyBB
-    re.compile(r"(?:We (?:currently )?have)\s+([\d,\.]{1,15})\s+members", re.I),
-    re.compile(r"Total\s+members\s*[:\s]\s*([\d,\.]{1,15})", re.I),  # phpBB
-    re.compile(r"\bMembers\s*:\s*([\d,\.]{1,15})", re.I),          # vBulletin
-    re.compile(r"\bMembers\s+([\d,\.]{1,15})(?:\s|$)", re.I),       # XenForo
+    re.compile(rf"Total\s+members\s*[:•·∙]\s*({_수})", re.I),        # phpBB
+    re.compile(rf"(?:We (?:currently )?have)\s+({_수})\s+members", re.I),
+    re.compile(rf"\bMembers\s*:\s*({_수})", re.I),                  # vBulletin
+    re.compile(rf"(?<![:：])\s*({_수})\s*Total\s+Members", re.I),    # MyBB
+    re.compile(rf"\bMembers\s+({_수})(?:\s|$)", re.I),               # XenForo
 ]
 _게시물 = [
-    re.compile(r"([\d,\.]{1,15})\s*Total\s+Posts", re.I),
-    re.compile(r"total of\s+([\d,\.]{1,15})\s+posts", re.I),
-    re.compile(r"Total\s+(?:posts|messages)\s*[:\s]\s*([\d,\.]{1,15})", re.I),
-    re.compile(r"\b(?:Posts|Messages)\s*:\s*([\d,\.]{1,15})", re.I),
-    re.compile(r"\b(?:Posts|Messages)\s+([\d,\.]{1,15})(?:\s|$)", re.I),
+    re.compile(rf"Total\s+(?:posts|messages)\s*[:•·∙]\s*({_수})", re.I),
+    re.compile(rf"total of\s+({_수})\s+posts", re.I),
+    re.compile(rf"\b(?:Posts|Messages)\s*:\s*({_수})", re.I),
+    re.compile(rf"(?<![:：])\s*({_수})\s*Total\s+Posts", re.I),
+    re.compile(rf"\b(?:Posts|Messages)\s+({_수})(?:\s|$)", re.I),
 ]
 
 # 이 말이 앞에 있으면 총계가 아닙니다. 지금 접속자거나 오늘 것이거나
@@ -124,12 +138,53 @@ _로그인벽 = re.compile(
     r"로그인.{0,6}(?:해야|후에).{0,10}(?:볼|이용)", re.I)
 
 
-def _숫자(s: str) -> int | None:
-    s = re.sub(r"[^\d]", "", s or "")
-    if not s or len(s) > 12:
-        return None
-    n = int(s)
-    return n if 1 <= n < 10_000_000_000 else None
+# 자리를 나누는 데 쓰는 빈칸들입니다. 좁은 빈칸(U+202F)과 안 나뉘는
+# 빈칸(U+00A0)으로 "185 091" 처럼 적는 포럼이 있습니다.
+_빈칸들 = "     "
+
+
+def _숫자(s: str) -> tuple[int | None, bool]:
+    """(수, 어림수인가) 를 돌려줍니다.
+
+    **1.6M 을 16 으로 읽던 버그를 고쳤습니다.** 점을 그냥 지워서
+    "Total posts: 1.6M" 이 16 이 되고 "24.3K" 가 243 이 됐습니다.
+    실제로는 160만과 24,300 입니다. 그 값이 사람이 조사한 규모 줄을
+    갈아 끼우고 있었습니다.
+
+    K·M·B 가 붙으면 곱하고 어림수로 표시합니다. 붙은 값은 정확하지
+    않으므로 규모줄() 이 「안팎」 을 붙입니다.
+    """
+    s = (s or "").strip()
+    if not s:
+        return None, False
+    for c in _빈칸들:
+        s = s.replace(c, "")
+
+    m = re.fullmatch(r"([\d.,]+)\s*([KkMmBb])?", s)
+    if not m:
+        숫자 = re.sub(r"[^\d]", "", s)
+        if not 숫자 or len(숫자) > 12:
+            return None, False
+        n = int(숫자)
+        return (n, False) if 1 <= n < 10_000_000_000 else (None, False)
+
+    값, 배 = m.group(1), (m.group(2) or "").upper()
+    if 배:
+        # 1.6M · 24.3K — 점은 소수점입니다. 지우면 안 됩니다.
+        try:
+            f = float(값.replace(",", ""))
+        except ValueError:
+            return None, False
+        곱 = {"K": 1_000, "M": 1_000_000, "B": 1_000_000_000}[배]
+        n = int(f * 곱)
+        return (n, True) if 1 <= n < 10_000_000_000 else (None, False)
+
+    # 접미사가 없으면 점과 쉼표는 자리 구분입니다.
+    숫자 = re.sub(r"[^\d]", "", 값)
+    if not 숫자 or len(숫자) > 12:
+        return None, False
+    n = int(숫자)
+    return (n, False) if 1 <= n < 10_000_000_000 else (None, False)
 
 
 def _제목뽑기(본문: str) -> str:
@@ -194,6 +249,37 @@ def 어니언확인(어니언: str, 원래제목: str, 마지막, *,
     return False, f"제목이 다릅니다: {제목[:60]}"
 
 
+def _막은것(본문: str, 헤더: dict) -> str:
+    """무엇이 막았나. 4xx 응답의 본문과 헤더로 가립니다.
+
+    「HTTP 403」 만으로는 손쓸 방법을 못 정합니다. 클라우드플레어면 깊은
+    조사로 넘기고, 원서버가 직접 막으면 어니언을 봐야 합니다.
+    """
+    h = {str(k).lower(): str(v).lower() for k, v in (헤더 or {}).items()}
+    글 = (본문 or "").lower()
+    서버 = h.get("server", "")
+
+    if "cloudflare" in 서버 or "cf-ray" in h or "cf-mitigated" in h:
+        if "1020" in 글:
+            return "클라우드플레어 규칙에 막힙니다"
+        if "1015" in 글:
+            return "클라우드플레어가 속도 제한을 겁니다"
+        return "클라우드플레어에 막힙니다"
+    if "ddos-guard" in 서버 or "ddos-guard" in 글:
+        return "DDoS-Guard 에 막힙니다"
+    if "x-sucuri-id" in h:
+        return "Sucuri 에 막힙니다"
+    if "x-iinfo" in h or "incapsula" in h.get("x-cdn", ""):
+        return "Imperva 에 막힙니다"
+    if "just a moment" in 글 or "checking your browser" in 글:
+        return "브라우저 검사 화면입니다"
+    if "access denied" in 글 or "forbidden" in 글:
+        return "원서버가 막습니다"
+    if 서버:
+        return f"{서버.split('/')[0]} 가 막습니다"
+    return "무엇이 막는지 못 알아냈습니다"
+
+
 def _왜(e: Exception) -> str:
     """연결이 왜 안 됐는지 짐작해 한 줄로 적습니다.
 
@@ -214,21 +300,25 @@ def _왜(e: Exception) -> str:
     return "우리 쪽 사정일 수 있어 상태를 안 바꿉니다"
 
 
-def _찾기(글: str, 규칙들) -> int | None:
-    """총계를 찾습니다. 못 찾으면 None 입니다. **지어내지 않습니다.**
+def _찾기(글: str, 규칙들) -> tuple[int | None, bool]:
+    """(총계, 어림수인가) 를 돌려줍니다. 못 찾으면 (None, False) 입니다.
 
     앞선 규칙일수록 확실한 꼴입니다. 앞 글자를 보고 총계가 아닌 것은
-    건너뜁니다.
+    건너뜁니다. 잡은 숫자 **바로 뒤**도 봅니다 — 안 그러면 24.3K 에서
+    되물러 24 를 잡습니다.
     """
     for rx in 규칙들:
         for m in rx.finditer(글):
             앞 = 글[max(0, m.start() - 40):m.start()]
             if _총계아님.search(앞):
                 continue
-            n = _숫자(m.group(1))
+            뒤 = 글[m.end(1):m.end(1) + 1]
+            if 뒤 and 뒤 in "0123456789.,":
+                continue          # 수를 중간에서 잘랐습니다
+            n, 어림 = _숫자(m.group(1))
             if n:
-                return n
-    return None
+                return n, 어림
+    return None, False
 
 
 def _기다리기(마지막, 열쇠: str) -> None:
@@ -374,12 +464,19 @@ def _한곳(주소: str, 이름: str, 마지막, *,
         "User-Agent": UA, "Accept": "text/html", "Accept-Language": "en"})
     끝주소 = 주소
     try:
-        with opener.open(req, timeout=30) as r:
+        with opener.open(req, timeout=(90 if 어니언 else 30)) as r:
             code = r.status
             끝주소 = r.url or 주소
+            헤더 = dict(getattr(r, "headers", None) or {})
             본문 = r.read(1_500_000).decode("utf-8", "replace")
     except urllib.error.HTTPError as e:
-        code, 본문 = e.code, ""
+        # **본문과 헤더를 안 버립니다.** 403 이 왜 났는지가 거기 있습니다.
+        code = e.code
+        try:
+            본문 = e.read(300_000).decode("utf-8", "replace")
+        except Exception:  # noqa: BLE001
+            본문 = ""
+        헤더 = dict(getattr(e, "headers", {}) or {})
     except (urllib.error.URLError, socket.timeout, OSError) as e:
         _찍기(마지막, host or 주소)
         # **연결이 안 된 것을 offline 으로 적지 않습니다.**
@@ -407,8 +504,11 @@ def _한곳(주소: str, 이름: str, 마지막, *,
     if code >= 400:
         # 403 은 클라우드플레어 검사일 수 있습니다. 죽은 것과 다릅니다.
         p.상태 = "미확인"
-        p.못본이유 = (f"HTTP {code}. 앞단 검사에 막혔을 수 있습니다. "
-                   "깊은 조사는 forum-crawler 로 합니다")
+        무엇 = _막은것(본문, 헤더)
+        p.못본이유 = f"HTTP {code}. {무엇}"
+        p.들어가는법 = 무엇
+        if "클라우드플레어" in 무엇 or "DDoS" in 무엇 or "검사" in 무엇:
+            덧붙임(p, "앞단 검사에 막혔습니다. 깊은 조사는 forum-crawler 로 합니다")
         return p
 
     # 주소가 옮겨 갔으면 원래 주소를 남깁니다. 명부에 적힌 주소가 언제부터
@@ -492,8 +592,10 @@ def _한곳(주소: str, 이름: str, 마지막, *,
                 break
             덧붙임(p, f"어니언 후보를 못 확인했습니다 — {왜}")
 
-    p.회원수 = _찾기(납작, _회원)
-    p.게시물수 = _찾기(납작, _게시물)
+    p.회원수, 어림1 = _찾기(납작, _회원)
+    p.게시물수, 어림2 = _찾기(납작, _게시물)
+    # K·M 이 붙은 값은 정확하지 않습니다. 규모줄() 이 「안팎」 을 붙입니다.
+    p.어림수 = bool(어림1 or 어림2)
     if p.회원수 is None and p.게시물수 is None:
         # **못본이유 에 안 적습니다.**
         #
