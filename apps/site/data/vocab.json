@@ -1,0 +1,78 @@
+{
+  "meta": {
+    "note": "지도와 가이드가 같이 쓰는 어휘입니다. 이름을 바꾸려면 여기부터 고칩니다.",
+    "source": "전부 노션 DB의 실제 select 값입니다. 새로 지어내지 않았습니다."
+  },
+
+  "layers": [
+    { "id": "sky",  "name": "오픈웹", "sub": "검색하면 나오는 세계",
+      "rule": "포럼 DB 「주소」가 있고 「어니언 주소」가 없으며 「가입 필요」가 꺼진 줄" },
+    { "id": "deep", "name": "다크웹", "sub": "주소나 계정을 알아야 열리는 세계",
+      "rule": "「어니언 주소」가 있거나 「가입 필요」가 켜진 줄. 랜섬웨어 DB는 전부 여기" }
+  ],
+
+  "kinds": [
+    { "id": "forum",    "name": "해킹 포럼",     "color": "#8b6fe0", "db": "포럼 DB" },
+    { "id": "ransom",   "name": "랜섬웨어 그룹", "color": "#dc5f4c", "db": "랜섬웨어 DB (종류=group)" },
+    { "id": "telegram", "name": "텔레그램 채널", "color": "#3f9bd6", "db": "텔레그램 DB" },
+    { "id": "archive",  "name": "공개 · 미러",   "color": "#3fae8f", "db": "포럼·랜섬웨어 DB 중 형식이 미러·아카이브" },
+    { "id": "broker",   "name": "접근 브로커",   "color": "#d08b3a", "db": "랜섬웨어 DB 「형식」에 IAB가 든 줄" }
+  ],
+
+  "continents": [
+    { "id": "sky-forum",    "layer": "sky",  "kind": "forum",    "name": "클리어넷 포럼",  "sub": "가입만 하면 보임" },
+    { "id": "sky-archive",  "layer": "sky",  "kind": "archive",  "name": "공개 · 미러",    "sub": "검색에도 걸림" },
+    { "id": "sky-telegram", "layer": "sky",  "kind": "telegram", "name": "공개 채널",      "sub": "링크만 있으면" },
+    { "id": "deep-ransom",  "layer": "deep", "kind": "ransom",   "name": "랜섬웨어 왕국",  "sub": "유출 사이트" },
+    { "id": "deep-forum",   "layer": "deep", "kind": "forum",    "name": "어니언 포럼",    "sub": "계정과 보증이 필요" },
+    { "id": "deep-telegram","layer": "deep", "kind": "telegram", "name": "비공개 채널",    "sub": "초대로만" },
+    { "id": "deep-broker",  "layer": "deep", "kind": "broker",   "name": "접근 브로커",    "sub": "들어갈 권한을 팜" },
+    { "id": "deep-archive", "layer": "deep", "kind": "archive",  "name": "어니언 미러",    "sub": "같은 자료를 다른 주소로" }
+  ],
+
+  "relations": [
+    { "id": "channel",   "prefix": "채널",    "kind": "flat", "label": "같은 곳의 공지 채널",
+      "note": "유통이 아니라 같은 조직의 두 창구입니다. 선으로 안 그리고 위성 점으로 그립니다" },
+    { "id": "actor",     "prefix": "행위자",  "kind": "actor", "label": "같은 사람이 지나감" },
+    { "id": "prev",      "prefix": "앞선곳",  "kind": "succession", "label": "앞선 자리" },
+    { "id": "next",      "prefix": "뒤이은곳","kind": "succession", "label": "뒤이은 자리" },
+    { "id": "split",     "prefix": "갈라진곳","kind": "succession", "label": "갈라져 나옴" },
+    { "id": "toransom",  "prefix": "랜섬웨어","kind": "flat", "label": "랜섬웨어와 이어짐" },
+    { "id": "toforum",   "prefix": "포럼",    "kind": "flat", "label": "포럼과 이어짐" },
+    { "id": "mention",   "prefix": "언급",    "kind": "weak", "label": "언급만 됨",
+      "note": "근거가 언급 하나뿐입니다. 점선으로 그립니다" },
+    { "id": "hop",       "prefix": null,      "kind": "case", "label": "사고가 지나감",
+      "note": "수집 DB 「같은 사건」과 「게시 시각」으로 만듭니다. 자리 관계가 아니라 사고 관계입니다" }
+  ],
+
+  "road_kinds": [
+    { "id": "flat",       "label": "같은 층 안의 이동",   "color": "--road",        "dash": null },
+    { "id": "drop",       "label": "아래로 — 팔리러 내려감", "color": "--road-drop",   "dash": "10 6" },
+    { "id": "rise",       "label": "위로 — 다시 공개됨",   "color": "--road-rise",   "dash": null },
+    { "id": "exposure",   "label": "노출에서 옴",          "color": "--road-expose", "dash": "9 6" },
+    { "id": "succession", "label": "압수 후 후계",         "color": "--road-succ",   "dash": "8 5" }
+  ],
+
+  "verdicts": [
+    { "id": "확인됨",      "gate": "full",    "color": "--v-confirmed", "note": "지금 0건입니다. 값이 생기기 전에는 범례에서 뺍니다" },
+    { "id": "신뢰성 높음", "gate": "full",    "color": "--v-likely" },
+    { "id": "미확인",      "gate": "partial", "color": "--v-unknown" },
+    { "id": "신뢰성 낮음", "gate": "partial", "color": "--v-weak" },
+    { "id": "허위",        "gate": "blocked", "color": "--v-false" }
+  ],
+
+  "circulation": [
+    { "id": "최초 유출", "label": "처음 올라온 곳" },
+    { "id": "재배포",    "label": "다시 뿌린 곳" },
+    { "id": "되팔이",    "label": "사서 다시 판 곳" },
+    { "id": "수법 공유", "label": "방법만 오간 곳" }
+  ],
+
+  "status": [
+    { "id": "online",   "label": "열려 있음",   "mark": null },
+    { "id": "offline",  "label": "닫힘",       "mark": "채도 낮춤" },
+    { "id": "압수됨",   "label": "압수",       "mark": "채도 낮춤 + 빗금" },
+    { "id": "인계됨",   "label": "넘어감",     "mark": "채도 낮춤" },
+    { "id": "미확인",   "label": "확인 못 함", "mark": null }
+  ]
+}

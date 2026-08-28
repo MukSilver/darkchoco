@@ -1,0 +1,175 @@
+{
+  "meta": {
+    "note": "가이드가 쓰는 자산입니다. 조사 결과가 아니라 팀이 직접 재서 채우는 값입니다. leak-map.json 과 갈라 둡니다.",
+    "item_source": "노션 수집 DB 「유출 항목」 multi_select 아홉 값을 그대로 씁니다. 이름을 바꾸지 않습니다.",
+    "edition": "2026.09"
+  },
+
+  "item_types": [
+    { "id": "name", "label": "이름", "purpose": null,
+      "harm": "단독으로는 피해가 안 됩니다. 다른 항목과 합쳐질 때 위험해집니다",
+      "first_action": null,
+      "alone": false,
+      "note": "단독으로는 조치를 내지 않습니다. 결합 위험에서만 씁니다" },
+
+    { "id": "phone", "label": "전화", "purpose": "phish",
+      "harm": "기관·기업을 사칭한 문자와 전화. 본인 확인 문자를 가로채는 시도",
+      "first_action": "모르는 번호의 링크를 열지 않습니다",
+      "alone": true, "urgency": "지금 바로" },
+
+    { "id": "email", "label": "이메일", "purpose": "account",
+      "harm": "계정 찾기의 출발점이 됩니다. 다른 서비스에서 같은 주소로 계정을 추적당합니다",
+      "first_action": "이 주소로 만든 계정의 비밀번호를 바꿉니다",
+      "alone": true, "urgency": "오늘 안에" },
+
+    { "id": "address", "label": "주소", "purpose": "phish",
+      "harm": "배송을 사칭한 연락. 생활 패턴이 드러납니다",
+      "first_action": "주문하지 않은 배송 안내를 열지 않습니다",
+      "alone": true, "urgency": "지금 바로" },
+
+    { "id": "account", "label": "계정", "purpose": "account",
+      "harm": "계정 탈취. 같은 비밀번호를 쓴 다른 서비스까지 함께 뚫립니다",
+      "first_action": "같은 비밀번호를 쓴 계정을 전부 바꿉니다",
+      "alone": true, "urgency": "오늘 안에" },
+
+    { "id": "rrn", "label": "주민번호", "purpose": "identity",
+      "harm": "명의도용. 비대면으로 계정과 대출이 열립니다",
+      "first_action": "명의도용 방지 서비스를 신청합니다",
+      "alone": true, "urgency": "오늘 안에" },
+
+    { "id": "finance", "label": "카드금융", "purpose": "money",
+      "harm": "부정 결제와 금융 사기",
+      "first_action": "카드사에 정지와 재발급을 요청합니다",
+      "alone": true, "urgency": "지금 바로" },
+
+    { "id": "internal", "label": "회사 내부 자료", "purpose": "privacy",
+      "harm": "개인 대응 범위 밖입니다. 조직이 다뤄야 합니다",
+      "first_action": "내 이름이 들어 있는지 회사에 확인을 요청합니다",
+      "alone": true, "urgency": "상담" },
+
+    { "id": "etc", "label": "기타", "purpose": null,
+      "harm": "무엇인지 알 수 없습니다",
+      "first_action": null,
+      "alone": false,
+      "note": "실제 값으로 나누기 전에는 조치를 내지 않습니다. 화면에는 「무엇인지 아직 못 나눴습니다」로 적습니다" }
+  ],
+
+  "purposes": [
+    { "id": "account",  "label": "계정 보호",       "color": "--k-forum" },
+    { "id": "phish",    "label": "사칭 · 피싱 방어", "color": "--k-archive" },
+    { "id": "identity", "label": "명의 보호",       "color": "--k-forum" },
+    { "id": "money",    "label": "금융 차단",       "color": "--k-broker" },
+    { "id": "privacy",  "label": "사생활 보호",     "color": "--k-telegram" }
+  ],
+
+  "stages": [
+    { "id": "now",    "label": "지금 바로",     "sub": "미루면 손해가 커지는 것" },
+    { "id": "today",  "label": "오늘 안에",     "sub": "오늘 안에 끝낼 것" },
+    { "id": "watch",  "label": "이후 감시 · 신고", "sub": "한 달 넘게 지켜볼 것" }
+  ],
+
+  "common": [
+    { "id": "c1", "label": "유출 통지서 보관", "why": "분쟁조정과 손해배상의 증빙이 됩니다", "minutes": 5 },
+    { "id": "c2", "label": "비밀번호 변경", "why": "같은 비밀번호를 쓴 곳 전부입니다", "minutes": 10 },
+    { "id": "c3", "label": "2단계 인증 설정", "why": "문자 대신 앱 인증으로 합니다", "minutes": 5 }
+  ],
+
+  "actions": [
+    { "id": "a-acc-1", "purpose": "account", "stage": "today", "branch": "일반",
+      "items": ["account", "email"],
+      "text": "같은 비밀번호를 쓴 개인 계정 전부 변경",
+      "why": "회사 계정만 바꾸면 개인 계정이 남습니다", "minutes": 10 },
+    { "id": "a-acc-2", "purpose": "account", "stage": "today", "branch": "일반",
+      "items": ["account"],
+      "text": "모든 기기에서 로그아웃하고 2단계 인증을 앱 인증으로",
+      "why": "문자 인증은 번호를 아는 상대에게 뚫립니다", "minutes": 10 },
+    { "id": "a-acc-3", "purpose": "account", "stage": "watch", "branch": "일반",
+      "items": ["account", "email"],
+      "text": "로그인·복구 알림을 켜고 연결된 앱 점검", "minutes": 5 },
+
+    { "id": "a-ph-1", "purpose": "phish", "stage": "now", "branch": "일반",
+      "items": ["name", "phone"],
+      "text": "이름과 소속을 함께 아는 문자·전화를 열지 않기",
+      "why": "둘을 같이 아는 발신자만 가능합니다", "minutes": 0 },
+    { "id": "a-ph-2", "purpose": "phish", "stage": "now", "branch": "일반",
+      "items": ["address"],
+      "text": "주문하지 않은 배송 안내와 링크를 열지 않기",
+      "why": "배송지가 함께 나간 사고입니다", "minutes": 0 },
+    { "id": "a-ph-3", "purpose": "phish", "stage": "watch", "branch": "일반",
+      "items": ["phone", "email", "address"],
+      "text": "증거를 보관한 뒤 신고", "desk": "d-118", "minutes": null },
+
+    { "id": "a-id-1", "purpose": "identity", "stage": "today", "branch": "일반",
+      "items": ["rrn"],
+      "text": "명의도용 방지 서비스 신청", "desk": "d-msafer", "minutes": 15 },
+    { "id": "a-id-2", "purpose": "identity", "stage": "today", "branch": "일반",
+      "items": ["rrn"],
+      "text": "계좌·대출·카드 개설 차단 신청", "desk": "d-fss", "minutes": 15 },
+    { "id": "a-id-3", "purpose": "identity", "stage": "watch", "branch": "일반",
+      "items": ["rrn"],
+      "text": "본인확인 내역을 주기적으로 조회", "desk": "d-eprivacy", "minutes": 10 },
+
+    { "id": "a-mo-1", "purpose": "money", "stage": "now", "branch": "일반",
+      "items": ["finance"],
+      "text": "카드 정지와 재발급 요청", "minutes": 15 },
+    { "id": "a-mo-2", "purpose": "money", "stage": "today", "branch": "일반",
+      "items": ["finance"],
+      "text": "최근 거래내역 확인과 결제 알림 설정", "minutes": 10 },
+    { "id": "a-mo-3", "purpose": "money", "stage": "watch", "branch": "일반",
+      "items": ["finance"],
+      "text": "두 달간 명세서 확인", "minutes": null },
+
+    { "id": "a-pv-1", "purpose": "privacy", "stage": "today", "branch": "일반",
+      "items": ["internal"],
+      "text": "내부 문서에 내 이름이 있는지 회사에 확인 요청", "minutes": null },
+    { "id": "a-pv-2", "purpose": "privacy", "stage": "today", "branch": "일반",
+      "items": ["internal"],
+      "text": "유출 통지서 발급을 요청해 보관",
+      "why": "분쟁조정과 손해배상의 증빙이 됩니다", "minutes": 10 },
+    { "id": "a-pv-3", "purpose": "privacy", "stage": "watch", "branch": "일반",
+      "items": ["internal"],
+      "text": "사내 계정과 업무 메일의 이상 접속 확인 요청", "minutes": null },
+
+    { "id": "b-1", "purpose": null, "stage": "now", "branch": "피해 발생",
+      "items": [],
+      "text": "화면과 문자를 지우지 말고 그대로 보관",
+      "why": "신고와 분쟁조정에서 이것이 증거입니다", "minutes": 5 },
+    { "id": "b-2", "purpose": "money", "stage": "now", "branch": "피해 발생",
+      "items": [],
+      "text": "금융 피해면 지급정지부터", "desk": "d-fss", "minutes": null },
+    { "id": "b-3", "purpose": null, "stage": "now", "branch": "피해 발생",
+      "items": [],
+      "text": "경찰에 신고", "desk": "d-police", "minutes": null },
+    { "id": "b-4", "purpose": "identity", "stage": "today", "branch": "피해 발생",
+      "items": [],
+      "text": "명의도용이면 개설된 계정을 먼저 확인", "desk": "d-msafer", "minutes": null }
+  ],
+
+  "desks": [
+    { "id": "d-fss",      "label": "금융감독원",            "what": "계좌 · 대출 · 카드 개설 차단, 지급정지" },
+    { "id": "d-msafer",   "label": "명의도용 방지 서비스",   "what": "휴대폰 명의도용 차단과 가입 내역 조회" },
+    { "id": "d-eprivacy", "label": "개인정보 포털",         "what": "본인확인 내역 조회, 회원탈퇴 대행" },
+    { "id": "d-118",      "label": "개인정보침해 신고센터",  "what": "침해 신고와 상담 · 118" },
+    { "id": "d-adr",      "label": "개인정보분쟁조정위원회", "what": "분쟁조정 · 1833-6972" },
+    { "id": "d-police",   "label": "경찰 사이버범죄 신고",   "what": "금전 피해와 명의도용 신고" }
+  ],
+
+  "combos": [
+    { "items": ["name", "phone"],    "harm": "기관과 기업을 사칭한 피싱" },
+    { "items": ["address", "name"],  "harm": "생활 패턴을 이용한 표적 사기" },
+    { "items": ["email", "account"], "harm": "다른 서비스 계정 추적과 대입 시도" },
+    { "items": ["name", "rrn"],      "harm": "비대면 계정 개설과 명의도용" }
+  ],
+
+  "gates": [
+    { "verdict": ["확인됨", "신뢰성 높음"], "id": "full",
+      "label": "검증 완료", "action": "확인된 항목 기준으로 조치 안내" },
+    { "verdict": ["미확인", "신뢰성 낮음"], "id": "partial",
+      "label": "검토 중", "action": "사실관계 확인과 예방 중심 안내만" },
+    { "verdict": [], "id": "claim",
+      "label": "주장만 확인", "action": "유출을 단정하지 않고 주의사항만",
+      "note": "검증 DB에 대응 줄이 없는 사고" },
+    { "verdict": ["허위"], "id": "blocked",
+      "label": "허위", "action": "조치를 만들지 않고 왜 허위인지만 표시" }
+  ]
+}
