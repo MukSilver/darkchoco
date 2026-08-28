@@ -65,7 +65,7 @@ class 갈래결과:
     바뀐줄: int = 0
     건너뜀: int = 0          # 주소가 없어 조사 못 한 줄
     문제: list = field(default_factory=list)
-    처음본곳: dict = field(default_factory=dict)   # 호스트 → 어디서 봤나
+    처음본곳: dict = field(default_factory=dict)   # 호스트 → {어디서 봤나}
     오류: str = ""
     초: float = 0.0
     줄별: list = field(default_factory=list)
@@ -192,12 +192,20 @@ def 한갈래(갈래: str, *, apply: bool = False, limit: int = 0,
         if res.사람판정:
             r.문제.append(f"{res.이름}: {res.사람판정}")
         for h in getattr(p, "처음본곳", ()):
-            r.처음본곳.setdefault(h, res.이름 or p.이름)
+            # 여러 곳이 같은 호스트를 걸어 두면 그것이 더 중요한 실마리입니다.
+            # setdefault 로 하나만 담으면 그 사실을 원리상 못 셉니다.
+            r.처음본곳.setdefault(h, set()).add(res.이름 or p.이름)
         if res.바뀐칸:
             r.바뀐줄 += 1
 
     if apply and 본것:
-        _쌓기(db or 기본_표(), 갈래, 본것)
+        # 한갈래() 는 예외를 밖으로 안 냅니다. 이 한 줄만 밖에 있어서,
+        # 표가 깨지면 dc.py crawl 과 dc.py auto 가 통째로 죽었습니다.
+        # 시계열을 못 쌓는 것과 조사를 못 하는 것은 다른 일입니다.
+        try:
+            _쌓기(db or 기본_표(), 갈래, 본것)
+        except Exception as e:  # noqa: BLE001
+            r.문제.append(f"시계열을 못 쌓았습니다: {type(e).__name__}: {e}"[:200])
     r.초 = time.time() - t0
     return r
 
@@ -297,13 +305,18 @@ def 표로(결과: list[갈래결과], *, apply: bool) -> str:
     # 명부에 없는 이웃들. 노션에 안 씁니다. 새 곳을 찾는 실마리입니다.
     처음본것: dict = {}
     for r in 결과:
-        for h, 어디 in getattr(r, "처음본곳", {}).items():
-            처음본것.setdefault(h, 어디)
+        for h, 어디들 in getattr(r, "처음본곳", {}).items():
+            처음본것.setdefault(h, set()).update(
+                어디들 if isinstance(어디들, set) else {어디들})
     if 처음본것:
         줄.append("")
         줄.append(f"  명부에 없는 이웃 {len(처음본것)}곳 (노션에 안 씁니다)")
-        for h, 어디 in sorted(처음본것.items())[:12]:
-            줄.append(f"    {h:<52} ← {어디}")
+        # 여러 곳이 같이 걸어 둔 것부터 보여 줍니다. 그것이 실마리입니다.
+        차례 = sorted(처음본것.items(), key=lambda kv: (-len(kv[1]), kv[0]))
+        for h, 어디들 in 차례[:12]:
+            딱지 = sorted(어디들)[0]
+            더 = f" 외 {len(어디들) - 1}곳" if len(어디들) > 1 else ""
+            줄.append(f"    {h:<48} ← {딱지}{더}")
         if len(처음본것) > 12:
             줄.append(f"    … {len(처음본것) - 12}곳 더")
 

@@ -672,6 +672,48 @@ def test_사람_판정을_덮으려_하면_화면에_올린다():
     assert "res.사람판정" in 글, "run.py 가 사람판정을 화면에 안 올린다"
 
 
+# ── 오늘 만든 바닥 결함 넷 ──────────────────────────────────────────
+def test_명부_줄이_어니언을_담는다():
+    """이음 사전이 이것을 씁니다. 없으면 어니언 관계를 통째로 못 봅니다.
+
+    포럼 명부에 어니언 주소가 43줄 적혀 있는데, 줄 에 어니언 필드가
+    없어서 사전에 하나도 안 들어갔습니다. 그래서 아는 곳의 어니언
+    미러가 「명부에 없는 이웃」 으로 잡혔습니다.
+    """
+    from hub.crawler.notion import 줄
+    assert "어니언" in 줄.__dataclass_fields__
+    글 = (ROOT / "hub" / "crawler" / "notion.py").read_text(encoding="utf-8")
+    assert '어니언=_글자(props.get("어니언 주소"))' in 글,         "줄들() 이 어니언 주소를 안 읽는다"
+
+
+def test_시계열을_못_쌓아도_조사는_산다():
+    """한갈래() 는 예외를 밖으로 안 냅니다. _쌓기 만 밖에 있었습니다."""
+    글 = (ROOT / "hub" / "crawler" / "run.py").read_text(encoding="utf-8")
+    시작 = 글.index("if apply and 본것:")
+    자리 = 글[시작:글.index("r.초 = time.time()", 시작)]
+    assert "try:" in 자리 and "except" in 자리,         "_쌓기 가 try 밖이다. 표가 깨지면 dc.py crawl 이 통째로 죽는다"
+
+
+def test_이웃의_출처를_여럿_담는다():
+    """여러 곳이 같은 호스트를 걸어 두면 그것이 더 중요한 실마리다."""
+    글 = (ROOT / "hub" / "crawler" / "run.py").read_text(encoding="utf-8")
+    assert "r.처음본곳.setdefault(h, set()).add(" in 글,         "setdefault 로 하나만 담으면 둘째 출처가 버려진다"
+
+
+def test_살펴볼것을_덮지_않고_붙인다():
+    """압수 안내를 봤는데 어니언 후보도 못 열었으면 둘 다 알려야 한다."""
+    from hub.crawler.place import Place, 덧붙임
+    p = Place(갈래="forum", 이름="X")
+    덧붙임(p, "압수 안내로 바뀌었습니다")
+    덧붙임(p, "어니언 후보를 못 확인했습니다")
+    덧붙임(p, "압수 안내로 바뀌었습니다")      # 같은 말은 안 쌓입니다
+    assert p.살펴볼것.count("압수") == 1, p.살펴볼것
+    assert "어니언" in p.살펴볼것, p.살펴볼것
+
+    글 = (ROOT / "hub" / "crawler" / "probe" / "forum.py").read_text(encoding="utf-8")
+    assert "p.살펴볼것 = " not in 글, "아직 덮어쓰는 곳이 있다"
+
+
 if __name__ == "__main__":
     n = 0
     for k, v in sorted(globals().items()):

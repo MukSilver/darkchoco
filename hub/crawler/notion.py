@@ -45,6 +45,7 @@ class 줄:
     page_id: str
     이름: str
     주소: str = ""
+    어니언: str = ""      # 이음 사전이 이것을 씁니다. 없으면 어니언 관계를 못 봅니다
     규모: str = ""
     상태: str = ""
     현재: dict = field(default_factory=dict)   # 기계칸의 지금 값
@@ -102,6 +103,7 @@ class 명부:
                 page_id=page["id"],
                 이름=_글자(props.get(self.제목칸)),
                 주소=_글자(props.get("주소")),
+                어니언=_글자(props.get("어니언 주소")),
                 규모=_글자(props.get("규모")),
                 상태=_글자(props.get("상태")),
                 현재=현재,
