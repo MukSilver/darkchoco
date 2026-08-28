@@ -26,7 +26,32 @@ ok()   { printf '  \033[32mOK\033[0m %s\n' "$*"; }
 bad()  { printf '  \033[31m!!\033[0m %s\n' "$*"; }
 say()  { printf '     %s\n' "$*"; }
 
-as_root() { if [ "$(id -u)" = "0" ]; then "$@"; else sudo "$@"; fi; }
+# 비밀번호를 물을 때 어디서 받나. DARKCHOCO_SUDO_PW 가 있으면 sudo 가
+# 그것을 쓰게 합니다. 창이 없는 자리(VM 을 밖에서 부릴 때)에서는 sudo 가
+# 물어볼 데가 없어 그냥 멈춥니다.
+#
+# 도우미 파일은 이 스크립트가 끝나면 지웁니다.
+if [ -n "${DARKCHOCO_SUDO_PW:-}" ] && [ "$(id -u)" != "0" ]; then
+    ASKPASS="$(mktemp)"
+    cat > "$ASKPASS" <<'ASKPASS_EOF'
+#!/bin/sh
+# sudo 가 비밀번호를 물을 때 부르는 도우미입니다. 환경 변수에서 읽습니다.
+printf %s "$DARKCHOCO_SUDO_PW"
+ASKPASS_EOF
+    chmod 700 "$ASKPASS"
+    export SUDO_ASKPASS="$ASKPASS"
+    trap 'rm -f "$ASKPASS"' EXIT INT TERM
+fi
+
+as_root() {
+    if [ "$(id -u)" = "0" ]; then
+        "$@"
+    elif [ -n "${SUDO_ASKPASS:-}" ]; then
+        sudo -A "$@"
+    else
+        sudo "$@"
+    fi
+}
 
 # sudo 가 비밀번호를 물으면 스크립트가 아무 말 없이 멈춥니다. 미리
 # 보고 알려 줍니다. 조용히 멈추면 팀원은 뭘 해야 할지 모릅니다.
@@ -39,8 +64,13 @@ need_sudo() {
     if sudo -n true 2>/dev/null; then
         return 0
     fi
+    if [ -n "${SUDO_ASKPASS:-}" ] && sudo -A true 2>/dev/null; then
+        return 0
+    fi
     bad "sudo 가 비밀번호를 묻습니다."
-    say "먼저 한 번 넣어 두고 다시 돌리십시오."
+    say "창이 없는 자리라면 비밀번호를 넘겨 주십시오."
+    say "    DARKCHOCO_SUDO_PW=... bash scripts/돌릴자리-만들기.sh"
+    say "아니면 먼저 한 번 넣어 두고 다시 돌리십시오."
     say "    sudo -v && bash scripts/돌릴자리-만들기.sh"
     say "또는 root 로 들어가서 돌리십시오."
     say "    sudo -i"
