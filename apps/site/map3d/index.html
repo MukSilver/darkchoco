@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>생태계 지도 — 다크초코</title>
+<link rel="stylesheet" href="../assets/tokens.css">
+<style>
+  .stage { display: grid; grid-template-columns: 1fr 336px; gap: var(--s4);
+           padding: var(--s4); align-items: start; height: calc(100vh - 53px); }
+  @media (max-width: 900px) { .stage { grid-template-columns: 1fr; height: auto; } }
+  .board { position: relative; background: var(--panel); border: 1px solid var(--line);
+           border-radius: var(--r3); overflow: hidden; height: 100%; min-height: 60vh; }
+  .board canvas { display: block; width: 100%; height: 100%; }
+
+  /* 라벨은 3D 안이 아니라 위에 얹은 HTML 입니다. 같이 돌면 글자가 뒤집혀 읽기가 급격히 나빠집니다 */
+  .labels { position: absolute; inset: 0; pointer-events: none; }
+  .lab { position: absolute; transform: translate(-50%, -50%);
+         background: rgba(8,11,17,.86); border: 1px solid var(--line-hard);
+         border-radius: var(--r1); padding: 3px 8px; white-space: nowrap;
+         font-size: 12px; font-weight: 700; color: var(--ink);
+         backdrop-filter: blur(3px); }
+  .lab b { font-weight: 700; }
+  .lab i { font-style: normal; color: var(--faint); font-weight: 400; margin-left: 5px; }
+
+  .layerName { position: absolute; pointer-events: none; transform: translate(-100%, -50%);
+               text-align: right; padding-right: 12px; }
+  .layerName b { display: block; font-size: 17px; font-weight: 700; }
+  .layerName span { font-size: 11.5px; color: var(--faint); }
+
+  /* 회전 조작 — 드래그만 두면 SC 2.5.7(AA) 위반입니다. 슬라이더가 의무입니다 */
+  .ctl { position: absolute; left: var(--s4); bottom: var(--s4); right: var(--s4);
+         display: flex; align-items: center; gap: var(--s3); }
+  .ctl input[type=range] { flex: 1; max-width: 340px; accent-color: var(--k-forum); }
+  .ctl .deg { font-size: var(--t-tiny); color: var(--faint); font-variant-numeric: tabular-nums;
+              min-width: 44px; }
+  .ctl button { background: var(--sunk); border: 1px solid var(--line); color: var(--muted);
+                border-radius: var(--r1); padding: 5px 11px; font: inherit;
+                font-size: var(--t-tiny); cursor: pointer; }
+  .ctl button:hover { border-color: var(--line-hard); color: var(--ink); }
+
+  .side { height: 100%; overflow-y: auto; display: flex; flex-direction: column; gap: var(--s3); }
+  .side h2 { font-size: var(--t-h3); }
+  .picked .name { color: var(--ink); font-size: 17px; font-weight: 700; }
+  .picked dl { display: grid; grid-template-columns: 1fr auto; gap: 4px var(--s3);
+               margin-top: var(--s3); font-size: var(--t-small); }
+  .picked dt { color: var(--faint); } .picked dd { color: var(--muted); font-weight: 600; }
+  .legend { display: flex; flex-direction: column; gap: var(--s3); }
+  .legend .grp { display: flex; flex-direction: column; gap: 6px; }
+  .legend .grp b { font-size: var(--t-tiny); color: var(--ink); }
+  .legend .it { display: flex; align-items: center; gap: var(--s2); font-size: var(--t-tiny);
+                color: var(--muted); }
+  .sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .hint { font-size: var(--t-tiny); color: var(--faint); }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+</style>
+</head>
+<body>
+
+<div class="stage">
+  <div class="board" id="board">
+    <canvas id="cv"></canvas>
+    <div class="labels" id="labels"></div>
+    <div class="ctl">
+      <button type="button" id="reset">정면으로</button>
+      <input type="range" id="rot" min="0" max="359" value="0" step="1" aria-label="지도 방위">
+      <span class="deg" id="deg">0°</span>
+    </div>
+    <p class="sr" id="live" role="status" aria-atomic="true"></p>
+  </div>
+
+  <aside class="side">
+    <div class="card picked" id="picked">
+      <h2>칸을 고르면</h2>
+      <p class="empty" style="margin-top:var(--s3)">아직 아무 칸도 안 골랐습니다</p>
+    </div>
+    <div class="card legend" id="legend"></div>
+    <p class="hint">끌어서 돌립니다 · 휠로 확대 · 슬라이더와 화살표 키로도 돌아갑니다</p>
+  </aside>
+</div>
+
+<script type="module">
+import * as THREE from "../vendor/three.module.min.js";
+import { mountHead, loadData, el } from "../assets/shell.js";
+import { world, worldToCell, SQ3 } from "../assets/hexcanvas.js";
+
+const base = mountHead("map");
+let data;
+try { ({ data } = await loadData(base)); }
+catch (e) {
+  document.getElementById("board").innerHTML =
+    `<p class="empty" style="margin:var(--s6)">지도를 못 읽었습니다 — ${e.message}</p>`;
+  throw e;
+}
+
+const css = k => getComputedStyle(document.documentElement).getPropertyValue(k).trim();
+const board = document.getElementById("board");
+const cv = document.getElementById("cv");
+
+// ── 배치. 기존 지도와 같은 규칙입니다.
+const cellsOf = p => p.investigated ? Math.max(2, Math.round((p.cases || 1) * 0.9)) : 1;
+const demand = Math.max(...data.layers.map(l =>
+  data.places.filter(p => p.layer === l.id).reduce((s, p) => s + cellsOf(p), 0)));
+const COLS = Math.ceil(Math.sqrt(demand / 0.6 * 1.7));
+const ROWS = Math.ceil(demand / 0.6 / COLS) + 2;
+const S = 1;                                   // 3D 는 월드 단위로 둡니다
+const kindColor = Object.fromEntries(data.kinds.map(k => [k.id, k.color]));
+
+const ANCHOR = { forum: [.16, .42], ransom: [.50, .28], telegram: [.82, .50],
+                 archive: [.48, .82], market: [.80, .80], broker: [.88, .20] };
+
+// 육각 이웃 (odd-r)
+const DIRS = [[[+1,0],[+1,0]],[[0,+1],[+1,+1]],[[-1,+1],[0,+1]],
+              [[-1,0],[-1,0]],[[-1,-1],[0,-1]],[[0,-1],[+1,-1]]];
+function neighbors(c, r) {
+  const out = [];
+  for (const [ev, od] of DIRS) {
+    const [dc, dr] = r % 2 === 0 ? ev : od;
+    const nc = c + dc, nr = r + dr;
+    if (nc >= 0 && nc < COLS && nr >= 0 && nr < ROWS) out.push([nc, nr]);
+  }
+  return out;
+}
+function grow(seed, count, taken) {
+  const key = ([c, r]) => c + "," + r;
+  const [sw, sh] = world(seed[0], seed[1], S);
+  const dist = ([c, r]) => { const [x, y] = world(c, r, S);
+    return (x - sw) ** 2 + ((y - sh) * 0.95) ** 2; };
+  const got = [], front = [seed], seen = new Set([key(seed)]);
+  while (front.length && got.length < count) {
+    front.sort((a, b) => dist(a) - dist(b));
+    const cur = front.shift();
+    if (!taken.has(key(cur))) { taken.set(key(cur), true); got.push(cur); }
+    for (const nb of neighbors(cur[0], cur[1]))
+      if (!taken.has(key(nb)) && !seen.has(key(nb))) { seen.add(key(nb)); front.push(nb); }
+  }
+  return got;
+}
+
+const placeCell = {}, allCells = [];
+for (const layer of data.layers) {
+  const taken = new Map();
+  for (const kind of data.kinds) {
+    const here = data.places.filter(p => p.layer === layer.id && p.kind === kind.id);
+    if (!here.length) continue;
+    const [ax, ay] = ANCHOR[kind.id] || [.5, .5];
+    const total = here.reduce((s, p) => s + cellsOf(p), 0);
+    const land = grow([Math.round(ax * (COLS - 1)), Math.round(ay * (ROWS - 1))], total, taken);
+    const landSet = new Map(land.map(([c, r]) => [c + "," + r, false]));
+    for (const p of [...here].sort((a, b) => (b.cases || 0) - (a.cases || 0))) {
+      const free = land.filter(([c, r]) => !landSet.get(c + "," + r));
+      if (!free.length) { placeCell[p.id] = []; continue; }
+      let seed = free[0], best = -1;
+      for (const f of free) {
+        const [fx, fy] = world(f[0], f[1], S);
+        let d = Infinity;
+        for (const [c, r] of land) {
+          if (!landSet.get(c + "," + r)) continue;
+          const [wx, wy] = world(c, r, S);
+          d = Math.min(d, (wx - fx) ** 2 + (wy - fy) ** 2);
+        }
+        if (d === Infinity) { seed = free[Math.floor(free.length / 2)]; break; }
+        if (d > best) { best = d; seed = f; }
+      }
+      const sub = new Map(); for (const [k, v] of landSet) if (v) sub.set(k, true);
+      const got = grow(seed, cellsOf(p), sub).filter(([c, r]) => landSet.has(c + "," + r));
+      for (const [c, r] of got) landSet.set(c + "," + r, true);
+      placeCell[p.id] = got;
+    }
+    allCells.push(...land);
+  }
+}
+
+// 판 중심 — 회전 축입니다
+const xs = allCells.map(([c, r]) => world(c, r, S)[0]);
+const ys = allCells.map(([c, r]) => world(c, r, S)[1]);
+const CX = (Math.min(...xs) + Math.max(...xs)) / 2;
+const CY = (Math.min(...ys) + Math.max(...ys)) / 2;
+const SPAN = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+
+// ── 씬
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(css("--bg") || "#0b0e14");
+scene.fog = new THREE.Fog(scene.background, SPAN * 2.0, SPAN * 5.0);
+
+// 직교 카메라 — 이게 「면적 = 사고 수」 약속을 지킵니다. 원근으로 바꾸면 깨집니다.
+const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 4000);
+const TILT = THREE.MathUtils.degToRad(34);   // Δz/D > tan34 = 0.67 을 만족시킵니다
+let yaw = 0, zoom = 1;
+const FOCUS = new THREE.Vector3(0, 0, 0);      // 두 층의 가운데. 배치 뒤에 채웁니다
+function placeCamera() {
+  const d = SPAN * 3.0;
+  camera.position.set(FOCUS.x + Math.sin(yaw) * Math.cos(TILT) * d,
+                      FOCUS.y + Math.sin(TILT) * d,
+                      FOCUS.z + Math.cos(yaw) * Math.cos(TILT) * d);
+  camera.up.set(0, 1, 0);
+  camera.lookAt(FOCUS);
+}
+
+const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: false });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.06;
+
+// ── 조명. 한 바퀴 도는 동안 어느 면도 새까매지지 않게 둘을 마주 놓습니다.
+scene.add(new THREE.HemisphereLight(0xa8c0e0, 0x0b1018, 0.78));
+const key = new THREE.DirectionalLight(0xfff4e6, 1.85);
+key.position.set(SPAN * 0.7, SPAN * 1.5, SPAN * 0.55);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+const sc = key.shadow.camera;
+sc.left = -SPAN * 0.8; sc.right = SPAN * 0.8;
+sc.top = SPAN * 0.8; sc.bottom = -SPAN * 0.8;
+sc.near = 1; sc.far = SPAN * 5; sc.updateProjectionMatrix();
+key.shadow.bias = -0.0016; key.shadow.normalBias = 0.03;
+scene.add(key);
+const fill = new THREE.DirectionalLight(0x7fb2ff, 0.42);
+fill.position.set(-SPAN * 0.8, SPAN * 0.6, -SPAN * 0.7);
+scene.add(fill);
+
+// ── 육각 기둥. 밑면이 얕아야 면적이 윗면으로만 읽힙니다.
+const THICK = 0.42, LIFT = 0.16;
+const geo = new THREE.CylinderGeometry(S * 0.94, S * 0.94, THICK, 6, 1);
+geo.rotateY(Math.PI / 6);                       // 뾰족 위(pointy-top)
+
+const Z = { sky: SPAN * 0.95, deep: 0 };      // 화면 분리 0.79 > 판 깊이 0.56
+const dummy = new THREE.Object3D();
+const meshes = [];
+const pickTable = { sky: new Map(), deep: new Map() };
+
+for (const layer of data.layers) {
+  const here = data.places.filter(p => p.layer === layer.id);
+  // 업종별로 InstancedMesh 하나 — 드로우콜이 업종 수만큼입니다
+  for (const kind of data.kinds) {
+    const ps = here.filter(p => p.kind === kind.id);
+    const total = ps.reduce((s, p) => s + (placeCell[p.id] || []).length, 0);
+    if (!total) continue;
+    const mat = new THREE.MeshStandardMaterial({
+      color: new THREE.Color(kindColor[kind.id]),
+      roughness: 0.55, metalness: 0.06, flatShading: true });
+    const im = new THREE.InstancedMesh(geo, mat, total);
+    im.castShadow = true; im.receiveShadow = true;
+    im.instanceColor = null;
+    let i = 0;
+    const colorAttr = new Float32Array(total * 3);
+    for (const p of ps) {
+      const dim = p.investigated ? 1 : 0.42;
+      const c = new THREE.Color(kindColor[kind.id]).multiplyScalar(dim);
+      for (const [cc, rr] of (placeCell[p.id] || [])) {
+        const [wx, wy] = world(cc, rr, S);
+        dummy.position.set(wx - CX, Z[layer.id] + (p.investigated ? LIFT : 0), wy - CY);
+        dummy.scale.set(1, p.investigated ? 1.35 : 1, 1);
+        dummy.updateMatrix();
+        im.setMatrixAt(i, dummy.matrix);
+        colorAttr[i*3] = c.r; colorAttr[i*3+1] = c.g; colorAttr[i*3+2] = c.b;
+        pickTable[layer.id].set(cc + "," + rr, p);
+        i++;
+      }
+    }
+    im.instanceColor = new THREE.InstancedBufferAttribute(colorAttr, 3);
+    im.instanceMatrix.needsUpdate = true;
+    scene.add(im); meshes.push(im);
+  }
+}
+
+// ── 판. 층이 떠 있는 것을 보이게 하는 얇은 바닥입니다.
+for (const layer of data.layers) {
+  // 그 층이 실제로 쓴 칸의 범위에 맞춥니다
+  const own = data.places.filter(p => p.layer === layer.id)
+    .flatMap(p => placeCell[p.id] || []).map(([c, r]) => world(c, r, S));
+  if (!own.length) continue;
+  const x0 = Math.min(...own.map(o => o[0])), x1 = Math.max(...own.map(o => o[0]));
+  const y0 = Math.min(...own.map(o => o[1])), y1 = Math.max(...own.map(o => o[1]));
+  const pad = S * 2.4;
+  const g = new THREE.BoxGeometry(x1 - x0 + pad * 2, 0.09, y1 - y0 + pad * 2);
+  const m = new THREE.MeshStandardMaterial({
+    color: new THREE.Color(layer.id === "sky" ? "#0b1a17" : "#180d11"),
+    roughness: 1, metalness: 0, transparent: true, opacity: 0.72 });
+  const b = new THREE.Mesh(g, m);
+  b.position.set((x0 + x1) / 2 - CX, Z[layer.id] - THICK * 0.66, (y0 + y1) / 2 - CY);
+  b.receiveShadow = true;
+  scene.add(b);
+  // 판 가장자리에 얇은 테두리를 둘러 층 경계를 또렷하게
+  const edge = new THREE.LineSegments(
+    new THREE.EdgesGeometry(g),
+    new THREE.LineBasicMaterial({
+      color: new THREE.Color(css(layer.id === "sky" ? "--k-archive" : "--k-ransom")),
+      transparent: true, opacity: 0.5 }));
+  edge.position.copy(b.position);
+  scene.add(edge);
+}
+
+// ── 유통선. 두 층 사이를 잇는 곡선입니다.
+const centroid = {};
+for (const p of data.places) {
+  const cs = placeCell[p.id] || []; if (!cs.length) continue;
+  let sx = 0, sy = 0;
+  for (const [c, r] of cs) { const [x, y] = world(c, r, S); sx += x; sy += y; }
+  centroid[p.id] = new THREE.Vector3(sx/cs.length - CX,
+    Z[p.layer] + (p.investigated ? LIFT : 0) + THICK * 0.6, sy/cs.length - CY);
+}
+const ROADC = { flat: "--road", drop: "--road-drop", rise: "--road-rise",
+                exposure: "--road-expose", succession: "--road-succ" };
+for (const f of data.flows) {
+  const a = centroid[f.from], b = centroid[f.to]; if (!a || !b) continue;
+  const mid = a.clone().add(b).multiplyScalar(0.5);
+  mid.y += Math.max(SPAN * 0.10, Math.abs(a.y - b.y) * 0.45);
+  const curve = new THREE.QuadraticBezierCurve3(a, mid, b);
+  const w = Math.max(0.10, Math.min(0.5, 0.10 + Math.sqrt(f.cases || 1) * 0.055));
+  const tube = new THREE.TubeGeometry(curve, 44, w, 8, false);
+  const mat = new THREE.MeshStandardMaterial({
+    color: new THREE.Color(css(ROADC[f.kind] || "--road")),
+    roughness: 0.35, metalness: 0.12,
+    emissive: new THREE.Color(css(ROADC[f.kind] || "--road")).multiplyScalar(0.22),
+    transparent: f.confidence !== "confirmed", opacity: f.confidence === "confirmed" ? 1 : 0.5 });
+  const m = new THREE.Mesh(tube, mat); m.castShadow = true;
+  scene.add(m);
+}
+
+// ── 라벨. 3D 안에 두지 않고 위에 얹습니다. 같이 돌면 글자가 뒤집혀 읽기가 무너집니다.
+const labelBox = document.getElementById("labels");
+const labeled = data.places.filter(p => p.investigated && p.name && centroid[p.id]);
+const labelEls = labeled.map(p => {
+  const d = el("div", { class: "lab" });
+  d.append(el("b", {}, p.name), el("i", {}, `${p.cases || 0}건`));
+  labelBox.append(d); return { p, d };
+});
+const layerEls = data.layers.map(l => {
+  const d = el("div", { class: "layerName" });
+  d.append(el("b", { style: `color:${css(l.id === "sky" ? "--k-archive" : "--k-ransom")}` }, l.name),
+           el("span", {}, l.sub));
+  labelBox.append(d); return { l, d };
+});
+
+function syncLabels() {
+  const w = cv.clientWidth, h = cv.clientHeight;
+  const v = new THREE.Vector3();
+  const put = [];
+  for (const { p, d } of labelEls) {
+    v.copy(centroid[p.id]); v.y += 0.9;
+    v.project(camera);
+    put.push({ d, x: (v.x * 0.5 + 0.5) * w, y: (-v.y * 0.5 + 0.5) * h,
+               n: p.cases || 0, off: (v.z > 1 || v.z < -1) });
+  }
+  // 큰 자리를 먼저 놓고, 겹치면 작은 쪽을 위로 밀어 올립니다
+  put.sort((a, b) => b.n - a.n);
+  const done = [];
+  for (const it of put) {
+    if (it.off) { it.d.style.display = "none"; continue; }
+    it.d.style.display = "";
+    const hw = it.d.offsetWidth / 2 || 40, hh = 11;
+    for (let guard = 0; guard < 24; guard++) {
+      let hit = false;
+      for (const o of done) {
+        if (Math.abs(it.x - o.x) < hw + o.hw + 5 && Math.abs(it.y - o.y) < hh + o.hh + 3) {
+          it.y = o.y - (hh + o.hh + 4); hit = true; break;
+        }
+      }
+      if (!hit) break;
+    }
+    done.push({ x: it.x, y: it.y, hw, hh });
+    it.d.style.left = it.x + "px";
+    it.d.style.top = it.y + "px";
+  }
+  for (const { l, d } of layerEls) {
+    v.set(-SPAN * 0.62, Z[l.id] + 0.4, 0); v.project(camera);
+    d.style.left = ((v.x * 0.5 + 0.5) * w) + "px";
+    d.style.top = ((-v.y * 0.5 + 0.5) * h) + "px";
+  }
+}
+
+// ── 크기
+const VSPAN = Z.sky * Math.cos(TILT) + SPAN * Math.sin(TILT);   // 화면 세로 실제 길이
+function resize() {
+  const w = board.clientWidth, h = board.clientHeight;
+  renderer.setSize(w, h, false);
+  const aspect = w / h;
+  const need = Math.max(VSPAN * 0.60, SPAN * 0.56 / Math.max(aspect, 0.9));
+  const half = need / zoom;
+  camera.left = -half * aspect; camera.right = half * aspect;
+  camera.top = half; camera.bottom = -half;
+  camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(board);
+
+// ── 회전 조작. 드래그 + 슬라이더 + 키보드. 셋 다 없으면 SC 2.5.7(AA) 위반입니다.
+const rot = document.getElementById("rot"), degEl = document.getElementById("deg");
+const live = document.getElementById("live");
+let vel = 0, dragging = false, lastX = 0, moved = 0;
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function setYaw(deg, announce) {
+  yaw = THREE.MathUtils.degToRad(((deg % 360) + 360) % 360);
+  rot.value = Math.round(((deg % 360) + 360) % 360);
+  degEl.textContent = rot.value + "°";
+  if (announce) live.textContent = `방위 ${rot.value}도`;
+}
+cv.style.touchAction = "none";
+cv.addEventListener("pointerdown", e => {
+  dragging = true; moved = 0; lastX = e.clientX; vel = 0;
+  cv.setPointerCapture(e.pointerId);
+});
+cv.addEventListener("pointermove", e => {
+  if (!dragging) return;
+  const dx = e.clientX - lastX; lastX = e.clientX; moved += Math.abs(dx);
+  vel = dx * 0.30;
+  setYaw(THREE.MathUtils.radToDeg(yaw) + vel);
+});
+cv.addEventListener("pointerup", e => {
+  dragging = false; cv.releasePointerCapture(e.pointerId);
+  if (moved < 5) pickAt(e);           // 끌지 않았으면 클릭입니다
+});
+rot.addEventListener("input", () => setYaw(+rot.value, true));
+document.getElementById("reset").addEventListener("click", () => { setYaw(0, true); vel = 0; });
+cv.addEventListener("wheel", e => {
+  e.preventDefault();
+  zoom = Math.max(0.55, Math.min(3.2, zoom * (e.deltaY < 0 ? 1.09 : 0.917)));
+  resize();
+}, { passive: false });
+
+// ── 클릭 판정. 화면 → 월드 → 격자. 회전과 무관하게 정확합니다.
+const ray = new THREE.Raycaster();
+function pickAt(e) {
+  const r = cv.getBoundingClientRect();
+  const nx = ((e.clientX - r.left) / r.width) * 2 - 1;
+  const ny = -((e.clientY - r.top) / r.height) * 2 + 1;
+  ray.setFromCamera(new THREE.Vector2(nx, ny), camera);
+  // 위층이 언제나 앞입니다. 위→아래 순서로 평면과 만나는 점을 봅니다.
+  for (const lid of ["sky", "deep"]) {
+    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -(Z[lid] + THICK * 0.5));
+    const hit = new THREE.Vector3();
+    if (!ray.ray.intersectPlane(plane, hit)) continue;
+    const [c, rr] = worldToCell(hit.x + CX, hit.z + CY, S);
+    const p = pickTable[lid].get(c + "," + rr);
+    if (p) { showPlace(p); return; }
+  }
+}
+
+function showPlace(p) {
+  const box = document.getElementById("picked");
+  const layer = data.layers.find(l => l.id === p.layer);
+  const kind = data.kinds.find(k => k.id === p.kind);
+  const named = p.investigated && p.name;
+  box.innerHTML = "<h2>고른 자리</h2>";
+  box.append(
+    named ? el("div", { class: "name", style: `color:${kindColor[p.kind]}` },
+                document.createTextNode(p.name))
+          : el("div", { class: "name", style: "color:var(--muted)" }, "아직 안 본 자리"),
+    el("div", { style: "font-size:var(--t-tiny);color:var(--faint)" },
+       `${kind.name} · ${layer.name}`));
+  if (named) {
+    box.append(el("dl", { html:
+      `<dt>확인한 사고</dt><dd>${p.cases || 0}건</dd>` +
+      `<dt>상태</dt><dd>${p.status || "미확인"}</dd>` }));
+  } else {
+    box.append(el("p", { class: "empty", style: "margin-top:var(--s3);text-align:left" },
+      "이름만 확보하고 아직 들여다보지 못한 곳입니다."));
+  }
+  live.textContent = (named ? p.name : "아직 안 본 자리") + " 선택";
+}
+
+// ── 범례
+const lg = document.getElementById("legend");
+lg.append(el("h2", {}, "무엇을 보고 있나"));
+const g1 = el("div", { class: "grp" });
+g1.append(el("b", {}, "업종"));
+for (const k of data.kinds)
+  g1.append(el("div", { class: "it" },
+    el("span", { class: "sw", style: `background:${k.color}` }), el("span", {}, k.name)));
+lg.append(g1);
+const g2 = el("div", { class: "grp" });
+g2.append(el("b", {}, "칸 크기"));
+g2.append(el("div", { class: "it" }, "칸 수 = 그 자리에서 확인한 사고 수"));
+g2.append(el("div", { class: "it" }, "옅은 칸 = 이름만 알고 아직 안 본 곳"));
+lg.append(g2);
+
+// ── 루프
+let last = performance.now();
+function tick(now) {
+  const dt = Math.min(50, now - last); last = now;
+  if (!dragging && Math.abs(vel) > 0.01 && !reduce) {
+    vel *= Math.pow(0.88, dt / 16.7);            // 관성
+    setYaw(THREE.MathUtils.radToDeg(yaw) + vel);
+  }
+  placeCamera();
+  renderer.render(scene, camera);
+  syncLabels();
+  requestAnimationFrame(tick);
+}
+FOCUS.set(0, Z.sky * 0.5, 0);
+resize(); setYaw(28); requestAnimationFrame(tick);
+</script>
+</body>
+</html>
