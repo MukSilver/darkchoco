@@ -132,6 +132,78 @@ def test_dc_run_dry_가_돈다():
     assert "돈 것" in out, out[:400]
 
 
+def test_차례표가_실패로_안_밀린다():
+    """실패했을 때 last_ok 를 갱신하면 다음 시도가 주기만큼 밀린다.
+
+    6시간짜리는 18시간, 하루짜리는 사흘이 되어 사실상 멈춘다.
+    """
+    from hub.sched import Sched
+
+    with tempfile.TemporaryDirectory() as d:
+        s = Sched(Path(d) / "s.db")
+        try:
+            t = 1_000_000.0
+            s.됐다("x", now=t)
+            s.안됐다("x", "일부러", now=t + 100)
+            줄 = s.상태()[0]
+            assert 줄["last_ok"] == t, "실패가 last_ok 를 밀었다"
+            assert 줄["fails"] == 1
+        finally:
+            s.close()
+
+
+def test_실패하면_짧은_간격으로_다시_본다():
+    from hub.sched import Sched
+
+    with tempfile.TemporaryDirectory() as d:
+        s = Sched(Path(d) / "s.db")
+        try:
+            t = 1_000_000.0
+            s.안됐다("x", now=t)
+            assert s.언제("x", 360, t + 60) is None, "실패 직후에 또 시도한다"
+            assert s.언제("x", 360, t + 5 * 60 + 1) is not None, "5분 뒤에 안 한다"
+            s.안됐다("x", now=t + 400)
+            assert s.언제("x", 360, t + 400 + 5 * 60 + 1) is None, "간격이 안 늘었다"
+            assert s.언제("x", 360, t + 400 + 10 * 60 + 1) is not None
+        finally:
+            s.close()
+
+
+def test_안쓴것은_차례를_안건드린다():
+    """준비가 안 돼 건너뛴 것은 성공도 실패도 아니다."""
+    from hub.sched import Sched
+
+    with tempfile.TemporaryDirectory() as d:
+        db = Path(d) / "t.db"
+        옛 = os.environ.pop("DARKCHOCO_CHANNELS", None)
+        try:
+            runner.여러판(["tg-preview"], db=db)
+        finally:
+            if 옛 is not None:
+                os.environ["DARKCHOCO_CHANNELS"] = 옛
+        s = Sched(db)
+        try:
+            줄 = s.상태()
+        finally:
+            s.close()
+    if 줄:   # 채널 목록이 이 PC 에 있으면 돌았을 수도 있다
+        assert 줄[0]["fails"] == 0, "안 쓴 것을 실패로 셌다"
+
+
+def test_install_task_가_명령을_만든다():
+    code, out = _dc("install-task", "--show")
+    assert code == 0, out[:400]
+    assert "Register-ScheduledTask" in out
+    assert "Unregister-ScheduledTask" in out, "끄는 방법을 안 알려준다"
+    assert "run --due" in out, "때 된 것만 돌리는 명령이 아니다"
+
+
+def test_plan_이_다음차례를_보여준다():
+    code, out = _dc("plan")
+    assert code == 0, out[:400]
+    assert "다음" in out and "돌 때가 된 것" in out, out[:400]
+
+
 if __name__ == "__main__":
     n = 0
     for k, v in sorted(globals().items()):

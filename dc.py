@@ -5,7 +5,9 @@
     python dc.py info <이름>          그 도구를 어떻게 쓰는지 봅니다
     python dc.py doctor [이름]        지금 돌 수 있는 상태인지 봅니다
     python dc.py run [--only 이름]    수집을 한 판 돌립니다
-    python dc.py plan                 어떤 어댑터가 몇 분마다 도는지 봅니다
+    python dc.py plan                 무엇이 언제 도는지 봅니다
+    python dc.py run --due            주기가 찬 것만 돌립니다
+    python dc.py install-task         스케줄러에 겁니다
     python dc.py readme --check       README 의 도구 표가 최신인지 봅니다
     python dc.py readme --write       README 의 도구 표를 다시 씁니다
 
@@ -300,7 +302,8 @@ def cmd_run(args) -> int:
     if args.dry:
         print()
         print("  미리보기입니다. 밖에 요청을 보내지 않고 표에도 안 넣습니다.")
-    결과 = runner.여러판(이름들, dry=args.dry, limit=args.limit)
+    결과 = runner.여러판(이름들, dry=args.dry, limit=args.limit,
+                     때된것만=args.due)
     print()
     print(runner.표로(결과))
     print()
@@ -308,7 +311,8 @@ def cmd_run(args) -> int:
 
 
 def cmd_plan(args) -> int:
-    from hub import registry
+    from hub import registry, runner
+    from hub.sched import Sched
 
     es = registry.목록()
     if not es:
@@ -316,21 +320,114 @@ def cmd_plan(args) -> int:
         print("  등록된 어댑터가 없습니다. hub/adapters/ 에 파일을 놓으십시오.")
         print()
         return 0
+
+    sch = Sched(runner.기본_표())
+    try:
+        상태 = {r["name"]: r for r in sch.상태()}
+        남은 = {e.name: sch.다음까지(e.name, e.every) for e in es}
+    finally:
+        sch.close()
+
     print()
     print(f"어댑터 {len(es)}개")
     print()
     print("  " + 채움("이름", 16) + 채움("담당", 8) + 채움("주기", 10)
-          + 채움("어디서", 8) + "무엇을")
-    print("  " + "─" * 74)
+          + 채움("다음", 12) + "무엇을")
+    print("  " + "─" * 76)
+    때된것 = 0
     for e in es:
         주기 = f"{e.every}분마다" if e.every else "부를 때만"
+        r = 상태.get(e.name)
+        if r is None:
+            다음 = "아직 안 돎"
+            때된것 += 1
+        elif r["fails"]:
+            다음 = f"{r['fails']}번 실패"
+            때된것 += 1 if 남은[e.name] == 0 else 0
+        elif not e.every:
+            다음 = "-"
+        elif 남은[e.name] <= 0:
+            다음 = "지금"
+            때된것 += 1
+        else:
+            분 = 남은[e.name]
+            다음 = f"{분//60}시간 뒤" if 분 >= 60 else f"{분}분 뒤"
         print("  " + 채움(e.name, 16) + 채움(e.owner or "-", 8)
-              + 채움(주기, 10) + 채움(표시.get(e.runs_in, e.runs_in), 8) + e.summary)
+              + 채움(주기, 10) + 채움(다음, 12) + e.summary)
+
     print()
-    print("  한 판 돌리기:  python dc.py run")
+    print(f"  지금 돌 때가 된 것 {때된것}개")
+    print()
+    print("  때 된 것만:    python dc.py run --due")
+    print("  전부:          python dc.py run")
     print("  하나만:        python dc.py run --only <이름>")
     print()
     return 0
+
+
+# ── install-task ─────────────────────────────────
+def cmd_install_task(args) -> int:
+    """윈도우 작업 스케줄러에 등록합니다. 등록 명령을 만들어 줍니다."""
+    이름 = "Darkchoco-Collect"
+    파이썬 = sys.executable
+    작업 = f'"{파이썬}" "{ROOT / "dc.py"}" run --due'
+
+    if args.show:
+        print()
+        print("  이 명령을 PowerShell 에 붙여 넣으면 등록됩니다.")
+        print()
+        print(f'    $a = New-ScheduledTaskAction -Execute "{파이썬}" '
+              f'-Argument \'"{ROOT / "dc.py"}" run --due\' -WorkingDirectory "{ROOT}"')
+        print(f'    $t = New-ScheduledTaskTrigger -Once -At (Get-Date) '
+              f'-RepetitionInterval (New-TimeSpan -Minutes {args.every})')
+        print(f'    $s = New-ScheduledTaskSettingsSet -StartWhenAvailable '
+              f'-MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours 1)')
+        print(f'    Register-ScheduledTask -TaskName "{이름}" -Action $a '
+              f'-Trigger $t -Settings $s -Force')
+        print()
+        print("  끄려면")
+        print(f'    Unregister-ScheduledTask -TaskName "{이름}" -Confirm:$false')
+        print()
+        print("  지금 걸려 있는지 보려면")
+        print(f'    Get-ScheduledTask -TaskName "{이름}" -ErrorAction SilentlyContinue')
+        print()
+        return 0
+
+    if os.name != "nt":
+        print("윈도우가 아닙니다. cron 에 아래를 넣으십시오.", file=sys.stderr)
+        print(f"  */{args.every} * * * * cd {ROOT} && {파이썬} dc.py run --due")
+        return 1
+
+    ps = [
+        f'$a = New-ScheduledTaskAction -Execute "{파이썬}" '
+        f'-Argument \'"{ROOT / "dc.py"}" run --due\' -WorkingDirectory "{ROOT}"',
+        f'$t = New-ScheduledTaskTrigger -Once -At (Get-Date) '
+        f'-RepetitionInterval (New-TimeSpan -Minutes {args.every})',
+        '$s = New-ScheduledTaskSettingsSet -StartWhenAvailable '
+        '-MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours 1)',
+        f'Register-ScheduledTask -TaskName "{이름}" -Action $a -Trigger $t '
+        f'-Settings $s -Force | Out-Null',
+        f'Write-Host "등록했습니다: {이름} ({args.every}분마다)"',
+    ]
+    r = subprocess.run(["powershell", "-NoProfile", "-Command", "; ".join(ps)],
+                       capture_output=True, text=True, encoding="utf-8",
+                       errors="replace")
+    print((r.stdout or "").strip() or (r.stderr or "").strip())
+    if r.returncode == 0:
+        print()
+        print("  끄려면:  python dc.py install-task --remove")
+    return r.returncode
+
+
+def cmd_remove_task(args) -> int:
+    이름 = "Darkchoco-Collect"
+    r = subprocess.run(
+        ["powershell", "-NoProfile", "-Command",
+         f'Unregister-ScheduledTask -TaskName "{이름}" -Confirm:$false; '
+         f'Write-Host "지웠습니다: {이름}"'],
+        capture_output=True, text=True, encoding="utf-8", errors="replace")
+    print((r.stdout or "").strip() or (r.stderr or "").strip())
+    return r.returncode
 
 
 # ── readme ──────────────────────────────────────────────────────────
@@ -392,9 +489,17 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--dry", action="store_true",
                    help="밖에 요청을 안 보내고 준비만 봅니다")
     p.add_argument("--limit", type=int, default=0, help="어댑터마다 최대 몇 건까지")
+    p.add_argument("--due", action="store_true",
+                   help="주기가 찬 것만. 스케줄러가 이것을 씁니다")
     p.set_defaults(fn=cmd_run)
 
     sub.add_parser("plan", help="어떤 어댑터가 몇 분마다 도는지").set_defaults(fn=cmd_plan)
+
+    p = sub.add_parser("install-task", help="작업 스케줄러에 등록합니다")
+    p.add_argument("--every", type=int, default=10, help="몇 분마다 (기본 10)")
+    p.add_argument("--show", action="store_true", help="등록 안 하고 명령만 보여 줍니다")
+    p.add_argument("--remove", action="store_true", help="등록을 지웁니다")
+    p.set_defaults(fn=lambda a: cmd_remove_task(a) if a.remove else cmd_install_task(a))
 
     p = sub.add_parser("readme", help="README 의 도구 표를 보거나 다시 씁니다")
     g = p.add_mutually_exclusive_group(required=True)

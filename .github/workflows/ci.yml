@@ -74,6 +74,8 @@ jobs:
         run: |
           set -e
           python dc.py list
+          python dc.py plan
+          python dc.py install-task --show
           python dc.py readme --check
           (cd apps/forum-crawler    && python investigate.py --help > /dev/null)
           (cd apps/tg-korea-alert   && python korea_alert_monitor.py --help > /dev/null)
