@@ -37,7 +37,7 @@ from urllib.parse import urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "packages"))
 
-from hub.crawler.place import Place, 지금  # noqa: E402
+from hub.crawler.place import Place, 덧붙임, 지금  # noqa: E402
 from hub.crawler.probe._나가기 import 보호없음, 오프너  # noqa: E402
 from hub.crawler.probe._읽기 import 글자만, 언어판별  # noqa: E402
 from hub.crawler.probe import _이음  # noqa: E402
@@ -309,13 +309,13 @@ def 한곳(주소: str, 이름: str, 마지막: list[float], *,
         # 일이 아니고 생태계 지도에서 중요한 사건이라 놓치면 안 됩니다.
         p.상태 = "미확인"
         p.못본이유 = "압수 안내로 바뀌었습니다"
-        p.살펴볼것 = "압수 안내로 바뀌었습니다. 상태를 손으로 「압수됨」 처리하십시오"
+        덧붙임(p, "압수 안내로 바뀌었습니다. 상태를 손으로 「압수됨」 처리하십시오")
         p.들어가는법 = "수사기관 안내 쪽입니다"
         return p
     if _파킹.search(글):
         p.상태 = "offline"
         p.못본이유 = "도메인이 팔려 광고 쪽이 되었습니다. 포럼이 아닙니다"
-        p.살펴볼것 = "도메인이 남의 것이 되었습니다. 주소가 맞는지 보십시오"
+        덧붙임(p, "도메인이 남의 것이 되었습니다. 주소가 맞는지 보십시오")
         return p
     if _검사.search(글):
         p.상태 = "미확인"
@@ -357,9 +357,9 @@ def 한곳(주소: str, 이름: str, 마지막: list[float], *,
                               마지막, 프록시=프록시)
             if 같나:
                 p.어니언 = f"http://{o}"
-                p.살펴볼것 = f"어니언 미러를 찾았습니다 — {왜}"
+                덧붙임(p, f"어니언 미러를 찾았습니다 — {왜}")
                 break
-            p.살펴볼것 = f"어니언 후보를 못 확인했습니다 — {왜}"
+            덧붙임(p, f"어니언 후보를 못 확인했습니다 — {왜}")
 
     p.회원수 = _찾기(납작, _회원)
     p.게시물수 = _찾기(납작, _게시물)
