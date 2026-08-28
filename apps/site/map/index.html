@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>생태계 지도 — 다크초코</title>
+<link rel="stylesheet" href="../assets/tokens.css">
+<style>
+  .lead { padding: var(--s5) var(--s5) 0; }
+  .lead h1 { font-size: var(--t-h1); }
+  .lead .claim { margin-top: var(--s2); font-size: 19px; color: var(--ink); font-weight: 600; }
+  .lead .basis { margin-top: var(--s2); font-size: var(--t-small); color: var(--faint); }
+
+  .stage { display: grid; grid-template-columns: 1fr 320px; gap: var(--s4);
+           padding: var(--s4) var(--s5) var(--s6); align-items: start; }
+  @media (max-width: 1100px) { .stage { grid-template-columns: 1fr; } }
+
+  .board { background: var(--panel); border: 1px solid var(--line);
+           border-radius: var(--r3); overflow: hidden; }
+  .board svg { display: block; width: 100%; height: auto; }
+
+  .side { display: flex; flex-direction: column; gap: var(--s3); }
+  .side h2 { font-size: var(--t-h3); }
+  .funnel { display: flex; flex-direction: column; gap: var(--s2); }
+  .funnel .row { display: grid; grid-template-columns: 84px 1fr 52px; align-items: center;
+                 gap: var(--s2); font-size: var(--t-small); }
+  .funnel .bar { height: 10px; border-radius: var(--r4); background: var(--sunk);
+                 overflow: hidden; }
+  .funnel .bar i { display: block; height: 100%; background: var(--k-forum); }
+  .funnel .gap { font-size: var(--t-tiny); color: var(--faint); padding-left: 88px; }
+
+  .picked .name { color: var(--ink); font-size: 17px; font-weight: 700; }
+  .picked dl { display: grid; grid-template-columns: 1fr auto; gap: 4px var(--s3);
+               margin-top: var(--s3); font-size: var(--t-small); }
+  .picked dt { color: var(--faint); }
+  .picked dd { color: var(--muted); font-weight: 600; }
+
+  .legend { display: flex; flex-direction: column; gap: var(--s3); }
+  .legend .grp { display: flex; flex-direction: column; gap: 6px; }
+  .legend .grp b { font-size: var(--t-tiny); color: var(--ink); }
+  .legend .it { display: flex; align-items: center; gap: var(--s2); font-size: var(--t-tiny);
+                color: var(--muted); }
+  .legend .line { width: 30px; height: 0; border-top-width: 3px; border-top-style: solid; }
+  .foot { padding: 0 var(--s5) var(--s7); font-size: var(--t-tiny); color: var(--faint);
+          max-width: 96ch; }
+  .foot p { margin-bottom: 4px; }
+</style>
+</head>
+<body>
+
+<div class="lead">
+  <h1>개인정보 유출 생태계 지도</h1>
+  <p class="claim">유출물은 위에서 나거나 훔쳐져 아래로 내려가 팔리고, 다시 위로 올라와 남습니다.</p>
+  <p class="basis" id="basis"></p>
+</div>
+
+<div class="stage">
+  <div class="board"><svg id="map" viewBox="0 0 1280 820" role="img"
+       aria-label="오픈웹과 다크웹 두 층의 벌집 지도. 층 사이를 오가는 선이 유출물의 이동입니다."></svg></div>
+
+  <aside class="side">
+    <div class="card">
+      <h2>지금까지 확인한 것</h2>
+      <div class="funnel" id="funnel"></div>
+    </div>
+    <div class="card picked" id="picked">
+      <h2>칸을 고르면</h2>
+      <p class="empty" style="margin-top:var(--s3)">아직 아무 칸도 안 골랐습니다</p>
+    </div>
+    <div class="card legend" id="legend"></div>
+  </aside>
+</div>
+
+<div class="foot">
+  <p>1 · 층은 그 자리에 닿는 데 필요한 것으로 갈랐습니다. 사이트 자체의 조건이며 우리 조사 진척도가 아닙니다.</p>
+  <p>2 · 덩어리 크기는 그 자리에서 확인한 사고 수입니다. 이 그림은 원근이 아니라 평행 기울임이라
+     앞뒤 크기가 같습니다. 판 두께는 데이터가 아닙니다.</p>
+  <p>3 · 대륙 안에서 자리끼리 붙어 있는 것에는 뜻이 없습니다. 자리 사이의 관계는 선으로만 나타냅니다.</p>
+  <p>4 · 옅은 칸은 이름만 확보하고 아직 들여다보지 못한 자리입니다. 지우지 않고 그대로 둡니다.</p>
+</div>
+
+<script type="module">
+import { mountHead, mountSampleWarning, loadData, el } from "../assets/shell.js";
+import { makeGrid, growBlob, outline, bbox, curve, polyPoints } from "../assets/hex.js";
+
+const base = mountHead("map");
+const NS = "http://www.w3.org/2000/svg";
+const svg = document.getElementById("map");
+const add = (tag, at = {}) => {
+  const n = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(at)) n.setAttribute(k, v);
+  svg.append(n);
+  return n;
+};
+const css = k => getComputedStyle(document.documentElement).getPropertyValue(k).trim();
+
+const ROAD = {
+  flat:       { c: css("--road"),        dash: null,   w: 3.4 },
+  drop:       { c: css("--road-drop"),   dash: "10 6", w: 3.2 },
+  rise:       { c: css("--road-rise"),   dash: null,   w: 4.0 },
+  exposure:   { c: css("--road-expose"), dash: "9 6",  w: 3.0 },
+  succession: { c: css("--road-succ"),   dash: "8 5",  w: 2.6 },
+};
+
+const { data } = await loadData(base);
+mountSampleWarning(data.meta);
+document.getElementById("basis").textContent =
+  `기준일 ${data.meta.basis_date} · ${data.meta.edition} 판`;
+
+// ── 배치. 두 층이 같은 격자를 씁니다. 그래야 같은 자리가 위아래로 겹칩니다.
+const COLS = 26, ROWS = 12, Z = 268;
+const grid = makeGrid({ size: 13, originX: 168, originY: 612 });
+const kindColor = Object.fromEntries(data.kinds.map(k => [k.id, k.color]));
+
+// 층별로 업종 덩어리를 키웁니다. 같은 업종은 두 층에서 같은 자리를 씁니다.
+const ANCHOR = { forum: [.18, .45], ransom: [.50, .30], telegram: [.80, .55],
+                 archive: [.50, .80], broker: [.86, .22] };
+const placeCell = {};   // place.id -> [ [c,r], ... ]
+
+for (const layer of data.layers) {
+  const z = layer.id === "sky" ? Z : 0;
+  const taken = new Map();
+  for (const kind of data.kinds) {
+    const here = data.places.filter(p => p.layer === layer.id && p.kind === kind.id);
+    if (!here.length) continue;
+    const [ax, ay] = ANCHOR[kind.id] || [.5, .5];
+    // 업종 대륙을 먼저 키우고, 그 안에서 자리별로 나눠 줍니다.
+    const total = here.reduce((s, p) => s + Math.max(1, p.cases || 1), 0);
+    const seed = [Math.round(ax * (COLS - 1)), Math.round(ay * (ROWS - 1))];
+    const land = growBlob({ seed, count: total, cols: COLS, rows: ROWS,
+                            taken, world: grid.world });
+    // 자리를 일렬로 자르면 라벨이 한 줄에 겹칩니다. 각자 씨앗에서 키웁니다.
+    const landSet = new Map(land.map(([c, r]) => [c + "," + r, false]));
+    const sorted = [...here].sort((a, b) => (b.cases || 0) - (a.cases || 0));
+    for (let si = 0; si < sorted.length; si++) {
+      const p = sorted[si];
+      const n = Math.max(1, p.cases || 1);
+      // 대륙 안에서 아직 안 쓴 칸 중, 이미 쓴 칸에서 가장 먼 것을 씨앗으로
+      const free = land.filter(([c, r]) => !landSet.get(c + "," + r));
+      if (!free.length) { placeCell[p.id] = []; continue; }
+      let seed2 = free[0], best = -1;
+      for (const f of free) {
+        const [fx, fy] = grid.world(f[0], f[1]);
+        let d = Infinity;
+        for (const [c, r] of land) {
+          if (!landSet.get(c + "," + r)) continue;
+          const [wx, wy] = grid.world(c, r);
+          d = Math.min(d, (wx - fx) ** 2 + (wy - fy) ** 2);
+        }
+        if (d === Infinity) { seed2 = free[Math.floor(free.length / 2)]; break; }
+        if (d > best) { best = d; seed2 = f; }
+      }
+      const sub = new Map();
+      for (const [k, v] of landSet) if (v) sub.set(k, true);
+      const got = growBlob({ seed: seed2, count: n, cols: COLS, rows: ROWS,
+                             taken: sub, world: grid.world })
+                  .filter(([c, r]) => landSet.has(c + "," + r));
+      for (const [c, r] of got) landSet.set(c + "," + r, true);
+      placeCell[p.id] = got;
+    }
+    // 대륙 바탕
+    const g = add("g");
+    for (const [c, r] of land) {
+      const poly = document.createElementNS(NS, "polygon");
+      poly.setAttribute("points", polyPoints(grid.cell(c, r, z)));
+      poly.setAttribute("fill", kind.color);
+      poly.setAttribute("fill-opacity", ".18");
+      g.append(poly);
+    }
+  }
+  // 판 테두리
+  const [c0, c1, c2, c3] = grid.plate(COLS, ROWS, z);
+  add("polygon", { points: polyPoints([c0, c1, c2, c3]), fill: "none",
+                   stroke: layer.id === "sky" ? css("--k-archive") : css("--k-ransom"),
+                   "stroke-opacity": ".45", "stroke-width": "1.4" });
+  add("text", { x: c0[0] - 12, y: (c0[1] + c3[1]) / 2, "text-anchor": "end",
+                fill: layer.id === "sky" ? css("--k-archive") : css("--k-ransom"),
+                "font-size": "16", "font-weight": "700" }).textContent = layer.name;
+}
+
+// ── 자리 칸 (진한 것만 색을 채웁니다)
+const boxOf = {};
+for (const p of data.places) {
+  const cells = placeCell[p.id] || [];
+  if (!cells.length) continue;
+  const z = p.layer === "sky" ? Z : 0;
+  boxOf[p.id] = bbox(cells, z, grid);
+  const g = add("g", { class: "place", tabindex: "0", role: "button",
+                       "aria-label": `${p.name} · 확인한 사고 ${p.cases || 0}건` });
+  for (const [c, r] of cells) {
+    const poly = document.createElementNS(NS, "polygon");
+    poly.setAttribute("points", polyPoints(grid.cell(c, r, z)));
+    poly.setAttribute("fill", kindColor[p.kind]);
+    poly.setAttribute("fill-opacity", p.investigated ? ".95" : ".26");
+    if (!p.investigated) { poly.setAttribute("stroke", kindColor[p.kind]);
+                           poly.setAttribute("stroke-opacity", ".4"); }
+    g.append(poly);
+  }
+  for (const [a, b] of outline(cells, z, grid)) {
+    const ln = document.createElementNS(NS, "line");
+    ln.setAttribute("x1", a[0].toFixed(1)); ln.setAttribute("y1", a[1].toFixed(1));
+    ln.setAttribute("x2", b[0].toFixed(1)); ln.setAttribute("y2", b[1].toFixed(1));
+    ln.setAttribute("stroke", p.investigated ? css("--bg") : kindColor[p.kind]);
+    ln.setAttribute("stroke-width", p.investigated ? "1.4" : "1.6");
+    g.append(ln);
+  }
+  g.addEventListener("click", () => pick(p));
+  g.addEventListener("keydown", e => { if (e.key === "Enter") pick(p); });
+}
+
+// ── 길. 선을 먼저 그리고 라벨을 나중에 그려야 글자가 안 지워집니다.
+for (const f of data.flows) {
+  const A = boxOf[f.from], B = boxOf[f.to];
+  if (!A || !B) continue;
+  const st = ROAD[f.kind] || ROAD.flat;
+  const side = f.kind === "rise" ? -1 : 1;
+  const { d } = curve([A.cx, A.cy], [B.cx, B.cy], { bend: .16, side });
+  add("path", { d, fill: "none", stroke: st.c, "stroke-width": st.w,
+                "stroke-opacity": f.confidence === "confirmed" ? ".9" : ".55",
+                "stroke-linecap": "round",
+                ...(st.dash || f.confidence !== "confirmed" ? { "stroke-dasharray": st.dash || "6 5" } : {}) });
+}
+
+// ── 자리 이름표
+const used = [];
+for (const p of [...data.places].filter(p => p.investigated)
+                                .sort((a, b) => (b.cases || 0) - (a.cases || 0))) {
+  const b = boxOf[p.id]; if (!b) continue;
+  const label = `${p.name} · ${p.cases || 0}건`;
+  const w = label.length * 8.4 + 18;
+  let y = b.y0 - 24;
+  for (let k = 0; k < 9; k++) {
+    const clash = used.some(u => Math.abs(y - u.y) < 20 &&
+                                 Math.abs(b.cx - u.x) < (w + u.w) / 2 + 8);
+    if (!clash) break;
+    y -= 21;
+  }
+  used.push({ x: b.cx, y, w });
+  add("line", { x1: b.cx, y1: y + 19, x2: b.cx, y2: b.cy, stroke: kindColor[p.kind],
+                "stroke-width": "1", "stroke-opacity": ".6" });
+  add("rect", { x: b.cx - w / 2, y, width: w, height: 19, rx: "4",
+                fill: css("--sunk"), stroke: kindColor[p.kind], "stroke-width": "1" });
+  add("text", { x: b.cx, y: y + 14, "text-anchor": "middle", fill: css("--ink"),
+                "font-size": "11.5", "font-weight": "600" }).textContent = label;
+}
+
+// ── 오른쪽 — 깔때기
+const S = data.stats, FUN = [["reported", "보도된 사고"], ["matched", "다크웹 대조"],
+                             ["circulating", "유통 확인"], ["judged", "판정 완료"]];
+const fun = document.getElementById("funnel");
+FUN.forEach(([k, label], i) => {
+  fun.append(el("div", { class: "row" },
+    el("span", { style: "color:var(--faint)" }, label),
+    el("div", { class: "bar" }, el("i", { style: `width:${(S[k] / S.reported) * 100}%` })),
+    el("b", { class: "mono", style: "text-align:right;color:var(--ink)" }, String(S[k]))));
+  if (i < FUN.length - 1) {
+    const next = FUN[i + 1];
+    fun.append(el("div", { class: "gap" },
+      `여기서 ${S[k] - S[next[0]]}건이 다음 단계로 못 갔습니다`));
+  }
+});
+
+// ── 칸 고르기
+function pick(p) {
+  const box = document.getElementById("picked");
+  const layer = data.layers.find(l => l.id === p.layer);
+  const kind = data.kinds.find(k => k.id === p.kind);
+  const linked = data.flows.filter(f => f.from === p.id || f.to === p.id).length;
+  box.innerHTML = "<h2>고른 자리</h2>";
+  box.append(
+    el("div", { class: "name", style: `color:${kind.color}` }, p.name),
+    el("div", { style: "font-size:var(--t-tiny);color:var(--faint)" },
+       `${kind.name} · ${layer.name}${p.korea ? " · 한국 관련" : ""}`),
+    el("dl", { html:
+      `<dt>확인한 사고</dt><dd>${p.cases || 0}건</dd>` +
+      `<dt>들여다봤나</dt><dd>${p.investigated ? "예" : "이름만 확보"}</dd>` +
+      `<dt>상태</dt><dd>${p.status || "미확인"}</dd>` +
+      `<dt>최초 확인</dt><dd>${p.first_seen || "—"}</dd>` +
+      `<dt>최근 확인</dt><dd>${p.last_seen || "—"}</dd>` +
+      `<dt>이어진 자리</dt><dd>${linked}곳</dd>` }));
+  if (p.note) box.append(el("p", { style: "margin-top:var(--s3);font-size:var(--t-small)" }, p.note));
+}
+
+// ── 범례
+const lg = document.getElementById("legend");
+lg.append(el("h2", {}, "범례"));
+lg.append(el("div", { class: "grp", html:
+  "<b>칸 하나 = 자리 하나</b>" +
+  data.kinds.map(k =>
+    `<span class="it"><i class="swatch" style="background:${k.color}"></i>${k.name}</span>`).join("") }));
+lg.append(el("div", { class: "grp", html:
+  "<b>칸 진하기</b>" +
+  `<span class="it"><i class="swatch" style="background:${css("--k-forum")}"></i>우리가 들여다본 자리</span>` +
+  `<span class="it"><i class="swatch" style="background:${css("--k-forum")};opacity:.26"></i>이름만 아는 자리</span>` }));
+lg.append(el("div", { class: "grp", html:
+  "<b>길</b>" +
+  [["flat", "같은 층 안의 이동"], ["drop", "아래로 — 팔리러 내려감"],
+   ["rise", "위로 — 다시 공개됨"], ["exposure", "노출에서 옴"],
+   ["succession", "압수 후 후계"]].map(([k, t]) =>
+    `<span class="it"><i class="line" style="border-color:${ROAD[k].c};border-top-style:${ROAD[k].dash ? "dashed" : "solid"}"></i>${t}</span>`).join("") }));
+</script>
+</body>
+</html>

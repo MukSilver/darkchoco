@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>조사 자료 — 다크초코</title>
+<link rel="stylesheet" href="../assets/tokens.css">
+<style>
+  .wrap { max-width: 720px; margin: 0 auto; padding: var(--s8) var(--s5); }
+  h1 { font-size: var(--t-h1); }
+  .lock { margin-top: var(--s5); padding: var(--s5); border-radius: var(--r3);
+          background: var(--panel); border: 1px solid var(--k-broker); }
+  .lock h2 { color: var(--k-broker); font-size: var(--t-h3); }
+  .lock p { margin-top: var(--s3); font-size: var(--t-small); }
+  ul { margin: var(--s3) 0 0 var(--s4); font-size: var(--t-small); color: var(--muted); }
+  li { margin-bottom: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>다크웹 조사 자료</h1>
+  <div class="lock">
+    <h2>팀 계정이 있어야 열립니다</h2>
+    <p>조사 기록에는 어디로 들어가는지가 함께 적혀 있습니다. 그 부분은 공개하지 않습니다.
+       지도와 대응 가이드라인은 누구나 볼 수 있고, 이 구역만 문 뒤에 둡니다.</p>
+  </div>
+
+  <h2 style="margin-top:var(--s6);font-size:var(--t-h3)">여기에 들어올 것</h2>
+  <ul>
+    <li>조사 기록을 근거와 함께 찾는 검색</li>
+    <li>답변마다 어느 자리·어느 게시물에서 나온 것인지 표시</li>
+    <li>근거를 누르면 지도의 그 칸으로 이동</li>
+    <li>근거가 부족하면 답을 만들지 않고 「확인 못 함」으로 남김</li>
+  </ul>
+
+  <p style="margin-top:var(--s6);font-size:var(--t-tiny);color:var(--faint)">
+    이 구역만 서버가 필요합니다. 지도와 가이드는 JSON 하나로 도는 정적 화면입니다.
+    배포할 때 이 경로를 빼거나 인증 뒤에 둡니다.
+  </p>
+</div>
+<script type="module">
+  import { mountHead } from "../assets/shell.js";
+  mountHead("wiki");
+</script>
+</body>
+</html>

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>다크초코 — 유출된 개인정보는 어디로 가는가</title>
+<link rel="stylesheet" href="assets/tokens.css">
+<style>
+  .wrap { max-width: 1040px; margin: 0 auto; padding: var(--s8) var(--s5) var(--s8); }
+  .hero h1 { font-size: var(--t-hero); letter-spacing: -.01em; text-wrap: balance; }
+  .hero p { margin-top: var(--s4); font-size: 18px; max-width: 62ch; color: var(--body); }
+  .hero .who { margin-top: var(--s3); font-size: var(--t-small); color: var(--faint); }
+
+  .doors { display: grid; gap: var(--s4); margin-top: var(--s7);
+           grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .door { display: block; padding: var(--s5); border-radius: var(--r3);
+          background: var(--panel); border: 1px solid var(--line); color: inherit; }
+  .door:hover { border-color: var(--line-hard); text-decoration: none; }
+  .door .tag { font-size: var(--t-tiny); font-weight: 700; letter-spacing: .04em; }
+  .door h2 { margin: var(--s2) 0 var(--s3); font-size: 21px; }
+  .door p { font-size: var(--t-small); color: var(--muted); }
+  .door .go { margin-top: var(--s4); font-size: var(--t-small); font-weight: 600; }
+  .door[data-area="guide"] { border-left: 3px solid var(--v-likely); }
+  .door[data-area="guide"] .tag, .door[data-area="guide"] .go { color: var(--v-likely); }
+  .door[data-area="map"] { border-left: 3px solid var(--k-forum); }
+  .door[data-area="map"] .tag, .door[data-area="map"] .go { color: var(--k-forum); }
+  .door[data-area="wiki"] { border-left: 3px solid var(--k-broker); opacity: .72; }
+  .door[data-area="wiki"] .tag, .door[data-area="wiki"] .go { color: var(--k-broker); }
+
+  .note { margin-top: var(--s7); padding-top: var(--s5); border-top: 1px solid var(--line);
+          font-size: var(--t-small); color: var(--faint); max-width: 72ch; }
+  .note b { color: var(--muted); }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <section class="hero">
+    <h1>유출된 개인정보는 어디로 가는가</h1>
+    <p>훔쳐지거나 실수로 열린 개인정보가 어디를 거쳐 어디에 남는지를 직접 열어 확인하고
+       기록했습니다. 확인한 것만 싣고, 확인하지 못한 것은 확인하지 못했다고 적습니다.</p>
+    <p class="who">화이트햇 스쿨 4기 · 다크초코</p>
+  </section>
+
+  <nav class="doors">
+    <a class="door" data-area="guide" href="guide/">
+      <div class="tag">내 정보가 걱정된다면</div>
+      <h2>유출 대응 가이드라인</h2>
+      <p>어떤 사고에서 무엇이 실제로 확인됐는지 보고, 그 항목에 필요한 조치만 받습니다.
+         확인되지 않은 항목에는 조치를 만들지 않습니다.</p>
+      <div class="go">확인하러 가기 →</div>
+    </a>
+
+    <a class="door" data-area="map" href="map/">
+      <div class="tag">유통 구조가 궁금하다면</div>
+      <h2>개인정보 유출 생태계 지도</h2>
+      <p>오픈웹과 다크웹 두 층, 그 사이를 오가는 길. 유출물이 내려가 팔리고 다시 올라와
+         남는 과정을 한 장으로 봅니다.</p>
+      <div class="go">지도 보기 →</div>
+    </a>
+
+    <a class="door" data-area="wiki" href="wiki/">
+      <div class="tag">조사자라면</div>
+      <h2>다크웹 조사 자료</h2>
+      <p>조사 기록을 근거와 함께 찾습니다. 답변마다 어느 자리에서 나온 것인지 지도로
+         이어집니다.</p>
+      <div class="go">팀 계정으로 들어가기 →</div>
+    </a>
+  </nav>
+
+  <p class="note">
+    <b>세 문이 같은 조사 기록을 씁니다.</b>
+    지도에서 사고를 고르면 그 사고가 가이드로 그대로 넘어가고, 가이드에서 「이 사고가 어디를
+    거쳤나」를 누르면 지도의 그 경로가 밝아집니다.
+    <br><br>
+    <b>포럼과 그룹의 이름은 적지만 주소는 적지 않습니다.</b>
+    들어가는 법도 적지 않습니다. 조사 기록 구역은 팀 계정이 있어야 열립니다.
+  </p>
+</div>
+
+<script type="module">
+  import { mountHead } from "./assets/shell.js";
+  mountHead("__none__");
+</script>
+</body>
+</html>
