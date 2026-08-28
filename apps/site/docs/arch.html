@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>구조 한 장 — 다크초코</title>
+<link rel="stylesheet" href="../assets/tokens.css">
+<style>
+  .wrap { padding: var(--s6) var(--s6) var(--s7); max-width: 1500px; }
+  h1 { font-size: var(--t-h1); }
+  .sub { margin-top: var(--s2); color: var(--muted); font-size: var(--t-small); }
+  .row { display: grid; grid-template-columns: 300px 190px 1fr; gap: var(--s4);
+         margin-top: var(--s5); align-items: stretch; }
+  .col > .lab { font-size: var(--t-tiny); font-weight: 700; letter-spacing: .05em;
+                color: var(--faint); margin-bottom: var(--s3); }
+  .box { background: var(--panel); border: 1px solid var(--line);
+         border-radius: var(--r2); padding: 9px 12px; margin-bottom: 6px; }
+  .box b { display: block; color: var(--ink); font-size: var(--t-small); }
+  .box small { color: var(--faint); font-size: 11.5px; }
+  .box[data-t="db"]   { border-left: 3px solid var(--k-forum); }
+  .box[data-t="team"] { border-left: 3px solid var(--v-confirmed); }
+  .box[data-t="out"]  { border-left: 3px solid var(--k-broker); }
+
+  .mid { display: flex; flex-direction: column; justify-content: center; gap: var(--s3); }
+  .step { background: var(--sunk); border: 1px dashed var(--line-hard);
+          border-radius: var(--r2); padding: var(--s3); text-align: center; }
+  .step b { display: block; color: var(--ink); font-size: var(--t-small); }
+  .step small { color: var(--faint); font-size: 11px; }
+
+  .screens { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s3); }
+  .area { background: var(--panel); border: 1px solid var(--line);
+          border-radius: var(--r3); padding: var(--s4); }
+  .area > b { display: block; font-size: var(--t-h3); color: var(--ink); }
+  .area > small { display: block; color: var(--faint); font-size: 11.5px;
+                  margin: 4px 0 var(--s3); }
+  .area ul { list-style: none; }
+  .area li { font-size: var(--t-small); color: var(--body); padding: 5px 0;
+             border-top: 1px solid var(--line); }
+  .area li span { color: var(--faint); font-size: 11px; }
+  .area[data-a="guide"] { border-top: 3px solid var(--v-likely); }
+  .area[data-a="map"]   { border-top: 3px solid var(--k-forum); }
+  .area[data-a="wiki"]  { border-top: 3px solid var(--k-broker); opacity: .68; }
+
+  .rules { margin-top: var(--s5); display: grid; grid-template-columns: repeat(4, 1fr);
+           gap: var(--s3); }
+  .rule { background: var(--sunk); border: 1px solid var(--line); border-left: 3px solid var(--warn);
+          border-radius: var(--r2); padding: var(--s3) var(--s4); }
+  .rule b { display: block; color: var(--warn); font-size: var(--t-small); margin-bottom: 3px; }
+  .rule small { color: var(--muted); font-size: 11.5px; line-height: 1.55; }
+  .foot { margin-top: var(--s5); padding-top: var(--s4); border-top: 1px solid var(--line);
+          font-size: 11.5px; color: var(--faint); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>세 산출물이 한 사이트에서 도는 구조</h1>
+  <p class="sub">노션은 팀이 쓰는 곳이고 사이트는 읽는 곳입니다. 사이에 굽는 단계를 둡니다.</p>
+
+  <div class="row">
+    <div class="col">
+      <div class="lab">어디서 오는가</div>
+      <div class="box" data-t="db"><b>포럼 · 랜섬웨어 · 텔레그램</b><small>자리가 됩니다</small></div>
+      <div class="box" data-t="db"><b>행위자 · 주소 변경 이력</b><small>후계와 이사 자국이 됩니다</small></div>
+      <div class="box" data-t="db"><b>수집 · 검증</b><small>사고와 판정이 됩니다</small></div>
+      <div class="box" data-t="db"><b>닥스훈트 — 오픈웹</b><small>수집 DB에 수집자 값 하나만 더하면 됩니다</small></div>
+      <div class="box" data-t="team"><b>조치 열아홉 · 창구 여섯</b><small>조사 결과가 아니라 팀이 직접 잰 값입니다</small></div>
+    </div>
+
+    <div class="col mid">
+      <div class="step"><b>build_data.py</b><small>노션을 읽어 파일로 굽습니다</small></div>
+      <div class="step"><b>계약 검사</b><small>어기면 그 요소를 안 그립니다<br>이름에 주소가 있으면 아예 멈춥니다</small></div>
+      <div class="box" data-t="out"><b>leak-map.json</b><small>자리 · 길 · 사고</small></div>
+      <div class="box" data-t="out"><b>guide.json</b><small>항목 · 조치 · 창구</small></div>
+      <div class="box" data-t="out"><b>vocab.json</b><small>둘이 같이 쓰는 이름</small></div>
+    </div>
+
+    <div class="col">
+      <div class="lab">무엇을 보는가 — 한 사이트, 세 구역</div>
+      <div class="screens">
+        <div class="area" data-a="guide">
+          <b>유출 대응 가이드라인</b>
+          <small>내 정보가 걱정된다면</small>
+          <ul>
+            <li>G1 · 무엇이 확인됐는지 <span>주장과 확인을 가름</span></li>
+            <li>G2 · 오늘 할 일 <span>확인된 항목만</span></li>
+            <li>G3 · 창구로 <span>어디에 무엇을 말하나</span></li>
+            <li>G4 · 인쇄 <span>종이 한 장</span></li>
+          </ul>
+        </div>
+        <div class="area" data-a="map">
+          <b>생태계 지도</b>
+          <small>유통 구조가 궁금하다면</small>
+          <ul>
+            <li>M1 · 두 층 판 <span>오픈웹 위 · 다크웹 아래</span></li>
+            <li>M2 · 사건 상태 <span>고른 사고의 길만</span></li>
+            <li>M3 · 자리 카드 <span>때 · 대조 · 밖</span></li>
+            <li>M4 · 깔때기 <span>어디서 끊겼나</span></li>
+            <li>M5 · 정지판 <span>발표 · 지면</span></li>
+          </ul>
+        </div>
+        <div class="area" data-a="wiki">
+          <b>조사 자료</b>
+          <small>조사자라면 — 팀 계정</small>
+          <ul>
+            <li>답변마다 근거 자리</li>
+            <li>지도로 이어짐</li>
+            <li>밖으로 안 나감</li>
+          </ul>
+        </div>
+      </div>
+      <div class="lab" style="margin-top:var(--s4)">두 구역이 서로를 부릅니다</div>
+      <div class="box"><b>지도 → 가이드</b><small>고른 사고를 그대로 넘깁니다 (<code>?case=13</code>)</small></div>
+      <div class="box"><b>가이드 → 지도</b><small>그 사고가 지난 길만 밝힙니다. 지도는 guide.json 을 읽지 않습니다</small></div>
+    </div>
+  </div>
+
+  <div class="rules">
+    <div class="rule"><b>토큰이 밖으로 안 나갑니다</b>
+      <small>브라우저는 굽힌 파일만 읽습니다. 노션 키가 화면에 실리지 않습니다.</small></div>
+    <div class="rule"><b>주소는 안 싣습니다</b>
+      <small>이름은 적고 주소와 들어가는 법은 적지 않습니다. 검사에서 걸리면 멈춥니다.</small></div>
+    <div class="rule"><b>확인한 것만 조치가 됩니다</b>
+      <small>주장은 화면에 보이되 할 일을 만들지 않습니다. 허위는 아예 막습니다.</small></div>
+    <div class="rule"><b>협업처가 늦어도 섭니다</b>
+      <small>닥스훈트 자료가 하나도 안 와도 지도는 완전합니다. 오면 자리가 이미 있습니다.</small></div>
+  </div>
+
+  <p class="foot">서버가 없습니다. 정적 파일과 JSON뿐입니다 · 다크초코 툴킷 저장소 <code>apps/site</code></p>
+</div>
+</body>
+</html>
