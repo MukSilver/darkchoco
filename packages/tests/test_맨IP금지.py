@@ -150,6 +150,28 @@ def test_연결_실패를_offline_로_안_적는다():
     assert "백신" in p.못본이유, p.못본이유
 
 
+def test_안내문서와_코드가_안_어긋난다():
+    """문서에 적은 환경 변수와 주기가 코드와 같은지 봅니다.
+
+    문서만 고치고 코드를 안 고치거나 그 반대면, 문서를 따라 한 사람이
+    보호 없이 돌게 됩니다.
+    """
+    문서 = (ROOT / "docs" / "안전하게-돌리기.md").read_text(encoding="utf-8")
+    for 낱말 in ("TOR_SOCKS_PROXY", "DARKCHOCO_TOR_SKIP",
+                "DARKCHOCO_ALLOW_DIRECT", "HTTPTunnelPort 9080",
+                "ExcludeExitNodes {kr}", "StrictNodes 1"):
+        assert 낱말 in 문서, f"문서에 {낱말} 이 없습니다"
+
+    from hub.crawler.probe import _나가기
+    for 낱말 in ("TOR_SOCKS_PROXY", "DARKCHOCO_TOR_SKIP",
+                "DARKCHOCO_ALLOW_DIRECT"):
+        assert 낱말 in (ROOT / "hub/crawler/probe/_나가기.py")            .read_text(encoding="utf-8"), f"코드에 {낱말} 이 없습니다"
+
+    from hub.crawler.run import 주기
+    for 갈래, 분 in 주기.items():
+        assert re.search(rf"{갈래}\s+{분}\s*분", 문서),             f"문서의 {갈래} 주기가 코드({분}분)와 다릅니다"
+
+
 if __name__ == "__main__":
     n = 0
     for k, v in sorted(globals().items()):
