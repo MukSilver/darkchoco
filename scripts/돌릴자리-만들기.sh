@@ -158,8 +158,7 @@ else
         # 왜인지 로그에서 뽑아 줍니다. 파일을 보라고만 하면 팀원이
         # 무엇을 찾아야 하는지 모릅니다.
         WHY="$(grep -hE "\[warn\]|\[err\]" "$LOG" /var/log/tor/log 2>/dev/null | tail -4)"
-        [ -n "$WHY" ] && printf '     %s
-' "$WHY"
+        [ -n "$WHY" ] && printf "     %s" "$WHY"; echo
         if printf '%s' "$WHY" | grep -q "Address already in use"; then
             say ""
             say "다른 tor 가 이미 그 포트를 쥐고 있습니다."
@@ -179,17 +178,27 @@ step "5. 길이 뚫리기를 기다립니다"
 say "Tor 가 중계 목록을 받는 데 1~5분 걸립니다."
 say "ExcludeExitNodes 때문에 쓸 수 있는 출구가 줄어 더 느립니다."
 bootstrapped() {
-    grep -q "Bootstrapped 100%" "$LOG" 2>/dev/null ||
-    as_root grep -q "Bootstrapped 100%" /var/log/tor/log 2>/dev/null ||
-    as_root grep -q "Bootstrapped 100%" /var/log/tor/notices.log 2>/dev/null
-}
-for i in $(seq 1 150); do
-    bootstrapped && break
-    if [ $((i % 15)) = 0 ]; then
-        PCT="$(grep -o "Bootstrapped [0-9]*%" "$LOG" 2>/dev/null | tail -1)"
-        say "${PCT:-여는 중} ... ($((i * 2))초)"
+    # 로그가 어디로 갈지는 자리마다 다릅니다. systemd 가 띄우면 journald 로
+    # 갑니다. 파일만 보면 다 됐는데도 5분을 헛기다립니다.
+    grep -q "Bootstrapped 100%" "$LOG" 2>/dev/null && return 0
+    as_root grep -q "Bootstrapped 100%" /var/log/tor/log 2>/dev/null && return 0
+    as_root grep -q "Bootstrapped 100%" /var/log/tor/notices.log 2>/dev/null && return 0
+    if command -v journalctl >/dev/null 2>&1; then
+        as_root journalctl -u tor@default -u tor --no-pager -n 200 2>/dev/null |
+            grep -q "Bootstrapped 100%" && return 0
     fi
-    sleep 2
+    # 로그를 못 찾아도 실제로 나가지면 다 된 것입니다. 이것이 진짜 검사입니다.
+    curl -sS --max-time 12 --proxy "http://127.0.0.1:${PORT}"          https://check.torproject.org/api/ip 2>/dev/null | grep -q '"IsTor"' && return 0
+    return 1
+}
+
+for i in $(seq 1 100); do
+    bootstrapped && { ok "길이 뚫렸습니다"; break; }
+    if [ $((i % 10)) = 0 ]; then
+        PCT="$(grep -o "Bootstrapped [0-9]*%" "$LOG" 2>/dev/null | tail -1)"
+        say "${PCT:-여는 중} ... ($((i * 3))초)"
+    fi
+    sleep 3
 done
 
 # ── 6. 정말 나가지나 ───────────────────────────────────────────────

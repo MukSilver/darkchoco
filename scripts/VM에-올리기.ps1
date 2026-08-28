@@ -121,8 +121,10 @@ try {
     $base = Split-Path -Leaf $tar
     VmRun "rm -rf ~/darkchoco && mkdir -p ~/darkchoco && tar -xf ~/$base -C ~/darkchoco && rm -f ~/$base" -Quiet | Out-Null
     Remove-Item -LiteralPath $tar -Force -ErrorAction SilentlyContinue
-    $n = (VmRun 'find ~/darkchoco -type f | wc -l') -join ""
-    OK "$mb MB · 파일 $($n.Trim())개 (.git 과 .venv 는 안 넣습니다)"
+    # -join "" 으로 붙이면 여러 줄이 한 덩어리가 되어 361 이 3610 처럼
+    # 보입니다. 마지막 줄만 씁니다.
+    $n = (VmRun 'find ~/darkchoco -type f | wc -l' | Select-Object -Last 1)
+    OK "$mb MB · 파일 $("$n".Trim())개 (.git 과 .venv 는 안 넣습니다)"
 
     # ── 5. 자리 만들기 ─────────────────────────────────────────────
     Step "5. VM 안에서 자리 만들기"
