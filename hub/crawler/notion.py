@@ -25,7 +25,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "packages"))
 
 from dc_notion import Notion  # noqa: E402
 
-from hub.crawler.place import Place, 기계칸, 빈칸만칸  # noqa: E402
+from hub.crawler.place import (  # noqa: E402
+    Place, 기계칸, 빈칸만칸, 사람판정_상태)
 
 __all__ = ["명부", "반영결과", "갈래별_DB"]
 
@@ -58,6 +59,7 @@ class 반영결과:
     오류: str = ""
     없는옵션: list = field(default_factory=list)   # 스키마 선택지에 없음
     사람글: list = field(default_factory=list)     # 사람이 이미 써 둔 칸
+    사람판정: str = ""                             # 압수됨·인계됨. 안 건드림
 
 
 class 명부:
@@ -109,6 +111,9 @@ class 명부:
     # ── 쓰기 ────────────────────────────────────────────────────────
     def 반영(self, 줄: 줄, p: Place, *, apply: bool = False) -> 반영결과:
         r = 반영결과(이름=줄.이름 or p.이름)
+        if 줄.현재.get("상태") in 사람판정_상태 and p.상태 in ("online", "offline"):
+            r.사람판정 = (f"사람이 「{줄.현재['상태']}」 으로 판정한 줄입니다. "
+                      f"기계는 {p.상태} 로 봤지만 상태를 안 건드립니다")
         값 = p.노션값(줄.현재 or 줄.규모)
         if not 값:
             r.안바뀜 = True

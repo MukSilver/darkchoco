@@ -641,6 +641,37 @@ def test_압수는_거짓_상태로_안_적는다():
     assert p.살펴볼것 and "압수" in p.살펴볼것, p.살펴볼것
 
 
+def test_사람이_판정한_상태를_기계가_안_덮는다():
+    """압수됨·인계됨 은 「무슨 일이 있었나」 이지 「살아있나」 가 아니다.
+
+    압수된 사이트도 수사기관 배너로 200 을 돌려주니 기계는 online 이라
+    한다. 실제 랜섬웨어 DB 에서 「압수됨 → online」 과 「인계됨 → offline」
+    이 될 뻔했다.
+    """
+    from hub.crawler.place import 사람판정_상태
+
+    for 옛 in 사람판정_상태:
+        for 새 in ("online", "offline"):
+            p = Place(갈래="ransom", 이름="X", 상태=새, 두드림=True,
+                      주소="http://a.onion")
+            값 = p.노션값({"상태": 옛})
+            assert "상태" not in 값, f"{옛} 를 {새} 로 덮으려 한다"
+            # 확인일은 씁니다. 언제 봤는지는 남겨야 합니다.
+            assert 값["확인일"] == p.확인일[:10]
+
+    # 사람 판정이 아니면 그대로 덮습니다.
+    p = Place(갈래="ransom", 이름="X", 상태="online", 두드림=True)
+    assert p.노션값({"상태": "offline"})["상태"] == "online"
+
+
+def test_사람_판정을_덮으려_하면_화면에_올린다():
+    """조용히 안 쓰고 끝내면 사람이 그 줄을 다시 볼 계기가 없다."""
+    from hub.crawler.notion import 반영결과
+    assert "사람판정" in 반영결과.__dataclass_fields__
+    글 = (ROOT / "hub" / "crawler" / "run.py").read_text(encoding="utf-8")
+    assert "res.사람판정" in 글, "run.py 가 사람판정을 화면에 안 올린다"
+
+
 if __name__ == "__main__":
     n = 0
     for k, v in sorted(globals().items()):
