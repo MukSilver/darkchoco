@@ -19,6 +19,7 @@ param(
     [string]$Vm       = "kali-linux-2026.2-virtualbox-amd64",
     [string]$User     = "kali",
     [string]$Password = "kali",
+    [int]$Port     = 9080,
     [string]$Repo     = "",
     [switch]$Sync
 )
@@ -44,9 +45,15 @@ function Say($m) { Write-Host "  $m" }
 $PwFile = Join-Path $env:TEMP ("vbgc-" + [guid]::NewGuid().ToString("N") + ".txt")
 $Password | Out-File -LiteralPath $PwFile -Encoding ascii -NoNewline
 
+# 밖에서 부르는 셸은 ~/.bashrc 를 안 읽습니다. bash -lc 는 로그인 셸이라
+# ~/.profile 을 읽는데, 데비안 계열 .bashrc 는 비대화형이면 맨 앞에서
+# 빠져나갑니다. 그래서 자리 만들기가 넣어 둔 TOR_SOCKS_PROXY 가 여기서는
+# 안 보입니다. 명령에 직접 실어 줍니다.
+$EnvPrefix = "export TOR_SOCKS_PROXY=http://127.0.0.1:$Port PYTHONIOENCODING=utf-8; "
+
 function VmRun([string]$Cmd) {
     & $VBox guestcontrol $Vm --username $User --passwordfile $PwFile `
-        run --wait-stdout --wait-stderr -- /bin/bash -lc $Cmd 2>&1
+        run --wait-stdout --wait-stderr -- /bin/bash -lc ($EnvPrefix + $Cmd) 2>&1
 }
 
 try {
