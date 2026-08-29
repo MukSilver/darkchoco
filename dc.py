@@ -75,6 +75,18 @@ def _tool_json찾기():
     return sorted(나온것)
 
 
+def _눌러(*조각: str) -> str:
+    """`hub/../docs/흐름.md` 를 `docs/흐름.md` 로 눌러 줍니다.
+
+    tool.json 의 경로는 그 도구 폴더 기준입니다. 그런데 저장소 뿌리에서
+    돌리는 도구는 `run_cwd` 가 `..` 이라 화면에 `hub/..` 이 그대로
+    나옵니다. 사람이 그걸 그대로 쳐도 되긴 하는데 읽기 나쁩니다.
+    """
+    import posixpath
+    붙임 = posixpath.join(*[c for c in 조각 if c and c != "."])
+    return posixpath.normpath(붙임) if 붙임 else "."
+
+
 def 도구들() -> list[dict]:
     """tool.json 을 전부 찾아 읽습니다. 이름 순으로 돌려줍니다."""
     out = []
@@ -150,7 +162,7 @@ def cmd_info(args) -> int:
     print(f"\n{t['name']}   {t.get('owner','-')} ({t.get('github','-')})")
     print(f"  폴더      {t['_rel']}")
     if t.get("docs"):
-        print(f"  문서      {t['_rel']}/{t['docs']}")
+        print(f"  문서      {_눌러(t['_rel'], t['docs'])}")
     if t.get("license"):
         print(f"  라이선스  {t['license']}  (루트는 Apache-2.0 입니다. NOTICE 를 보십시오)")
 

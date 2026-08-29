@@ -66,8 +66,11 @@ def test_명령에_이상문자가_없다():
 def test_list_가_돈다():
     code, out = _dc("list")
     assert code == 0, out
-    assert "도구 7개" in out, out[:300]
-    for n in ("kr-leak-alarm", "darkweb-verify-ko", "forum-crawler"):
+    # 숫자를 박아 두면 도구가 하나 늘 때마다 검사가 깨집니다. 실제로
+    # 크롤러를 툴킷에 넣었더니 「도구 7개」에서 걸렸습니다. 세어서 봅니다.
+    몇장 = len([p for p in _tool_json들() if ".git" not in p.parts])
+    assert f"도구 {몇장}개" in out, f"{몇장}장인데 화면은: {out[:300]!r}"
+    for n in ("kr-leak-alarm", "darkweb-verify-ko", "forum-crawler", "crawler"):
         assert n in out, f"{n} 이 목록에 없다"
 
 
@@ -111,6 +114,77 @@ def test_스케줄러가_auto_를_부른다():
     assert 'dc.py" auto' in 나온것, "등록 명령이 auto 를 안 부릅니다"
     assert "run --due" not in 나온것, "아직 run --due 를 겁니다"
 
+
+
+def test_README_구조도가_실제_폴더를_다_담는다():
+    """오늘 정확히 이것이 문제였습니다.
+
+    hub/ 이 3,691줄로 저장소에서 제일 큰데 README 에 **낱말조차 없었습니다.**
+    구조도가 dc.py · apps · packages · skills · docs 다섯만 적고 있었습니다.
+    hub/ 과 scripts/ 가 생긴 뒤로 아무도 안 고친 것입니다.
+
+    오류가 안 납니다. 처음 온 사람이 저장소를 잘못 이해할 뿐입니다.
+    """
+    글 = (ROOT / "README.md").read_text(encoding="utf-8")
+    자리 = 글[글.index("## 구조"):]
+    자리 = 자리[:자리.index("<!-- 도구표 시작")]
+
+    안볼것 = {".git", ".github", ".venv", "venv", "__pycache__",
+            "node_modules", ".pytest_cache"}
+    실제 = sorted(d.name for d in ROOT.iterdir()
+                if d.is_dir() and d.name not in 안볼것 and not d.name.startswith("."))
+    빠짐 = [d for d in 실제 if f"{d}/" not in 자리]
+    assert not 빠짐, f"README 구조도에 없는 폴더: {빠짐}"
+    assert len(실제) >= 5, f"폴더를 {len(실제)}개만 찾았다"
+
+
+def test_도구표가_최신이다():
+    """tool.json 을 더해 놓고 README 표를 안 고치면 어긋납니다."""
+    import subprocess
+    r = subprocess.run([sys.executable, "dc.py", "readme", "--check"], cwd=ROOT,
+                       capture_output=True, text=True, encoding="utf-8",
+                       errors="replace", timeout=120,
+                       env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+    assert r.returncode == 0, (
+        "README 도구 표가 낡았습니다. python dc.py readme --write 로 다시 쓰십시오.\n"
+        + (r.stdout or "") + (r.stderr or ""))
+
+
+def test_크롤러도_툴킷에_있다():
+    """제일 큰 것이 `dc.py list` 에 안 나오고 있었습니다.
+
+    툴킷의 규칙은 「도구 하나에 tool.json 한 장」입니다. 크롤러만 그 밖에
+    있어서 `dc.py info` 도 `dc.py doctor` 도 안 됐습니다.
+    """
+    import json
+    p = ROOT / "hub" / "tool.json"
+    assert p.exists(), "hub/tool.json 이 없습니다"
+    d = json.loads(p.read_text(encoding="utf-8"))
+    assert d["name"] == "crawler", d.get("name")
+    assert d["preconditions"]["tor"] is True, "Tor 가 필요하다고 안 적혀 있습니다"
+    # 다른 도구가 **전부** 갖고 있는 칸은 크롤러도 갖춰야 표가 안
+    # 비뚤어집니다. 한 도구만 있는 칸(license · kind)은 안 봅니다.
+    다른것 = [json.loads(x.read_text(encoding="utf-8"))
+            for x in _tool_json들() if x.parent.name != "hub"]
+    공통 = set(다른것[0])
+    for x in 다른것[1:]:
+        공통 &= set(x)
+    빠짐 = sorted(공통 - set(d))
+    assert not 빠짐, f"다른 도구가 다 갖고 있는데 crawler 에 없는 칸: {빠짐}"
+
+
+def test_끝난_기록은_따로_둔다():
+    """따라 하면 안 되는 문서가 살아 있는 문서와 섞여 있었습니다.
+
+    구축절차.md 는 8/26 에 끝난 일회성 절차인데 286줄짜리라, 처음 온
+    사람이 그것부터 따라 하기 쉽습니다.
+    """
+    기록 = ROOT / "docs" / "기록"
+    assert 기록.is_dir(), "docs/기록/ 이 없습니다"
+    for f in 기록.glob("*.md"):
+        머리 = f.read_text(encoding="utf-8").split(chr(10))[:5]
+        assert any("끝난 일의 기록" in l for l in 머리), (
+            f"{f.name} 맨 위에 「끝난 일의 기록」 표시가 없습니다")
 
 if __name__ == "__main__":
     n = 0
