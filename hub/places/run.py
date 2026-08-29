@@ -28,6 +28,7 @@ sys.path.insert(0, str(ROOT / "packages"))
 sys.path.insert(0, str(ROOT))
 
 from hub.places.write import 갈래별_DB, 명부, 반영결과  # noqa: E402
+from hub.places.backoff import 기록 as 두드림기록  # noqa: E402
 from hub.places.merge import 합치기  # noqa: E402
 from hub.places.place import Place  # noqa: E402
 from hub.places.extract import links
@@ -70,6 +71,7 @@ class 갈래결과:
     못본것: int = 0
     바뀐줄: int = 0
     건너뜀: int = 0          # 주소가 없어 조사 못 한 줄
+    쉰것: int = 0            # 연속 실패로 이번 판은 안 두드린 줄
     문제: list = field(default_factory=list)
     상태셈: dict = field(default_factory=dict)   # online 몇 · offline 몇 …
     이유셈: dict = field(default_factory=dict)   # 못 본 까닭별로
@@ -116,15 +118,20 @@ def _조사(갈래: str, 줄들, ctx: dict):
         조사기 안의 except 는 연결 실패만 잡습니다. 명부에 이상한 값이
         적혀 있으면 ValueError 같은 것이 올라와 판 전체를 죽입니다.
         실제로 "nulled.to" 한 줄이 47분치 작업을 날렸습니다.
+
+        걸린 초도 여기서 잽니다. 조사기마다 재면 세 곳을 고쳐야 하고,
+        한 곳을 빠뜨리면 그 갈래만 숫자가 없습니다.
         """
+        시작 = time.time()
         try:
-            return 부르기()
+            p = 부르기()
         except Exception as e:  # noqa: BLE001
             p = Place(갈래=갈래, 이름=r.이름, 주소=r.주소,
                       못본이유=f"이 줄에서 터졌습니다: {type(e).__name__}: {e}"[:180],
                       받은곳="조사 중 예외")
             p.살펴볼것 = "명부의 값이 이상할 수 있습니다. 주소를 보십시오"
-            return p
+        p.걸린초 = round(time.time() - 시작, 2)
+        return p
 
     if 갈래 == "telegram":
         마지막 = [0.0]
@@ -274,13 +281,31 @@ def 한갈래(갈래: str, *, apply: bool = False, limit: int = 0,
     볼것 = [x for x in 줄들
           if (x.주소 or "").strip() or (getattr(x, "어니언", "") or "").strip()]
     r.건너뜀 = len(줄들) - len(볼것)
+
+    # **연속으로 죽어 있던 곳은 이번 판을 쉽니다.**
+    #
+    # 한 판 53분 중 47분이 죽은 주소를 기다리는 시간이었습니다. 어제
+    # 죽었으면 오늘도 죽었을 가능성이 큽니다. 최대 두 주가 지나면 다시
+    # 보므로 부활한 곳을 놓치지 않습니다. 자세한 것은 backoff.py 에.
+    #
+    # **쉰 줄은 노션을 안 건드립니다.** 확인일도 안 바꿉니다.
+    # 「오늘 봤는데 죽어 있었다」와 「오늘 안 봤다」는 다릅니다.
+    지금때 = time.time()
+    자취 = 두드림기록(db or 기본_표())
+    try:
+        볼것, 쉰것 = 자취.거를것(갈래, 볼것, 지금때)
+    except Exception:  # noqa: BLE001  자취가 깨져도 조사는 돕니다
+        쉰것 = []
+    r.쉰것 = len(쉰것)
+
     if limit:
         볼것 = 볼것[:limit]
 
     본것: list[Place] = []
     셀것 = len(볼것)
     if not 조용히 and 셀것:
-        print(f"  {갈래}: {셀것}줄을 봅니다", flush=True)
+        쉼말 = f" (연속 실패로 {r.쉰것}줄은 쉽니다)" if r.쉰것 else ""
+        print(f"  {갈래}: {셀것}줄을 봅니다{쉼말}", flush=True)
 
     for 줄, p in _조사(갈래, 볼것, {"tor": tor, "limit": limit,
                                  "이음사전": 이음사전}):
@@ -303,6 +328,11 @@ def 한갈래(갈래: str, *, apply: bool = False, limit: int = 0,
             r.본것 += 1
         else:
             r.못본것 += 1
+        try:
+            자취.적기(갈래, getattr(줄, "page_id", ""), p.봤나(),
+                    지금때, getattr(p, "걸린초", 0.0))
+        except Exception:  # noqa: BLE001  자취가 깨져도 조사는 돕니다
+            pass
         try:
             res = m.반영(줄, p, apply=apply)
         except Exception as e:  # noqa: BLE001  한 줄이 죽어도 나머지는 돕니다
@@ -335,6 +365,20 @@ def 한갈래(갈래: str, *, apply: bool = False, limit: int = 0,
             _쌓기(db or 기본_표(), 갈래, 본것)
         except Exception as e:  # noqa: BLE001
             r.문제.append(f"시계열을 못 쌓았습니다: {type(e).__name__}: {e}"[:200])
+
+    # 두드린 자취는 **미리보기에서도 남깁니다.** 노션에 쓰는 것과
+    # 두드렸다는 사실은 다른 일입니다. 미리보기로 30초를 기다린 것도
+    # 기다린 것이라, 여기서 안 남기면 백오프가 영영 안 걸립니다.
+    try:
+        자취.저장()
+    except Exception as e:  # noqa: BLE001
+        r.문제.append(f"두드린 자취를 못 남겼습니다: {type(e).__name__}"[:120])
+    finally:
+        try:
+            자취.close()
+        except Exception:  # noqa: BLE001
+            pass
+
     r.초 = time.time() - t0
     return r
 
@@ -433,6 +477,10 @@ def 표로(결과: list[갈래결과], *, apply: bool) -> str:
                f"바뀐 줄 {r.바뀐줄}"]
         if r.건너뜀:
             조각.append(f"주소 없음 {r.건너뜀}")
+        # 쉰 줄을 안 적으면 「다 봤다」로 읽힙니다. 안 본 것은 안 봤다고
+        # 적습니다.
+        if r.쉰것:
+            조각.append(f"쉰 줄 {r.쉰것}")
         줄.append(f"  {이름:<12} {' · '.join(조각)}  {r.초:.0f}초")
         if r.상태셈:
             셈 = " · ".join(f"{k} {v}" for k, v in

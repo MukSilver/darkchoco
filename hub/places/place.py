@@ -190,6 +190,9 @@ class Place:
     받은곳: str = ""
     살펴볼것: str = ""              # 사람이 손봐야 하는 것. 화면에 올립니다
     처음본곳: list = field(default_factory=list)   # 명부에 없는 이웃들
+    걸린초: float = 0.0             # 이 줄을 보는 데 걸린 초. 노션엔 안 씁니다.
+                                    # 시간 제한과 동시 수를 짐작이 아니라
+                                    # 재서 정하려고 쌓습니다
 
     def 봤나(self) -> bool:
         return not self.못본이유
