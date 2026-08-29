@@ -1471,6 +1471,54 @@ def test_달을_세는_쪽도_같은_날을_본다():
     assert "date.today()" not in 글, "기계 시간대의 오늘을 씁니다"
     assert "_오늘()" in 글, "한국 기준 오늘을 안 씁니다"
 
+
+# ── fetch.py — 여는 법 갈아 끼우기 ─────────────────────────────────
+def test_여는법이_셋이고_같은_것을_돌려준다():
+    """부르는 쪽은 무엇으로 열었는지 몰라도 됩니다."""
+    from hub.places.fetch import 연것, 여는법들, 열기
+    assert set(여는법들) == {"http", "browser", "api"}
+    for 법 in 여는법들:
+        r = 열기("https://example.test/", 법=법)
+        assert isinstance(r, 연것), 법
+        assert r.여는법 == 법 or 법 == "api", (법, r.여는법)
+
+
+def test_모르는_여는법은_거절한다():
+    from hub.places.fetch import 열기
+    try:
+        열기("https://example.test/", 법="magic")
+    except ValueError:
+        return
+    raise AssertionError("모르는 법을 받아 줬다")
+
+
+def test_브라우저는_Tor_없이_안_뜬다():
+    """urllib 과 다릅니다.
+
+    브라우저는 우리가 안 건 요청(폰트·이미지·텔레메트리)도 스스로
+    보냅니다. 프록시를 안 걸면 그것들이 전부 맨 IP 로 나갑니다.
+    **한 군데만 새도 그 판은 우리 주소를 남깁니다.**
+    """
+    from hub.places.fetch import 열기
+    r = 열기("https://example.test/", 법="browser", 프록시=None)
+    assert not r.봤나(), "Tor 없이 브라우저를 띄웠다"
+    assert "Tor" in r.못본이유, r.못본이유
+
+
+def test_page_가_있어야_깊게_본_것이다():
+    """수집기 일곱 중 다섯이 page 를 요구합니다."""
+    from hub.places.fetch import 연것
+    assert not 연것(본문="<html/>").깊게봤나
+    assert 연것(본문="<html/>", page=object()).깊게봤나
+
+
+def test_fetch_도_egress_를_지난다():
+    """여는 법이 늘어도 나가는 문은 하나여야 합니다."""
+    글 = (ROOT / "hub" / "places" / "fetch.py").read_text(encoding="utf-8")
+    assert "from hub.places.egress import" in 글, "egress 를 안 지납니다"
+    assert "urllib.request.urlopen" not in 글, "프록시를 건너뛰는 urlopen 이 있습니다"
+    assert "build_opener" not in 글, "프록시 없는 오프너를 직접 만듭니다"
+
 if __name__ == "__main__":
     n = 0
     for k, v in sorted(globals().items()):
