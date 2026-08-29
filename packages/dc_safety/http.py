@@ -86,6 +86,11 @@ def _check_host(url: str) -> str:
     return host
 
 
+# 밖에서도 주소만 검사하고 싶을 때가 있습니다. 밑줄 이름을 직접 부르지
+# 않게 공개 이름을 하나 둡니다. 같은 함수입니다.
+check_host = _check_host
+
+
 class SafeHttpClient:
     def __init__(self, network_cfg: dict[str, Any] | None = None):
         cfg = network_cfg or {}
@@ -169,7 +174,13 @@ class SafeHttpClient:
                 location = f"{p.scheme}://{p.netloc}{location}"
             _check_host(location)  # ← 여기서 목록 밖이면 차단
             url = location
-            resp = self._session.get(url, timeout=self.timeout, stream=True, allow_redirects=False)
+            resp = self._session.get(
+                url,
+                timeout=self.timeout,
+                stream=True,
+                allow_redirects=False,
+                headers=extra_headers or {},   # 최초 요청과 같은 헤더를 유지한다
+            )
 
         try:
             if resp.status_code == 404:

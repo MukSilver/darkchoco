@@ -53,7 +53,11 @@ def reaction_count(message) -> int:
 
 
 def sender_label(sender) -> str:
-    """사람이 읽을 이름 한 줄. tg-korea-alert 의 알림 문구에 쓰입니다."""
+    """사람이 읽을 이름 한 줄. tg-korea-alert 의 알림 문구에 쓰입니다.
+
+    수집 JSON 의 sender_name 과는 형태가 다르다. 그쪽은 이름만 넣고 없으면
+    null 이므로 apps/tg-korea-alert/collect_messages.py 에 따로 둔다.
+    """
     if sender is None:
         return "알 수 없음"
     name = get_display_name(sender)

@@ -16,8 +16,12 @@ import time
 from pathlib import Path
 from typing import Any
 
-import yaml
-from tqdm import tqdm
+# 윈도우 콘솔(cp949)에서 한글·기호로 죽는 것을 막습니다.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "packages"))
+from dc_console import use_utf8  # noqa: E402
+
+use_utf8()
+
 
 import config
 import profile_report_generator
@@ -38,6 +42,7 @@ logger = logging.getLogger("investigate")
 
 
 def load_whitelist(path: str | None = None) -> list[dict[str, Any]]:
+    import yaml   # 설치 전에도 --help 가 뜨도록 여기서 부른다
     # 기본값을 함수 시그니처(모듈 임포트 시점)에 고정하지 않고 호출 시점에 config.WHITELIST_PATH
     # 를 다시 읽는다 — 그래야 런타임에 config 값이 바뀌어도(예: 테스트의 monkeypatch) 반영된다.
     p = Path(path if path is not None else config.WHITELIST_PATH)
@@ -58,6 +63,7 @@ def find_approved_source(url: str, source_type: str) -> dict[str, Any] | None:
 
 
 def run_pipeline(page, source: dict[str, Any], *, resume: bool = False) -> dict[str, Any]:
+    from tqdm import tqdm   # 설치 전에도 --help 가 뜨도록 여기서 부른다
     """Collector ①~⑦을 순서대로 호출하고 report_generator 가 쓸 dict로 취합한다.
 
     resume=True면 content_sample.crawl_site()가 이전 체크포인트(세션 만료/챌린지로 중단된

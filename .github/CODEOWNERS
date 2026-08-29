@@ -1,6 +1,6 @@
 # 폴더마다 주인을 정합니다.
 # 자기 앱 폴더는 본인이 바로 머지해도 됩니다.
-# packages 는 공용이라 리뷰 한 명이 필요합니다.
+# packages 와 hub 는 공용이라 리뷰 한 명이 필요합니다.
 
 /apps/forum-crawler/     @minsmiths
 /apps/dls-observatory/   @60secAgo
@@ -9,5 +9,16 @@
 /apps/tg-korea-alert/    @minsmiths
 /skills/                 @grute02
 /packages/               @MukSilver @minsmiths @60secAgo @leesubhin060-max
+
+# 통합 크롤러. 노션 다크웹 DB 811줄에 씁니다.
+# 여기가 잘못되면 팀원이 몇 주간 손으로 적은 것이 지워집니다.
+/hub/                    @MukSilver
+
+# 이 둘은 특히 봅니다.
+#   write.py   노션에 쓰는 유일한 곳 (관문 5개)
+#   egress.py  밖으로 나가는 유일한 길 (Tor 관문)
+/hub/places/write.py     @MukSilver @60secAgo
+/hub/places/egress.py    @MukSilver @60secAgo
+
 /docs/                   @MukSilver
 /.github/                @MukSilver

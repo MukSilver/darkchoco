@@ -7,13 +7,20 @@ kr-leak-alarm 의 것을 표준으로 올렸습니다.
 이 패키지는 apps 를 import 하지 않습니다.
 """
 
-from .http import (
-    ALLOWED_CONTENT_TYPES, ALLOWED_HOSTS, BlockedHostError, FetchError,
-    HttpStatusError, NotFoundError, SafeHttpClient,
-)
+# http 는 requests 를 씁니다. 살균 함수(text)만 쓰는 곳까지 requests 를
+# 받게 하지 않으려고 늦게 부릅니다.
+_HTTP = ['ALLOWED_CONTENT_TYPES', 'ALLOWED_HOSTS', 'BlockedHostError', 'FetchError', 'HttpStatusError', 'NotFoundError', 'SafeHttpClient', 'check_host']
+
+
+def __getattr__(name):
+    if name in _HTTP:
+        from . import http
+        return getattr(http, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 from .text import defang_domain, defang_url, extract_domain, is_onion, sanitize_text
 
 __all__ = [
+    "check_host",
     "SafeHttpClient", "ALLOWED_HOSTS", "ALLOWED_CONTENT_TYPES",
     "FetchError", "BlockedHostError", "HttpStatusError", "NotFoundError",
     "sanitize_text", "defang_url", "defang_domain", "is_onion", "extract_domain",

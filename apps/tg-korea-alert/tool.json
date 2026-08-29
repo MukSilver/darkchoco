@@ -1,0 +1,58 @@
+{
+  "name": "tg-korea-alert",
+  "owner": "성민서",
+  "github": "@minsmiths",
+  "summary": "텔레그램에서 한국 관련 글을 골라 디스코드로 알립니다",
+  "runs_in": "host",
+  "commands": {
+    "monitor": "python korea_alert_monitor.py",
+    "setup": "python setup_config.py",
+    "login": "python test.py",
+    "collect": "python collect_messages.py <url>"
+  },
+  "default": "monitor",
+  "run_cwd": ".",
+  "install": {
+    "requirements": "requirements.txt"
+  },
+  "preconditions": {
+    "docker": false,
+    "tor": false,
+    "interactive_login": "텔레그램"
+  },
+  "secrets": [
+    {
+      "key": "TELEGRAM_API_ID",
+      "where": "my.telegram.org"
+    },
+    {
+      "key": "TELEGRAM_API_HASH",
+      "where": "my.telegram.org"
+    },
+    {
+      "key": "DISCORD_WEBHOOK_URL",
+      "where": "디스코드 채널 설정"
+    },
+    {
+      "key": "DART_API_KEY",
+      "where": "opendart.fss.or.kr"
+    },
+    {
+      "key": "GEMINI_API_KEY",
+      "where": "aistudio.google.com"
+    }
+  ],
+  "config_files": [
+    {
+      "path": ".env",
+      "example": null,
+      "note": "setup_config.py 가 만듭니다"
+    }
+  ],
+  "packages": [
+    "dc_telegram"
+  ],
+  "output": "디스코드 알림",
+  "docs": null,
+  "note": "끝나지 않는 상주 프로세스입니다"
+}

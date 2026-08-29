@@ -9,6 +9,8 @@
     3. ~/.config/darkchoco/notion_token   사람마다 하나
     4. ./.notion_token.txt                지금 폴더
 
+찾는 자리와 재시도는 packages/dc_notion 에 있다.
+
 **토큰 값을 환경변수로 받지 않는다.** 값을 넣으면 `docker inspect` 와
 셸 히스토리에 남는다. 파일을 마운트하고 그 경로를 준다.
 
@@ -19,80 +21,59 @@
 from __future__ import annotations
 
 import json
-import os
 import sys
 import time
-import urllib.error
-import urllib.request
 from pathlib import Path
 
-API = "https://api.notion.com/v1"
-VERSION = "2025-09-03"
-# 토큰을 찾는 자리. 위에서부터 본다.
-TOKEN_PLACES = [
-    Path("/run/secrets/notion_token"),
-    Path.home() / ".config" / "darkchoco" / "notion_token",
-    Path.home() / ".config" / "darkchoco" / "notion_token.txt",
-    Path.cwd() / ".notion_token.txt",
-]
-TIMEOUT = 30
-RETRY = 3
+# 경로·재시도·토큰 탐색은 packages/dc_notion 이 맡습니다.
+# 환경변수로 토큰을 받지 않는 방침은 그대로입니다(allow_env_token=False).
+#
+# 이 스킬은 cp -R 로 떼어 갈 수 있어야 하므로, 저장소 밖에서도 부품을 찾게
+# _dcpath 에 맡깁니다. 못 찾아도 import 는 되어야 합니다. 노션을 안 쓰는
+# 절(③④⑤⑥)이 그대로 돌아야 하기 때문입니다.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _dcpath import ensure_packages, missing_message, use_utf8  # noqa: E402
+
+use_utf8()
+
+if ensure_packages():
+    from dc_notion import API, VERSION, Notion, NotionError  # noqa: E402
+else:
+    API = "https://api.notion.com/v1"
+    VERSION = ""
+
+    class NotionError(RuntimeError):
+        pass
+
+    class Notion:                                        # noqa: D101
+        def __init__(self, *a, **k):
+            raise SystemExit(missing_message())
+
+_client: Notion | None = None
 
 
-def _token_file() -> Path:
-    """토큰 파일을 찾는다. 못 찾으면 어디를 봤는지 전부 알린다."""
-    env = os.environ.get("NOTION_TOKEN_FILE")
-    places = ([Path(env)] if env else []) + TOKEN_PLACES
-    for p in places:
+def _notion() -> Notion:
+    """처음 부를 때만 만든다. 토큰이 없어도 import 는 되어야 한다.
+
+    이 스킬은 노션 없이도 ③④⑤⑥ 절이 돌기 때문이다.
+    """
+    global _client
+    if _client is None:
         try:
-            if p.is_file():
-                return p
-        except OSError:
-            continue
-    raise SystemExit(
-        "토큰 파일을 못 찾았다. 아래를 봤다.\n  "
-        + "\n  ".join(str(p) for p in places)
-        + "\n\n하나를 만들거나 NOTION_TOKEN_FILE 로 경로를 준다.\n"
-          "도커면 -v <토큰파일>:/run/secrets/notion_token:ro 로 붙인다.\n"
-          "노션 없이도 ③④⑤⑥ 은 돈다. 그 절을 안 봄 으로 적고 진행하면 된다.")
-
-
-def _token() -> str:
-    p = _token_file()
-    t = p.read_text(encoding="utf-8").strip()
-    if not t:
-        raise SystemExit(f"토큰 파일이 비어 있다: {p}")
-    return t
+            _client = Notion(verbose=False, allow_env_token=False)
+        except RuntimeError as e:
+            raise SystemExit(
+                str(e) + "\n노션 없이도 ③④⑤⑥ 은 돈다. 그 절을 안 봄 으로 적고 진행하면 된다."
+            ) from e
+    return _client
 
 
 def _call(path: str, method: str = "GET", body: dict | None = None) -> dict:
-    url = path if path.startswith("http") else API + path
-    data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(
-        url,
-        data=data,
-        method=method,
-        headers={
-            "Authorization": "Bearer " + _token(),
-            "Notion-Version": VERSION,
-            "Content-Type": "application/json",
-        },
-    )
-    last = None
-    for i in range(RETRY):
-        try:
-            with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-                return json.load(r)
-        except urllib.error.HTTPError as e:
-            if e.code in (429, 500, 502, 503):
-                last = e
-                time.sleep(1.5 * (i + 1))
-                continue
-            raise SystemExit(f"{e.code} {e.reason} — {path}")
-        except urllib.error.URLError as e:
-            last = e
-            time.sleep(1.5 * (i + 1))
-    raise SystemExit(f"재시도 {RETRY}회 실패 — {path} ({last})")
+    """노션에 요청한다. 실패하면 예전처럼 메시지를 남기고 끝낸다."""
+    try:
+        return _notion()._request(method, path, body)
+    except NotionError as e:
+        raise SystemExit(str(e)) from e
 
 
 def title_of(obj: dict) -> str:

@@ -16,7 +16,7 @@ from .base import LeakRecord, Source, parse_timestamp
 
 log = logging.getLogger(__name__)
 
-FEED_URL = "https://ransomfeed.it/rss-complete.php"
+from dc_ransomfeed import RANSOMFEED_RSS as FEED_URL  # packages/dc_ransomfeed
 
 _ENTITY_DECL_RE = re.compile(rb"<!(DOCTYPE|ENTITY)\b", re.IGNORECASE)
 
