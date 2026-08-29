@@ -17,7 +17,7 @@
 
 **전부 Tor 를 거칩니다.** 어니언만이 아닙니다. 평범한 도메인이라도
 다크웹 포럼의 쪽을 여는 일은 저쪽 로그에 우리 주소를 남기는 일입니다.
-나가는 길은 _나가기.py 한 곳뿐이고, Tor 가 없으면 안 나갑니다.
+나가는 길은 egress.py 한 곳뿐이고, Tor 가 없으면 안 나갑니다.
 
 표준 라이브러리만 씁니다.
 """
@@ -37,10 +37,10 @@ from urllib.parse import urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "packages"))
 
-from hub.crawler.place import Place, 덧붙임, 지금  # noqa: E402
-from hub.crawler.probe._나가기 import 보호없음, 오프너  # noqa: E402
-from hub.crawler.probe._읽기 import 글자만, 언어판별  # noqa: E402
-from hub.crawler.probe import _게시판, _이음  # noqa: E402
+from hub.places.place import Place, 덧붙임, 지금  # noqa: E402
+from hub.places.egress import 보호없음, 오프너  # noqa: E402
+from hub.places.extract.lang import 글자만, 언어판별  # noqa: E402
+from hub.places.extract import boards, links  # noqa: E402
 
 __all__ = ["조사", "한곳", "NEEDS_PACKAGES"]
 
@@ -562,10 +562,10 @@ def _한곳(주소: str, 이름: str, 마지막, *,
     # 그 쪽이 붙인 게시판 이름을 봅니다. 무엇을 다루는 곳인지에 대한
     # 가장 좋은 증거입니다. **게시글 제목은 안 봅니다** — 유출 글
     # 제목에는 피해 기업 이름이 들어갑니다(SECURITY.md).
-    이름들 = _게시판.게시판이름들(본문)
+    이름들 = boards.게시판이름들(본문)
     if 이름들:
-        p.유통자리 = _게시판.유통자리(이름들)
-        p.개인정보 = _게시판.개인정보증거(이름들)
+        p.유통자리 = boards.유통자리(이름들)
+        p.개인정보 = boards.개인정보증거(이름들)
 
     if _로그인벽.search(글):
         p.가입필요 = True
@@ -575,14 +575,14 @@ def _한곳(주소: str, 이름: str, 마지막, *,
 
     납작 = re.sub(r"\s+", " ", html.unescape(글))
     if 이음사전:
-        p.연결된곳 = _이음.찾기(본문, 이음사전, f"포럼 DB: {p.이름}")
-        p.처음본곳 = _이음.처음보는곳(본문, 이음사전)
+        p.연결된곳 = links.찾기(본문, 이음사전, f"포럼 DB: {p.이름}")
+        p.처음본곳 = links.처음보는곳(본문, 이음사전)
 
     # 자기 어니언 미러가 첫 화면에 걸려 있는데 명부엔 비어 있는 경우가
     # 많습니다. **열어서 제목을 견줘 보고** 같으면 채웁니다. 추측으로
     # 채우면 남의 어니언이 들어갑니다.
     if 어니언미러 and not 어니언 and not p.어니언:
-        찾은것 = _이음.어니언들(본문)
+        찾은것 = links.어니언들(본문)
         for o in 찾은것[:2]:
             같나, 왜 = 어니언확인(f"http://{o}", p.이름 or _제목뽑기(본문),
                               마지막, 프록시=프록시)

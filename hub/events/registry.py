@@ -1,6 +1,6 @@
 """어댑터를 찾습니다.
 
-hub/adapters/ 안의 파일을 읽어 목록을 만듭니다. 파일 하나가 어댑터 하나입니다.
+hub/events/sources/ 안의 파일을 읽어 목록을 만듭니다. 파일 하나가 어댑터 하나입니다.
 새 출처를 붙이려면 그 폴더에 파일 하나를 놓으면 됩니다. 등록표를 따로
 고칠 일이 없습니다.
 
@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-ADAPTERS = HERE / "adapters"
+출처들 = HERE / "sources"
 
 __all__ = ["Entry", "목록", "불러오기"]
 
@@ -58,9 +58,9 @@ def _머리글(p: Path) -> dict:
 def 목록() -> list[Entry]:
     """어댑터 전부. 이름 순입니다."""
     out = []
-    if not ADAPTERS.is_dir():
+    if not 출처들.is_dir():
         return out
-    for p in sorted(ADAPTERS.glob("*.py")):
+    for p in sorted(출처들.glob("*.py")):
         if p.name.startswith("_"):
             continue
         h = _머리글(p)
@@ -71,7 +71,7 @@ def 목록() -> list[Entry]:
             every = 0
         out.append(Entry(
             name=이름,
-            module=f"hub.adapters.{p.stem}",
+            module=f"hub.events.sources.{p.stem}",
             path=p,
             summary=h.get("SUMMARY", ""),
             owner=h.get("OWNER", ""),

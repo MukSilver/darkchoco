@@ -49,10 +49,10 @@ def test_한국_관련_유출에_이름을_안_쓴다():
 
 
 def test_압수됨_인계됨_을_안_덮는다():
-    """hub/crawler/place.py 의 사람판정_상태 와 같은 규칙입니다."""
+    """hub/places/place.py 의 사람판정_상태 와 같은 규칙입니다."""
     글 = _글()
     assert '("압수됨", "인계됨")' in 글, "사람 판정 보호가 없습니다"
-    from hub.crawler.place import 사람판정_상태
+    from hub.places.place import 사람판정_상태
     for v in 사람판정_상태:
         assert f'"{v}"' in 글, f"{v} 를 안 지킵니다"
 

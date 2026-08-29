@@ -5,6 +5,7 @@
 밖에 요청을 보내지 않습니다. 등록·건너뛰기·표 넣기만 봅니다.
 """
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -17,8 +18,8 @@ sys.path.insert(0, str(ROOT))
 from dc_console import use_utf8  # noqa: E402
 from dc_store import Item, Store  # noqa: E402
 
-from hub import registry, runner  # noqa: E402
-from hub.contract import Ctx, Needs, Skip  # noqa: E402
+from hub.events import registry, run as runner  # noqa: E402
+from hub.events.contract import Ctx, Needs, Skip  # noqa: E402
 
 use_utf8()
 
@@ -58,7 +59,7 @@ def test_목록은_requests_없이도_읽힌다():
         "        return None",
         "sys.meta_path.insert(0, _막개())",
         f"sys.path.insert(0, r'{ROOT}')",
-        "from hub import registry",
+        "from hub.events import registry",
         "print(len(registry.목록()))",
     ])
     r = subprocess.run([sys.executable, "-c", 막기], cwd=ROOT,
@@ -118,6 +119,92 @@ def test_표에_넣고_다시_넣으면_안_늘어난다():
             assert len(store.rows()) == 1, "같은 글이 두 줄이 됐다"
         finally:
             store.close()
+
+
+
+def test_모든_hub_모듈이_혼자_불러진다():
+    """폴더를 옮기면 `parents[N]` 의 숫자가 조용히 어긋납니다.
+
+    파일이 한 칸 깊어지면 `parents[2]` 가 가리키던 저장소 뿌리가 `hub/`
+    가 됩니다. **오류가 그 자리에서 안 납니다.** 나중에 그 모듈을 처음
+    부르는 명령에서 ModuleNotFoundError 로 터집니다.
+
+    2026-08-30 에 폴더를 places/ · events/ 로 바꾸면서 이것으로 네 번
+    깨졌습니다. 그래서 **모듈을 전부 실제로 불러 봅니다.**
+    """
+    줄바꿈 = chr(10)
+    모듈 = []
+    for f in sorted((ROOT / "hub").rglob("*.py")):
+        if "__pycache__" in str(f):
+            continue
+        이름 = ".".join(f.relative_to(ROOT).with_suffix("").parts)
+        모듈.append(이름[:-9] if 이름.endswith(".__init__") else 이름)
+    assert len(모듈) >= 20, f"모듈을 {len(모듈)}개만 찾았다. rglob 이 안 도는 것이다"
+
+    본문 = 줄바꿈.join([
+        "import importlib, sys",
+        f"sys.path.insert(0, r'{ROOT}')",
+        "안됨 = []",
+        f"for m in {sorted(set(모듈))!r}:",
+        "    try: importlib.import_module(m)",
+        "    except Exception as e: 안됨.append(f'{m}: {type(e).__name__} {e}')",
+        "print('|'.join(안됨))",
+    ])
+    r = subprocess.run([sys.executable, "-c", 본문], cwd=ROOT,
+                       capture_output=True, text=True,
+                       encoding="utf-8", errors="replace", timeout=120)
+    assert r.returncode == 0, (r.stderr or "")[:400]
+    안됨 = [x for x in (r.stdout or "").strip().split("|") if x]
+    assert not 안됨, "혼자 못 불러지는 모듈:" + 줄바꿈 + 줄바꿈.join("  " + x for x in 안됨)
+
+
+def test_저장소_뿌리를_세는_숫자가_맞다():
+    """`parents[N]` 의 N 이 파일 깊이와 맞는지 봅니다.
+
+    파일을 한 칸 옮기면 이 숫자가 조용히 어긋납니다. `parents[2]` 가
+    가리키던 저장소 뿌리가 `hub/` 가 됩니다. **그 자리에서 오류가 안
+    납니다.** 그 경로를 실제로 쓰는 순간에야 터지는데, 그게 몇 주 뒤일
+    수 있습니다.
+
+    2026-08-30 폴더 개편 때 이것으로 네 번 깨졌습니다. 그중 하나는
+    모듈을 불러올 때는 멀쩡하고 `collect()` 를 부를 때만 터졌습니다.
+    윗 검사(모듈 불러오기)로는 그것을 못 잡습니다. 그래서 **부르지 않고
+    숫자만 셉니다.**
+    """
+    직접 = re.compile(r"Path\(__file__\)\.resolve\(\)\.parents\[(\d+)\]")
+    여기선언 = re.compile(r"HERE = Path\(__file__\)\.resolve\(\)\.parent$", re.M)
+    여기위 = re.compile(r"HERE\.parents\[(\d+)\]")
+    여기부모 = re.compile(r"ROOT = HERE\.parent$", re.M)
+
+    틀린것 = []
+    센것 = 0
+    for f in sorted((ROOT / "hub").rglob("*.py")):
+        if "__pycache__" in str(f):
+            continue
+        글 = f.read_text(encoding="utf-8")
+        이름 = f.relative_to(ROOT)
+        깊이 = len(이름.parts) - 1            # 저장소 뿌리까지 몇 칸 위인가
+
+        for m in 직접.finditer(글):
+            센것 += 1
+            본것 = int(m.group(1))
+            if 본것 != 깊이:
+                틀린것.append(f"{이름}: parents[{본것}] 인데 {깊이} 여야 합니다")
+
+        if 여기선언.search(글):
+            for m in 여기위.finditer(글):
+                센것 += 1
+                본것 = int(m.group(1))
+                if 본것 + 1 != 깊이:
+                    틀린것.append(f"{이름}: HERE.parents[{본것}] 인데 {깊이 - 1} 여야 합니다")
+            if 여기부모.search(글):
+                센것 += 1
+                if 깊이 != 2:
+                    틀린것.append(f"{이름}: HERE.parent 인데 {깊이} 칸 깊이입니다")
+
+    붙임 = chr(10) + chr(10).join("  " + x for x in 틀린것)
+    assert not 틀린것, "저장소 뿌리를 잘못 셉니다:" + 붙임
+    assert 센것 >= 8, f"{센것}개만 찾았습니다. 정규식이 안 걸리는 것입니다"
 
 
 def test_dc_plan_이_돈다():
@@ -201,10 +288,10 @@ def test_install_task_가_명령을_만든다():
     #
     # 봐야 하는 것은 낱말이 아니라 뜻이다. **때가 된 것만 돌리는가.**
     assert 'dc.py" auto' in out, "auto 를 안 부른다"
-    from hub.crawler.run import 여러갈래
+    from hub.places.run import 여러갈래
     import inspect
     assert "때된것만" in inspect.signature(여러갈래).parameters
-    from hub.runner import 여러판
+    from hub.events.run import 여러판
     assert "때된것만" in inspect.signature(여러판).parameters
 
 

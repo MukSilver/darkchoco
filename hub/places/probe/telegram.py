@@ -32,10 +32,10 @@ from typing import Iterator
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "packages"))
 
-from hub.crawler.place import Place, 지금  # noqa: E402
-from hub.crawler.probe._나가기 import 보호없음, 오프너  # noqa: E402
-from hub.crawler.probe._읽기 import 언어판별  # noqa: E402
-from hub.crawler.probe import _게시판, _이음  # noqa: E402
+from hub.places.place import Place, 지금  # noqa: E402
+from hub.places.egress import 보호없음, 오프너  # noqa: E402
+from hub.places.extract.lang import 언어판별  # noqa: E402
+from hub.places.extract import boards, links  # noqa: E402
 
 __all__ = ["조사", "NEEDS_PACKAGES"]
 
@@ -233,13 +233,13 @@ def 한곳(채널: str, 마지막: list[float], 이름표: str = "", *,
     # 피해 기업 이름이 들어갑니다(SECURITY.md).
     말들 = [x for x in (p.이름, p.어떤곳) if x]
     if 말들:
-        p.유통자리 = _게시판.유통자리(말들)
-        p.개인정보 = _게시판.개인정보증거(말들)
+        p.유통자리 = boards.유통자리(말들)
+        p.개인정보 = boards.개인정보증거(말들)
 
     # 채널이 걸어 둔 곳 중 명부에 있는 것만 셉니다. 미리보기에는
     # 글 안의 링크도 섞이는데, 그것도 그 채널이 가리키는 곳입니다.
     if 이음사전:
-        p.연결된곳 = _이음.찾기(body, 이음사전, f"텔레그램 DB: {p.이름}")
+        p.연결된곳 = links.찾기(body, 이음사전, f"텔레그램 DB: {p.이름}")
 
     if 수 or 글들:
         p.상태 = "online"

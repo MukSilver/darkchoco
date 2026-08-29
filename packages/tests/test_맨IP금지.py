@@ -5,7 +5,7 @@
 
 이 검사가 지키는 것 둘입니다.
 
-  1. 조사기 안에서 urllib 을 직접 부르지 않습니다. 부르면 _나가기.py 의
+  1. 조사기 안에서 urllib 을 직접 부르지 않습니다. 부르면 egress.py 의
      프록시를 건너뜁니다. 한 군데만 새도 그 갈래는 맨 IP 로 나갑니다
   2. Tor 가 없으면 요청을 아예 안 보냅니다. 빈손으로 돌아오지, 맨
      연결로 채워 오지 않습니다
@@ -25,7 +25,19 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "packages"))
 
-PROBE = ROOT / "hub" / "crawler" / "probe"
+PLACES = ROOT / "hub" / "places"
+
+
+def _긁는파일들():
+    """places/ 밑을 전부 봅니다. probe/ 만 보면 안 됩니다.
+
+    예전에는 probe/ 한 폴더만 훑었습니다. 그때는 조사기와 부품이 다 거기
+    있었기 때문입니다. 지금은 extract/ 가 따로 나갔고, 앞으로 폴더가 더
+    생길 수 있습니다. **밖으로 나갈 수 있는 자리를 빠뜨리지 않으려면
+    폴더를 세지 말고 전부 훑어야 합니다.**
+    """
+    return sorted(p for p in PLACES.rglob("*.py")
+                  if "__pycache__" not in str(p) and p.name != "egress.py")
 
 
 def _토르없이():
@@ -44,9 +56,7 @@ def _토르없이():
 def test_조사기는_urlopen_을_직접_안_부른다():
     """urlopen 은 프록시를 안 거칩니다. opener.open 을 써야 합니다."""
     샌곳 = []
-    for f in sorted(PROBE.glob("*.py")):
-        if f.name == "_나가기.py":
-            continue                      # 나가는 길 자신입니다
+    for f in _긁는파일들():            # egress.py 는 나가는 길 자신입니다
         for i, 줄 in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
             if re.search(r"urllib\.request\.urlopen\s*\(", 줄):
                 샌곳.append(f"{f.name}:{i}")
@@ -56,9 +66,7 @@ def test_조사기는_urlopen_을_직접_안_부른다():
 def test_조사기는_build_opener_를_직접_안_만든다():
     """직접 만들면 프록시 없는 오프너가 됩니다."""
     샌곳 = []
-    for f in sorted(PROBE.glob("*.py")):
-        if f.name == "_나가기.py":
-            continue
+    for f in _긁는파일들():
         for i, 줄 in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
             if "build_opener" in 줄:
                 샌곳.append(f"{f.name}:{i}")
@@ -66,7 +74,7 @@ def test_조사기는_build_opener_를_직접_안_만든다():
 
 
 def test_토르가_없으면_오프너를_안_준다():
-    from hub.crawler.probe._나가기 import 보호없음, 오프너
+    from hub.places.egress import 보호없음, 오프너
     with _토르없이():
         try:
             오프너()
@@ -77,7 +85,7 @@ def test_토르가_없으면_오프너를_안_준다():
 
 def test_socks_주소는_받지_않는다():
     """표준 라이브러리는 SOCKS 를 못 탑니다. 조용히 맨 연결이 되면 안 됩니다."""
-    from hub.crawler.probe._나가기 import 보호없음, 오프너
+    from hub.places.egress import 보호없음, 오프너
     try:
         오프너("socks5://127.0.0.1:9050")
     except 보호없음 as e:
@@ -87,7 +95,7 @@ def test_socks_주소는_받지_않는다():
 
 
 def test_세_갈래가_토르_없이는_안_나간다():
-    from hub.crawler.probe import forum, ransom, telegram
+    from hub.places.probe import forum, ransom, telegram
     with _토르없이():
         것들 = {
             "forum": forum.한곳("https://example.invalid/", "F", [0.0]),
@@ -101,7 +109,7 @@ def test_세_갈래가_토르_없이는_안_나간다():
 
 
 def test_맨연결은_일부러_켜야_된다():
-    from hub.crawler.probe._나가기 import 오프너
+    from hub.places.egress import 오프너
     with _토르없이():
         os.environ["DARKCHOCO_ALLOW_DIRECT"] = "1"
         try:
@@ -112,7 +120,7 @@ def test_맨연결은_일부러_켜야_된다():
 
 def test_갈래를_빼면_그_갈래만_맨연결이_된다():
     """끄는 사람이 무엇을 끄는지 알고 끄는 것입니다. 조용히 새는 것과 다릅니다."""
-    from hub.crawler.probe._나가기 import 보호없음, 오프너
+    from hub.places.egress import 보호없음, 오프너
     with _토르없이():
         os.environ["DARKCHOCO_TOR_SKIP"] = "telegram"
         try:
@@ -133,7 +141,7 @@ def test_연결_실패를_offline_로_안_적는다():
     V3 가 실제로 prologic.su · leaky.pro 접근을 막았습니다. 그것을
     offline 으로 적으면 사람이 조사해 둔 값을 우리 쪽 사정으로 덮습니다.
     """
-    from hub.crawler.probe import forum
+    from hub.places.probe import forum
 
     class 막힘:
         def open(self, req, timeout=0):
@@ -162,12 +170,12 @@ def test_안내문서와_코드가_안_어긋난다():
                 "ExcludeExitNodes {kr}", "StrictNodes 1"):
         assert 낱말 in 문서, f"문서에 {낱말} 이 없습니다"
 
-    from hub.crawler.probe import _나가기
+    from hub.places import egress
     for 낱말 in ("TOR_SOCKS_PROXY", "DARKCHOCO_TOR_SKIP",
                 "DARKCHOCO_ALLOW_DIRECT"):
-        assert 낱말 in (ROOT / "hub/crawler/probe/_나가기.py")            .read_text(encoding="utf-8"), f"코드에 {낱말} 이 없습니다"
+        assert 낱말 in (ROOT / "hub/places/egress.py")            .read_text(encoding="utf-8"), f"코드에 {낱말} 이 없습니다"
 
-    from hub.crawler.run import 주기
+    from hub.places.run import 주기
     for 갈래, 분 in 주기.items():
         assert re.search(rf"{갈래}\s+{분}\s*분", 문서),             f"문서의 {갈래} 주기가 코드({분}분)와 다릅니다"
 
@@ -175,17 +183,17 @@ def test_안내문서와_코드가_안_어긋난다():
 def test_흐름문서가_코드와_안_어긋난다():
     """문서에 적은 칸 갈래가 place.py 와 같은지 봅니다."""
     문서 = (ROOT / "docs" / "흐름.md").read_text(encoding="utf-8")
-    from hub.crawler.place import 덮어쓰는칸, 합치는칸, 빈칸만칸
+    from hub.places.place import 덮어쓰는칸, 합치는칸, 빈칸만칸
     for 칸 in 덮어쓰는칸 | 합치는칸 | 빈칸만칸:
         assert 칸 in 문서, f"흐름 문서에 「{칸}」 이 없습니다"
-    for 자리 in ("_나가기.py", "dc.py auto", "hub/crawler/run.py",
-                "hub/crawler/notion.py", "dls_fill.py", "hub/sched.py"):
+    for 자리 in ("egress.py", "dc.py auto", "hub/places/run.py",
+                "hub/places/write.py", "dls_fill.py", "hub/sched.py"):
         assert 자리 in 문서, f"흐름 문서에 {자리} 가 없습니다"
 
     # 그림에 나온 조사기가 실제로 다 있는지도 봅니다.
     for g in ("telegram", "forum", "ransom"):
         assert f"probe/{g}.py" in 문서, f"흐름 문서에 probe/{g}.py 가 없습니다"
-        assert (ROOT / f"hub/crawler/probe/{g}.py").exists()
+        assert (ROOT / f"hub/places/probe/{g}.py").exists()
 
 
 def test_http_는_CONNECT_로_보낸다():
@@ -198,7 +206,7 @@ def test_http_는_CONNECT_로_보낸다():
     """
     import urllib.request
 
-    from hub.crawler.probe._나가기 import 오프너
+    from hub.places.egress import 오프너
 
     op = 오프너("http://127.0.0.1:9080")
     핸들러 = {type(h).__name__: h for h in op.handlers}
@@ -219,7 +227,7 @@ def test_http_는_CONNECT_로_보낸다():
 
 
 def test_터널이_프록시_주소를_제대로_나눈다():
-    from hub.crawler.probe._나가기 import _프록시나누기
+    from hub.places.egress import _프록시나누기
     assert _프록시나누기("http://127.0.0.1:9080") == ("127.0.0.1", 9080)
     assert _프록시나누기("127.0.0.1:9080") == ("127.0.0.1", 9080)
     assert _프록시나누기("http://tor.local:9150") == ("tor.local", 9150)

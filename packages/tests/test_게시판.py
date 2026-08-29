@@ -22,7 +22,7 @@ from dc_console import use_utf8  # noqa: E402
 
 use_utf8()
 
-from hub.crawler.probe._게시판 import (  # noqa: E402
+from hub.places.extract.boards import (  # noqa: E402
     개인정보증거, 게시판이름들, 유통자리)
 
 # MyBB 꼴. bf.st 같은 곳이 이렇습니다.

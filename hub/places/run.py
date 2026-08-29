@@ -27,9 +27,10 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "packages"))
 sys.path.insert(0, str(ROOT))
 
-from hub.crawler.notion import 갈래별_DB, 명부, 반영결과  # noqa: E402
-from hub.crawler.place import Place  # noqa: E402
-from hub.crawler.probe import _이음, forum, ransom, telegram  # noqa: E402
+from hub.places.write import 갈래별_DB, 명부, 반영결과  # noqa: E402
+from hub.places.place import Place  # noqa: E402
+from hub.places.extract import links
+from hub.places.probe import forum, ransom, telegram  # noqa: E402
 
 __all__ = ["한갈래", "여러갈래", "표로", "기본_표", "갈래들",
            "차례", "됐다고_적기"]
@@ -254,7 +255,7 @@ def 이음사전만들기(갈래들목록=None) -> dict:
             명부들[g] = 명부(g).줄들()
         except Exception:  # noqa: BLE001  한 갈래가 안 읽혀도 나머지로 만듭니다
             continue
-    return _이음.이름표만들기(명부들)
+    return links.이름표만들기(명부들)
 
 
 def 한갈래(갈래: str, *, apply: bool = False, limit: int = 0,
