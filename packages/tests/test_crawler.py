@@ -1380,6 +1380,55 @@ def test_사람이_쓴_줄은_그대로_둔다():
     r = 규모합치기(사람, "피해 기업 40 (2026-08-30 기준)")
     assert 사람 in r, r
 
+
+def test_확인일은_한국_시간이다():
+    """크롤러가 도는 칼리 VM 이 미국 동부시(EDT)였습니다.
+
+    한국보다 13시간 뒤라 「2026-08-30 새벽에 봤다」가 노션에
+    **2026-08-29 로 적혔습니다.** 오류가 안 나고 날짜만 하루 밀립니다.
+    명부를 읽는 사람은 「어제 봤구나」 하고 넘어갑니다.
+
+    실제로 8/30 반영분 82줄이 8/29 로 적혔습니다.
+    """
+    import os
+    from datetime import datetime, timedelta, timezone
+    from hub.places.place import 지금, 오늘, KST
+
+    assert KST == timezone(timedelta(hours=9)), KST
+
+    # 기계 시간대를 바꿔도 안 흔들려야 합니다
+    옛 = os.environ.get("TZ")
+    try:
+        for tz in ("America/New_York", "UTC", "Asia/Seoul"):
+            os.environ["TZ"] = tz
+            try:
+                import time as _t
+                _t.tzset()                      # 윈도우에는 없습니다
+            except AttributeError:
+                pass
+            assert 지금().endswith("+09:00"), f"{tz} 에서 {지금()}"
+            assert 오늘() == datetime.now(KST).date()
+    finally:
+        os.environ.pop("TZ", None)
+        if 옛 is not None:
+            os.environ["TZ"] = 옛
+        try:
+            import time as _t
+            _t.tzset()
+        except AttributeError:
+            pass
+
+
+def test_달을_세는_쪽도_같은_날을_본다():
+    """`ransom.py` 가 date.today() 를 쓰면 기계 시간대를 따릅니다.
+
+    확인일만 고치고 이쪽을 놔두면, 자정 언저리에 **확인일과 집계 기간이
+    하루 어긋납니다.**
+    """
+    글 = (ROOT / "hub" / "places" / "probe" / "ransom.py").read_text(encoding="utf-8")
+    assert "date.today()" not in 글, "기계 시간대의 오늘을 씁니다"
+    assert "_오늘()" in 글, "한국 기준 오늘을 안 씁니다"
+
 if __name__ == "__main__":
     n = 0
     for k, v in sorted(globals().items()):
