@@ -1121,6 +1121,86 @@ def test_텔레그램도_게시판_부품을_쓴다():
     assert "body" not in 넣는줄, 넣는줄
 
 
+
+# ── merge.py ───────────────────────────────────────────────────────────
+def _랜섬(**kw):
+    from hub.places.place import Place
+    kw.setdefault("갈래", "ransom")
+    kw.setdefault("이름", "TESTGROUP")
+    return Place(**kw)
+
+
+def test_합치기는_이미_찬_칸을_안_덮는다():
+    """조사기마다 아는 것이 다릅니다. 겹치면 바탕이 이깁니다."""
+    from hub.places.merge import 합치기
+    바탕 = _랜섬(언어="러시아어", 어떤곳="주소를 열어 본 설명")
+    위 = _랜섬(언어="영어", 어떤곳="API 가 준 설명", 형식="RaaS")
+    r = 합치기(바탕, 위)
+    assert r.언어 == "러시아어", "바탕을 덮었다"
+    assert r.어떤곳 == "주소를 열어 본 설명", "바탕을 덮었다"
+    assert r.형식 == "RaaS", "빈칸을 안 채웠다"
+
+
+def test_합치기는_상태를_뒤엣것에_넘긴다():
+    """랜섬에서 뒤엣것은 /groups 입니다. 살아있나가 그 API 의 본업입니다."""
+    from hub.places.merge import 합치기
+    바탕 = _랜섬(상태="online", 두드림=True)
+    r = 합치기(바탕, _랜섬(상태="offline", 두드림=True))
+    assert r.상태 == "offline", "뒤엣것이 두드렸는데 안 넘어갔다"
+
+    # 뒤엣것이 못 두드렸으면 안 넘깁니다
+    바탕2 = _랜섬(상태="online", 두드림=True)
+    r2 = 합치기(바탕2, _랜섬(상태="미확인", 두드림=False))
+    assert r2.상태 == "online", "못 두드린 것이 상태를 덮었다"
+
+
+def test_합치기는_받은곳을_이어_붙인다():
+    """어디서 왔는지를 지우면 나중에 왜 그 값인지 못 찾습니다."""
+    from hub.places.merge import 합치기
+    r = 합치기(_랜섬(받은곳="주소를 엶"), _랜섬(받은곳="/groups"))
+    assert "주소를 엶" in r.받은곳 and "/groups" in r.받은곳, r.받은곳
+
+
+def test_합치기는_출처를_합집합으로_둔다():
+    """multi-select 입니다. 둘 다 실제로 쓴 출처입니다."""
+    from hub.places.merge import 합치기
+    r = 합치기(_랜섬(출처=["직접 확인"]), _랜섬(출처=["ransomware.live"]))
+    assert set(r.출처) == {"직접 확인", "ransomware.live"}, r.출처
+    # 같은 것을 두 번 얹어도 안 늘어납니다
+    r = 합치기(r, _랜섬(출처=["직접 확인"]))
+    assert len(r.출처) == 2, r.출처
+
+
+def test_합치기는_살펴볼것을_안_지운다():
+    """사람이 봐야 하는 줄입니다. 덮으면 조용히 사라집니다."""
+    from hub.places.merge import 합치기
+    r = 합치기(_랜섬(살펴볼것="압수 안내로 바뀜"), _랜섬(살펴볼것="어니언 미러 찾음"))
+    assert "압수 안내로 바뀜" in r.살펴볼것 and "어니언 미러 찾음" in r.살펴볼것, r.살펴볼것
+
+
+def test_조사기가_셋이어도_인자만_늘어난다():
+    """이것이 merge.py 를 뺀 이유입니다.
+
+    dls-observatory 가 붙으면 `run.py` 에 if 를 더하는 게 아니라
+    여기에 인자를 하나 더 줍니다.
+    """
+    from hub.places.merge import 합치기
+    연것 = _랜섬(언어="영어", 받은곳="주소를 엶")
+    API = _랜섬(형식="RaaS", 상태="online", 두드림=True, 받은곳="/groups")
+    DLS = _랜섬(피해대상="제조 3 · 의료 1", 연락수단="tox", 받은곳="dls")
+    r = 합치기(연것, API, DLS)
+    assert r.언어 == "영어" and r.형식 == "RaaS" and r.피해대상 == "제조 3 · 의료 1"
+    assert r.연락수단 == "tox" and r.상태 == "online"
+
+
+def test_run_에_손으로_박은_합치기가_안_남았다():
+    """예전에는 칸 이름을 run.py 안에서 문자열로 나열했습니다."""
+    글 = (ROOT / "hub" / "places" / "run.py").read_text(encoding="utf-8")
+    assert "합치기(" in 글, "merge.py 를 안 씁니다"
+    자리 = 글[글.index("def _열기"):글.index("def _열기") + 900]
+    assert '"이전이름"' not in 자리 and '"최근활동"' not in 자리, (
+        "칸 이름을 run.py 에서 다시 나열하고 있습니다. merge.py 로 가야 합니다")
+
 if __name__ == "__main__":
     n = 0
     for k, v in sorted(globals().items()):

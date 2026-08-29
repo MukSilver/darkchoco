@@ -28,6 +28,7 @@ sys.path.insert(0, str(ROOT / "packages"))
 sys.path.insert(0, str(ROOT))
 
 from hub.places.write import 갈래별_DB, 명부, 반영결과  # noqa: E402
+from hub.places.merge import 합치기  # noqa: E402
 from hub.places.place import Place  # noqa: E402
 from hub.places.extract import links
 from hub.places.probe import forum, ransom, telegram  # noqa: E402
@@ -206,20 +207,14 @@ def _조사(갈래: str, 줄들, ctx: dict):
                           어니언=getattr(r, "어니언", ""))
             q.갈래 = "ransom"
             q.출처 = ["직접 확인"]
-            # /groups 가 준 것이 있으면 그것을 얹습니다. API 가 더 확실합니다.
+
+            # 조사기가 여럿 붙는 규칙은 merge.py 한 곳에만 둡니다.
+            # 뒤에 오는 것이 상태를 이깁니다 (거기 설명을 보십시오).
+            #
+            # dls-observatory 가 붙으면 **인자를 하나 더 줍니다.**
+            #     return 합치기(q, API가준것, DLS가준것)
             앞 = 받은것.get(r.page_id)
-            if 앞:
-                _, a = 앞
-                if a.두드림:
-                    q.상태, q.두드림 = a.상태, True
-                for 칸 in ("형식", "종류", "이전이름", "이전주소", "최근활동"):
-                    v = getattr(a, 칸, "")
-                    if v and not getattr(q, 칸, ""):
-                        setattr(q, 칸, v)
-                if a.어떤곳 and not q.어떤곳:
-                    q.어떤곳 = a.어떤곳
-                q.받은곳 = f"{a.받은곳} + {q.받은곳}"
-            return q
+            return 합치기(q, 앞[1] if 앞 else None)
 
         import concurrent.futures as cf
 
