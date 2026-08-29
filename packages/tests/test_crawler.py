@@ -1201,6 +1201,137 @@ def test_run_에_손으로_박은_합치기가_안_남았다():
     assert '"이전이름"' not in 자리 and '"최근활동"' not in 자리, (
         "칸 이름을 run.py 에서 다시 나열하고 있습니다. merge.py 로 가야 합니다")
 
+
+# ── backoff.py ─────────────────────────────────────────────────────────
+class _가짜줄:
+    def __init__(self, pid, 이름="X"):
+        self.page_id, self.이름 = pid, 이름
+
+
+def _자취():
+    import tempfile
+    from hub.places.backoff import 기록
+    d = tempfile.mkdtemp()
+    return 기록(Path(d) / "b.db")
+
+
+def test_처음_보는_줄은_안_쉰다():
+    from hub.places.backoff import 기록  # noqa: F401
+    b = _자취()
+    try:
+        assert b.쉬는중("forum", "새것", 1_000_000.0) == 0
+    finally:
+        b.close()
+
+
+def test_한_번_실패는_다음_판에_바로_다시_본다():
+    """한 번 죽은 것으로 쉬면 잠깐 끊긴 곳을 놓칩니다."""
+    b = _자취()
+    try:
+        t = 1_000_000.0
+        b.적기("forum", "A", False, t)
+        assert b.쉬는중("forum", "A", t + 60) == 0, "한 번 실패로 쉬고 있다"
+    finally:
+        b.close()
+
+
+def test_두_번_실패하면_하루_쉰다():
+    b = _자취()
+    try:
+        t = 1_000_000.0
+        b.적기("forum", "A", False, t)
+        b.적기("forum", "A", False, t + 3600)
+        assert b.쉬는중("forum", "A", t + 3600 + 3600) > 0, "두 번 실패인데 안 쉰다"
+        assert b.쉬는중("forum", "A", t + 3600 + 86400 + 60) == 0, "하루가 지났는데 아직 쉰다"
+    finally:
+        b.close()
+
+
+def test_아무리_죽어도_두_주면_다시_본다():
+    """영영 안 보면 부활한 곳을 영영 못 찾습니다."""
+    from hub.places.backoff import 최대쉼
+    b = _자취()
+    try:
+        t = 1_000_000.0
+        for i in range(20):
+            b.적기("forum", "A", False, t + i)
+        남음 = b.쉬는중("forum", "A", t + 20)
+        assert 남음 <= 최대쉼, f"{남음}일이나 쉰다. 최대 {최대쉼}일이어야 한다"
+        assert b.쉬는중("forum", "A", t + 20 + (최대쉼 + 1) * 86400) == 0
+    finally:
+        b.close()
+
+
+def test_한_번_되면_연속실패가_0_이_된다():
+    b = _자취()
+    try:
+        t = 1_000_000.0
+        for i in range(5):
+            b.적기("forum", "A", False, t + i)
+        assert b.쉬는중("forum", "A", t + 5) > 0
+        b.적기("forum", "A", True, t + 5, 3.2)
+        assert b.쉬는중("forum", "A", t + 6) == 0, "살아났는데 아직 쉰다"
+    finally:
+        b.close()
+
+
+def test_거를것이_볼것과_쉰것을_가른다():
+    b = _자취()
+    try:
+        t = 1_000_000.0
+        for i in range(4):
+            b.적기("forum", "죽은것", False, t + i)
+        볼것, 쉰것 = b.거를것("forum", [_가짜줄("죽은것"), _가짜줄("산것")], t + 4)
+        assert [x.page_id for x in 볼것] == ["산것"], [x.page_id for x in 볼것]
+        assert [x.page_id for x in 쉰것] == ["죽은것"]
+    finally:
+        b.close()
+
+
+def test_갈래가_다르면_따로_센다():
+    b = _자취()
+    try:
+        t = 1_000_000.0
+        for i in range(4):
+            b.적기("forum", "A", False, t + i)
+        assert b.쉬는중("forum", "A", t + 4) > 0
+        assert b.쉬는중("ransom", "A", t + 4) == 0, "갈래를 안 가르고 있다"
+    finally:
+        b.close()
+
+
+def test_걸린초가_쌓인다():
+    """시간 제한과 동시 수를 짐작이 아니라 재서 정하려는 것입니다."""
+    b = _자취()
+    try:
+        t = 1_000_000.0
+        for i, 초 in enumerate([1.5, 4.0, 12.0]):
+            b.적기("forum", f"P{i}", True, t, 초)
+        assert b.걸린초분포("forum") == [1.5, 4.0, 12.0]
+    finally:
+        b.close()
+
+
+def test_쉰_줄은_노션을_안_건드린다():
+    """`_조사` 에 안 들어가면 `반영` 도 안 불립니다.
+
+    「오늘 봤는데 죽어 있었다」와 「오늘 안 봤다」는 다릅니다. 쉰 줄의
+    확인일이 바뀌면 명부가 거짓말을 합니다.
+    """
+    글 = (ROOT / "hub" / "places" / "run.py").read_text(encoding="utf-8")
+    자리 = 글[글.index("자취 = 두드림기록"):글.index("본것: list[Place] = []")]
+    assert "거를것" in 자리 and "r.쉰것" in 자리
+    # 쉰것을 본것에 도로 넣는 코드가 없어야 합니다
+    assert "볼것 + 쉰것" not in 글 and "볼것.extend(쉰것)" not in 글
+
+
+def test_쉰_줄_수를_화면에_적는다():
+    """조용히 건너뛰면 「다 봤다」로 읽힙니다."""
+    from hub.places.run import 갈래결과, 표로
+    r = 갈래결과(갈래="forum", 본것=10, 쉰것=120)
+    글 = 표로([r], apply=False)
+    assert "쉰 줄 120" in 글, 글
+
 if __name__ == "__main__":
     n = 0
     for k, v in sorted(globals().items()):
