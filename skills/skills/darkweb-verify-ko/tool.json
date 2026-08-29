@@ -1,0 +1,36 @@
+{
+  "name": "darkweb-verify-ko",
+  "owner": "최현서",
+  "github": "@grute02",
+  "summary": "유출 주장 하나를 아홉 단계로 검증합니다 (AI 스킬)",
+  "kind": "skill",
+  "runs_in": "host",
+  "commands": {
+    "install": "cp -R skills/skills/darkweb-verify-ko ~/.claude/skills/"
+  },
+  "default": "install",
+  "run_cwd": ".",
+  "install": {
+    "requirements": null,
+    "note": "복사 한 번이면 됩니다"
+  },
+  "preconditions": {
+    "docker": false,
+    "tor": false,
+    "interactive_login": false
+  },
+  "secrets": [
+    {
+      "key": "노션 토큰 파일",
+      "where": "~/.config/darkchoco/notion_token",
+      "optional": true
+    }
+  ],
+  "config_files": [],
+  "packages": [
+    "dc_notion"
+  ],
+  "output": "판정 근거",
+  "docs": "SKILL.md",
+  "note": "노션 없이도 ③④⑤⑥ 절은 돕니다. 판정은 사람이 합니다"
+}

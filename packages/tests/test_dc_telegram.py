@@ -11,6 +11,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from dc_console import use_utf8  # noqa: E402
+
+use_utf8()   # 한글 콘솔에서 결과 줄이 깨지지 않게 한다
+
 # telethon 을 안 깔아도 순수 로직은 검증할 수 있게 최소 스텁을 끼웁니다.
 if "telethon" not in sys.modules:
     t = types.ModuleType("telethon"); t.TelegramClient = object
@@ -33,6 +37,13 @@ def test_parse_channel():
     assert dc.parse_channel("t.me/foo") == "foo"
     assert dc.parse_channel("@bar") == "bar"
     assert dc.parse_channel(" baz/ ") == "baz"
+
+
+def test_parse_channel_숫자ID는_정수로():
+    # Telethon 은 채널 ID 를 문자열로 주면 이름으로 알아듣는다.
+    assert dc.parse_channel("-1001234567890") == -1001234567890
+    assert dc.parse_channel(-1001234567890) == -1001234567890
+    assert dc.parse_channel("1234") == 1234
 
 
 def test_merge_records_새것이_이기고_내림차순():

@@ -12,17 +12,26 @@ from telethon import TelegramClient
 SESSION_PATH = Path.cwd() / "telegram_session"
 
 
-def parse_channel(value: str) -> str:
+def parse_channel(value):
     """채널 입력을 하나의 형태로 맞춥니다.
 
     https://t.me/foo/ · t.me/foo · @foo · foo 를 전부 'foo' 로 만듭니다.
     끝 슬래시를 떼는 것은 tg-korea-alert 쪽에서 고친 부분입니다.
+
+    -1001234567890 처럼 숫자만 들어오면 int 로 돌려줍니다. Telethon 이
+    채널 ID 를 문자열로 받으면 이름으로 알아듣기 때문입니다.
     """
-    value = value.strip().rstrip("/")
-    for prefix in ("https://t.me/", "http://t.me/", "t.me/", "@"):
-        if value.startswith(prefix):
-            value = value[len(prefix):]
-            break
+    value = str(value).strip().rstrip("/")
+    if value.lstrip("-").isdigit():
+        return int(value)
+    changed = True
+    while changed:
+        changed = False
+        for prefix in ("https://t.me/", "http://t.me/", "t.me/", "@"):
+            if value.startswith(prefix):
+                value = value[len(prefix):]
+                changed = True
+                break
     return value.strip("/")
 
 

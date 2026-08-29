@@ -8,8 +8,6 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from telethon import TelegramClient, events, utils
-from telethon.tl.types import Channel
 
 from company_country_classifier import CompanyCountryClassifier
 from local_config import load_local_env, normalize_discord_webhook
@@ -91,6 +89,7 @@ def open_database(path):
 
 
 async def resolve_channel(client, value):
+    from telethon.tl.types import Channel   # 설치 전에도 --help 가 뜨게 한다
     parsed = parse_channel(value)
     try:
         return await client.get_entity(parsed)
@@ -170,6 +169,7 @@ def send_test_alert(webhook_url):
 
 class AlertMonitor:
     def __init__(self, client, database, webhook_url, entities, classifier):
+        from telethon import utils          # 설치 전에도 --help 가 뜨게 한다
         self.client = client
         self.database = database
         self.webhook_url = webhook_url
@@ -300,6 +300,7 @@ class AlertMonitor:
 
 
 async def main(args):
+    from telethon import TelegramClient, events   # 설치 전에도 --help 가 뜨게 한다
     load_local_env()
     webhook_url = normalize_discord_webhook(os.environ["DISCORD_WEBHOOK_URL"])
     if args.test_alert:

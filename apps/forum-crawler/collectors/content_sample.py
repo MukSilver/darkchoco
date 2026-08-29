@@ -24,7 +24,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urljoin
 
-from tqdm import tqdm
 
 import challenge
 import config
@@ -458,6 +457,7 @@ def crawl_site(
       이어서 진행한다(처음부터 다시 돌지 않음).
     """
     from collectors import structure  # 지연 import: structure.py는 이 모듈을 참조하지 않음
+    from tqdm import tqdm             # 지연 import: 설치 전에도 --help 가 뜨게 한다
 
     source_id = source.get("name") or source.get("url", "unknown")
     profile = site_profiles.get_profile(source)

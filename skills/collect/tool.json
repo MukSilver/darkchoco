@@ -1,0 +1,43 @@
+{
+  "name": "collect",
+  "owner": "최현서",
+  "github": "@grute02",
+  "summary": "텔레그램·랜섬·브라우저킷 결과를 SQLite 한 표로 모읍니다",
+  "runs_in": "host",
+  "commands": {
+    "cli": "python -m collect.main --db data/darkchoco.db",
+    "dry": "python -m collect.main --db data/darkchoco.db --dry"
+  },
+  "default": "cli",
+  "run_cwd": "..",
+  "install": {
+    "requirements": null,
+    "packages": [
+      "requests"
+    ],
+    "note": "requests 가 필요합니다. pip install requests"
+  },
+  "preconditions": {
+    "docker": false,
+    "tor": false,
+    "interactive_login": false
+  },
+  "secrets": [
+    {
+      "key": "DARKCHOCO_CHANNELS",
+      "where": "읽을 채널 목록 파일 경로"
+    },
+    {
+      "key": "DARKCHOCO_WEBHOOK",
+      "where": "디스코드 웹훅",
+      "optional": true
+    }
+  ],
+  "config_files": [],
+  "packages": [
+    "dc_console"
+  ],
+  "output": "SQLite 29칸 표",
+  "docs": null,
+  "note": "run_cwd 가 skills/ 입니다. -m collect.main 으로 부릅니다"
+}

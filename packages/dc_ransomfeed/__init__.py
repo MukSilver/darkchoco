@@ -22,7 +22,16 @@ from .endpoints import (
     RANSOMFEED_RSS, RANSOMLOOK, RANSOMWARE_LIVE,
     look_detail, look_list, rl_country_victims, rl_groups, rl_recent_victims, rl_victims,
 )
-from .fetch import Fetcher
+
+# Fetcher 는 requests 를 씁니다. 주소 상수만 쓰는 앱까지 requests 를 받게
+# 하지 않으려고 늦게 부릅니다. dls-observatory 가 표준 라이브러리만 쓰는
+# 앱인데 여기서 requests 가 딸려 오던 것을 고친 것입니다.
+def __getattr__(name):
+    if name == "Fetcher":
+        from .fetch import Fetcher
+        return Fetcher
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "RANSOMWARE_LIVE", "RANSOMLOOK", "RANSOMFEED_RSS",

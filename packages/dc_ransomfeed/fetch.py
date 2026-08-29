@@ -17,11 +17,19 @@ from typing import Any
 from dc_safety import NotFoundError, SafeHttpClient
 
 # 출처별 최소 간격(초). 상대 서버를 힘들게 하지 않기 위한 값입니다.
+# 실측으로 알아낸 값입니다. dls-observatory 가 대량 엔드포인트에서
+# 1req/분/엔드포인트 를 확인했습니다 (apps/dls-observatory/sources.py:174).
+# 그보다 빠르게 치면 막힙니다. kr-leak-alarm 은 어제 실제로 IP 가 막혔습니다
+# (apps/kr-leak-alarm/collector/sources/ransomware_live.py:110).
+#
+# 지금 이 Fetcher 를 쓰는 앱은 없습니다. 두 앱 모두 각자 판을 쓰고 여기서는
+# 주소 상수만 가져갑니다. 새로 쓸 때를 위해 값만 실측에 맞춰 둡니다.
 THROTTLE = {
-    "ransomware.live": 1.0,
+    "ransomware.live": 62.0,
     "ransomlook.io": 1.5,
     "ransomfeed.it": 2.0,
 }
+
 DEFAULT_GAP = 1.0
 CACHE_TTL = 300.0          # 5분. 두 앱이 연달아 같은 것을 받는 것을 막습니다.
 

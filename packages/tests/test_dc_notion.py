@@ -5,7 +5,29 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import dc_notion as dn  # noqa: E402
+
+from dc_console import use_utf8  # noqa: E402
+
+use_utf8()   # 한글 콘솔에서 결과 줄이 깨지지 않게 한다
+import dc_notion as dn
+import dc_notion.token  # noqa: F401  # noqa: E402
+
+
+import contextlib
+
+
+@contextlib.contextmanager
+def 토큰자리_비움():
+    """이 PC 에 토큰이 깔려 있어도 도는 검사를 만들기 위한 것입니다.
+
+    자리 목록을 잠시 비워 "아직 아무 데도 없는 상태" 를 만듭니다.
+    """
+    옛 = list(dn.token.TOKEN_PLACES)
+    dn.token.TOKEN_PLACES[:] = [Path("절대로없는자리") / "notion_token"]
+    try:
+        yield
+    finally:
+        dn.token.TOKEN_PLACES[:] = 옛
 
 
 def test_토큰_파일_방식():
@@ -20,25 +42,33 @@ def test_토큰_파일_방식():
 
 
 def test_토큰_환경변수_방식도_계속_받는다():
+    """파일이 없을 때만 환경변수를 봅니다. 파일이 먼저입니다."""
     os.environ["NOTION_TOKEN"] = "ntn_env"
     try:
-        assert dn.find_token() == "ntn_env"
+        with 토큰자리_비움():
+            assert dn.find_token() == "ntn_env"
     finally:
         del os.environ["NOTION_TOKEN"]
 
 
 def test_토큰_없으면_어디를_봤는지_알려준다():
+    """토큰이 실제로 깔려 있어도 도는 검사여야 한다.
+
+    자리 목록을 잠시 없는 곳으로 바꿔 "못 찾은 상황" 을 만든다.
+    """
     keep = {k: os.environ.pop(k, None) for k in ("NOTION_TOKEN", "NOTION_TOKEN_FILE")}
     try:
-        dn.find_token()
+        with 토큰자리_비움():
+            dn.find_token()
     except RuntimeError as e:
         assert "봤습니다" in str(e)
+        assert "절대로없는자리" in str(e), "어디를 봤는지 안 알려준다"
         return
     finally:
         for k, v in keep.items():
             if v:
                 os.environ[k] = v
-    raise AssertionError("토큰이 없는데 예외가 안 났습니다")
+    raise AssertionError("토큰 자리를 없앴는데 예외가 안 났습니다")
 
 
 def test_값_읽기():
