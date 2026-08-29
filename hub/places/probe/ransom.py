@@ -49,7 +49,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "packages"))
 
 from dc_ransomfeed import RANSOMWARE_LIVE, rl_victims  # noqa: E402
 
-from hub.places.place import Place, 지금  # noqa: E402
+from hub.places.place import Place, 지금
+from hub.places.place import 오늘 as _오늘  # noqa: E402
 from hub.places.egress import 보호없음, 오프너  # noqa: E402
 
 __all__ = ["조사", "NEEDS_PACKAGES"]
@@ -186,7 +187,7 @@ def _주소들(g: dict) -> tuple[str, str]:
 # ── 월별 피해 목록으로 세기 ────────────────────────────────────────
 def _달들(n: int) -> list[tuple[int, int]]:
     """이번 달부터 거슬러 n 달."""
-    오늘 = date.today()
+    오늘 = _오늘()          # 기계 시간대가 아니라 한국 기준입니다
     년, 월 = 오늘.year, 오늘.month
     out = []
     for _ in range(n):

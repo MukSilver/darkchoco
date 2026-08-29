@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 __all__ = ["Place", "기계칸", "덮어쓰는칸", "합치는칸", "빈칸만칸",
            "사람판정_상태", "지금", "규모합치기", "기계가_쓴_줄", "덧붙임"]
@@ -43,8 +43,27 @@ def 덧붙임(p, 말: str) -> None:
     p.살펴볼것 = f"{p.살펴볼것} · {말}" if p.살펴볼것 else 말
 
 
+# 확인일은 **한국 시간**으로 적습니다.
+#
+# 예전에는 astimezone() 으로 기계 시간대를 따랐습니다. 그런데 크롤러가
+# 도는 칼리 VM 이 미국 동부시(EDT)였습니다. 한국보다 13시간 뒤라
+# 「2026-08-30 새벽에 봤다」가 노션에 **2026-08-29 로 적혔습니다.**
+#
+# 오류가 안 납니다. 날짜가 하루 밀린 채로 쌓입니다. 명부를 읽는 사람은
+# 「어제 봤구나」 하고 넘어갑니다.
+#
+# VM 시간대를 고치는 방법도 있는데, 그러면 다른 자리에서 돌릴 때 또
+# 어긋납니다. **팀이 한국에 있으니 코드에서 못박습니다.**
+KST = timezone(timedelta(hours=9))
+
+
 def 지금() -> str:
-    return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
+    return datetime.now(KST).isoformat(timespec="seconds")
+
+
+def 오늘() -> "date":
+    """한국 기준 오늘. 달을 세는 쪽도 같은 날을 봐야 합니다."""
+    return datetime.now(KST).date()
 
 
 # 기계가 채워도 되는 노션 칸입니다. 전부 기존 칸이고, 다루는 법이 셋으로
