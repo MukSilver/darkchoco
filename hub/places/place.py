@@ -93,6 +93,19 @@ _숫자만 = re.compile(r"^\s*[\d,\.\s]{1,15}\s*$")
 _기준줄 = re.compile(r"\(\d{4}-\d{2}-\d{2} 기준\)\s*$")
 
 
+# dls_fill 이 쓴 줄. 셋 다 "(최근 N개월)" 또는 "(최근 N개월 M건)" 으로
+# 끝납니다. 코드에서 확인한 꼴입니다(apps/dls-observatory/dls_fill.py).
+#
+#     피해자 12건 (최근 6개월)                       규모
+#     업종 Technology(3) / 국가 US(1) (최근 6개월 5건) 피해 대상
+#     있음 — 2건 (최근 6개월)                        한국 관련 유출
+#
+# **이것도 기계 줄로 봅니다.** 안 그러면 크롤러가 자기 줄을 하나 더 붙여
+# 같은 뜻이 두 줄이 됩니다. 373줄에 그런 일이 실제로 있었습니다. 꼴이
+# 달라 서로 갈아 끼우지 못한 것이 원인이었습니다.
+_DLS줄 = re.compile(r"\(최근 \d+개월(?: \d+건)?\)\s*$")
+
+
 def 기계가_쓴_줄(줄: str) -> bool:
     """새 줄로 갈아 끼워도 되는 줄인가.
 
@@ -106,7 +119,7 @@ def 기계가_쓴_줄(줄: str) -> bool:
     if not 줄:
         return False
     return (bool(_기계줄.match(줄)) or bool(_숫자만.match(줄))
-            or bool(_기준줄.search(줄)))
+            or bool(_기준줄.search(줄)) or bool(_DLS줄.search(줄)))
 
 
 def 규모합치기(기존: str, 새줄: str) -> str:
