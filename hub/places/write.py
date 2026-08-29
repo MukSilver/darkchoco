@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "packages"))
 
 from dc_notion import Notion  # noqa: E402
 
-from hub.crawler.place import (  # noqa: E402
+from hub.places.place import (  # noqa: E402
     Place, 기계칸, 빈칸만칸, 사람판정_상태)
 
 __all__ = ["명부", "반영결과", "갈래별_DB"]

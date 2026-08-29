@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterator, Protocol
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "packages"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "packages"))
 
 from dc_store import Item  # noqa: E402,F401  (어댑터가 여기서 가져다 씁니다)
 

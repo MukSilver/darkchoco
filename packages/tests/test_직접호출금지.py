@@ -27,10 +27,10 @@ use_utf8()
     # 나가는 길 자신입니다. 여기 한 곳만 urllib 을 부르고, 나머지는
     # 전부 이 파일의 오프너를 지납니다. 그래야 Tor 를 빠뜨리는 길이
     # 안 생깁니다. test_맨IP금지.py 가 그것을 따로 봅니다.
-    "hub/crawler/probe/_나가기.py",
-    "hub/crawler/probe/telegram.py",
-    "hub/crawler/probe/forum.py",
-    "hub/crawler/probe/ransom.py",
+    "hub/places/egress.py",
+    "hub/places/probe/telegram.py",
+    "hub/places/probe/forum.py",
+    "hub/places/probe/ransom.py",
     "packages/dc_safety/http.py",
     "packages/dc_ransomfeed/fetch.py",
 }
@@ -91,7 +91,7 @@ def test_조사기가_간격을_갖고_있다():
     for rel in sorted(허용):
         if not rel.startswith("hub/"):
             continue
-        if rel.endswith("_나가기.py"):
+        if rel.endswith("egress.py"):
             # 길을 내주는 자리입니다. 간격은 그 길을 쓰는 조사기가 갖습니다.
             continue
         s = (ROOT / rel).read_text(encoding="utf-8")
@@ -100,7 +100,7 @@ def test_조사기가_간격을_갖고_있다():
 
 
 def test_랜섬은_62초를_지킨다():
-    s = (ROOT / "hub/crawler/probe/ransom.py").read_text(encoding="utf-8")
+    s = (ROOT / "hub/places/probe/ransom.py").read_text(encoding="utf-8")
     import re
     m = re.search(r"^간격\s*=\s*([\d.]+)", s, re.M)
     assert m, "간격 상수를 못 찾았습니다"

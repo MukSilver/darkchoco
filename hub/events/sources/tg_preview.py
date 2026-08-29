@@ -26,10 +26,10 @@ OWNER = "최현서"
 EVERY = 60          # 분
 RUNS_IN = "host"
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]   # hub/events/sources/ 에서 세 칸
 sys.path.insert(0, str(ROOT / "skills"))
 
-from hub.contract import Ctx, Item, Needs, Skip  # noqa: E402
+from hub.events.contract import Ctx, Item, Needs, Skip  # noqa: E402
 
 NEEDS = Needs(packages=["requests"])
 

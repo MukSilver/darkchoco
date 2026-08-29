@@ -49,8 +49,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "packages"))
 
 from dc_ransomfeed import RANSOMWARE_LIVE, rl_victims  # noqa: E402
 
-from hub.crawler.place import Place, 지금  # noqa: E402
-from hub.crawler.probe._나가기 import 보호없음, 오프너  # noqa: E402
+from hub.places.place import Place, 지금  # noqa: E402
+from hub.places.egress import 보호없음, 오프너  # noqa: E402
 
 __all__ = ["조사", "NEEDS_PACKAGES"]
 

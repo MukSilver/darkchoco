@@ -23,14 +23,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parent
+ROOT = HERE.parents[1]        # hub/events/ 에서 두 칸 위가 저장소입니다
 sys.path.insert(0, str(ROOT / "packages"))
 sys.path.insert(0, str(ROOT))
 
 from dc_store import Store  # noqa: E402
 
-from hub import registry  # noqa: E402
-from hub.contract import Ctx, Result, Skip  # noqa: E402
+from hub.events import registry  # noqa: E402
+from hub.events.contract import Ctx, Result, Skip  # noqa: E402
 from hub.sched import Sched  # noqa: E402
 
 __all__ = ["한판", "여러판", "기본_표", "차례"]

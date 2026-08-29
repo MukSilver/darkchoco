@@ -16,7 +16,7 @@
 list · info · doctor 는 도구를 대신 실행하지 않습니다. 무엇을 치면 되는지
 알려 줄 뿐입니다. 각 도구는 만든 사람이 소유합니다.
 
-run 은 다릅니다. hub/adapters 에 등록된 것만 부르고, 결과를 한 표에 넣습니다.
+run 은 다릅니다. hub/events/sources 에 등록된 것만 부르고, 결과를 한 표에 넣습니다.
 어댑터는 원래 도구를 감싼 얇은 물건이라 그 도구의 방어가 그대로 삽니다.
 
 이 파일 자체는 표준 라이브러리만 씁니다. run 이 부르는 어댑터는 각자
@@ -332,21 +332,21 @@ def _나가는길(자세히: bool = False) -> int:
     다크웹 쪽을 여는 일은 저쪽 로그에 우리 주소를 남기는 일입니다.
     남는 것이 한국 주소이면 우리가 누구인지 좁혀집니다.
     """
-    from hub.crawler.probe import _나가기
+    from hub.places import egress
 
     print()
     print("  ── 밖으로 나가는 길 ──")
-    프록시 = _나가기.프록시주소()
-    뺀것 = _나가기.뺀갈래()
+    프록시 = egress.프록시주소()
+    뺀것 = egress.뺀갈래()
 
     if not 프록시:
-        if _나가기.맨연결_허락():
+        if egress.맨연결_허락():
             print("  !! 맨 연결을 허락한 상태입니다 (DARKCHOCO_ALLOW_DIRECT=1)")
             print("     우리 IP 가 그대로 남습니다.")
         else:
             print("  Tor 가 없습니다. 크롤러가 밖으로 안 나갑니다.")
         print()
-        for 줄 in _나가기.안내.splitlines():
+        for 줄 in egress.안내.splitlines():
             print("  " + 줄)
         print()
         return 1
@@ -361,7 +361,7 @@ def _나가는길(자세히: bool = False) -> int:
         print()
         return 0
 
-    r = _나가기.출구확인(프록시)
+    r = egress.출구확인(프록시)
     표 = "OK" if r["된다"] else "!!"
     print(f"  {표} {r['말']}")
     if r["된다"]:
@@ -375,7 +375,7 @@ def _나가는길(자세히: bool = False) -> int:
 # ── crawl ────────────────────────────────────────
 def cmd_crawl(args) -> int:
     """통합 크롤러. 세 갈래 명부를 조사해 노션에 반영합니다."""
-    from hub.crawler import run as 크롤
+    from hub.places import run as 크롤
 
     대상 = [x.strip() for x in (args.only or "").split(",") if x.strip()] or None
     if 대상:
@@ -415,7 +415,7 @@ def cmd_auto(args) -> int:
     둘 다 **때가 된 것만** 돕니다. 스케줄러는 자주 부르고, 무엇이 언제
     돌지는 차례표가 정합니다.
     """
-    from hub.crawler import run as 크롤
+    from hub.places import run as 크롤
 
     print()
     print("  ── 수집 ──")
@@ -440,32 +440,32 @@ def cmd_auto(args) -> int:
 
 # ── run · plan ───────────────────────────────────
 def cmd_run(args) -> int:
-    from hub import runner
+    from hub.events import run as 사건
 
     이름들 = [n.strip() for n in (args.only or "").split(",") if n.strip()] or None
     if args.dry:
         print()
         print("  미리보기입니다. 밖에 요청을 보내지 않고 표에도 안 넣습니다.")
-    결과 = runner.여러판(이름들, dry=args.dry, limit=args.limit,
+    결과 = 사건.여러판(이름들, dry=args.dry, limit=args.limit,
                      때된것만=args.due)
     print()
-    print(runner.표로(결과))
+    print(사건.표로(결과))
     print()
     return 1 if any(r.error for r in 결과) else 0
 
 
 def cmd_plan(args) -> int:
-    from hub import registry, runner
+    from hub.events import registry, run as 사건
     from hub.sched import Sched
 
     es = registry.목록()
     if not es:
         print()
-        print("  등록된 어댑터가 없습니다. hub/adapters/ 에 파일을 놓으십시오.")
+        print("  등록된 어댑터가 없습니다. hub/events/sources/ 에 파일을 놓으십시오.")
         print()
         return 0
 
-    sch = Sched(runner.기본_표())
+    sch = Sched(사건.기본_표())
     try:
         상태 = {r["name"]: r for r in sch.상태()}
         남은 = {e.name: sch.다음까지(e.name, e.every) for e in es}

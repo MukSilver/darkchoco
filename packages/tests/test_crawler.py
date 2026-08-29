@@ -17,8 +17,8 @@ from dc_console import use_utf8  # noqa: E402
 
 use_utf8()
 
-from hub.crawler.place import Place, 규모합치기, 기계가_쓴_줄  # noqa: E402
-from hub.crawler.probe import forum, ransom, telegram  # noqa: E402
+from hub.places.place import Place, 규모합치기, 기계가_쓴_줄  # noqa: E402
+from hub.places.probe import forum, ransom, telegram  # noqa: E402
 
 
 class _가짜오프너:
@@ -120,7 +120,7 @@ def test_기계칸이_세_갈래_어딘가에는_있다():
     """기계칸 에 적어 두고 어느 DB 에도 없는 칸이면 영영 안 쓰인다."""
     스키마 = json.loads((HERE / "노션스키마.json").read_text(encoding="utf-8"))
     어딘가 = set().union(*(set(v["칸"]) for v in 스키마.values()))
-    from hub.crawler.place import 기계칸
+    from hub.places.place import 기계칸
     없는것 = 기계칸 - 어딘가
     assert not 없는것, f"어느 DB 에도 없는 칸: {없는것}"
 
@@ -337,9 +337,9 @@ def test_포럼은_Tor_없이_안_본다():
     """어니언이든 아니든 같습니다. 규칙이 대상마다 다르면 빠뜨립니다."""
     import os
 
-    from hub.crawler.probe import _나가기
+    from hub.places import egress
 
-    참오프너 = _나가기.오프너
+    참오프너 = egress.오프너
     옛 = forum.오프너
     forum.오프너 = 참오프너
     지운것 = {k: os.environ.pop(k, None)
@@ -384,7 +384,7 @@ def test_두드렸는데_못_봤으면_미확인을_쓴다():
 
 def test_랜섬_상태를_locations_에서_읽는다():
     """ransomware.live 는 최상위가 아니라 locations 에 담는다."""
-    from hub.crawler.probe.ransom import _상태로
+    from hub.places.probe.ransom import _상태로
     assert _상태로({"locations": [{"fqdn": "a.onion", "available": True}]}) == ("online", True)
     assert _상태로({"locations": [{"fqdn": "a.onion", "available": False}]}) == ("offline", True)
     assert _상태로({"available": True}) == ("online", True)
@@ -487,14 +487,14 @@ def test_주소가_옮겨가면_원래_주소를_남긴다():
 
 def test_사람이_쓴_칸은_안_건드린다():
     """빈칸만칸 은 비어 있을 때만 채웁니다."""
-    from hub.crawler.place import 빈칸만칸
+    from hub.places.place import 빈칸만칸
     assert "어떤 곳인지" in 빈칸만칸 and "사용 언어" in 빈칸만칸
     assert "상태" not in 빈칸만칸 and "확인일" not in 빈칸만칸
 
 
 def test_랜섬_피해집계는_기본으로_안_돈다():
     """dls_fill 이 같은 칸을 채웁니다. 둘 다 쓰면 줄이 겹칩니다."""
-    from hub.crawler.probe.ransom import 개월
+    from hub.places.probe.ransom import 개월
     assert 개월 == 0, "기본으로 켜면 373줄에 겹치는 줄이 붙는다"
 
     그룹 = [{"name": "G", "locations": [{"available": True, "slug": "http://g.onion"}]}]
@@ -549,13 +549,13 @@ def test_이음은_명부에_있는_곳만_적는다():
 
     처음 보는 주소를 「연결된 곳」에 적으면 관계가 아니라 잡음입니다.
     """
-    from hub.crawler.probe import _이음
+    from hub.places.extract import links
 
     class 줄:
         def __init__(s, 이름, 주소="", 어니언=""):
             s.이름, s.주소, s.어니언 = 이름, 주소, 어니언
 
-    사전 = _이음.이름표만들기({
+    사전 = links.이름표만들기({
         "forum": [줄("BreachForums", "https://bf.st/"),
                   줄("ZDL", "", "http://oaptxiyisljt2kv3we2we34kuudmqda7f2geffoylzpeo7ourhtz4dad.onion/")],
         "telegram": [줄("DarkForums", "https://t.me/DarkForumsss"),
@@ -566,7 +566,7 @@ def test_이음은_명부에_있는_곳만_적는다():
           """<a href="https://google.com/">구글</a>"""
           """<a href="https://never-seen.example/">처음</a>"""
           "http://oaptxiyisljt2kv3we2we34kuudmqda7f2geffoylzpeo7ourhtz4dad.onion/ 도 있습니다")
-    나온것 = _이음.찾기(본문, 사전, "포럼 DB: 나")
+    나온것 = links.찾기(본문, 사전, "포럼 DB: 나")
 
     assert "포럼 DB: BreachForums" in 나온것, 나온것
     assert "텔레그램 DB: DarkForums" in 나온것, 나온것
@@ -576,20 +576,20 @@ def test_이음은_명부에_있는_곳만_적는다():
 
 
 def test_이음은_자기_자신을_안_센다():
-    from hub.crawler.probe import _이음
+    from hub.places.extract import links
 
     class 줄:
         def __init__(s, 이름, 주소=""):
             s.이름, s.주소, s.어니언 = 이름, 주소, ""
 
-    사전 = _이음.이름표만들기({"forum": [줄("나", "https://me.example/")]})
-    assert _이음.찾기('<a href="https://me.example/x">나</a>', 사전,
+    사전 = links.이름표만들기({"forum": [줄("나", "https://me.example/")]})
+    assert links.찾기('<a href="https://me.example/x">나</a>', 사전,
                     "포럼 DB: 나") == ""
 
 
 def test_호스트가_아닌_것을_걸러낸다():
     """상대 주소와 파일 이름이 urlparse 를 지나면 호스트처럼 보입니다."""
-    from hub.crawler.probe._이음 import 호스트
+    from hub.places.extract.links import 호스트
     for 값 in ("@projectwwh", ".", "member.php", "style.css", "search.php",
               "logo.png", "", "  ", "localhost"):
         assert 호스트(값) == "", f"{값!r} 를 호스트로 봤다"
@@ -603,7 +603,7 @@ def test_호스트가_아닌_것을_걸러낸다():
 
 def test_인프라는_이웃으로_안_센다():
     """CDN 은 어느 쪽이나 씁니다. 관계가 아닙니다."""
-    from hub.crawler.probe._이음 import 처음보는곳
+    from hub.places.extract.links import 처음보는곳
     본문 = ("""<a href="https://cdnjs.cloudflare.com/x.js">js</a>"""
           """<a href="https://fonts.googleapis.com/c">font</a>"""
           """<a href="https://newsite.example/">새 곳</a>"""
@@ -613,7 +613,7 @@ def test_인프라는_이웃으로_안_센다():
 
 def test_어니언_제목이_다르면_남의_것으로_본다():
     """첫 화면에 남의 어니언이 광고로 걸려 있을 수 있습니다."""
-    from hub.crawler.probe.forum import _닮았나
+    from hub.places.probe.forum import _닮았나
     assert _닮았나("BreachForums - The premier Databreach forum",
                  "BreachForums | Databreach")
     assert not _닮았나("BreachForums - Databreach discussion",
@@ -625,7 +625,7 @@ def test_두드려_본_줄에만_확인만함을_넣는다():
     p = _포럼한판("<html><body>367224 Total Members</body></html>")
     assert p.노션값()["조사 단계"] == "확인만 함"
 
-    from hub.crawler.place import Place, 빈칸만칸
+    from hub.places.place import Place, 빈칸만칸
     # 안 두드린 줄은 아무것도 안 씁니다.
     안봄 = Place(갈래="forum", 이름="X", 상태="미확인", 두드림=False)
     assert 안봄.노션값() == {}
@@ -648,7 +648,7 @@ def test_사람이_판정한_상태를_기계가_안_덮는다():
     한다. 실제 랜섬웨어 DB 에서 「압수됨 → online」 과 「인계됨 → offline」
     이 될 뻔했다.
     """
-    from hub.crawler.place import 사람판정_상태
+    from hub.places.place import 사람판정_상태
 
     for 옛 in 사람판정_상태:
         for 새 in ("online", "offline"):
@@ -666,9 +666,9 @@ def test_사람이_판정한_상태를_기계가_안_덮는다():
 
 def test_사람_판정을_덮으려_하면_화면에_올린다():
     """조용히 안 쓰고 끝내면 사람이 그 줄을 다시 볼 계기가 없다."""
-    from hub.crawler.notion import 반영결과
+    from hub.places.write import 반영결과
     assert "사람판정" in 반영결과.__dataclass_fields__
-    글 = (ROOT / "hub" / "crawler" / "run.py").read_text(encoding="utf-8")
+    글 = (ROOT / "hub" / "places" / "run.py").read_text(encoding="utf-8")
     assert "res.사람판정" in 글, "run.py 가 사람판정을 화면에 안 올린다"
 
 
@@ -680,15 +680,15 @@ def test_명부_줄이_어니언을_담는다():
     없어서 사전에 하나도 안 들어갔습니다. 그래서 아는 곳의 어니언
     미러가 「명부에 없는 이웃」 으로 잡혔습니다.
     """
-    from hub.crawler.notion import 줄
+    from hub.places.write import 줄
     assert "어니언" in 줄.__dataclass_fields__
-    글 = (ROOT / "hub" / "crawler" / "notion.py").read_text(encoding="utf-8")
+    글 = (ROOT / "hub" / "places" / "write.py").read_text(encoding="utf-8")
     assert '어니언=_글자(props.get("어니언 주소"))' in 글,         "줄들() 이 어니언 주소를 안 읽는다"
 
 
 def test_시계열을_못_쌓아도_조사는_산다():
     """한갈래() 는 예외를 밖으로 안 냅니다. _쌓기 만 밖에 있었습니다."""
-    글 = (ROOT / "hub" / "crawler" / "run.py").read_text(encoding="utf-8")
+    글 = (ROOT / "hub" / "places" / "run.py").read_text(encoding="utf-8")
     시작 = 글.index("if apply and 본것:")
     자리 = 글[시작:글.index("r.초 = time.time()", 시작)]
     assert "try:" in 자리 and "except" in 자리,         "_쌓기 가 try 밖이다. 표가 깨지면 dc.py crawl 이 통째로 죽는다"
@@ -696,13 +696,13 @@ def test_시계열을_못_쌓아도_조사는_산다():
 
 def test_이웃의_출처를_여럿_담는다():
     """여러 곳이 같은 호스트를 걸어 두면 그것이 더 중요한 실마리다."""
-    글 = (ROOT / "hub" / "crawler" / "run.py").read_text(encoding="utf-8")
+    글 = (ROOT / "hub" / "places" / "run.py").read_text(encoding="utf-8")
     assert "r.처음본곳.setdefault(h, set()).add(" in 글,         "setdefault 로 하나만 담으면 둘째 출처가 버려진다"
 
 
 def test_살펴볼것을_덮지_않고_붙인다():
     """압수 안내를 봤는데 어니언 후보도 못 열었으면 둘 다 알려야 한다."""
-    from hub.crawler.place import Place, 덧붙임
+    from hub.places.place import Place, 덧붙임
     p = Place(갈래="forum", 이름="X")
     덧붙임(p, "압수 안내로 바뀌었습니다")
     덧붙임(p, "어니언 후보를 못 확인했습니다")
@@ -710,7 +710,7 @@ def test_살펴볼것을_덮지_않고_붙인다():
     assert p.살펴볼것.count("압수") == 1, p.살펴볼것
     assert "어니언" in p.살펴볼것, p.살펴볼것
 
-    글 = (ROOT / "hub" / "crawler" / "probe" / "forum.py").read_text(encoding="utf-8")
+    글 = (ROOT / "hub" / "places" / "probe" / "forum.py").read_text(encoding="utf-8")
     assert "p.살펴볼것 = " not in 글, "아직 덮어쓰는 곳이 있다"
 
 
@@ -720,13 +720,13 @@ def test_진행이_보인다():
     포럼 269줄이 Tor 를 거치면 한 시간 넘게 걸린다. 사람이 볼 때도,
     자동으로 돌 때 로그를 볼 때도 진행이 보여야 어디서 멈췄는지 안다.
     """
-    글 = (ROOT / "hub" / "crawler" / "run.py").read_text(encoding="utf-8")
+    글 = (ROOT / "hub" / "places" / "run.py").read_text(encoding="utf-8")
     assert "분쯤 남음" in 글, "남은 시간을 안 알려 준다"
     assert "flush=True" in 글, "버퍼에 갇히면 진행이 안 보인다"
     # 조용히 를 주면 안 찍어야 합니다. 검사가 시끄러우면 안 됩니다.
     import inspect
 
-    from hub.crawler.run import 여러갈래, 한갈래
+    from hub.places.run import 여러갈래, 한갈래
     for fn in (한갈래, 여러갈래):
         assert "조용히" in inspect.signature(fn).parameters, fn.__name__
 
@@ -757,7 +757,7 @@ def test_게시판_증거가_없으면_그_칸을_안_쓴다():
 
 
 def test_유통자리와_개인정보는_사람이_쓴_것을_안_덮는다():
-    from hub.crawler.place import 빈칸만칸
+    from hub.places.place import 빈칸만칸
     assert "유통 자리" in 빈칸만칸 and "개인정보 유출" in 빈칸만칸
 
 
@@ -768,7 +768,7 @@ def test_한_줄이_죽어도_나머지는_돈다():
     판 전체가 죽었다. 포럼 269줄이 47분 돌다 한 줄 때문에 통째로
     날아갔다. 결과가 하나도 안 남았다.
     """
-    from hub.crawler.run import _조사
+    from hub.places.run import _조사
 
     class 가짜줄:
         def __init__(self, 이름, 주소):
@@ -823,7 +823,7 @@ def test_같은_호스트만_기다린다():
     """포럼 명부 224줄이 전부 다른 호스트다. 그 사이 3초는 아무도 안 돕는다."""
     import time as _t
 
-    from hub.crawler.probe.forum import _기다리기, 간격
+    from hub.places.probe.forum import _기다리기, 간격
 
     마지막 = {}
     t0 = _t.time()
@@ -838,7 +838,7 @@ def test_같은_호스트만_기다린다():
 
 def test_동시에_봐도_줄과_결과가_안_엇갈린다():
     """as_completed 는 끝난 순서로 옵니다. 줄을 잘못 짝지으면 남의 값을 씁니다."""
-    from hub.crawler.run import _조사
+    from hub.places.run import _조사
 
     class 가짜줄:
         def __init__(self, 이름):
@@ -868,7 +868,7 @@ def test_동시에_봐도_줄과_결과가_안_엇갈린다():
 
 def test_Tor_가_없으면_한_줄씩_본다():
     """프록시가 없으면 어차피 안 나갑니다. 스레드를 안 만듭니다."""
-    글 = (ROOT / "hub" / "crawler" / "run.py").read_text(encoding="utf-8")
+    글 = (ROOT / "hub" / "places" / "run.py").read_text(encoding="utf-8")
     assert "동시 = 최대동시 if 프록시 else 1" in 글
 
 
@@ -878,7 +878,7 @@ def test_요약이_얼마나_열렸는지_보여_준다():
     「살아있는 것은 봤는데 회원 수가 첫 화면에 없다」 도 못 본 것으로
     센다. 실제로 몇 곳이 열렸는지가 안 보인다.
     """
-    from hub.crawler.run import 갈래결과, 표로
+    from hub.places.run import 갈래결과, 표로
 
     r = 갈래결과(갈래="forum", 본것=22, 못본것=202, 바뀐줄=84)
     r.상태셈 = {"online": 140, "offline": 60, "미확인": 24}
@@ -937,7 +937,7 @@ def test_클리어넷이_안_되면_어니언으로_다시_간다():
 
 def test_어니언만_있는_줄도_본다():
     """포럼 명부 45줄이 클리어넷 주소가 없는데 37줄에 어니언이 있습니다."""
-    글 = (ROOT / "hub" / "crawler" / "run.py").read_text(encoding="utf-8")
+    글 = (ROOT / "hub" / "places" / "run.py").read_text(encoding="utf-8")
     자리 = 글[글.index("볼것 = ["):글.index("r.건너뜀")]
     assert "어니언" in 자리, "어니언만 있는 줄을 안 봅니다"
 
@@ -994,7 +994,7 @@ def test_못_본_줄에도_들어가는_법은_남긴다():
     assert set(값) <= {"확인일", "상태", "들어가는 법"}, 값
 
     # 두드리지도 못한 줄에는 안 뿌립니다.
-    from hub.crawler.place import Place
+    from hub.places.place import Place
     안봄 = Place(갈래="forum", 이름="X", 상태="미확인", 두드림=False,
                 들어가는법="아무거나", 못본이유="연결이 안 됩니다")
     assert 안봄.노션값() == {}, 안봄.노션값()
@@ -1002,7 +1002,7 @@ def test_못_본_줄에도_들어가는_법은_남긴다():
 
 def test_어니언_주소를_씻는다():
     """명부에 「— 미기입 —」·날짜 꼬리·v2 가 섞여 있습니다."""
-    from hub.crawler.probe.forum import _어니언정리
+    from hub.places.probe.forum import _어니언정리
     v3 = "http://" + "a" * 56 + ".onion/"
     assert _어니언정리(v3) == v3
     assert _어니언정리("a" * 56 + ".onion") == "http://" + "a" * 56 + ".onion"
@@ -1067,7 +1067,7 @@ def test_K_M_접미사를_제대로_읽는다():
     점을 그냥 지워서 그랬습니다. 그 값이 사람이 조사한 규모 줄을 갈아
     끼웁니다.
     """
-    from hub.crawler.probe.forum import _숫자
+    from hub.places.probe.forum import _숫자
     for 값, 기대, 어림 in [("1.6M", 1_600_000, True),
                         ("24.3K", 24_300, True),
                         ("2M", 2_000_000, True),
@@ -1091,7 +1091,7 @@ def test_수를_중간에서_안_자른다():
 
 def test_4xx_에서_무엇이_막는지_적는다():
     """HTTP 403 만으로는 손쓸 방법을 못 정합니다."""
-    from hub.crawler.probe.forum import _막은것
+    from hub.places.probe.forum import _막은것
     assert "클라우드플레어" in _막은것("error code: 1020",
                                 {"Server": "cloudflare", "CF-RAY": "x"})
     assert "속도 제한" in _막은것("error code: 1015", {"CF-RAY": "x"})
@@ -1104,14 +1104,14 @@ def test_4xx_에서_무엇이_막는지_적는다():
 def test_두드린_줄은_확인일만_바뀌어도_쓴다():
     """403·404 로 막힌 줄은 상태가 계속 미확인이라, 오늘 두드렸다는
     사실이 아예 안 남았습니다."""
-    글 = (ROOT / "hub" / "crawler" / "notion.py").read_text(encoding="utf-8")
+    글 = (ROOT / "hub" / "places" / "write.py").read_text(encoding="utf-8")
     assert 'set(달라진것) <= {"확인일"} and not p.두드림' in 글,         "두드린 줄인데 확인일을 안 쓴다"
 
 
 def test_텔레그램도_게시판_부품을_쓴다():
-    글 = (ROOT / "hub" / "crawler" / "probe" / "telegram.py").read_text(
+    글 = (ROOT / "hub" / "places" / "probe" / "telegram.py").read_text(
         encoding="utf-8")
-    assert "_게시판" in 글, "텔레그램에 게시판 부품이 안 물려 있다"
+    assert "boards" in 글, "텔레그램에 게시판 부품이 안 물려 있다"
     assert "유통자리" in 글 and "개인정보" in 글
     # 글 본문은 안 씁니다. 이름과 소개만 씁니다.
     자리 = 글[글.index("말들 = ["):글.index("말들 = [") + 260]
