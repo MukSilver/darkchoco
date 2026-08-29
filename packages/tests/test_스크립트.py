@@ -212,6 +212,49 @@ def test_powershell_이_ps1_을_읽을_수_있나():
     assert not 깨진것, "PowerShell 이 못 읽습니다: " + " · ".join(깨진것)
 
 
+
+def test_올릴_때_두드린_자취를_안_지운다():
+    """`rm -rf ~/darkchoco` 가 hub/data 까지 지우고 있었습니다.
+
+    거기에 「이 곳을 연달아 몇 번 못 두드렸나」가 들어 있습니다. 지워지면
+    백오프가 **영영 안 걸립니다.** 매 판 461줄을 30초씩 다시 기다립니다.
+
+    **오류가 안 납니다.** 크롤러는 잘 돌고, 그냥 계속 느립니다. 그래서
+    눈으로는 못 찾습니다.
+    """
+    글 = (ROOT / "scripts" / "VM에-올리기.ps1").read_text(encoding="utf-8-sig")
+
+    assert "rm -rf ~/darkchoco" in 글, "올리는 줄을 못 찾았습니다"
+
+    # ① 저장소 밖으로 빼 두고 되돌려야 합니다
+    assert "darkchoco-data" in 글, (
+        "hub/data 를 저장소 밖에 안 빼 둡니다. rm -rf 에 같이 지워집니다")
+    앞뒤 = 글[글.index("darkchoco-data"):]
+    assert "cp -a ~/darkchoco/hub/data/." in 앞뒤, "빼 두는 줄이 없습니다"
+    assert "cp -a ~/darkchoco-data/." in 앞뒤, "되돌리는 줄이 없습니다"
+
+    # ② 내 PC 자취를 VM 것 위에 덮으면 안 됩니다
+    assert "--exclude=./hub/data" in 글, (
+        "묶음에 hub/data 가 들어갑니다. 내 PC 자취가 VM 것을 덮습니다")
+
+    # ③ 순서가 맞아야 합니다. 되돌리기가 rm 뒤에 와야 합니다
+    빼기 = 글.index("cp -a ~/darkchoco/hub/data/.")
+    지우기 = 글.index("rm -rf ~/darkchoco &&")
+    되돌리기 = 글.index("cp -a ~/darkchoco-data/.")
+    assert 빼기 < 지우기 < 되돌리기, (
+        f"순서가 틀렸습니다: 빼기 {빼기} · 지우기 {지우기} · 되돌리기 {되돌리기}")
+
+
+def test_백오프가_쓰는_자리를_스크립트가_안다():
+    """코드가 쓰는 경로와 스크립트가 지키는 경로가 같아야 합니다."""
+    import sys as _sys
+    _sys.path.insert(0, str(ROOT))
+    from hub.places.run import 기본_표                       # noqa: PLC0415
+    자리 = 기본_표().relative_to(ROOT).as_posix()
+    assert 자리.startswith("hub/data/"), 자리
+    글 = (ROOT / "scripts" / "VM에-올리기.ps1").read_text(encoding="utf-8-sig")
+    assert "hub/data" in 글, f"코드는 {자리} 를 쓰는데 스크립트가 모릅니다"
+
 if __name__ == "__main__":
     n = 0
     for k, v in sorted(globals().items()):

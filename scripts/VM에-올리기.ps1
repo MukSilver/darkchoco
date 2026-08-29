@@ -120,13 +120,34 @@ try {
     Step "4. 저장소 넣기"
     $tar = Join-Path $env:TEMP ("darkchoco-" + [guid]::NewGuid().ToString("N") + ".tar")
     Push-Location $Repo
-    & $TarExe --exclude=.git --exclude=.venv --exclude=__pycache__ --exclude=*.pyc -cf $tar .
+    # **hub/data 는 안 넣습니다.** 내 PC 의 자취를 VM 것 위에 덮으면
+    # VM 이 「죽은 곳을 몇 번 두드렸나」를 잊습니다.
+    & $TarExe --exclude=.git --exclude=.venv --exclude=__pycache__ --exclude=*.pyc `
+        --exclude=./hub/data -cf $tar .
     Pop-Location
     $mb = [math]::Round((Get-Item $tar).Length / 1MB, 1)
     & $VBox guestcontrol $Vm --username $User --passwordfile $PwFile `
         copyto --target-directory "/home/$User/" $tar | Out-Null
     $base = Split-Path -Leaf $tar
-    VmRun "rm -rf ~/darkchoco && mkdir -p ~/darkchoco && tar -xf ~/$base -C ~/darkchoco && rm -f ~/$base" -Quiet | Out-Null
+    # **자취를 살려 둡니다.**
+    #
+    # 예전에는 그냥 `rm -rf ~/darkchoco` 였습니다. 그러면 올릴 때마다
+    # hub/data 가 같이 지워집니다. 거기에 「이 곳을 연달아 몇 번 못
+    # 두드렸나」가 들어 있어서, 지워지면 백오프가 **영영 안 걸립니다.**
+    # 매 판 461줄을 30초씩 다시 기다리게 됩니다.
+    #
+    # 그래서 저장소 밖(~/darkchoco-data)에 두고 넣은 뒤 되돌립니다.
+    # rm -rf 가 원리상 못 건드리는 자리입니다.
+    $넣기 = @(
+        'mkdir -p ~/darkchoco-data',
+        '[ -d ~/darkchoco/hub/data ] && cp -a ~/darkchoco/hub/data/. ~/darkchoco-data/ 2>/dev/null',
+        'rm -rf ~/darkchoco && mkdir -p ~/darkchoco',
+        "tar -xf ~/$base -C ~/darkchoco && rm -f ~/$base",
+        'mkdir -p ~/darkchoco/hub/data',
+        'cp -a ~/darkchoco-data/. ~/darkchoco/hub/data/ 2>/dev/null',
+        'true'
+    ) -join '; '
+    VmRun $넣기 -Quiet | Out-Null
     Remove-Item -LiteralPath $tar -Force -ErrorAction SilentlyContinue
     # -join "" 으로 붙이면 여러 줄이 한 덩어리가 되어 361 이 3610 처럼
     # 보입니다. 마지막 줄만 씁니다.
