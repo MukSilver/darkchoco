@@ -1519,6 +1519,58 @@ def test_fetch_도_egress_를_지난다():
     assert "urllib.request.urlopen" not in 글, "프록시를 건너뛰는 urlopen 이 있습니다"
     assert "build_opener" not in 글, "프록시 없는 오프너를 직접 만듭니다"
 
+
+# ── collect/ — 수집기 흡수 ─────────────────────────────────────────
+def test_수집기_일곱이_다_있다():
+    from hub.places import collect as C
+    assert len(C.차례) == 7, C.차례
+    for n in C.차례:
+        f = ROOT / "hub" / "places" / "collect" / f"{n}.py"
+        assert f.exists(), f"{n} 이 없습니다"
+        assert "def run(" in f.read_text(encoding="utf-8"), f"{n} 에 run 이 없습니다"
+
+
+def test_page_없이_도는_것과_아닌_것을_가른다():
+    """다섯이 Playwright page 를 받습니다. http 로 열면 못 돕니다."""
+    from hub.places import collect as C
+    page필요 = [n for n in C.차례 if C.page가필요한가(n)]
+    assert len(page필요) == 5, page필요
+    assert set(C.필요한것) == set(C.차례)
+
+
+def test_못_돈_수집기를_적는다():
+    """조용히 빠뜨리면 나중에 왜 칸이 비었는지 못 찾습니다."""
+    from hub.places.collect.모으기 import 모으기
+    from hub.places.fetch import 연것
+    p = 모으기(연것(주소="https://x.test/", 본문="<html/>", 여는법="http"), "T")
+    assert "못 돈 수집기" in p.살펴볼것, p.살펴볼것
+    assert "2/7" in p.받은곳, p.받은곳
+
+
+def test_못_열었으면_수집기를_안_돌린다():
+    from hub.places.collect.모으기 import 모으기
+    from hub.places.fetch import 연것
+    p = 모으기(연것(주소="https://x.test/", 못본이유="연결이 안 됩니다"), "T")
+    assert not p.두드림 and p.못본이유 == "연결이 안 됩니다"
+    assert not p.받은곳, "못 열었는데 받은곳을 적었다"
+
+
+def test_칸이름이_Place_에_실제로_있다():
+    """수집기가 노션 칸 이름으로 돌려줍니다. 옮기는 표가 맞아야 합니다."""
+    from dataclasses import fields
+    from hub.places.collect.모으기 import 칸이름
+    from hub.places.place import Place
+    있는칸 = {f.name for f in fields(Place)}
+    없는것 = sorted(set(칸이름.values()) - 있는칸)
+    assert not 없는것, f"Place 에 없는 칸으로 옮기려 합니다: {없는것}"
+
+
+def test_없는것을_확인한_것은_안_쓴다():
+    """CONFIRMED_ABSENT 는 「없는 것을 확인했다」입니다. 값이 아닙니다."""
+    from hub.places.collect.모으기 import _값
+    assert _값({"state": "CONFIRMED_ABSENT"}) is None
+    assert _값({"value": "abc.onion"}) == "abc.onion"
+
 if __name__ == "__main__":
     n = 0
     for k, v in sorted(globals().items()):
