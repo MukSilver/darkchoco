@@ -884,9 +884,51 @@ def test_동시에_봐도_줄과_결과가_안_엇갈린다():
 
 
 def test_Tor_가_없으면_한_줄씩_본다():
-    """프록시가 없으면 어차피 안 나갑니다. 스레드를 안 만듭니다."""
+    """프록시가 없으면 어차피 안 나갑니다. 스레드를 안 만듭니다.
+
+    예전에는 이 검사가 소스에서 문자열 한 줄을 찾았습니다. 흐름을
+    통일하면서 그 줄이 없어졌는데, **동작은 그대로인데 검사만 깨졌습니다.**
+    낱말이 아니라 뜻을 봅니다.
+    """
+    from hub.places import run as R
+
+    본것 = []
+    옛열기 = R.갈래표["forum"]["여는법"]
+
+    def 세는열기(r, 상황):
+        import threading
+        본것.append(threading.current_thread().name)
+        return Place(갈래="forum", 이름=r.이름, 못본이유="검사")
+
+    class 줄:
+        def __init__(self, i):
+            self.page_id, self.이름, self.주소, self.어니언 = f"p{i}", f"F{i}", f"https://e{i}.test/", ""
+
+    R.갈래표["forum"]["여는법"] = 세는열기
+    try:
+        list(R._조사("forum", [줄(i) for i in range(4)],
+                    {"tor": None, "이음사전": {}}))
+    finally:
+        R.갈래표["forum"]["여는법"] = 옛열기
+    assert len(set(본것)) == 1, f"Tor 가 없는데 스레드를 {len(set(본것))}개 썼다"
+
+
+def test_갈래를_보고_가르지_않는다():
+    """흐름 통일의 핵심입니다.
+
+    예전에는 `_조사()` 안이 if telegram / elif forum / elif ransom
+    세 덩이였습니다. 수집기를 얹으려면 세 곳에 각각 붙여야 했습니다.
+    """
     글 = (ROOT / "hub" / "places" / "run.py").read_text(encoding="utf-8")
-    assert "동시 = 최대동시 if 프록시 else 1" in 글
+    자리 = 글[글.index("def _조사"):글.index("def 이음사전만들기")]
+    for 나쁜 in ('갈래 == "telegram"', '갈래 == "forum"', '갈래 == "ransom"'):
+        assert 나쁜 not in 자리, f"_조사() 안에서 갈래를 가릅니다: {나쁜}"
+
+    from hub.places.run import 갈래표, 갈래들
+    assert set(갈래표) == set(갈래들), (set(갈래표), set(갈래들))
+    for 갈래, 설정 in 갈래표.items():
+        assert callable(설정["여는법"]), 갈래
+        assert "동시" in 설정 and "앞선것" in 설정, 갈래
 
 
 def test_요약이_얼마나_열렸는지_보여_준다():
@@ -1214,7 +1256,7 @@ def test_run_에_손으로_박은_합치기가_안_남았다():
     """예전에는 칸 이름을 run.py 안에서 문자열로 나열했습니다."""
     글 = (ROOT / "hub" / "places" / "run.py").read_text(encoding="utf-8")
     assert "합치기(" in 글, "merge.py 를 안 씁니다"
-    자리 = 글[글.index("def _열기"):글.index("def _열기") + 900]
+    자리 = 글[글.index("def _조사"):글.index("def 이음사전만들기")]
     assert '"이전이름"' not in 자리 and '"최근활동"' not in 자리, (
         "칸 이름을 run.py 에서 다시 나열하고 있습니다. merge.py 로 가야 합니다")
 

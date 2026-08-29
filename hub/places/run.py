@@ -103,14 +103,112 @@ def _쌓기(db: Path, 갈래: str, 목록: list[Place]) -> None:
         conn.close()
 
 
+# ── 갈래마다 다른 것은 이 아래 표 하나입니다 ────────────────────────
+#
+# 예전에는 `_조사()` 안이 if telegram / elif forum / elif ransom 세
+# 덩이였고, 랜섬 분기가 나머지 둘을 합친 것보다 길었습니다. 수집기를
+# 얹으려면 세 곳에 각각 붙여야 했습니다.
+#
+# 흐름을 하나로 두고 **갈래 차이를 표로만** 냅니다.
+#
+#     ① 볼 곳 고르기   write.py 가 노션에서 읽습니다
+#     ② 나가는 길      egress.py — 갈래 상관없이 하나
+#     ③ 열기           갈래마다 여는 법이 다릅니다   ← 표
+#     ④ 뽑기           수집기                        ← 표 (다음 단계)
+#     ⑤ 합치기         merge.py
+#     ⑥ 쓰기           write.py 관문 다섯
+#
+# 갈래가 넷째로 늘어도 표에 한 줄만 더합니다.
+
+
+def _텔레그램_열기(r, 상황):
+    return telegram.한곳(r.주소, 상황["마지막"], r.이름,
+                       프록시=상황["프록시"], 이음사전=상황["이음사전"])
+
+
+def _포럼_열기(r, 상황):
+    return forum.한곳(r.주소, r.이름, 상황["마지막"], 프록시=상황["프록시"],
+                    이음사전=상황["이음사전"],
+                    어니언미러=bool(상황["프록시"]),
+                    어니언=getattr(r, "어니언", ""))
+
+
+def _랜섬_열기(r, 상황):
+    """랜섬 주소도 포럼 조사기로 엽니다. 뽑는 것이 같습니다.
+
+    어니언 미러 찾기는 안 합니다. 랜섬은 명부에 어니언이 이미 적혀
+    있어서 후보를 다시 찾을 이유가 없습니다.
+    """
+    q = forum.한곳(r.주소, r.이름, 상황["마지막"], 프록시=상황["프록시"],
+                 이음사전=상황["이음사전"], 어니언미러=False,
+                 어니언=getattr(r, "어니언", ""))
+    q.갈래 = "ransom"
+    q.출처 = ["직접 확인"]
+    return q
+
+
+def _랜섬_앞선것(줄들, 상황):
+    """한 판에 한 번, 목록을 통째로 받습니다.
+
+    그룹 하나씩 조회하면 요청이 폭발합니다. /groups 한 번으로 392개
+    상태를 봅니다. 결과는 page_id 로 찾을 수 있게 돌려줍니다.
+    """
+    이름별 = {r.이름.strip().lower(): r for r in 줄들}
+    out = {}
+    for p in ransom.조사(limit=상황.get("limit", 0), 프록시=상황["프록시"]):
+        r = 이름별.get(p.이름.strip().lower())
+        if r is not None:
+            out[r.page_id] = p
+    return out
+
+
+갈래표 = {
+    "telegram": {
+        "여는법": _텔레그램_열기,
+        "앞선것": None,
+        # t.me 한 호스트라 동시에 열면 그쪽을 힘들게 합니다.
+        "동시": 1,
+        "마지막": list,          # 호스트가 하나 — 마지막 시각 한 개
+    },
+    "forum": {
+        "여는법": _포럼_열기,
+        "앞선것": None,
+        # 269줄이 전부 다른 호스트입니다. 동시에 봐도 어느 한 곳을
+        # 힘들게 하지 않습니다. 같은 호스트를 두 번 칠 때는 forum.py 가
+        # 간격을 지킵니다.
+        "동시": None,            # None 이면 최대동시
+        "마지막": dict,          # 호스트마다 따로
+    },
+    "ransom": {
+        "여는법": _랜섬_열기,
+        "앞선것": _랜섬_앞선것,
+        "동시": None,
+        "마지막": dict,
+    },
+}
+
+
 def _조사(갈래: str, 줄들, ctx: dict):
-    """갈래에 맞는 조사기를 돌립니다. (줄, Place) 를 내놓습니다.
+    """한 갈래를 돕니다. (줄, Place) 를 내놓습니다.
+
+    **갈래를 보고 가르지 않습니다.** 갈래표에서 여는 법만 꺼내 씁니다.
 
     프록시는 셋 다 받습니다. 하나라도 빠지면 그 갈래만 우리 IP 로
     나갑니다.
     """
+    if 갈래 not in 갈래표:
+        raise ValueError(f"모르는 갈래입니다: {갈래}")
+    설정 = 갈래표[갈래]
     프록시 = ctx.get("tor")
-    이음사전 = ctx.get("이음사전")
+
+    상황 = {
+        "프록시": 프록시,
+        "이음사전": ctx.get("이음사전"),
+        "limit": ctx.get("limit", 0),
+        "마지막": 설정["마지막"]() if 설정["마지막"] is not dict else {},
+    }
+    if 설정["마지막"] is list:
+        상황["마지막"] = [0.0]
 
     def _한줄(부르기, r):
         """**한 줄이 죽어도 나머지는 돕니다.**
@@ -133,112 +231,53 @@ def _조사(갈래: str, 줄들, ctx: dict):
         p.걸린초 = round(time.time() - 시작, 2)
         return p
 
-    if 갈래 == "telegram":
-        마지막 = [0.0]
-        for r in 줄들:
-            yield r, _한줄(lambda r=r: telegram.한곳(
-                r.주소, 마지막, r.이름, 프록시=프록시, 이음사전=이음사전), r)
+    # ── ③ 앞선 것. 목록을 통째로 받는 갈래만 있습니다
+    미리: dict = {}
+    if 설정["앞선것"]:
+        try:
+            미리 = 설정["앞선것"](줄들, 상황)
+        except Exception as e:  # noqa: BLE001
+            미리 = {}
+            print(f"    앞선 조사가 실패했습니다: {type(e).__name__}: {e}"[:160],
+                  flush=True)
 
-    elif 갈래 == "forum":
-        마지막: dict = {}
-        # 어니언 미러 확인은 열어 보는 요청이 하나 더 듭니다. 어니언
-        # 주소가 비어 있는 줄에서만 하므로 한 판에 몇 번 안 됩니다.
-        미러 = bool(프록시)
+    # ── ④ 열 것 고르기. 주소가 아예 없으면 못 엽니다
+    열것 = [r for r in 줄들
+          if (r.주소 or "").strip() or (getattr(r, "어니언", "") or "").strip()]
+    if 미리 and not 프록시:
+        열것 = []            # Tor 가 없으면 앞선 것만 냅니다
 
-        # **서로 다른 서버는 같이 봅니다.**
-        #
-        # 포럼 명부 224줄이 전부 다른 호스트입니다. 한 줄씩 차례로 보면
-        # 죽은 곳의 타임아웃(30초)을 그대로 다 기다립니다. 서로 다른
-        # 서버라 동시에 봐도 어느 한 곳을 힘들게 하지 않습니다. 같은
-        # 호스트를 두 번 칠 때는 forum.py 가 간격을 지킵니다.
-        #
-        # 동시에 여는 수를 크게 잡으면 Tor 회로가 늘어 오히려 느려지고,
-        # 출구 하나에서 요청이 몰립니다. 여섯이면 충분합니다.
-        동시 = 최대동시 if 프록시 else 1
-        if 동시 <= 1:
-            for r in 줄들:
-                yield r, _한줄(lambda r=r: forum.한곳(
-                    r.주소, r.이름, 마지막, 프록시=프록시,
-                    이음사전=이음사전, 어니언미러=미러,
-                    어니언=r.어니언), r)
-        else:
-            import concurrent.futures as cf
+    def _한곳(r):
+        q = _한줄(lambda: 설정["여는법"](r, 상황), r)
+        # 조사기가 여럿 붙는 규칙은 merge.py 한 곳에만 둡니다.
+        # dls-observatory 가 붙으면 **인자를 하나 더 줍니다.**
+        #     return 합치기(q, 미리.get(...), DLS가준것)
+        return 합치기(q, 미리.get(r.page_id))
 
-            with cf.ThreadPoolExecutor(max_workers=동시) as 풀:
-                일 = {풀.submit(_한줄, (lambda r=r: forum.한곳(
-                          r.주소, r.이름, 마지막, 프록시=프록시,
-                          이음사전=이음사전, 어니언미러=미러,
-                          어니언=r.어니언)), r): r
-                     for r in 줄들}
-                for 끝난것 in cf.as_completed(일):
-                    yield 일[끝난것], 끝난것.result()
+    동시 = 설정["동시"] or 최대동시
+    if not 프록시:
+        동시 = 1                 # 맨 연결이면 어차피 안 나갑니다
 
-    elif 갈래 == "ransom":
-        # 랜섬은 목록을 통째로 받습니다. 그룹 하나씩 조회하면 요청이 폭발합니다.
-        이름별 = {r.이름.strip().lower(): r for r in 줄들}
-        받은것: dict = {}
-        for p in ransom.조사(limit=ctx.get("limit", 0), 프록시=프록시):
-            r = 이름별.get(p.이름.strip().lower())
-            if r is not None:
-                받은것[r.page_id] = (r, p)
-
-        # **주소를 실제로 열어 봅니다.**
-        #
-        # /groups 는 살아있는지와 형식만 줍니다. 사용 언어 · 어떤 곳인지 ·
-        # 들어가는 법 · 연결된 곳 · 규모는 그 쪽 화면을 봐야 압니다.
-        # 명부 514줄 중 507줄에 주소가 있는데 지금껏 한 번도 안 열었습니다.
-        #
-        # 마켓 101줄은 ransomware.live 에 아예 없어서 /groups 로는 상태도
-        # 못 얻습니다. 그 줄들은 여는 것 말고 길이 없습니다.
-        열것 = []
-        for r in 줄들:
-            if not 프록시:
-                break
-            주소 = (r.주소 or "").strip()
-            어니언 = (getattr(r, "어니언", "") or "").strip()
-            if 주소 or 어니언:
-                열것.append(r)
-
-        if not 열것:
-            for r, p in 받은것.values():
-                yield r, p
-            return
-
-        마지막: dict = {}
-        동시 = 최대동시
-
-        def _열기(r):
-            """포럼 조사기로 랜섬 주소를 봅니다. 뽑는 것이 같습니다."""
-            q = forum.한곳(r.주소, r.이름, 마지막, 프록시=프록시,
-                          이음사전=이음사전, 어니언미러=False,
-                          어니언=getattr(r, "어니언", ""))
-            q.갈래 = "ransom"
-            q.출처 = ["직접 확인"]
-
-            # 조사기가 여럿 붙는 규칙은 merge.py 한 곳에만 둡니다.
-            # 뒤에 오는 것이 상태를 이깁니다 (거기 설명을 보십시오).
-            #
-            # dls-observatory 가 붙으면 **인자를 하나 더 줍니다.**
-            #     return 합치기(q, API가준것, DLS가준것)
-            앞 = 받은것.get(r.page_id)
-            return 합치기(q, 앞[1] if 앞 else None)
-
+    본것 = set()
+    if 동시 <= 1:
+        for r in 열것:
+            본것.add(r.page_id)
+            yield r, _한곳(r)
+    else:
         import concurrent.futures as cf
 
-        본것 = set()
         with cf.ThreadPoolExecutor(max_workers=동시) as 풀:
-            일 = {풀.submit(_한줄, (lambda r=r: _열기(r)), r): r for r in 열것}
+            일 = {풀.submit(_한곳, r): r for r in 열것}
             for 끝난것 in cf.as_completed(일):
                 r = 일[끝난것]
                 본것.add(r.page_id)
                 yield r, 끝난것.result()
 
-        # 주소가 없어 못 연 줄은 /groups 가 준 것만이라도 냅니다.
-        for pid, (r, p) in 받은것.items():
-            if pid not in 본것:
-                yield r, p
-    else:
-        raise ValueError(f"모르는 갈래입니다: {갈래}")
+    # ── ⑤ 못 연 줄도 앞선 것이 있으면 그것만이라도 냅니다
+    이름별 = {r.page_id: r for r in 줄들}
+    for pid, p in 미리.items():
+        if pid not in 본것 and pid in 이름별:
+            yield 이름별[pid], p
 
 
 def 이음사전만들기(갈래들목록=None) -> dict:
