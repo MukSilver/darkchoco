@@ -270,6 +270,32 @@ def test_백오프가_쓰는_자리를_스크립트가_안다():
     글 = (ROOT / "scripts" / "VM에-올리기.ps1").read_text(encoding="utf-8-sig")
     assert "hub/data" in 글, f"코드는 {자리} 를 쓰는데 스크립트가 모릅니다"
 
+
+def test_자리만들기가_브라우저를_깐다():
+    """수집기 일곱 중 다섯이 Playwright page 를 받습니다.
+
+    없으면 첫 화면 글자만 보고 끝나서 채우는 칸이 절반으로 줍니다.
+    클라우드플레어 앞단도 브라우저라야 지납니다 — 2026-08-30 실측으로
+    「연결이 안 됩니다」 461줄 중 상당수가 그것입니다.
+    """
+    글 = (ROOT / "scripts" / "돌릴자리-만들기.sh").read_text(encoding="utf-8")
+    assert "playwright install" in 글, "크롬을 안 깝니다"
+    assert "chromium" in 글
+
+    # **apt 의 playwright 를 쓰면 안 됩니다.** 데비안이 드라이버를 떼어
+    # 내서(1.55.0+ds) 띄울 때 죽습니다.
+    #     Connection.init: Connection closed while reading from the driver
+    # pip 판은 node 와 드라이버를 안에 갖고 옵니다.
+    assert 'pip install -q "playwright' in 글, "pip 판을 안 깝니다"
+    assert "+ds" in 글 or "드라이버" in 글, "apt 판을 쓰면 안 되는 이유가 안 적혀 있습니다"
+
+
+def test_브라우저가_없어도_크롤러는_돈다():
+    """400MB 를 못 받는 자리도 있습니다. 거기서도 돌아야 합니다."""
+    글 = (ROOT / "scripts" / "돌릴자리-만들기.sh").read_text(encoding="utf-8")
+    assert "DARKCHOCO_SKIP_BROWSER" in 글, "건너뛸 길이 없습니다"
+    assert "http 로만 열립니다" in 글, "못 깔았을 때 무슨 일이 나는지 안 적습니다"
+
 if __name__ == "__main__":
     n = 0
     for k, v in sorted(globals().items()):

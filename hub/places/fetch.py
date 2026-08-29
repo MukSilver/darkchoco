@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-__all__ = ["연것", "열기", "여는법들", "브라우저없음"]
+__all__ = ["연것", "열기", "여는법들", "브라우저없음", "브라우저세션"]
 
 여는법들 = ("http", "browser", "api")
 
@@ -58,7 +58,7 @@ class 연것:
 
 
 def 열기(주소: str, *, 법: str = "http", 프록시: str | None = None,
-       오프너=None, timeout: int = 30, 갈래: str = "") -> 연것:
+       오프너=None, timeout: int = 30, 갈래: str = "", 세션=None) -> 연것:
     """한 곳을 엽니다. 법 을 갈아 끼웁니다.
 
     법 을 안 주면 http 입니다. http 로 막히면 부르는 쪽이 browser 로
@@ -71,7 +71,7 @@ def 열기(주소: str, *, 법: str = "http", 프록시: str | None = None,
         return _http로(주소, 프록시=프록시, 오프너=오프너,
                      timeout=timeout, 갈래=갈래)
     if 법 == "browser":
-        return _브라우저로(주소, 프록시=프록시, timeout=timeout)
+        return _브라우저로(주소, 프록시=프록시, timeout=timeout, 세션=세션)
     return 연것(주소=주소, 여는법="api",
               못본이유="api 는 갈래별 조사기가 직접 부릅니다")
 
@@ -125,41 +125,83 @@ def _http로(주소, *, 프록시, 오프너, timeout, 갈래) -> 연것:
     return r
 
 
-def _브라우저로(주소, *, 프록시, timeout) -> 연것:
-    """Playwright 로 엽니다.
+class 브라우저세션:
+    """크롬을 한 번만 띄워 돌려 씁니다.
+
+    줄마다 띄우면 786번입니다. 뜨는 데만 1~2초씩이라 그것만 20분이
+    넘습니다. 한 번 띄우고 페이지만 새로 엽니다.
 
     **Tor 없이는 안 뜹니다.** 브라우저는 urllib 과 달리 우리가 안 건
     요청(폰트·이미지·텔레메트리)도 스스로 보냅니다. 프록시를 안 걸면
     그것들이 전부 맨 IP 로 나갑니다.
-    """
-    if not 프록시:
-        return 연것(주소=주소, 여는법="browser",
-                  못본이유="브라우저는 Tor 없이 안 씁니다. 안 건 요청까지 새 나갑니다")
-    try:
-        from playwright.sync_api import sync_playwright     # noqa: PLC0415
-    except ImportError:
-        raise 브라우저없음(
-            "playwright 가 안 깔렸습니다.\n"
-            "  pip install playwright && playwright install --with-deps chromium") from None
 
-    r = 연것(주소=주소, 여는법="browser")
-    호스트포트 = 프록시.split("://", 1)[-1]
-    with sync_playwright() as pw:
-        br = pw.chromium.launch(headless=True,
-                                proxy={"server": f"http://{호스트포트}"})
+        with 브라우저세션(프록시) as 세션:
+            for 주소 in 주소들:
+                r = 열기(주소, 법="browser", 세션=세션)
+    """
+
+    def __init__(self, 프록시: str | None):
+        if not 프록시:
+            raise 브라우저없음(
+                "브라우저는 Tor 없이 안 씁니다. 안 건 요청까지 새 나갑니다")
+        self.프록시 = 프록시
+        self._pw = None
+        self._br = None
+
+    def __enter__(self):
         try:
-            ctx = br.new_context(locale="en-US")
-            page = ctx.new_page()
-            resp = page.goto(주소, timeout=timeout * 1000,
-                             wait_until="domcontentloaded")
-            r.상태코드 = resp.status if resp else 0
-            r.헤더 = {k.lower(): v for k, v in (resp.headers if resp else {}).items()}
-            r.최종주소 = page.url
-            r.본문 = page.content()
-            r.page = page
-        except Exception as e:              # noqa: BLE001
-            r.못본이유 = f"{type(e).__name__}: {e}"[:180]
-        finally:
-            if r.page is None:
-                br.close()
+            from playwright.sync_api import sync_playwright   # noqa: PLC0415
+        except ImportError:
+            raise 브라우저없음(
+                "playwright 가 안 깔렸습니다. "
+                "bash scripts/돌릴자리-만들기.sh 가 깝니다") from None
+        호스트포트 = self.프록시.split("://", 1)[-1]
+        self._pw = sync_playwright().start()
+        self._br = self._pw.chromium.launch(
+            headless=True, proxy={"server": f"http://{호스트포트}"})
+        return self
+
+    def __exit__(self, *a):
+        for x in (self._br, self._pw):
+            try:
+                (x.close if x is self._br else x.stop)()
+            except Exception:       # noqa: BLE001
+                pass
+        self._br = self._pw = None
+        return False
+
+    def 새페이지(self):
+        if self._br is None:
+            raise 브라우저없음("세션이 안 열렸습니다. with 로 감싸십시오")
+        ctx = self._br.new_context(locale="en-US")
+        return ctx.new_page()
+
+
+def _브라우저로(주소, *, 프록시, timeout, 세션=None) -> 연것:
+    """Playwright 로 엽니다. 세션을 주면 그것을 돌려 씁니다."""
+    r = 연것(주소=주소, 여는법="browser")
+    혼자 = 세션 is None
+    if 혼자:
+        if not 프록시:
+            r.못본이유 = "브라우저는 Tor 없이 안 씁니다. 안 건 요청까지 새 나갑니다"
+            return r
+        try:
+            세션 = 브라우저세션(프록시).__enter__()
+        except 브라우저없음 as e:
+            r.못본이유 = str(e)[:180]
+            return r
+    try:
+        page = 세션.새페이지()
+        resp = page.goto(주소, timeout=timeout * 1000,
+                         wait_until="domcontentloaded")
+        r.상태코드 = resp.status if resp else 0
+        r.헤더 = {k.lower(): v for k, v in (resp.headers if resp else {}).items()}
+        r.최종주소 = page.url
+        r.본문 = page.content()
+        r.page = page
+    except Exception as e:          # noqa: BLE001
+        r.못본이유 = f"{type(e).__name__}: {e}"[:180]
+    finally:
+        if 혼자 and r.page is None:
+            세션.__exit__(None, None, None)
     return r
