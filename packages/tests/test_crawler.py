@@ -1544,7 +1544,12 @@ def test_못_돈_수집기를_적는다():
     from hub.places.fetch import 연것
     p = 모으기(연것(주소="https://x.test/", 본문="<html/>", 여는법="http"), "T")
     assert "못 돈 수집기" in p.살펴볼것, p.살펴볼것
-    assert "2/7" in p.받은곳, p.받은곳
+    # 몇 개가 돌았는지를 화면에 적습니다. 숫자를 박지 않습니다 —
+    # 차례가 바뀌면 개수도 바뀝니다.
+    import re as _re
+    m = _re.search(r"수집기 (\d)/7", p.받은곳)
+    assert m, p.받은곳
+    assert int(m.group(1)) < 7, f"page 없이 다 돌았다고 합니다: {p.받은곳}"
 
 
 def test_못_열었으면_수집기를_안_돌린다():
@@ -1648,6 +1653,46 @@ def test_깊게_못_본_줄도_얕은_것으로_쓴다():
     글 = (ROOT / "hub" / "places" / "run.py").read_text(encoding="utf-8")
     assert "깊게본것" in 글, "깊게 본 줄을 안 셉니다"
     assert "얕은 것이라도" in 글, "왜 이 되돌림이 필요한지가 안 적혀 있습니다"
+
+
+def test_사이트_전체를_재귀로_돈다():
+    """investigate.py 가 하던 일 중 제일 큽니다.
+
+    structure 가 카테고리 씨앗을 찾으면 content.crawl_site() 로 사이트를
+    돌며 게시글 헤드라인을 모읍니다. 이게 빠지면 홈페이지 한 장만 보고
+    끝나서 (5)교차참조 (7)활동 이 빈손으로 돕니다.
+
+    그러면 「유통 자리」「개인정보 유출」「최근 활동」이 계속 빕니다.
+    """
+    글 = (ROOT / "hub" / "places" / "collect" / "모으기.py").read_text(encoding="utf-8")
+    assert "crawl_site" in 글, "사이트 전체를 안 돕니다. 홈페이지 한 장만 봅니다"
+    assert "_사이트_카테고리_시드" in 글, "씨앗을 안 받습니다"
+
+
+def test_수집기_차례가_평평하지_않다():
+    """단순 나열이 아닙니다. 앞엣것 결과로 뒤엣것이 갈립니다."""
+    글 = (ROOT / "hub" / "places" / "collect" / "모으기.py").read_text(encoding="utf-8")
+    assert "sample_list_url" in 글, "사람이 골라 준 목록 페이지를 안 씁니다"
+    assert "_표본_게시글" in 글, "④ 가 만든 표본을 ⑦ 에 안 넘깁니다"
+    assert "_들어가는_법_구조" in 글, "② 가 모은 글자를 ⑤ 가 다시 안 씁니다"
+
+
+def test_수집기_사이에_간격이_있다():
+    """onion 은 느립니다. 붙여서 치면 그쪽을 힘들게 합니다."""
+    글 = (ROOT / "hub" / "places" / "collect" / "모으기.py").read_text(encoding="utf-8")
+    assert "REQUEST_DELAY_MIN_SEC" in 글, "수집기 사이에 간격이 없습니다"
+
+
+def test_스냅샷을_남긴다():
+    """무엇을 보고 그렇게 판단했는지가 남아야 합니다."""
+    글 = (ROOT / "hub" / "places" / "collect" / "모으기.py").read_text(encoding="utf-8")
+    assert "save_snapshot" in 글, "증거를 안 남깁니다"
+
+
+def test_표본_게시글_수를_적는다():
+    """0 이면 (5)(7) 이 빈손으로 돈 것입니다. 화면에서 보여야 합니다."""
+    글 = (ROOT / "hub" / "places" / "collect" / "모으기.py").read_text(encoding="utf-8")
+    assert "표본 게시글" in 글
 
 if __name__ == "__main__":
     n = 0
