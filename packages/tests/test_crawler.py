@@ -1626,6 +1626,29 @@ def test_Tor_없으면_깊은_판을_안_돈다():
     from hub.places.run import 깊게
     assert list(깊게("forum", [object()], {"tor": None})) == []
 
+
+def test_한_줄에_노션을_한_번만_쓴다():
+    """깊게 볼 줄을 얕은 판에서 먼저 쓰면 같은 줄에 두 번 씁니다.
+
+    실측(2026-08-30, 포럼 12줄)에서 「바뀐 줄 14」가 나왔습니다. 12줄인데
+    14입니다. 확인일만 바뀐 줄이 두 번 올라가고 노션 요청도 두 배였습니다.
+    """
+    글 = (ROOT / "hub" / "places" / "run.py").read_text(encoding="utf-8")
+    assert "미룰것" in 글, "깊게 볼 줄을 미루지 않습니다"
+    자리 = 글[글.index("for 줄, p in _조사("):글.index("# ── 깊은 판")]
+    assert "if 미룰것:" in 자리 and "continue" in 자리, (
+        "미룬 줄이 얕은 판에서도 반영됩니다")
+
+
+def test_깊게_못_본_줄도_얕은_것으로_쓴다():
+    """미뤄 놓고 깊은 판이 실패하면 아무것도 안 쓰게 됩니다.
+
+    브라우저가 403 을 받는 곳이 실제로 있습니다(bf.st · Voided).
+    """
+    글 = (ROOT / "hub" / "places" / "run.py").read_text(encoding="utf-8")
+    assert "깊게본것" in 글, "깊게 본 줄을 안 셉니다"
+    assert "얕은 것이라도" in 글, "왜 이 되돌림이 필요한지가 안 적혀 있습니다"
+
 if __name__ == "__main__":
     n = 0
     for k, v in sorted(globals().items()):

@@ -417,7 +417,12 @@ def 한갈래(갈래: str, *, apply: bool = False, limit: int = 0,
     얕은것: dict = {}
 
     for 줄, p in _조사(갈래, 볼것, ctx):
-        if p.상태 == "online" and (줄.주소 or "").startswith("http"):
+        # **깊게 볼 줄은 여기서 노션에 안 씁니다.** 깊은 판이 값을 더
+        # 채워서 오는데 먼저 쓰면 같은 줄에 두 번 쓰게 됩니다. 확인일만
+        # 바뀐 줄이 두 번 올라가고 요청도 두 배가 됩니다.
+        미룰것 = (갈래 in 깊게볼갈래 and tor
+               and p.상태 == "online" and (줄.주소 or "").startswith("http"))
+        if 미룰것:
             깊게볼것.append(줄)
             얕은것[줄.page_id] = p
         본것.append(p)
@@ -444,6 +449,8 @@ def 한갈래(갈래: str, *, apply: bool = False, limit: int = 0,
                     지금때, getattr(p, "걸린초", 0.0))
         except Exception:  # noqa: BLE001  자취가 깨져도 조사는 돕니다
             pass
+        if 미룰것:
+            continue            # 깊은 판이 한 번만 씁니다
         try:
             res = m.반영(줄, p, apply=apply)
         except Exception as e:  # noqa: BLE001  한 줄이 죽어도 나머지는 돕니다
@@ -475,7 +482,9 @@ def 한갈래(갈래: str, *, apply: bool = False, limit: int = 0,
     if 깊게볼것 and not 조용히:
         print(f"    깊게 {len(깊게볼것)}줄 (브라우저)", flush=True)
     깊게샘 = 0
+    깊게본것: set = set()
     for 줄, 깊은 in 깊게(갈래, 깊게볼것, ctx):
+        깊게본것.add(줄.page_id)
         앞 = 얕은것.get(줄.page_id)
         # 얕은 것이 바탕입니다. 상태와 규모는 http 가 더 믿을 만합니다.
         # 깊은 것은 빈칸만 채웁니다.
@@ -490,8 +499,25 @@ def 한갈래(갈래: str, *, apply: bool = False, limit: int = 0,
             r.바뀐줄 += 1
         if 합친것.살펴볼것:
             r.문제.append(f"{res.이름}: {합친것.살펴볼것}")
+    # 깊게 못 본 줄(브라우저가 403 을 받았거나 터진 줄)은 얕은 것이라도
+    # 씁니다. 안 그러면 미뤄 놓고 아무것도 안 쓰게 됩니다.
+    for pid, p in 얕은것.items():
+        if pid in 깊게본것:
+            continue
+        줄 = {x.page_id: x for x in 깊게볼것}.get(pid)
+        if 줄 is None:
+            continue
+        try:
+            res = m.반영(줄, p, apply=apply)
+        except Exception as e:  # noqa: BLE001
+            res = 반영결과(이름=줄.이름, 오류=str(e)[:160])
+        r.줄별.append(res)
+        if res.바뀐칸:
+            r.바뀐줄 += 1
+
     if 깊게샘 and not 조용히:
-        print(f"    깊게 본 것 {깊게샘}줄", flush=True)
+        print(f"    깊게 본 것 {깊게샘}줄 · 얕은 것으로만 "
+              f"{len(얕은것) - 깊게샘}줄", flush=True)
 
     if apply and 본것:
         # 한갈래() 는 예외를 밖으로 안 냅니다. 이 한 줄만 밖에 있어서,
