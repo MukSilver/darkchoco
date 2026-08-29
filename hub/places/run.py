@@ -162,6 +162,21 @@ def _랜섬_앞선것(줄들, 상황):
     return out
 
 
+# 깊게 보는 판을 돌릴 갈래. 수집기 일곱이 Playwright page 를 받습니다.
+#
+# **브라우저는 막힌 곳을 뚫는 도구가 아닙니다.** 2026-08-30 에 포럼
+# 20줄로 http 와 나란히 재봤습니다.
+#
+#     둘 다 못 봄 14 · 둘 다 4 · http 만 2 · **browser 만 0**
+#
+# 브라우저가 더 여는 곳은 하나도 없었고 두 곳에서는 졌습니다 —
+# 클라우드플레어가 진짜 헤드리스 크롬을 더 잘 알아봅니다. 「연결이 안
+# 됩니다」도 대부분 Tor 터널 실패지 앞단 검사가 아니었습니다.
+#
+# 그러니 브라우저의 값은 **연 곳을 더 깊게 보는 것**입니다. http 로
+# 열린 곳만 다시 열어 수집기를 돌립니다.
+깊게볼갈래 = {"forum", "ransom"}
+
 갈래표 = {
     "telegram": {
         "여는법": _텔레그램_열기,
@@ -280,6 +295,52 @@ def _조사(갈래: str, 줄들, ctx: dict):
             yield 이름별[pid], p
 
 
+def 깊게(갈래: str, 열린것, ctx: dict):
+    """열린 곳만 브라우저로 다시 열어 수집기 일곱을 돌립니다.
+
+    **순차로 돕니다.** Playwright 의 동기 API 는 스레드 안전하지
+    않습니다. 여러 스레드에서 같은 세션을 쓰면 조용히 엉킵니다.
+
+    크롬은 한 번만 띄웁니다. 줄마다 띄우면 뜨는 데만 1~2초씩이라
+    그것만으로 수십 분이 됩니다.
+
+    (줄, 깊은Place) 를 내놓습니다. 상태는 주장하지 않습니다 — 브라우저가
+    403 을 받아도 그 곳이 죽은 것은 아닙니다. 상태는 http 가 정합니다.
+    """
+    프록시 = ctx.get("tor")
+    if 갈래 not in 깊게볼갈래 or not 프록시 or not 열린것:
+        return
+
+    from hub.places.collect.모으기 import 모으기          # noqa: PLC0415
+    from hub.places.fetch import 브라우저세션, 브라우저없음, 열기  # noqa: PLC0415
+
+    try:
+        세션열기 = 브라우저세션(프록시)
+    except 브라우저없음:
+        return
+    try:
+        with 세션열기 as 세션:
+            for r in 열린것:
+                주소 = (r.주소 or "").strip()
+                if not 주소:
+                    continue
+                try:
+                    연것 = 열기(주소, 법="browser", 프록시=프록시,
+                              timeout=40, 세션=세션)
+                    if not 연것.봤나():
+                        continue
+                    q = 모으기(연것, r.이름, 갈래=갈래)
+                except Exception as e:      # noqa: BLE001  한 줄이 죽어도 나머지를 돕니다
+                    continue
+                # 상태를 안 넘깁니다. 브라우저 403 이 http 200 을 덮으면
+                # 살아있는 곳이 미확인이 됩니다.
+                q.두드림 = False
+                q.상태 = "미확인"
+                yield r, q
+    except 브라우저없음:
+        return
+
+
 def 이음사전만들기(갈래들목록=None) -> dict:
     """세 명부의 주소를 한 사전으로 모읍니다.
 
@@ -346,8 +407,19 @@ def 한갈래(갈래: str, *, apply: bool = False, limit: int = 0,
         쉼말 = f" (연속 실패로 {r.쉰것}줄은 쉽니다)" if r.쉰것 else ""
         print(f"  {갈래}: {셀것}줄을 봅니다{쉼말}", flush=True)
 
-    for 줄, p in _조사(갈래, 볼것, {"tor": tor, "limit": limit,
-                                 "이음사전": 이음사전}):
+    ctx = {"tor": tor, "limit": limit, "이음사전": 이음사전}
+
+    # ── 얕은 판. http 로 동시에 봅니다
+    #
+    # 깊은 판에 넘길 것을 여기서 모읍니다. **열린 곳만** 넘깁니다 —
+    # 안 열린 곳을 브라우저로 다시 여는 것은 30초를 두 번 버리는 일입니다.
+    깊게볼것: list = []
+    얕은것: dict = {}
+
+    for 줄, p in _조사(갈래, 볼것, ctx):
+        if p.상태 == "online" and (줄.주소 or "").startswith("http"):
+            깊게볼것.append(줄)
+            얕은것[줄.page_id] = p
         본것.append(p)
         r.상태셈[p.상태] = r.상태셈.get(p.상태, 0) + 1
         if p.못본이유:
@@ -395,6 +467,31 @@ def 한갈래(갈래: str, *, apply: bool = False, limit: int = 0,
             r.처음본곳.setdefault(h, set()).add(res.이름 or p.이름)
         if res.바뀐칸:
             r.바뀐줄 += 1
+
+    # ── 깊은 판. 열린 곳만 브라우저로 다시 열어 수집기 일곱을 돌립니다
+    #
+    # 순차라 느립니다. 그래서 열린 곳만 봅니다 — 실측으로 20줄 중
+    # 4~6곳입니다.
+    if 깊게볼것 and not 조용히:
+        print(f"    깊게 {len(깊게볼것)}줄 (브라우저)", flush=True)
+    깊게샘 = 0
+    for 줄, 깊은 in 깊게(갈래, 깊게볼것, ctx):
+        앞 = 얕은것.get(줄.page_id)
+        # 얕은 것이 바탕입니다. 상태와 규모는 http 가 더 믿을 만합니다.
+        # 깊은 것은 빈칸만 채웁니다.
+        합친것 = 합치기(앞, 깊은) if 앞 else 깊은
+        깊게샘 += 1
+        try:
+            res = m.반영(줄, 합친것, apply=apply)
+        except Exception as e:  # noqa: BLE001
+            res = 반영결과(이름=줄.이름, 오류=str(e)[:160])
+        r.줄별.append(res)
+        if res.바뀐칸:
+            r.바뀐줄 += 1
+        if 합친것.살펴볼것:
+            r.문제.append(f"{res.이름}: {합친것.살펴볼것}")
+    if 깊게샘 and not 조용히:
+        print(f"    깊게 본 것 {깊게샘}줄", flush=True)
 
     if apply and 본것:
         # 한갈래() 는 예외를 밖으로 안 냅니다. 이 한 줄만 밖에 있어서,
