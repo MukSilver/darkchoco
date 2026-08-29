@@ -1571,6 +1571,61 @@ def test_없는것을_확인한_것은_안_쓴다():
     assert _값({"state": "CONFIRMED_ABSENT"}) is None
     assert _값({"value": "abc.onion"}) == "abc.onion"
 
+
+def test_브라우저는_막힌_곳을_뚫는_도구가_아니다():
+    """2026-08-30 실측입니다. 포럼 20줄에 http 와 나란히 댔습니다.
+
+        둘 다 못 봄 14 · 둘 다 4 · http 만 2 · **browser 만 0**
+
+    브라우저가 더 여는 곳은 하나도 없었고 두 곳에서는 졌습니다.
+    클라우드플레어가 진짜 헤드리스 크롬을 더 잘 알아봅니다.
+
+    그래서 **열린 곳만** 깊게 봅니다. 안 열린 곳을 브라우저로 다시
+    여는 것은 30초를 두 번 버리는 일입니다.
+    """
+    글 = (ROOT / "hub" / "places" / "run.py").read_text(encoding="utf-8")
+    assert 'p.상태 == "online"' in 글, "열린 곳만 고르지 않습니다"
+    assert "browser 만 0" in 글 or "browser 만" in 글, (
+        "왜 이렇게 하는지가 안 적혀 있습니다")
+
+
+def test_깊은_판은_상태를_안_주장한다():
+    """브라우저가 403 을 받아도 그 곳이 죽은 것은 아닙니다.
+
+    실제로 bf.st 가 http 200(163,544자) · browser 403(5,786자) 였습니다.
+    깊은 것이 상태를 덮으면 살아있는 곳이 미확인이 됩니다.
+    """
+    글 = (ROOT / "hub" / "places" / "run.py").read_text(encoding="utf-8")
+    자리 = 글[글.index("def 깊게("):]
+    자리 = 자리[:자리.index(chr(10) + "def ") if chr(10) + "def " in 자리 else len(자리)]
+    assert "q.두드림 = False" in 자리, "깊은 것이 상태를 주장합니다"
+    assert 'q.상태 = "미확인"' in 자리
+
+
+def test_깊은_판은_순차로_돈다():
+    """Playwright 동기 API 는 스레드 안전하지 않습니다.
+
+    여러 스레드에서 같은 세션을 쓰면 **조용히 엉킵니다.** 오류가 안 나고
+    엉뚱한 페이지의 값이 섞입니다.
+    """
+    글 = (ROOT / "hub" / "places" / "run.py").read_text(encoding="utf-8")
+    자리 = 글[글.index("def 깊게("):]
+    자리 = 자리[:자리.index(chr(10) + "def ") if chr(10) + "def " in 자리 else len(자리)]
+    assert "ThreadPoolExecutor" not in 자리, "깊은 판을 스레드로 돌립니다"
+    assert "스레드 안전" in 자리, "왜 순차인지가 안 적혀 있습니다"
+
+
+def test_깊게_볼_갈래를_고른다():
+    """텔레그램은 브라우저가 필요 없습니다. API 로 봅니다."""
+    from hub.places.run import 갈래들, 깊게볼갈래
+    assert 깊게볼갈래 <= set(갈래들), 깊게볼갈래
+    assert "telegram" not in 깊게볼갈래
+
+
+def test_Tor_없으면_깊은_판을_안_돈다():
+    from hub.places.run import 깊게
+    assert list(깊게("forum", [object()], {"tor": None})) == []
+
 if __name__ == "__main__":
     n = 0
     for k, v in sorted(globals().items()):
