@@ -1,29 +1,33 @@
 import argparse
 import asyncio
-import json
-import os
 import re
-import tempfile
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from telethon import TelegramClient
 from telethon.errors import RPCError
 from telethon.tl.functions.channels import GetFullChannelRequest
 from telethon.tl.types import Channel
-from telethon.utils import get_display_name, get_peer_id
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "packages"))
+from dc_telegram import (  # noqa: E402
+    forward_metadata,
+    isoformat,
+    load_payload as load_existing_payload,
+    make_client,
+    merge_records,
+    parse_channel,
+    reaction_count,
+    safe_peer_id,
+    sender_metadata,
+    validate_same_channel,
+    write_json_atomic,
+)
 
 
 BASE_DIR = Path(__file__).resolve().parent
 SESSION_PATH = BASE_DIR / "telegram_session"
 DEFAULT_OUTPUT = BASE_DIR / "output" / "channel_messages.json"
-
-
-def parse_channel(value: str):
-    value = value.strip()
-    if value.lstrip("-").isdigit():
-        return int(value)
-    return value.removeprefix("https://t.me/").removeprefix("@")
 
 
 def parse_args():
@@ -53,104 +57,6 @@ def parse_args():
         help="기존 JSON이 있으면 마지막 메시지 이후의 신규 메시지만 수집해 합침",
     )
     return parser.parse_args()
-
-
-def isoformat(value):
-    return value.isoformat() if value else None
-
-
-def safe_peer_id(peer):
-    if peer is None:
-        return None
-    try:
-        return get_peer_id(peer)
-    except (TypeError, ValueError):
-        return None
-
-
-def sender_metadata(message):
-    sender = getattr(message, "sender", None)
-    return {
-        "sender_id": message.sender_id,
-        "sender_username": getattr(sender, "username", None),
-        "sender_display_name": get_display_name(sender) if sender else None,
-        "post_author": getattr(message, "post_author", None),
-        "via_bot_id": getattr(message, "via_bot_id", None),
-    }
-
-
-def forward_metadata(message):
-    forward = getattr(message, "forward", None)
-    if not forward:
-        return {
-            "is_forwarded": False,
-            "forward_from_id": None,
-            "forward_from_name": None,
-            "forward_channel_post": None,
-            "forward_date": None,
-        }
-    return {
-        "is_forwarded": True,
-        "forward_from_id": safe_peer_id(getattr(forward, "from_id", None)),
-        "forward_from_name": getattr(forward, "from_name", None),
-        "forward_channel_post": getattr(forward, "channel_post", None),
-        "forward_date": isoformat(getattr(forward, "date", None)),
-    }
-
-
-def reaction_count(message):
-    reactions = getattr(getattr(message, "reactions", None), "results", None) or []
-    return sum(getattr(reaction, "count", 0) or 0 for reaction in reactions)
-
-
-def load_existing_payload(output: Path):
-    resolved = output.expanduser().resolve()
-    if not resolved.exists():
-        return None
-    payload = json.loads(resolved.read_text(encoding="utf-8-sig"))
-    if not isinstance(payload, dict) or not isinstance(payload.get("messages"), list):
-        raise ValueError(f"기존 JSON 구조가 올바르지 않습니다: {resolved}")
-    return payload
-
-
-def validate_same_channel(existing, current):
-    old = existing.get("channel") or {}
-    old_id, new_id = old.get("id"), current.get("id")
-    old_username = str(old.get("username") or "").lower()
-    new_username = str(current.get("username") or "").lower()
-    if old_id and new_id and int(old_id) != int(new_id):
-        raise ValueError("기존 JSON과 현재 수집 대상의 Telegram 채널 ID가 다릅니다.")
-    if not old_id and old_username and new_username and old_username != new_username:
-        raise ValueError("기존 JSON과 현재 수집 대상의 username이 다릅니다.")
-
-
-def merge_records(existing_records, new_records):
-    merged = {}
-    for record in list(existing_records) + list(new_records):
-        if not isinstance(record, dict) or record.get("id") is None:
-            continue
-        merged[int(record["id"])] = record
-    return [merged[message_id] for message_id in sorted(merged, reverse=True)]
-
-
-def write_json_atomic(output: Path, payload):
-    output = output.expanduser().resolve()
-    output.parent.mkdir(parents=True, exist_ok=True)
-    handle, temp_name = tempfile.mkstemp(
-        prefix=f".{output.stem}_", suffix=".tmp", dir=output.parent
-    )
-    try:
-        with os.fdopen(handle, "w", encoding="utf-8") as stream:
-            json.dump(payload, stream, ensure_ascii=False, indent=2)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temp_name, output)
-    except Exception:
-        try:
-            os.unlink(temp_name)
-        except FileNotFoundError:
-            pass
-        raise
 
 
 async def get_channel_metadata(client, entity):
@@ -205,9 +111,7 @@ async def collect(channel, limit: int, output: Path, incremental: bool = False):
     if limit < 1:
         raise ValueError("--limit은 1 이상이어야 합니다.")
 
-    api_id = int(os.environ["TELEGRAM_API_ID"])
-    api_hash = os.environ["TELEGRAM_API_HASH"]
-    client = TelegramClient(str(SESSION_PATH), api_id, api_hash)
+    client = make_client(SESSION_PATH)
 
     await client.connect()
     try:

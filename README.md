@@ -3,32 +3,104 @@
 다크웹 개인정보 유통 생태계 조사 도구 모음
 화이트햇 스쿨 4기 · 다크초코
 
+도구마다 주인이 있습니다. 하나만 골라 써도 되고, 필요한 것만 설치해도 됩니다.
+
+```bash
+python dc.py list
+```
+
 ---
 
 ## 처음 오셨으면
 
-**[docs/각자_할일.md](docs/각자_할일.md)** 를 먼저 보십시오.
-각자 무엇을 고쳐야 하는지 그대로 따라 할 수 있게 적혀 있습니다.
+**[docs/지금까지.md](docs/지금까지.md)** 를 먼저 보십시오.
+무엇이 생겼고 무엇이 안 됐는지 한 장으로 적혀 있습니다.
+
+각자 무엇을 고쳐야 하는지는 **[docs/각자_할일.md](docs/각자_할일.md)** 에 있습니다.
+
+---
+
+## 통합 크롤러 — 명부를 채웁니다
+
+다크웹 DB 세 개(포럼 · 텔레그램 · 랜섬웨어)가 24~30칸을 공유합니다.
+한 명령으로 세 갈래를 조사해 그 칸들을 채웁니다.
+
+```bash
+python dc.py crawl              # 미리보기. 노션에 안 씁니다
+python dc.py crawl --apply      # 실제로 반영합니다
+python dc.py crawl --only forum --limit 5
+python dc.py auto               # 수집 + 명부 조사 (스케줄러가 부릅니다)
+```
+
+**밖으로 나가려면 Tor 가 있어야 합니다.** 없으면 요청을 아예 안 보냅니다.
+다크웹 쪽을 여는 일은 저쪽 로그에 우리 주소를 남기는 일이고, 그것이
+한국 주소면 우리가 누구인지 좁혀집니다.
+
+자리를 만드는 것은 한 줄입니다. Debian · Ubuntu · Kali 에서 됩니다.
+
+```bash
+bash scripts/돌릴자리-만들기.sh
+```
+
+tor 설치 · torrc 규칙 · 띄우기 · 실제로 나가 보기 · 파이썬 부품 ·
+환경 변수 · 점검까지 합니다. 노션 토큰만 사람이 넣습니다.
+
+```bash
+mkdir -p ~/.config/darkchoco
+echo 'ntn_...' > ~/.config/darkchoco/notion_token.txt
+python dc.py doctor --net       # 밖에 어떤 주소가 남는지 봅니다
+```
+
+**윈도우에서 그냥 돌리지 마십시오.** 다크웹 쪽이 그 PC 로 내려오고 V3 가
+막습니다. VM 이나 WSL 에서 돌립니다. 왜 그런지와 자리를 어떻게 만드는지는
+[docs/안전하게-돌리기.md](docs/안전하게-돌리기.md) 에 있습니다.
+무엇이 무엇을 부르는지는 [docs/흐름.md](docs/흐름.md) 에 있습니다.
 
 ---
 
 ## 구조
 
 ```
-apps/         각자 소유. 자기 폴더에서 자유롭게 고칩니다
-packages/     공용 부품. 여기만 공유합니다
-skills/       검증 스킬
+dc.py         입구. 목록 · 사용법 · 상태를 봅니다
+apps/         도구. 각자 소유하고 자기 폴더에서 자유롭게 고칩니다
+packages/     공용 부품. 여기만 리뷰가 필요합니다
+skills/       수집기와 검증 스킬
 docs/         운영안 · 구축 절차 · 할 일
 ```
 
-| 폴더 | 담당 | 무엇 |
-|---|---|---|
-| apps/forum-crawler | 성민서 | 포럼 크롤링 |
-| apps/dls-observatory | 안유빈 | 다크웹 유출 사이트 관측 |
-| apps/kr-leak-alarm | 안유빈 | 랜섬웨어 한국 피해 알림 |
-| apps/tg-notion-report | 이수빈 | 텔레그램 수집 · 노션 반영 |
-| apps/tg-korea-alert | 성민서 | 텔레그램 한국 알림 |
-| skills | 최현서 | 유출 주장 검증 |
+도구 폴더마다 `tool.json` 이 한 장 있습니다. 아래 표는 그것으로 만듭니다.
+
+<!-- 도구표 시작 -->
+| 도구 | 담당 | 설치 | 비밀값 | 어디서 | 무엇을 하나 |
+|---|---|:-:|:-:|:-:|---|
+| [collect](skills/collect) | 최현서 | 없음 | 1곳 | 내 PC | 텔레그램·랜섬·브라우저킷 결과를 SQLite 한 표로 모읍니다 |
+| [darkweb-verify-ko](skills/skills/darkweb-verify-ko) | 최현서 | 없음 | 0곳 | 내 PC | 유출 주장 하나를 아홉 단계로 검증합니다 (AI 스킬) |
+| [dls-observatory](apps/dls-observatory) | 안유빈 | 없음 | 2곳 | 내 PC | 유출 사이트가 살아 있는지 보고 노션 명부를 갱신합니다 |
+| [forum-crawler](apps/forum-crawler) | 성민서 | 필요 | 0곳 | 도커 | 다크웹 포럼 한 곳을 훑어 조사 초안 MD 한 장을 냅니다 |
+| [kr-leak-alarm](apps/kr-leak-alarm) | 안유빈 | 필요 | 0곳 | 내 PC | 랜섬 피드 세 곳에서 한국 피해를 골라 대시보드로 냅니다 |
+| [tg-korea-alert](apps/tg-korea-alert) | 성민서 | 필요 | 5곳 | 내 PC | 텔레그램에서 한국 관련 글을 골라 디스코드로 알립니다 |
+| [tg-notion-report](apps/tg-notion-report) | 이수빈 | 필요 | 3곳 | 내 PC | 텔레그램 채널을 모아 노션 보고서로 반영합니다 |
+<!-- 도구표 끝 -->
+
+---
+
+## 남의 앱을 처음 돌릴 때
+
+`git clone` 다음부터 결과가 나오기까지 손으로 해야 하는 일입니다. 실측한 값입니다.
+
+| 앱 | 첫 명령 | 설치 | 비밀값 받을 곳 | 로그인 |
+|---|---|:-:|:-:|:-:|
+| kr-leak-alarm | `scripts\run.bat` | 자동 | 0곳 | 없음 |
+| dls-observatory | `python diagnose.py` | 없음 | 1곳 (노션) | 없음 |
+| forum-crawler | `docker run -e TARGET_URL=...` | docker build | 0곳 | 없음 |
+| skills/collect | `python -m collect.main --db ...` | pip | 0곳 | 없음 |
+| tg-notion-report | `python telegram_pipeline.py <url>` | pip | 2곳 | 텔레그램 |
+| tg-korea-alert | `python korea_alert_monitor.py` | pip | 4곳 | 텔레그램 |
+
+설치하기 전에 `--help` 로 먼저 훑어볼 수 있습니다. 여섯 앱 전부 됩니다.
+
+kr-leak-alarm 은 `scripts\run.bat` 이 가상환경을 만들고 설정 파일까지 복사합니다.
+`.env.example` 이 있는 앱은 그것을 `.env` 로 복사해 값을 채웁니다.
 
 ---
 
@@ -40,6 +112,7 @@ docs/         운영안 · 구축 절차 · 할 일
 | dc_notion | 노션 API · 토큰 |
 | dc_safety | 안전 HTTP · 텍스트 살균 |
 | dc_ransomfeed | 랜섬 피드 주소 · 가져오기 |
+| dc_console | 윈도우 한글 콘솔 대응 |
 
 사용법은 각 패키지 README 에 있습니다.
 
@@ -91,6 +164,8 @@ python packages/tests/test_dc_safety_ransomfeed.py
 ## 문서
 
 - [각자 할 일](docs/각자_할일.md) — 지금 무엇을 고쳐야 하는지
+- [안전하게 돌리기](docs/안전하게-돌리기.md) — VM 과 Tor. **크롤러를 돌리기 전에 보십시오**
+- [흐름](docs/흐름.md) — 무엇이 무엇을 부르나. 막혔을 때 어디를 보나
 - [팀 GitHub 운영안](docs/팀깃헙_운영안.md) — 왜 이 구조인지
 - [구축 절차](docs/구축절차.md) — 저장소를 어떻게 만들었는지
 

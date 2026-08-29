@@ -47,8 +47,8 @@ class NotionError(RuntimeError):
 
 class Notion:
     def __init__(self, token: str | None = None, verbose: bool = True,
-                 version: str = VERSION):
-        token = token or find_token()
+                 version: str = VERSION, allow_env_token: bool = True):
+        token = token or find_token(allow_env=allow_env_token)
         if not token:
             raise NotionError("노션 토큰이 비어 있습니다.")
         self.token = token
@@ -112,6 +112,13 @@ class Notion:
                           flush=True)
                 time.sleep(wait)
         raise NotionError(f"Notion API 재시도 초과: {method} {path}")
+
+    def request(self, method: str, path: str, body: dict | None = None) -> dict:
+        """아래 편의 메서드로 안 되는 경로를 직접 부를 때 씁니다.
+
+        경로는 /pages/... 처럼 /v1 뒤부터 적습니다.
+        """
+        return self._request(method, path, body)
 
     # -- 데이터베이스 / 데이터 소스 ----------------------------------------
     def database(self, database_id: str) -> dict:
