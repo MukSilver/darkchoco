@@ -237,6 +237,21 @@ def test_올릴_때_두드린_자취를_안_지운다():
     assert "--exclude=./hub/data" in 글, (
         "묶음에 hub/data 가 들어갑니다. 내 PC 자취가 VM 것을 덮습니다")
 
+    # ③ **묶는 스크립트가 둘입니다.** 하나만 고치면 다른 쪽으로 덮입니다.
+    #
+    #   VM에-올리기.ps1     처음 자리 만들 때. rm -rf 를 합니다
+    #   VM에서-돌리기.ps1   매번 돌릴 때.     위에 덮어씁니다
+    #
+    # 2026-08-30 에 앞엣것만 고치고 뒤엣것을 빠뜨렸습니다. rm -rf 가
+    # 없어서 안 지워지는데, 묶음에 들어 있어 **내 PC 것이 VM 것을
+    # 덮고 있었습니다.** 결과가 같습니다.
+    for 이름 in ("VM에-올리기.ps1", "VM에서-돌리기.ps1"):
+        묶음 = (ROOT / "scripts" / 이름).read_text(encoding="utf-8-sig")
+        if "$TarExe" not in 묶음:
+            continue
+        assert "--exclude=./hub/data" in 묶음, (
+            f"{이름} 이 hub/data 를 묶음에 넣습니다")
+
     # ③ 순서가 맞아야 합니다. 되돌리기가 rm 뒤에 와야 합니다
     빼기 = 글.index("cp -a ~/darkchoco/hub/data/.")
     지우기 = 글.index("rm -rf ~/darkchoco &&")

@@ -81,7 +81,17 @@ try {
         Say "저장소를 다시 넣습니다..."
         $tar = Join-Path $env:TEMP ("dc-" + [guid]::NewGuid().ToString("N") + ".tar")
         Push-Location $Repo
-        & $TarExe --exclude=.git --exclude=.venv --exclude=__pycache__ --exclude=*.pyc -cf $tar .
+            # **hub/data 는 안 넣습니다.**
+    #
+    # 이 스크립트는 rm -rf 를 안 하고 위에 덮어씁니다. 그래서 지워지지는
+    # 않는데, 묶음에 hub/data 가 들어 있으면 **내 PC 것이 VM 것을
+    # 덮습니다.** 윈도우에는 Tor 가 없어 전부 실패로 기록돼 있어서,
+    # 덮이면 VM 이 「어느 곳을 연달아 못 두드렸나」를 잃습니다.
+    #
+    # VM에-올리기.ps1 은 rm -rf 를 해서 거기는 빼 두고 되돌립니다.
+    # 여기는 안 넣는 것만으로 됩니다.
+    & $TarExe --exclude=.git --exclude=.venv --exclude=__pycache__ --exclude=*.pyc `
+        --exclude=./hub/data -cf $tar .
         Pop-Location
         & $VBox guestcontrol $Vm --username $User --passwordfile $PwFile `
             copyto --target-directory "/home/$User/" $tar | Out-Null
