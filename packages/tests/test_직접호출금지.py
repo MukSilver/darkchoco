@@ -28,6 +28,16 @@ use_utf8()
     # 전부 이 파일의 오프너를 지납니다. 그래야 Tor 를 빠뜨리는 길이
     # 안 생깁니다. test_맨IP금지.py 가 그것을 따로 봅니다.
     "hub/places/egress.py",
+
+    # 여는 법 셋을 담은 곳입니다. 여기가 urllib 을 부르는 유일한 이유는
+    # **부르는 쪽이 무엇으로 열었는지 몰라도 되게** 하려는 것입니다.
+    # 그래서 여기도 egress.py 의 오프너를 지납니다 — 직접 오프너를
+    # 만들지 않는 것을 test_맨IP금지.py 와 test_crawler.py 가 봅니다.
+    #
+    # 간격은 부르는 쪽(probe/*)이 지킵니다. fetch.py 는 한 번 열고
+    # 끝나므로 스스로 간격을 잴 것이 없습니다.
+    "hub/places/fetch.py",
+
     "hub/places/probe/telegram.py",
     "hub/places/probe/forum.py",
     "hub/places/probe/ransom.py",
@@ -86,17 +96,35 @@ def test_조사기_밖에서는_요청을_안_보낸다():
     )
 
 
+# 배관입니다. 길을 내주고 한 번 열어 줄 뿐, 몇 번 칠지는 안 정합니다.
+# 간격은 그 길을 쓰는 조사기가 갖습니다.
+#
+#   egress.py   Tor 오프너를 만들어 줍니다
+#   fetch.py    http · browser · api 로 한 번 엽니다
+#
+# 이 둘에 간격을 넣으면 오히려 나쁩니다. 호스트마다 다른 간격을 배관이
+# 알 수 없고, 알려면 배관이 조사기를 알아야 합니다.
+배관 = {"hub/places/egress.py", "hub/places/fetch.py"}
+
+
 def test_조사기가_간격을_갖고_있다():
-    """허용된 자리에는 반드시 간격이 있어야 합니다."""
+    """허용된 자리 중 **조사기**에는 반드시 간격이 있어야 합니다."""
+    본것 = 0
     for rel in sorted(허용):
-        if not rel.startswith("hub/"):
-            continue
-        if rel.endswith("egress.py"):
-            # 길을 내주는 자리입니다. 간격은 그 길을 쓰는 조사기가 갖습니다.
+        if not rel.startswith("hub/") or rel in 배관:
             continue
         s = (ROOT / rel).read_text(encoding="utf-8")
-        assert "간격" in s or "min_interval" in s or "sleep" in s, \
-            f"{rel} 에 간격이 없습니다"
+        assert ("간격" in s or "min_interval" in s or "sleep" in s), (
+            f"{rel} 에 간격이 없습니다")
+        본것 += 1
+    assert 본것 >= 3, f"조사기를 {본것}개만 봤습니다"
+
+
+def test_배관은_조사기를_모른다():
+    """배관이 조사기를 부르기 시작하면 방향이 꼬입니다."""
+    for rel in sorted(배관):
+        s = (ROOT / rel).read_text(encoding="utf-8")
+        assert "from hub.places.probe" not in s, f"{rel} 이 조사기를 부릅니다"
 
 
 def test_랜섬은_62초를_지킨다():
