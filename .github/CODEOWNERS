@@ -3,7 +3,6 @@
 # packages 와 hub 는 공용이라 리뷰 한 명이 필요합니다.
 
 /apps/kr-leak-alarm/     @60secAgo
-/apps/tg-notion-report/  @leesubhin060-max
 /apps/tg-korea-alert/    @minsmiths
 /skills/                 @grute02
 /packages/               @MukSilver @minsmiths @60secAgo @leesubhin060-max

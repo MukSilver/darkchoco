@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Callable, Iterable
 from urllib.parse import urlparse
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "packages"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "packages"))
 from dc_notion import Notion  # noqa: E402
 
 

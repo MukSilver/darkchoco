@@ -50,8 +50,6 @@ def test_설치_안해도_help_가_뜬다():
         # 실패했습니다.
         ("apps/tg-korea-alert",
          [sys.executable, "korea_alert_monitor.py", "--help"]),
-        ("apps/tg-notion-report",
-         [sys.executable, "telegram_pipeline.py", "--help"]),
     ]
     for cwd, cmd in 경우:
         r = subprocess.run(cmd, cwd=ROOT / cwd, capture_output=True, text=True,

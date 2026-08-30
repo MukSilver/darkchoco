@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote, urlencode
 
-from notion_safe_update import (
+from hub.events.telegram.safe_update import (
     MatchDecision,
     NotionCandidate,
     decide_update_target,

@@ -1,4 +1,0 @@
-# 공개 Telegram 채널 주소를 한 줄에 하나씩 입력합니다.
-https://t.me/example_channel_1
-https://t.me/example_channel_2
-
