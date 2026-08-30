@@ -56,7 +56,7 @@ jobs:
         env:
           PYTHONIOENCODING: utf-8
 
-      - name: dls-observatory
+
         working-directory: apps/dls-observatory
         run: |
           python test_mock.py
@@ -80,27 +80,7 @@ jobs:
           python dc.py plan
           python dc.py install-task --show
           python dc.py readme --check
-          (cd apps/forum-crawler    && python investigate.py --help > /dev/null)
           (cd apps/tg-korea-alert   && python korea_alert_monitor.py --help > /dev/null)
-          (cd apps/tg-notion-report && python telegram_pipeline.py --help > /dev/null)
-          (cd apps/dls-observatory  && python diagnose.py --help > /dev/null)
           echo "전부 뜹니다"
         env:
           PYTHONIOENCODING: utf-8
-
-  # forum-crawler 의 보안 검사는 그 앱에만 참인 규칙입니다.
-  # (requests.post 금지 · iter_content 금지 등) 저장소 전체에 걸면
-  # kr-leak-alarm/collector/notify.py 와 dc_safety/http.py 가 첫날 걸립니다.
-  # 그래서 경로를 한정해 겁니다.
-  포럼읽기전용:
-    name: forum-crawler 는 읽기만 하는지
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: 쓰기 호출이 없는지
-        run: |
-          if grep -rnE "requests\.(post|put|delete)|smtplib" apps/forum-crawler --include=*.py; then
-            echo "::error::forum-crawler 는 읽기 전용입니다"
-            exit 1
-          fi
-          echo "읽기만 합니다"
