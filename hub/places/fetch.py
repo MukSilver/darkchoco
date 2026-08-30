@@ -51,6 +51,24 @@ class 연것:
     def 봤나(self) -> bool:
         return not self.못본이유
 
+    def 닫기(self) -> None:
+        """**꼭 불러야 합니다.**
+
+        브라우저 컨텍스트는 안 닫으면 계속 삽니다. 84줄을 돌렸더니
+        컨텍스트 84개가 살아남아 VM 이 멈췄습니다(2026-08-30). 다섯
+        시간 넘게 아무 진행 없이 걸려 있었습니다.
+
+        page 는 컨텍스트에 딸려 있어 컨텍스트를 닫으면 같이 닫힙니다.
+        """
+        page, self.page = self.page, None
+        if page is None:
+            return
+        for 닫을것 in (getattr(page, "context", None), page):
+            try:
+                닫을것.close()
+            except Exception:       # noqa: BLE001  이미 닫혔을 수 있습니다
+                pass
+
     @property
     def 깊게봤나(self) -> bool:
         """page 가 있으면 수집기 일곱을 다 돌릴 수 있습니다."""
@@ -147,6 +165,7 @@ class 브라우저세션:
         self.프록시 = 프록시
         self._pw = None
         self._br = None
+        self.연것수 = 0
 
     def __enter__(self):
         try:
@@ -171,10 +190,20 @@ class 브라우저세션:
         return False
 
     def 새페이지(self):
+        """페이지 하나. **쓴 쪽이 연것.닫기() 로 닫아야 합니다.**"""
         if self._br is None:
             raise 브라우저없음("세션이 안 열렸습니다. with 로 감싸십시오")
         ctx = self._br.new_context(locale="en-US")
+        self.연것수 += 1
         return ctx.new_page()
+
+    @property
+    def 안닫힌수(self) -> int:
+        """지금 살아 있는 컨텍스트. 늘기만 하면 새는 것입니다."""
+        try:
+            return len(self._br.contexts) if self._br else 0
+        except Exception:           # noqa: BLE001
+            return 0
 
 
 def _브라우저로(주소, *, 프록시, timeout, 세션=None) -> 연것:
