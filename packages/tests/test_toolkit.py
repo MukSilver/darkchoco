@@ -119,25 +119,26 @@ def test_스케줄러가_auto_를_부른다():
 
 
 
-def test_README_구조도가_실제_폴더를_다_담는다():
-    """오늘 정확히 이것이 문제였습니다.
+def test_README_가_실제_폴더를_다_담는다():
+    """2026-08-30 에 정확히 이것이 문제였습니다.
 
-    hub/ 이 3,691줄로 저장소에서 제일 큰데 README 에 **낱말조차 없었습니다.**
-    구조도가 dc.py · apps · packages · skills · docs 다섯만 적고 있었습니다.
+    hub/ 이 저장소에서 제일 큰데 README 에 **낱말조차 없었습니다.**
+    dc.py · apps · packages · skills · docs 다섯만 적혀 있었습니다.
     hub/ 과 scripts/ 가 생긴 뒤로 아무도 안 고친 것입니다.
 
     오류가 안 납니다. 처음 온 사람이 저장소를 잘못 이해할 뿐입니다.
+
+    **제목이 아니라 내용을 봅니다.** 예전에는 「## 구조」 절을 찾았는데,
+    제목을 바꾸자 검사만 깨졌습니다. 어디에 적혀 있든 적혀만 있으면
+    됩니다.
     """
     글 = (ROOT / "README.md").read_text(encoding="utf-8")
-    자리 = 글[글.index("## 구조"):]
-    자리 = 자리[:자리.index("<!-- 도구표 시작")]
-
     안볼것 = {".git", ".github", ".venv", "venv", "__pycache__",
             "node_modules", ".pytest_cache"}
     실제 = sorted(d.name for d in ROOT.iterdir()
                 if d.is_dir() and d.name not in 안볼것 and not d.name.startswith("."))
-    빠짐 = [d for d in 실제 if f"{d}/" not in 자리]
-    assert not 빠짐, f"README 구조도에 없는 폴더: {빠짐}"
+    빠짐 = [d for d in 실제 if f"{d}/" not in 글]
+    assert not 빠짐, f"README 에 없는 폴더: {빠짐}"
     assert len(실제) >= 5, f"폴더를 {len(실제)}개만 찾았다"
 
 
