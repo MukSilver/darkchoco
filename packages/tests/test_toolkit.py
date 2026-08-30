@@ -228,6 +228,41 @@ def test_지운_앱이_어디에도_안_남아_있다():
                 남음.append(f"{f.name}: apps/{이름}")
     assert not 남음, f"지운 앱을 아직 가리킵니다: {남음}"
 
+
+def test_README_가_보고서체다():
+    """일기체·메모체를 막습니다.
+
+    2026-08-30 에 「모름」「~함」「~없음」 같은 메모체로 썼다가 지적받았습니다.
+    설명서는 두 가지만 씁니다.
+
+        표 안       명사구 (동사 종결 없음)
+        표 밖 문장   완전한 합니다체
+
+    그 사이의 「~함」「~임」은 쓰지 않습니다.
+    """
+    글 = (ROOT / "README.md").read_text(encoding="utf-8")
+    본문 = [l.rstrip() for l in 글.splitlines()
+          if l.strip() and not l.startswith(("|", "#", "```", ">", "-", " ", "\t"))]
+    # 코드 블록 안은 뺍니다
+    안 = False
+    걸린것 = []
+    for l in 글.splitlines():
+        if l.startswith("```"):
+            안 = not 안
+            continue
+        if 안 or l.startswith(("|", "#", " ", "\t")):
+            continue
+        for 나쁜 in ("모름", "함.", "임.", "없음.", "불가.", "금지."):
+            if l.rstrip().endswith(나쁜):
+                걸린것.append(f"{나쁜}: {l.strip()[:50]}")
+    assert not 걸린것, "메모체가 남아 있습니다:\n  " + "\n  ".join(걸린것)
+
+
+def test_README_가_길지_않다():
+    """한 번에 안 들어오면 아무도 안 읽습니다."""
+    줄 = (ROOT / "README.md").read_text(encoding="utf-8").count(chr(10))
+    assert 줄 <= 260, f"{줄}줄. 240줄 안쪽으로 줄이십시오"
+
 if __name__ == "__main__":
     n = 0
     for k, v in sorted(globals().items()):
