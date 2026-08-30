@@ -5,7 +5,6 @@
 
 | 폴더 | 담당 | 무엇 |
 |---|---|---|
-| forum-crawler | 성민서 | 포럼 크롤링 (Docker + Tor + Playwright) |
 | dls-observatory | 안유빈 | 다크웹 유출 사이트 관측 → 노션 |
 | kr-leak-alarm | 안유빈 | 랜섬웨어 DLS 한국 피해 알림 + 대시보드 |
 | tg-notion-report | 이수빈 | 텔레그램 채널 수집 → 노션 반영 |

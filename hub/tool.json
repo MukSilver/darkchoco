@@ -1,0 +1,45 @@
+{
+  "name": "crawler",
+  "owner": "김무근",
+  "github": "@MukSilver",
+  "summary": "포럼·텔레그램·랜섬 명부를 한 명령으로 조사해 노션에 반영합니다",
+  "runs_in": "vm",
+  "commands": {
+    "preview": "python dc.py crawl",
+    "apply": "python dc.py crawl --apply",
+    "one": "python dc.py crawl --only forum --limit 5",
+    "auto": "python dc.py auto",
+    "net": "python dc.py doctor --net"
+  },
+  "default": "preview",
+  "run_cwd": "..",
+  "install": {
+    "requirements": null,
+    "note": "표준 라이브러리만 씁니다. tor 는 scripts/돌릴자리-만들기.sh 가 깝니다"
+  },
+  "preconditions": {
+    "docker": false,
+    "tor": true,
+    "interactive_login": false
+  },
+  "secrets": [
+    {
+      "key": "NOTION_TOKEN",
+      "where": "노션 integration 을 만들어 받습니다. VM 안 ~/.config/darkchoco/notion_token.txt"
+    },
+    {
+      "key": "TOR_SOCKS_PROXY",
+      "where": "tor 의 HTTPTunnelPort 주소입니다. 보통 http://127.0.0.1:9080"
+    }
+  ],
+  "config_files": [],
+  "packages": [
+    "dc_console",
+    "dc_notion",
+    "dc_ransomfeed",
+    "dc_store"
+  ],
+  "output": "노션 다크웹 DB 3개 · hub/data/places.db",
+  "docs": "../docs/흐름.md",
+  "note": "기본이 미리보기입니다. --apply 를 줘야 노션에 씁니다. Tor 가 없으면 요청을 아예 안 보냅니다"
+}
