@@ -16,7 +16,14 @@ python dc.py list
 **[docs/지금까지.md](docs/지금까지.md)** 를 먼저 보십시오.
 무엇이 생겼고 무엇이 안 됐는지 한 장으로 적혀 있습니다.
 
-각자 무엇을 고쳐야 하는지는 **[docs/각자_할일.md](docs/각자_할일.md)** 에 있습니다.
+그다음은 필요한 것만 봅니다.
+
+| 하려는 일 | 볼 것 |
+|---|---|
+| 남의 도구를 돌려 본다 | `python dc.py list` · `dc.py info <이름>` |
+| 크롤러를 돌린다 | [안전하게 돌리기](docs/안전하게-돌리기.md) — **VM 이 필요합니다** |
+| 어디가 막혔는지 찾는다 | [흐름](docs/흐름.md) |
+| PR 을 올린다 | [팀 GitHub 운영안](docs/팀깃헙_운영안.md) |
 
 ---
 
@@ -62,11 +69,26 @@ python dc.py doctor --net       # 밖에 어떤 주소가 남는지 봅니다
 
 ```
 dc.py         입구. 목록 · 사용법 · 상태를 봅니다
+hub/          통합 크롤러. 언제 돌릴지 정하고 노션에 씁니다
+  places/       어디가 있고 살아있나  → 다크웹 DB 3개
+  events/       무슨 글이 올라왔나    → 수집·검증 DB
 apps/         도구. 각자 소유하고 자기 폴더에서 자유롭게 고칩니다
 packages/     공용 부품. 여기만 리뷰가 필요합니다
 skills/       수집기와 검증 스킬
-docs/         운영안 · 구축 절차 · 할 일
+scripts/      VM 자리 만들기 · 올리기 · 돌리기
+docs/         운영안 · 흐름 · 할 일
 ```
+
+층이 셋입니다. **방향이 한쪽입니다.**
+
+```
+packages/  ←  hub/  ←  dc.py
+                ↓
+              apps/  ·  skills/
+```
+
+`packages/` 는 아무도 안 부릅니다. `apps/` 는 `hub/` 를 모릅니다.
+`hub/events/sources/` 만 앱을 부릅니다.
 
 도구 폴더마다 `tool.json` 이 한 장 있습니다. 아래 표는 그것으로 만듭니다.
 
@@ -136,13 +158,20 @@ packages 를 고치면 리뷰 한 명이 필요합니다.
 
 ## 테스트
 
-```
-python packages/tests/test_dc_telegram.py
-python packages/tests/test_dc_notion.py
-python packages/tests/test_dc_safety_ransomfeed.py
+전부 한 줄로 돕니다. 밖에 요청을 안 보냅니다.
+
+```bash
+for f in packages/tests/test_*.py; do python "$f"; done
 ```
 
-부품이 멀쩡한지 보는 테스트입니다. 네트워크 없이 돕니다.
+**15파일 199개입니다.** 표준 라이브러리만 씁니다.
+
+무거운 것을 안 깔고 한두 개만 보려면 이렇게 합니다.
+
+```bash
+python packages/tests/test_맨IP금지.py    # Tor 없이 안 나가는지
+python packages/tests/test_crawler.py     # 크롤러 전체
+```
 
 ---
 
@@ -162,11 +191,17 @@ python packages/tests/test_dc_safety_ransomfeed.py
 
 ## 문서
 
-- [각자 할 일](docs/각자_할일.md) — 지금 무엇을 고쳐야 하는지
+**보고 일하는 것**
+
+- [지금까지](docs/지금까지.md) — 어디까지 왔나. **처음이면 이것부터**
 - [안전하게 돌리기](docs/안전하게-돌리기.md) — VM 과 Tor. **크롤러를 돌리기 전에 보십시오**
 - [흐름](docs/흐름.md) — 무엇이 무엇을 부르나. 막혔을 때 어디를 보나
-- [팀 GitHub 운영안](docs/팀깃헙_운영안.md) — 왜 이 구조인지
-- [구축 절차](docs/구축절차.md) — 저장소를 어떻게 만들었는지
+- [팀 GitHub 운영안](docs/팀깃헙_운영안.md) — 소유 · 리뷰 · 브랜치 · 비밀 관리
+
+**끝난 일의 기록** — 따라 하는 문서가 아닙니다
+
+- [각자 할 일](docs/기록/각자_할일.md) — 8/28 부품 통합 때 나눈 몫
+- [구축 절차](docs/기록/구축절차.md) — 8/26 에 저장소를 어떻게 세웠나
 
 ---
 
