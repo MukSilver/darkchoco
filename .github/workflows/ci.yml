@@ -1,6 +1,6 @@
 name: 테스트
 
-# apps/forum-crawler/.github/ 는 깃허브가 안 봅니다. 루트에만 둡니다.
+# 워크플로는 루트 .github/ 에만 둡니다. 하위 폴더의 것은 깃허브가 안 봅니다.
 on:
   push:
     branches: ["**"]
@@ -53,14 +53,6 @@ jobs:
         run: |
           pip install -r requirements.txt
           python -m tests.test_all
-        env:
-          PYTHONIOENCODING: utf-8
-
-
-        working-directory: apps/dls-observatory
-        run: |
-          python test_mock.py
-          python test_db.py
         env:
           PYTHONIOENCODING: utf-8
 

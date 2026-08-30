@@ -189,6 +189,44 @@ def test_끝난_기록은_따로_둔다():
         assert any("끝난 일의 기록" in l for l in 머리), (
             f"{f.name} 맨 위에 「끝난 일의 기록」 표시가 없습니다")
 
+
+def test_빈_껍데기_도구가_없다():
+    """앱을 지웠는데 tool.json 만 남으면 목록에 유령이 뜹니다.
+
+    2026-08-30 에 apps/tg-notion-report 를 지웠는데 tool.json 한 장이
+    남았습니다. `dc.py list` 가 없는 도구를 계속 보여 줬습니다.
+
+    **오류가 안 납니다.** 목록에 이름이 있으니 팀원이 그것을 돌리려다
+    「폴더가 없습니다」를 봅니다.
+    """
+    유령 = []
+    for p in _tool_json들():
+        if ".git" in p.parts:
+            continue
+        나머지 = [x for x in p.parent.rglob("*")
+                if x.is_file() and x.name != "tool.json"
+                and "__pycache__" not in x.parts]
+        if not 나머지:
+            유령.append(str(p.parent.relative_to(ROOT)))
+    assert not 유령, f"tool.json 만 남은 껍데기: {유령}"
+
+
+def test_지운_앱이_어디에도_안_남아_있다():
+    """지운 앱 이름이 코드·설정에 남으면 CI 가 없는 폴더를 찾습니다."""
+    지운것 = ("forum-crawler", "dls-observatory", "tg-notion-report")
+    볼것 = [ROOT / ".github" / "workflows" / "ci.yml",
+          ROOT / ".github" / "CODEOWNERS",
+          ROOT / "README.md"]
+    남음 = []
+    for f in 볼것:
+        if not f.exists():
+            continue
+        글 = f.read_text(encoding="utf-8")
+        for 이름 in 지운것:
+            if f"apps/{이름}" in 글:
+                남음.append(f"{f.name}: apps/{이름}")
+    assert not 남음, f"지운 앱을 아직 가리킵니다: {남음}"
+
 if __name__ == "__main__":
     n = 0
     for k, v in sorted(globals().items()):

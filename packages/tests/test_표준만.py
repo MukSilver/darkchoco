@@ -2,7 +2,7 @@
 
     python packages/tests/test_표준만.py
 
-dls-observatory 는 표준 라이브러리만 쓰는 앱입니다. 공용 부품을 쓰게
+hub 는 표준 라이브러리만 쓰는 앱입니다. 공용 부품을 쓰게
 바꾸면서 requests 가 딸려 들어가 한 번 깨진 적이 있어 막아 둡니다.
 
 같은 프로세스에서 검사하면 이미 import 된 것이 통과시켜 버립니다.
@@ -54,7 +54,7 @@ def test_dc_notion_은_맨몸으로_된다():
 
 
 def test_dc_ransomfeed_주소만_맨몸으로_된다():
-    """dls-observatory 가 주소 상수만 가져다 쓴다. Fetcher 는 안 쓴다."""
+    """hub 가 주소 상수만 가져다 쓴다. Fetcher 는 안 쓴다."""
     code, out = _돌리기(
         "from dc_ransomfeed import RANSOMWARE_LIVE, RANSOMLOOK, RANSOMFEED_RSS\n"
         "print(RANSOMWARE_LIVE)")
@@ -75,7 +75,7 @@ def test_dls_observatory_가_맨몸으로_돈다():
          "sys.argv = ['diagnose.py', '--help']\n"
          "try: runpy.run_path('diagnose.py', run_name='__main__')\n"
          "except SystemExit: pass\n"],
-        cwd=ROOT / "apps" / "dls-observatory", capture_output=True, text=True,
+        cwd=ROOT / "hub", capture_output=True, text=True,
         encoding="utf-8", errors="replace", timeout=60)
     합 = (r.stdout or "") + (r.stderr or "")
     assert "ModuleNotFoundError" not in 합, "표준 라이브러리만으로 안 돈다\n" + 합[:500]
