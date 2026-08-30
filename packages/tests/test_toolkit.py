@@ -66,8 +66,11 @@ def test_명령에_이상문자가_없다():
 def test_list_가_돈다():
     code, out = _dc("list")
     assert code == 0, out
-    assert "도구 7개" in out, out[:300]
-    for n in ("kr-leak-alarm", "darkweb-verify-ko", "forum-crawler"):
+    # 숫자를 박아 두면 도구가 하나 늘거나 줄 때마다 검사가 깨집니다.
+    # 실제로 crawler 를 넣고 forum-crawler 를 지우면서 두 번 걸렸습니다.
+    몇장 = len([x for x in _tool_json들() if ".git" not in x.parts])
+    assert f"도구 {몇장}개" in out, f"{몇장}장인데 화면은: {out[:300]!r}"
+    for n in ("kr-leak-alarm", "darkweb-verify-ko", "crawler"):
         assert n in out, f"{n} 이 목록에 없다"
 
 
