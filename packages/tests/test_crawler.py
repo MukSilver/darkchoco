@@ -1694,6 +1694,46 @@ def test_표본_게시글_수를_적는다():
     글 = (ROOT / "hub" / "places" / "collect" / "모으기.py").read_text(encoding="utf-8")
     assert "표본 게시글" in 글
 
+
+def test_브라우저_창을_닫는다():
+    """안 닫으면 컨텍스트가 쌓입니다.
+
+    2026-08-30 에 84줄을 돌렸더니 컨텍스트 84개가 살아남아 VM 이
+    멈췄습니다. 다섯 시간 넘게 아무 진행이 없었고, 게스트 제어도
+    응답을 안 해서 껐다 켜야 했습니다.
+
+    **오류가 안 납니다.** 그냥 안 끝납니다.
+    """
+    from hub.places.fetch import 연것
+    연것(본문="x").닫기()               # page 가 없어도 안 터져야 합니다
+
+    class 가짜컨텍스트:
+        def __init__(self): self.닫힘 = False
+        def close(self): self.닫힘 = True
+
+    class 가짜페이지:
+        def __init__(self, c): self.context = c
+        def close(self): pass
+
+    c = 가짜컨텍스트()
+    r = 연것(본문="x", page=가짜페이지(c))
+    r.닫기()
+    assert c.닫힘, "컨텍스트를 안 닫았다"
+    assert r.page is None, "닫고 나서도 page 를 들고 있다"
+
+
+def test_깊은_판이_반드시_닫고_상한이_있다():
+    """한 줄이 오래 걸리는 것과 판이 안 끝나는 것은 다릅니다."""
+    글 = (ROOT / "hub" / "places" / "run.py").read_text(encoding="utf-8")
+    자리 = 글[글.index("def 깊게("):]
+    자리 = 자리[:자리.index(chr(10) + "def ") if chr(10) + "def " in 자리 else len(자리)]
+    assert "finally:" in 자리 and "닫기()" in 자리, "깊은 판이 창을 안 닫습니다"
+    assert "깊은판_상한초" in 자리, "전체 상한이 없습니다"
+    assert "살아있는 창" in 자리, "새는 것을 눈으로 볼 수 없습니다"
+
+    from hub.places.run import 깊은판_상한초
+    assert 0 < 깊은판_상한초 <= 3 * 3600, 깊은판_상한초
+
 if __name__ == "__main__":
     n = 0
     for k, v in sorted(globals().items()):

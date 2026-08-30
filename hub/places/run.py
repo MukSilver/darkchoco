@@ -177,6 +177,10 @@ def _랜섬_앞선것(줄들, 상황):
 # 열린 곳만 다시 열어 수집기를 돌립니다.
 깊게볼갈래 = {"forum", "ransom"}
 
+# 깊은 판 전체 상한. 한 줄이 오래 걸리는 것과 판이 안 끝나는 것은
+# 다릅니다. 상한이 없어서 다섯 시간 넘게 걸려 있던 적이 있습니다.
+깊은판_상한초 = 60 * 60
+
 갈래표 = {
     "telegram": {
         "여는법": _텔레그램_열기,
@@ -320,18 +324,36 @@ def 깊게(갈래: str, 열린것, ctx: dict):
         return
     try:
         with 세션열기 as 세션:
-            for r in 열린것:
+            셀것 = len(열린것)
+            시작 = time.time()
+            for i, r in enumerate(열린것, 1):
                 주소 = (r.주소 or "").strip()
                 if not 주소:
                     continue
+                # **전체 상한.** 한 줄이 오래 걸리는 것과 판이 안 끝나는
+                # 것은 다릅니다. 다섯 시간 넘게 걸려 있던 적이 있습니다.
+                if time.time() - 시작 > 깊은판_상한초:
+                    print(f"    깊은 판을 {깊은판_상한초 // 60}분에서 끊습니다 "
+                          f"({i - 1}/{셀것})", flush=True)
+                    break
+                연것 = None
                 try:
                     연것 = 열기(주소, 법="browser", 프록시=프록시,
                               timeout=40, 세션=세션)
                     if not 연것.봤나():
                         continue
                     q = 모으기(연것, r.이름, 갈래=갈래)
-                except Exception as e:      # noqa: BLE001  한 줄이 죽어도 나머지를 돕니다
+                except Exception:           # noqa: BLE001  한 줄이 죽어도 나머지를 돕니다
                     continue
+                finally:
+                    # **꼭 닫습니다.** 안 닫으면 컨텍스트가 쌓여 VM 이
+                    # 멈춥니다. 84줄에서 실제로 그랬습니다.
+                    if 연것 is not None:
+                        연것.닫기()
+                if i % 5 == 0 or i == 셀것:
+                    지난 = time.time() - 시작
+                    print(f"    깊게 {i}/{셀것}줄 · {지난 / 60:.0f}분 지남 "
+                          f"· 살아있는 창 {세션.안닫힌수}", flush=True)
                 # 상태를 안 넘깁니다. 브라우저 403 이 http 200 을 덮으면
                 # 살아있는 곳이 미확인이 됩니다.
                 q.두드림 = False
