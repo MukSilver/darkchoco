@@ -221,6 +221,15 @@ def _브라우저로(주소, *, 프록시, timeout, 세션=None) -> 연것:
             return r
     try:
         page = 세션.새페이지()
+        # **만들자마자 담습니다.**
+        #
+        # 예전에는 goto 가 된 뒤에 담았습니다. 그런데 goto 는 자주
+        # 터집니다(타임아웃·터널 실패). 그러면 창은 이미 열렸는데
+        # 연것 이 그것을 모르고, 닫기() 가 닫을 것이 없다고 지나갑니다.
+        #
+        # 실측(2026-08-30): 55줄 도는 동안 살아있는 창이 1 -> 13 으로
+        # 늘었습니다. 네 줄에 하나꼴로 샜습니다.
+        r.page = page
         resp = page.goto(주소, timeout=timeout * 1000,
                          wait_until="domcontentloaded")
         r.상태코드 = resp.status if resp else 0
@@ -230,6 +239,7 @@ def _브라우저로(주소, *, 프록시, timeout, 세션=None) -> 연것:
         r.page = page
     except Exception as e:          # noqa: BLE001
         r.못본이유 = f"{type(e).__name__}: {e}"[:180]
+        r.닫기()                    # 열린 창을 여기서 닫습니다
     finally:
         if 혼자 and r.page is None:
             세션.__exit__(None, None, None)

@@ -1734,6 +1734,21 @@ def test_깊은_판이_반드시_닫고_상한이_있다():
     from hub.places.run import 깊은판_상한초
     assert 0 < 깊은판_상한초 <= 3 * 3600, 깊은판_상한초
 
+
+def test_goto_가_터져도_창을_닫는다():
+    """창을 만든 뒤 goto 가 터지면 연것 이 그것을 모르고 지나갔습니다.
+
+    실측(2026-08-30): 55줄 도는 동안 살아있는 창이 1 -> 13 으로 늘었습니다.
+    네 줄에 하나꼴로 샜습니다. goto 는 자주 터집니다(타임아웃·터널 실패).
+    """
+    글 = (ROOT / "hub" / "places" / "fetch.py").read_text(encoding="utf-8")
+    자리 = 글[글.index("def _브라우저로("):]
+    새페이지 = 자리.index("세션.새페이지()")
+    goto = 자리.index("page.goto(")
+    담기 = 자리.index("r.page = page")
+    assert 새페이지 < 담기 < goto, (
+        "goto 뒤에 r.page 를 담습니다. 터지면 창이 샙니다")
+
 if __name__ == "__main__":
     n = 0
     for k, v in sorted(globals().items()):
