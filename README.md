@@ -100,7 +100,6 @@ packages/  ←  hub/  ←  dc.py
 | [darkweb-verify-ko](skills/skills/darkweb-verify-ko) | 최현서 | 없음 | 0곳 | 내 PC | 유출 주장 하나를 아홉 단계로 검증합니다 (AI 스킬) |
 | [kr-leak-alarm](apps/kr-leak-alarm) | 안유빈 | 필요 | 0곳 | 내 PC | 랜섬 피드 세 곳에서 한국 피해를 골라 대시보드로 냅니다 |
 | [tg-korea-alert](apps/tg-korea-alert) | 성민서 | 필요 | 5곳 | 내 PC | 텔레그램에서 한국 관련 글을 골라 디스코드로 알립니다 |
-| [tg-notion-report](apps/tg-notion-report) | 이수빈 | 필요 | 3곳 | 내 PC | 텔레그램 채널을 모아 노션 보고서로 반영합니다 |
 <!-- 도구표 끝 -->
 
 ---
