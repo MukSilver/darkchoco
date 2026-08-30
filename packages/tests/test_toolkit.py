@@ -48,7 +48,9 @@ def test_tool_json_이_전부_읽힌다():
         assert not 빠짐, f"{p} 에 {빠짐} 이 없다"
         assert d["default"] in d["commands"], f"{p} 의 default 가 commands 에 없다"
         본것 += 1
-    assert 본것 >= 7, f"tool.json 이 {본것}장뿐이다"
+    # 숫자를 박지 않습니다. 도구가 늘거나 줄 때마다 깨집니다 —
+    # 2026-08-30 에 crawler 를 넣고 둘을 지우면서 세 번 걸렸습니다.
+    assert 본것 >= 4, f"tool.json 이 {본것}장뿐이다. 너무 적습니다"
 
 
 def test_명령에_이상문자가_없다():
@@ -83,7 +85,7 @@ def test_info_가_돈다():
 
 
 def test_doctor_가_돈다():
-    code, out = _dc("doctor", "dls-observatory")
+    code, out = _dc("doctor", "crawler")
     assert code == 0, out
     assert "파이썬" in out, out[:300]
 

@@ -188,6 +188,49 @@ def 모으기(연것, 이름: str, *, 갈래: str = "forum",
             setattr(p, 칸,
                     " · ".join(map(str, v)) if isinstance(v, list) else v)
 
+    표본수 = len(모은것.get("_표본_게시글", []))
+
+    # ── dls-observatory 의 판정을 얹습니다
+    #
+    # 수집기는 「무엇이 있나」를 봅니다. infer 는 그것을 보고 「그래서
+    # 무엇인가」를 냅니다. 근거 없이는 값을 안 냅니다 — 모든 함수가
+    # (값, 근거) 를 같이 돌려주고, 근거가 없으면 값도 없습니다.
+    try:
+        from hub.places import infer as I                  # noqa: PLC0415
+        from hub.places.extract import page as PG          # noqa: PLC0415
+
+        메타 = PG.meta_tags(연것.본문 or "")
+        글자 = PG.visible_text(연것.본문 or "")
+        제목 = PG.get_title(연것.본문 or "") or 이름
+        설명 = 메타.get("meta_description") or ""
+        낱말 = 메타.get("meta_keywords") or ""
+        h1 = 메타.get("h1") or ""
+
+        if not p.언어:
+            언어, _ = PG.detect_language(연것.본문 or "", 글자)
+            if 언어:
+                p.언어 = 언어
+
+        막힘 = PG.detect_gate(연것.본문 or "", 글자)
+        if not p.들어가는법 and 막힘.get("how_to_enter"):
+            p.들어가는법 = 막힘["how_to_enter"]
+        if p.가입필요 is None and 막힘.get("signup_required") is not None:
+            p.가입필요 = bool(막힘["signup_required"])
+
+        꼴, 근거 = I.infer_format(갈래, 설명, 제목, 낱말, h1=h1, name=이름)
+        if 꼴 and not p.형식:
+            p.형식 = 꼴
+        개인, 근거2 = I.infer_pii(갈래, 설명, 제목, 낱말, h1=h1, fmt=꼴)
+        if 개인 and not p.개인정보:
+            p.개인정보 = 개인
+        자리, _ = I.infer_distribution(갈래, 설명, 제목, h1=h1,
+                                     listing_links=표본수)
+        for x in (자리 or []):
+            if x not in p.유통자리:
+                p.유통자리.append(x)
+    except Exception:       # noqa: BLE001  판정이 죽어도 수집 결과는 씁니다
+        pass
+
     표본 = len(모은것.get("_표본_게시글", []))
     p.받은곳 = f"수집기 {max(돈것, 0)}/7 ({연것.여는법})"
     if 표본:

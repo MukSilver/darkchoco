@@ -32,7 +32,6 @@ def test_reconfigure_없는_스트림에서도_안죽는다():
 자리 = [
     "apps/kr-leak-alarm/collector/main.py",
     "apps/kr-leak-alarm/tests/test_all.py",
-    "apps/dls-observatory/test_db.py",
     "skills/collect/main.py",
 ]
 
