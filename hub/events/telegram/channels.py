@@ -2,7 +2,7 @@ import asyncio
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "packages"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "packages"))
 from dc_telegram import make_client
 
 from telethon.tl.types import Channel

@@ -145,8 +145,14 @@ def test_모든_hub_모듈이_혼자_불러진다():
         "import importlib, sys",
         f"sys.path.insert(0, r'{ROOT}')",
         "안됨 = []",
+        "바깥 = {'telethon', 'requests', 'playwright', 'defusedxml', 'yaml', 'tqdm'}",
         f"for m in {sorted(set(모듈))!r}:",
         "    try: importlib.import_module(m)",
+        # 안 깔린 바깥 꾸러미는 경로 버그가 아닙니다. telethon 처럼
+        # 있어야 도는 것은 Needs 가 따로 봅니다.
+        "    except ModuleNotFoundError as e:",
+        "        if getattr(e, 'name', '') in 바깥: continue",
+        "        안됨.append(f'{m}: {type(e).__name__} {e}')",
         "    except Exception as e: 안됨.append(f'{m}: {type(e).__name__} {e}')",
         "print('|'.join(안됨))",
     ])

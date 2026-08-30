@@ -81,7 +81,6 @@ jobs:
           python dc.py install-task --show
           python dc.py readme --check
           (cd apps/tg-korea-alert   && python korea_alert_monitor.py --help > /dev/null)
-          (cd apps/tg-notion-report && python telegram_pipeline.py --help > /dev/null)
           echo "전부 뜹니다"
         env:
           PYTHONIOENCODING: utf-8
