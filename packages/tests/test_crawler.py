@@ -1749,6 +1749,55 @@ def test_goto_가_터져도_창을_닫는다():
     assert 새페이지 < 담기 < goto, (
         "goto 뒤에 r.page 를 담습니다. 터지면 창이 샙니다")
 
+
+# ── dls-observatory 흡수 ───────────────────────────────────────────
+def test_판정기가_근거_없이는_값을_안_낸다():
+    """infer.py 의 원칙입니다. 모든 함수가 (값, 근거) 를 돌려줍니다."""
+    from hub.places import infer as I
+    값, 근거 = I.infer_format("forum", "", "", "")
+    if 값:
+        assert 근거, f"{값} 을 근거 없이 냈다"
+    값2, 근거2 = I.infer_pii("forum", "", "", "")
+    if 값2:
+        assert 근거2
+
+
+def test_본문에서_뽑는_판정_넷이_있다():
+    """tor_probe.py 1,105줄 중 이 넷만 옮겼습니다.
+
+    나머지 절반은 직접 SOCKS5 터널을 여는 코드인데, hub 은 egress.py 로
+    나가고 하위 페이지는 브라우저가 봅니다. 이미 있는 것을 또 옮기면
+    나가는 길이 둘이 됩니다.
+    """
+    from hub.places.extract import page as P
+    for n in ("detect_language", "detect_gate", "meta_tags",
+              "extract_indicators", "visible_text", "get_title"):
+        assert callable(getattr(P, n, None)), n
+    글 = (ROOT / "hub" / "places" / "extract" / "page.py").read_text(encoding="utf-8")
+    # 낱말이 아니라 뜻을 봅니다. 설명에 socks5 라는 말이 나올 수는
+    # 있지만 **소켓을 여는 코드**가 있으면 안 됩니다.
+    for 나쁜 in ("import socket", "socks5_connect", "http.client", "ssl."):
+        assert 나쁜 not in 글, f"터널 여는 코드가 딸려 왔습니다: {나쁜}"
+
+
+def test_판정이_모으기에_붙어_있다():
+    """수집기는 「무엇이 있나」, infer 는 「그래서 무엇인가」입니다."""
+    from hub.places.collect.모으기 import 모으기
+    from hub.places.fetch import 연것
+    h = ('<html><head><title>Leaks Forum</title>'
+         '<meta name="description" content="database leaks and dumps for sale">'
+         '</head><body>You must register to view.</body></html>')
+    p = 모으기(연것(주소="https://x.test/", 본문=h, 여는법="http"), "LEAKS")
+    assert p.형식, "형식을 못 냈다"
+    assert p.들어가는법, "들어가는 법을 못 냈다"
+
+
+def test_판정이_죽어도_수집_결과는_쓴다():
+    """판정은 곁들이는 것입니다. 그것 때문에 조사가 날아가면 안 됩니다."""
+    글 = (ROOT / "hub" / "places" / "collect" / "모으기.py").read_text(encoding="utf-8")
+    자리 = 글[글.index("dls-observatory 의 판정을 얹습니다"):]
+    assert "except Exception:" in 자리, "판정이 터지면 조사까지 날아갑니다"
+
 if __name__ == "__main__":
     n = 0
     for k, v in sorted(globals().items()):
