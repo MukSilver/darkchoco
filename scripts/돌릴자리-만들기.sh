@@ -236,6 +236,44 @@ else
     bad ".venv 를 못 만들었습니다. python3 로 그냥 돌려도 됩니다"
 fi
 
+# ── 7-2. 브라우저 ──────────────────────────────────────────────────
+# 수집기 일곱 중 다섯이 Playwright page 를 받습니다. 없으면 첫 화면
+# 글자만 보고 끝나서 채우는 칸이 절반으로 줍니다.
+#
+# 클라우드플레어 앞단도 브라우저라야 지납니다. 2026-08-30 실측으로
+# 「연결이 안 됩니다」 461줄 중 상당수가 그것입니다.
+#
+# 크롬은 400MB 쯤 됩니다. 안 깔려도 크롤러는 돕니다 — 그때는 http 로만
+# 열고 못 돈 수집기를 화면에 적습니다.
+step "7-2. 브라우저 (Playwright)"
+if [ "${DARKCHOCO_SKIP_BROWSER:-}" = "1" ]; then
+    say "DARKCHOCO_SKIP_BROWSER=1 이라 건너뜁니다"
+elif "$PY" -c "import playwright.sync_api" 2>/dev/null && [ -d ~/.cache/ms-playwright ]; then
+    ok "playwright 와 크롬이 이미 있습니다"
+else
+    # **apt 의 playwright 를 쓰면 안 됩니다.**
+    #
+    # 칼리에 python3-playwright(1.55.0+ds)가 있는데 데비안이 드라이버를
+    # 떼어 냅니다(+ds = Debian source). 그것으로 띄우면 이렇게 죽습니다.
+    #
+    #     Connection.init: Connection closed while reading from the driver
+    #
+    # pip 판은 node 와 드라이버를 안에 갖고 옵니다. .venv 안에 깝니다.
+    say "playwright 를 받습니다 (크롬까지 400MB 쯤, 몇 분 걸립니다)..."
+    if "$PY" -m pip install -q "playwright>=1.45,<2"; then
+        # 크롬만 받습니다. --with-deps 는 root 가 필요한데, 칼리에는
+        # 필요한 라이브러리가 대부분 이미 있습니다.
+        if "$PY" -m playwright install chromium >/dev/null 2>&1; then
+            ok "브라우저까지 깔았습니다"
+        else
+            say "시스템 라이브러리가 모자란 것 같습니다. 받아 봅니다..."
+            as_root "$PY" -m playwright install --with-deps chromium >/dev/null 2>&1                 && ok "브라우저까지 깔았습니다"                 || bad "크롬을 못 깔았습니다. http 로만 열립니다 (수집기 5개가 안 돕니다)"
+        fi
+    else
+        bad "playwright 를 못 깔았습니다. http 로만 열립니다"
+    fi
+fi
+
 # ── 8. 환경 변수 ───────────────────────────────────────────────────
 step "8. 환경 변수"
 LINE="export TOR_SOCKS_PROXY=http://127.0.0.1:${PORT}"

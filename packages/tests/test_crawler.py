@@ -884,9 +884,51 @@ def test_동시에_봐도_줄과_결과가_안_엇갈린다():
 
 
 def test_Tor_가_없으면_한_줄씩_본다():
-    """프록시가 없으면 어차피 안 나갑니다. 스레드를 안 만듭니다."""
+    """프록시가 없으면 어차피 안 나갑니다. 스레드를 안 만듭니다.
+
+    예전에는 이 검사가 소스에서 문자열 한 줄을 찾았습니다. 흐름을
+    통일하면서 그 줄이 없어졌는데, **동작은 그대로인데 검사만 깨졌습니다.**
+    낱말이 아니라 뜻을 봅니다.
+    """
+    from hub.places import run as R
+
+    본것 = []
+    옛열기 = R.갈래표["forum"]["여는법"]
+
+    def 세는열기(r, 상황):
+        import threading
+        본것.append(threading.current_thread().name)
+        return Place(갈래="forum", 이름=r.이름, 못본이유="검사")
+
+    class 줄:
+        def __init__(self, i):
+            self.page_id, self.이름, self.주소, self.어니언 = f"p{i}", f"F{i}", f"https://e{i}.test/", ""
+
+    R.갈래표["forum"]["여는법"] = 세는열기
+    try:
+        list(R._조사("forum", [줄(i) for i in range(4)],
+                    {"tor": None, "이음사전": {}}))
+    finally:
+        R.갈래표["forum"]["여는법"] = 옛열기
+    assert len(set(본것)) == 1, f"Tor 가 없는데 스레드를 {len(set(본것))}개 썼다"
+
+
+def test_갈래를_보고_가르지_않는다():
+    """흐름 통일의 핵심입니다.
+
+    예전에는 `_조사()` 안이 if telegram / elif forum / elif ransom
+    세 덩이였습니다. 수집기를 얹으려면 세 곳에 각각 붙여야 했습니다.
+    """
     글 = (ROOT / "hub" / "places" / "run.py").read_text(encoding="utf-8")
-    assert "동시 = 최대동시 if 프록시 else 1" in 글
+    자리 = 글[글.index("def _조사"):글.index("def 이음사전만들기")]
+    for 나쁜 in ('갈래 == "telegram"', '갈래 == "forum"', '갈래 == "ransom"'):
+        assert 나쁜 not in 자리, f"_조사() 안에서 갈래를 가릅니다: {나쁜}"
+
+    from hub.places.run import 갈래표, 갈래들
+    assert set(갈래표) == set(갈래들), (set(갈래표), set(갈래들))
+    for 갈래, 설정 in 갈래표.items():
+        assert callable(설정["여는법"]), 갈래
+        assert "동시" in 설정 and "앞선것" in 설정, 갈래
 
 
 def test_요약이_얼마나_열렸는지_보여_준다():
@@ -1214,7 +1256,7 @@ def test_run_에_손으로_박은_합치기가_안_남았다():
     """예전에는 칸 이름을 run.py 안에서 문자열로 나열했습니다."""
     글 = (ROOT / "hub" / "places" / "run.py").read_text(encoding="utf-8")
     assert "합치기(" in 글, "merge.py 를 안 씁니다"
-    자리 = 글[글.index("def _열기"):글.index("def _열기") + 900]
+    자리 = 글[글.index("def _조사"):글.index("def 이음사전만들기")]
     assert '"이전이름"' not in 자리 and '"최근활동"' not in 자리, (
         "칸 이름을 run.py 에서 다시 나열하고 있습니다. merge.py 로 가야 합니다")
 
@@ -1428,6 +1470,333 @@ def test_달을_세는_쪽도_같은_날을_본다():
     글 = (ROOT / "hub" / "places" / "probe" / "ransom.py").read_text(encoding="utf-8")
     assert "date.today()" not in 글, "기계 시간대의 오늘을 씁니다"
     assert "_오늘()" in 글, "한국 기준 오늘을 안 씁니다"
+
+
+# ── fetch.py — 여는 법 갈아 끼우기 ─────────────────────────────────
+def test_여는법이_셋이고_같은_것을_돌려준다():
+    """부르는 쪽은 무엇으로 열었는지 몰라도 됩니다."""
+    from hub.places.fetch import 연것, 여는법들, 열기
+    assert set(여는법들) == {"http", "browser", "api"}
+    for 법 in 여는법들:
+        r = 열기("https://example.test/", 법=법)
+        assert isinstance(r, 연것), 법
+        assert r.여는법 == 법 or 법 == "api", (법, r.여는법)
+
+
+def test_모르는_여는법은_거절한다():
+    from hub.places.fetch import 열기
+    try:
+        열기("https://example.test/", 법="magic")
+    except ValueError:
+        return
+    raise AssertionError("모르는 법을 받아 줬다")
+
+
+def test_브라우저는_Tor_없이_안_뜬다():
+    """urllib 과 다릅니다.
+
+    브라우저는 우리가 안 건 요청(폰트·이미지·텔레메트리)도 스스로
+    보냅니다. 프록시를 안 걸면 그것들이 전부 맨 IP 로 나갑니다.
+    **한 군데만 새도 그 판은 우리 주소를 남깁니다.**
+    """
+    from hub.places.fetch import 열기
+    r = 열기("https://example.test/", 법="browser", 프록시=None)
+    assert not r.봤나(), "Tor 없이 브라우저를 띄웠다"
+    assert "Tor" in r.못본이유, r.못본이유
+
+
+def test_page_가_있어야_깊게_본_것이다():
+    """수집기 일곱 중 다섯이 page 를 요구합니다."""
+    from hub.places.fetch import 연것
+    assert not 연것(본문="<html/>").깊게봤나
+    assert 연것(본문="<html/>", page=object()).깊게봤나
+
+
+def test_fetch_도_egress_를_지난다():
+    """여는 법이 늘어도 나가는 문은 하나여야 합니다."""
+    글 = (ROOT / "hub" / "places" / "fetch.py").read_text(encoding="utf-8")
+    assert "from hub.places.egress import" in 글, "egress 를 안 지납니다"
+    assert "urllib.request.urlopen" not in 글, "프록시를 건너뛰는 urlopen 이 있습니다"
+    assert "build_opener" not in 글, "프록시 없는 오프너를 직접 만듭니다"
+
+
+# ── collect/ — 수집기 흡수 ─────────────────────────────────────────
+def test_수집기_일곱이_다_있다():
+    from hub.places import collect as C
+    assert len(C.차례) == 7, C.차례
+    for n in C.차례:
+        f = ROOT / "hub" / "places" / "collect" / f"{n}.py"
+        assert f.exists(), f"{n} 이 없습니다"
+        assert "def run(" in f.read_text(encoding="utf-8"), f"{n} 에 run 이 없습니다"
+
+
+def test_page_없이_도는_것과_아닌_것을_가른다():
+    """다섯이 Playwright page 를 받습니다. http 로 열면 못 돕니다."""
+    from hub.places import collect as C
+    page필요 = [n for n in C.차례 if C.page가필요한가(n)]
+    assert len(page필요) == 5, page필요
+    assert set(C.필요한것) == set(C.차례)
+
+
+def test_못_돈_수집기를_적는다():
+    """조용히 빠뜨리면 나중에 왜 칸이 비었는지 못 찾습니다."""
+    from hub.places.collect.모으기 import 모으기
+    from hub.places.fetch import 연것
+    p = 모으기(연것(주소="https://x.test/", 본문="<html/>", 여는법="http"), "T")
+    assert "못 돈 수집기" in p.살펴볼것, p.살펴볼것
+    # 몇 개가 돌았는지를 화면에 적습니다. 숫자를 박지 않습니다 —
+    # 차례가 바뀌면 개수도 바뀝니다.
+    import re as _re
+    m = _re.search(r"수집기 (\d)/7", p.받은곳)
+    assert m, p.받은곳
+    assert int(m.group(1)) < 7, f"page 없이 다 돌았다고 합니다: {p.받은곳}"
+
+
+def test_못_열었으면_수집기를_안_돌린다():
+    from hub.places.collect.모으기 import 모으기
+    from hub.places.fetch import 연것
+    p = 모으기(연것(주소="https://x.test/", 못본이유="연결이 안 됩니다"), "T")
+    assert not p.두드림 and p.못본이유 == "연결이 안 됩니다"
+    assert not p.받은곳, "못 열었는데 받은곳을 적었다"
+
+
+def test_칸이름이_Place_에_실제로_있다():
+    """수집기가 노션 칸 이름으로 돌려줍니다. 옮기는 표가 맞아야 합니다."""
+    from dataclasses import fields
+    from hub.places.collect.모으기 import 칸이름
+    from hub.places.place import Place
+    있는칸 = {f.name for f in fields(Place)}
+    없는것 = sorted(set(칸이름.values()) - 있는칸)
+    assert not 없는것, f"Place 에 없는 칸으로 옮기려 합니다: {없는것}"
+
+
+def test_없는것을_확인한_것은_안_쓴다():
+    """CONFIRMED_ABSENT 는 「없는 것을 확인했다」입니다. 값이 아닙니다."""
+    from hub.places.collect.모으기 import _값
+    assert _값({"state": "CONFIRMED_ABSENT"}) is None
+    assert _값({"value": "abc.onion"}) == "abc.onion"
+
+
+def test_브라우저는_막힌_곳을_뚫는_도구가_아니다():
+    """2026-08-30 실측입니다. 포럼 20줄에 http 와 나란히 댔습니다.
+
+        둘 다 못 봄 14 · 둘 다 4 · http 만 2 · **browser 만 0**
+
+    브라우저가 더 여는 곳은 하나도 없었고 두 곳에서는 졌습니다.
+    클라우드플레어가 진짜 헤드리스 크롬을 더 잘 알아봅니다.
+
+    그래서 **열린 곳만** 깊게 봅니다. 안 열린 곳을 브라우저로 다시
+    여는 것은 30초를 두 번 버리는 일입니다.
+    """
+    글 = (ROOT / "hub" / "places" / "run.py").read_text(encoding="utf-8")
+    assert 'p.상태 == "online"' in 글, "열린 곳만 고르지 않습니다"
+    assert "browser 만 0" in 글 or "browser 만" in 글, (
+        "왜 이렇게 하는지가 안 적혀 있습니다")
+
+
+def test_깊은_판은_상태를_안_주장한다():
+    """브라우저가 403 을 받아도 그 곳이 죽은 것은 아닙니다.
+
+    실제로 bf.st 가 http 200(163,544자) · browser 403(5,786자) 였습니다.
+    깊은 것이 상태를 덮으면 살아있는 곳이 미확인이 됩니다.
+    """
+    글 = (ROOT / "hub" / "places" / "run.py").read_text(encoding="utf-8")
+    자리 = 글[글.index("def 깊게("):]
+    자리 = 자리[:자리.index(chr(10) + "def ") if chr(10) + "def " in 자리 else len(자리)]
+    assert "q.두드림 = False" in 자리, "깊은 것이 상태를 주장합니다"
+    assert 'q.상태 = "미확인"' in 자리
+
+
+def test_깊은_판은_순차로_돈다():
+    """Playwright 동기 API 는 스레드 안전하지 않습니다.
+
+    여러 스레드에서 같은 세션을 쓰면 **조용히 엉킵니다.** 오류가 안 나고
+    엉뚱한 페이지의 값이 섞입니다.
+    """
+    글 = (ROOT / "hub" / "places" / "run.py").read_text(encoding="utf-8")
+    자리 = 글[글.index("def 깊게("):]
+    자리 = 자리[:자리.index(chr(10) + "def ") if chr(10) + "def " in 자리 else len(자리)]
+    assert "ThreadPoolExecutor" not in 자리, "깊은 판을 스레드로 돌립니다"
+    assert "스레드 안전" in 자리, "왜 순차인지가 안 적혀 있습니다"
+
+
+def test_깊게_볼_갈래를_고른다():
+    """텔레그램은 브라우저가 필요 없습니다. API 로 봅니다."""
+    from hub.places.run import 갈래들, 깊게볼갈래
+    assert 깊게볼갈래 <= set(갈래들), 깊게볼갈래
+    assert "telegram" not in 깊게볼갈래
+
+
+def test_Tor_없으면_깊은_판을_안_돈다():
+    from hub.places.run import 깊게
+    assert list(깊게("forum", [object()], {"tor": None})) == []
+
+
+def test_한_줄에_노션을_한_번만_쓴다():
+    """깊게 볼 줄을 얕은 판에서 먼저 쓰면 같은 줄에 두 번 씁니다.
+
+    실측(2026-08-30, 포럼 12줄)에서 「바뀐 줄 14」가 나왔습니다. 12줄인데
+    14입니다. 확인일만 바뀐 줄이 두 번 올라가고 노션 요청도 두 배였습니다.
+    """
+    글 = (ROOT / "hub" / "places" / "run.py").read_text(encoding="utf-8")
+    assert "미룰것" in 글, "깊게 볼 줄을 미루지 않습니다"
+    자리 = 글[글.index("for 줄, p in _조사("):글.index("# ── 깊은 판")]
+    assert "if 미룰것:" in 자리 and "continue" in 자리, (
+        "미룬 줄이 얕은 판에서도 반영됩니다")
+
+
+def test_깊게_못_본_줄도_얕은_것으로_쓴다():
+    """미뤄 놓고 깊은 판이 실패하면 아무것도 안 쓰게 됩니다.
+
+    브라우저가 403 을 받는 곳이 실제로 있습니다(bf.st · Voided).
+    """
+    글 = (ROOT / "hub" / "places" / "run.py").read_text(encoding="utf-8")
+    assert "깊게본것" in 글, "깊게 본 줄을 안 셉니다"
+    assert "얕은 것이라도" in 글, "왜 이 되돌림이 필요한지가 안 적혀 있습니다"
+
+
+def test_사이트_전체를_재귀로_돈다():
+    """investigate.py 가 하던 일 중 제일 큽니다.
+
+    structure 가 카테고리 씨앗을 찾으면 content.crawl_site() 로 사이트를
+    돌며 게시글 헤드라인을 모읍니다. 이게 빠지면 홈페이지 한 장만 보고
+    끝나서 (5)교차참조 (7)활동 이 빈손으로 돕니다.
+
+    그러면 「유통 자리」「개인정보 유출」「최근 활동」이 계속 빕니다.
+    """
+    글 = (ROOT / "hub" / "places" / "collect" / "모으기.py").read_text(encoding="utf-8")
+    assert "crawl_site" in 글, "사이트 전체를 안 돕니다. 홈페이지 한 장만 봅니다"
+    assert "_사이트_카테고리_시드" in 글, "씨앗을 안 받습니다"
+
+
+def test_수집기_차례가_평평하지_않다():
+    """단순 나열이 아닙니다. 앞엣것 결과로 뒤엣것이 갈립니다."""
+    글 = (ROOT / "hub" / "places" / "collect" / "모으기.py").read_text(encoding="utf-8")
+    assert "sample_list_url" in 글, "사람이 골라 준 목록 페이지를 안 씁니다"
+    assert "_표본_게시글" in 글, "④ 가 만든 표본을 ⑦ 에 안 넘깁니다"
+    assert "_들어가는_법_구조" in 글, "② 가 모은 글자를 ⑤ 가 다시 안 씁니다"
+
+
+def test_수집기_사이에_간격이_있다():
+    """onion 은 느립니다. 붙여서 치면 그쪽을 힘들게 합니다."""
+    글 = (ROOT / "hub" / "places" / "collect" / "모으기.py").read_text(encoding="utf-8")
+    assert "REQUEST_DELAY_MIN_SEC" in 글, "수집기 사이에 간격이 없습니다"
+
+
+def test_스냅샷을_남긴다():
+    """무엇을 보고 그렇게 판단했는지가 남아야 합니다."""
+    글 = (ROOT / "hub" / "places" / "collect" / "모으기.py").read_text(encoding="utf-8")
+    assert "save_snapshot" in 글, "증거를 안 남깁니다"
+
+
+def test_표본_게시글_수를_적는다():
+    """0 이면 (5)(7) 이 빈손으로 돈 것입니다. 화면에서 보여야 합니다."""
+    글 = (ROOT / "hub" / "places" / "collect" / "모으기.py").read_text(encoding="utf-8")
+    assert "표본 게시글" in 글
+
+
+def test_브라우저_창을_닫는다():
+    """안 닫으면 컨텍스트가 쌓입니다.
+
+    2026-08-30 에 84줄을 돌렸더니 컨텍스트 84개가 살아남아 VM 이
+    멈췄습니다. 다섯 시간 넘게 아무 진행이 없었고, 게스트 제어도
+    응답을 안 해서 껐다 켜야 했습니다.
+
+    **오류가 안 납니다.** 그냥 안 끝납니다.
+    """
+    from hub.places.fetch import 연것
+    연것(본문="x").닫기()               # page 가 없어도 안 터져야 합니다
+
+    class 가짜컨텍스트:
+        def __init__(self): self.닫힘 = False
+        def close(self): self.닫힘 = True
+
+    class 가짜페이지:
+        def __init__(self, c): self.context = c
+        def close(self): pass
+
+    c = 가짜컨텍스트()
+    r = 연것(본문="x", page=가짜페이지(c))
+    r.닫기()
+    assert c.닫힘, "컨텍스트를 안 닫았다"
+    assert r.page is None, "닫고 나서도 page 를 들고 있다"
+
+
+def test_깊은_판이_반드시_닫고_상한이_있다():
+    """한 줄이 오래 걸리는 것과 판이 안 끝나는 것은 다릅니다."""
+    글 = (ROOT / "hub" / "places" / "run.py").read_text(encoding="utf-8")
+    자리 = 글[글.index("def 깊게("):]
+    자리 = 자리[:자리.index(chr(10) + "def ") if chr(10) + "def " in 자리 else len(자리)]
+    assert "finally:" in 자리 and "닫기()" in 자리, "깊은 판이 창을 안 닫습니다"
+    assert "깊은판_상한초" in 자리, "전체 상한이 없습니다"
+    assert "살아있는 창" in 자리, "새는 것을 눈으로 볼 수 없습니다"
+
+    from hub.places.run import 깊은판_상한초
+    assert 0 < 깊은판_상한초 <= 3 * 3600, 깊은판_상한초
+
+
+def test_goto_가_터져도_창을_닫는다():
+    """창을 만든 뒤 goto 가 터지면 연것 이 그것을 모르고 지나갔습니다.
+
+    실측(2026-08-30): 55줄 도는 동안 살아있는 창이 1 -> 13 으로 늘었습니다.
+    네 줄에 하나꼴로 샜습니다. goto 는 자주 터집니다(타임아웃·터널 실패).
+    """
+    글 = (ROOT / "hub" / "places" / "fetch.py").read_text(encoding="utf-8")
+    자리 = 글[글.index("def _브라우저로("):]
+    새페이지 = 자리.index("세션.새페이지()")
+    goto = 자리.index("page.goto(")
+    담기 = 자리.index("r.page = page")
+    assert 새페이지 < 담기 < goto, (
+        "goto 뒤에 r.page 를 담습니다. 터지면 창이 샙니다")
+
+
+# ── dls-observatory 흡수 ───────────────────────────────────────────
+def test_판정기가_근거_없이는_값을_안_낸다():
+    """infer.py 의 원칙입니다. 모든 함수가 (값, 근거) 를 돌려줍니다."""
+    from hub.places import infer as I
+    값, 근거 = I.infer_format("forum", "", "", "")
+    if 값:
+        assert 근거, f"{값} 을 근거 없이 냈다"
+    값2, 근거2 = I.infer_pii("forum", "", "", "")
+    if 값2:
+        assert 근거2
+
+
+def test_본문에서_뽑는_판정_넷이_있다():
+    """tor_probe.py 1,105줄 중 이 넷만 옮겼습니다.
+
+    나머지 절반은 직접 SOCKS5 터널을 여는 코드인데, hub 은 egress.py 로
+    나가고 하위 페이지는 브라우저가 봅니다. 이미 있는 것을 또 옮기면
+    나가는 길이 둘이 됩니다.
+    """
+    from hub.places.extract import page as P
+    for n in ("detect_language", "detect_gate", "meta_tags",
+              "extract_indicators", "visible_text", "get_title"):
+        assert callable(getattr(P, n, None)), n
+    글 = (ROOT / "hub" / "places" / "extract" / "page.py").read_text(encoding="utf-8")
+    # 낱말이 아니라 뜻을 봅니다. 설명에 socks5 라는 말이 나올 수는
+    # 있지만 **소켓을 여는 코드**가 있으면 안 됩니다.
+    for 나쁜 in ("import socket", "socks5_connect", "http.client", "ssl."):
+        assert 나쁜 not in 글, f"터널 여는 코드가 딸려 왔습니다: {나쁜}"
+
+
+def test_판정이_모으기에_붙어_있다():
+    """수집기는 「무엇이 있나」, infer 는 「그래서 무엇인가」입니다."""
+    from hub.places.collect.모으기 import 모으기
+    from hub.places.fetch import 연것
+    h = ('<html><head><title>Leaks Forum</title>'
+         '<meta name="description" content="database leaks and dumps for sale">'
+         '</head><body>You must register to view.</body></html>')
+    p = 모으기(연것(주소="https://x.test/", 본문=h, 여는법="http"), "LEAKS")
+    assert p.형식, "형식을 못 냈다"
+    assert p.들어가는법, "들어가는 법을 못 냈다"
+
+
+def test_판정이_죽어도_수집_결과는_쓴다():
+    """판정은 곁들이는 것입니다. 그것 때문에 조사가 날아가면 안 됩니다."""
+    글 = (ROOT / "hub" / "places" / "collect" / "모으기.py").read_text(encoding="utf-8")
+    자리 = 글[글.index("dls-observatory 의 판정을 얹습니다"):]
+    assert "except Exception:" in 자리, "판정이 터지면 조사까지 날아갑니다"
 
 if __name__ == "__main__":
     n = 0

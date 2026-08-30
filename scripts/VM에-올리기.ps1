@@ -138,13 +138,17 @@ try {
     #
     # 그래서 저장소 밖(~/darkchoco-data)에 두고 넣은 뒤 되돌립니다.
     # rm -rf 가 원리상 못 건드리는 자리입니다.
+    # .venv 도 살립니다. 거기에 playwright 가 들어 있고, 다시 깔면
+    # 크롬까지 400MB 를 또 받습니다. 저장소 밖으로 뺐다가 되돌립니다.
     $넣기 = @(
         'mkdir -p ~/darkchoco-data',
         '[ -d ~/darkchoco/hub/data ] && cp -a ~/darkchoco/hub/data/. ~/darkchoco-data/ 2>/dev/null',
+        '[ -d ~/darkchoco/.venv ] && mv ~/darkchoco/.venv ~/darkchoco-venv 2>/dev/null',
         'rm -rf ~/darkchoco && mkdir -p ~/darkchoco',
         "tar -xf ~/$base -C ~/darkchoco && rm -f ~/$base",
         'mkdir -p ~/darkchoco/hub/data',
         'cp -a ~/darkchoco-data/. ~/darkchoco/hub/data/ 2>/dev/null',
+        '[ -d ~/darkchoco-venv ] && mv ~/darkchoco-venv ~/darkchoco/.venv 2>/dev/null',
         'true'
     ) -join '; '
     VmRun $넣기 -Quiet | Out-Null
