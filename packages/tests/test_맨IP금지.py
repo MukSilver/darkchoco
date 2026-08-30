@@ -186,8 +186,9 @@ def test_흐름문서가_코드와_안_어긋난다():
     from hub.places.place import 덮어쓰는칸, 합치는칸, 빈칸만칸
     for 칸 in 덮어쓰는칸 | 합치는칸 | 빈칸만칸:
         assert 칸 in 문서, f"흐름 문서에 「{칸}」 이 없습니다"
+    # dls_fill.py 는 2026-08-30 에 그 앱과 함께 지웠습니다.
     for 자리 in ("egress.py", "dc.py auto", "hub/places/run.py",
-                "hub/places/write.py", "dls_fill.py", "hub/sched.py"):
+                "hub/places/write.py", "hub/sched.py"):
         assert 자리 in 문서, f"흐름 문서에 {자리} 가 없습니다"
 
     # 그림에 나온 조사기가 실제로 다 있는지도 봅니다.
