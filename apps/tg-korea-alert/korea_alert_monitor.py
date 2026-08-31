@@ -310,8 +310,15 @@ async def main(args):
 
     api_id = int(os.environ["TELEGRAM_API_ID"])
     api_hash = os.environ["TELEGRAM_API_HASH"]
-    dart_api_key = os.environ["DART_API_KEY"]
-    gemini_api_key = os.environ["GEMINI_API_KEY"]
+    # DART 와 Gemini 는 보조 판별기다. 판별기 자체가 DART 실패와 Gemini 한도 소진을
+    # 견디게 짜여 있는데, 여기서 os.environ[...] 로 읽는 바람에 키가 없으면
+    # 판별기를 만들기도 전에 KeyError 로 통째로 죽었다. 없으면 없는 채로 간다.
+    dart_api_key = os.environ.get("DART_API_KEY", "")
+    gemini_api_key = os.environ.get("GEMINI_API_KEY", "")
+    if not dart_api_key:
+        print("[dart] DART_API_KEY 가 없습니다 — DART 조회를 건너뜁니다 (규칙·캐시로만 판별).")
+    if not gemini_api_key:
+        print("[gemini] GEMINI_API_KEY 가 없습니다 — Gemini 판별을 건너뜁니다 (규칙·캐시·DART 로만 판별).")
     database = open_database(args.database)
     client = TelegramClient(str(SESSION_PATH), api_id, api_hash)
 

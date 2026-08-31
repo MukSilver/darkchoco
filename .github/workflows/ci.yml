@@ -56,6 +56,38 @@ jobs:
         env:
           PYTHONIOENCODING: utf-8
 
+      # 앱이 둘인데 이 일이 하나만 돌고 있었습니다.
+      # **test_monitor_ordering 만 돌립니다.** 같은 폴더의 test.py 는 실제로
+      # 텔레그램에 로그인하고 test_classifier.py 는 디스코드로 보냅니다.
+      # 둘 다 GitHub 서버가 밖으로 나가는 일이라 CI 에서 돌리면 안 됩니다.
+      - name: tg-korea-alert
+        working-directory: apps/tg-korea-alert
+        run: |
+          pip install -r requirements.txt
+          python -m unittest test_monitor_ordering -v
+        env:
+          PYTHONIOENCODING: utf-8
+
+  스킬:
+    name: skills 검사
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      # CI 가 skills/ 를 아예 안 부르고 있었습니다. 도구 둘이 거기 있습니다.
+      # 아무것도 안 깝니다 — 이 검사들은 표준 라이브러리만 씁니다.
+      - name: skills 아래 검사 전부
+        run: |
+          set -e
+          for f in $(find skills -name "test_*.py" -not -path "*__pycache__*" | sort); do
+            echo "── $f"
+            python "$f"
+          done
+        env:
+          PYTHONIOENCODING: utf-8
+
   설치전:
     name: 설치 없이 --help 가 뜨는지
     runs-on: ubuntu-latest
@@ -65,7 +97,9 @@ jobs:
         with:
           python-version: "3.11"
       # 일부러 아무것도 안 깝니다. 남의 도구를 훑어보는 상황입니다.
-      - name: 여섯 진입점
+      # 이름의 수를 아래 줄 수와 맞춥니다. 「여섯」이라 적혀 있는데 다섯만
+      # 있었습니다. 명령을 더하거나 뺄 때 이름도 같이 고칩니다.
+      - name: 다섯 진입점
         run: |
           set -e
           python dc.py list

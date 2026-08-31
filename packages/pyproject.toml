@@ -11,7 +11,7 @@ requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
 
 # 기본 설치는 밖에서 받아오는 것이 없습니다.
-# dc_console 과 dc_notion 은 표준 라이브러리만 씁니다.
+# dc_console 과 dc_notion 과 dc_store 는 표준 라이브러리만 씁니다.
 dependencies = []
 
 # 필요한 것만 골라 받습니다.
@@ -31,6 +31,10 @@ packages = [
     "dc_notion",
     "dc_ransomfeed",
     "dc_safety",
+    # 2026-08-31 에 넣었습니다. 빠져 있어서 pip install -e packages 로는
+    # 안 깔렸습니다. 지금 도는 것은 부르는 쪽(hub/events/run.py ·
+    # skills/collect/store.py)이 sys.path 에 packages 를 넣기 때문입니다.
+    "dc_store",
     "dc_telegram",
 ]
 

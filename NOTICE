@@ -19,15 +19,23 @@ LICENSE 가 있으면 그것이 먼저입니다.
 ───────────
 
 apps/ 아래 다섯과 skills/ 는 각자 다른 저장소에서 `git subtree` 로 흡수했습니다.
-원래 저장소의 커밋 기록이 그대로 남아 있습니다. 절차는 docs/구축절차.md 에
+원래 저장소의 커밋 기록이 그대로 남아 있습니다. 절차는 docs/기록/구축절차.md 에
 적혀 있습니다.
+
+지금 있는 것
+
+  apps/kr-leak-alarm       안유빈
+  apps/tg-korea-alert      성민서
+  skills                   최현서
+
+2026-08-30 에 지운 것 (커밋 기록에는 남아 있습니다)
 
   apps/forum-crawler       성민서
   apps/dls-observatory     안유빈
-  apps/kr-leak-alarm       안유빈
   apps/tg-notion-report    이수빈
-  apps/tg-korea-alert      성민서
-  skills                   최현서
+
+지운 셋을 여기 남겨 두는 것은 원래 저작자를 지우지 않기 위해서입니다.
+폴더는 없어도 그 커밋은 이 저장소 기록에 그대로 있습니다.
 
 각 폴더의 주인은 .github/CODEOWNERS 에 적혀 있습니다.
 

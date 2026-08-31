@@ -121,7 +121,10 @@ def test_노션_안쓰는_도구는_그대로_돈다():
 def test_부품_설치_설정이_있다():
     """pip install -e packages 가 되어야 한다."""
     t = (ROOT / "packages" / "pyproject.toml").read_text(encoding="utf-8")
-    for n in ("dc_console", "dc_notion", "dc_safety", "dc_ransomfeed", "dc_telegram"):
+    # dc_store 는 2026-08-31 까지 빠져 있었다. 검사도 다섯만 세고 있어서
+    # 못 잡았다. 여섯을 다 센다.
+    for n in ("dc_console", "dc_notion", "dc_safety", "dc_ransomfeed",
+              "dc_store", "dc_telegram"):
         assert n in t, f"pyproject.toml 에 {n} 이 없다"
     assert "dependencies = []" in t, "기본 설치가 밖에서 무엇을 받으면 안 된다"
 

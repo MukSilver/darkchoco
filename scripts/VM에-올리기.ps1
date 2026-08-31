@@ -172,16 +172,30 @@ try {
     Step "6. 노션 토큰"
     if ($SkipToken) {
         Say "건너뜁니다 (-SkipToken)"
-    } elseif (Test-Path $TokenFile) {
-        & $VBox guestcontrol $Vm --username $User --passwordfile $PwFile `
-            run --wait-stdout -- /bin/bash -lc "mkdir -p ~/.config/darkchoco" | Out-Null
-        & $VBox guestcontrol $Vm --username $User --passwordfile $PwFile `
-            copyto --target-directory "/home/$User/.config/darkchoco/" $TokenFile | Out-Null
-        VmRun "chmod 600 ~/.config/darkchoco/notion_token.txt" -Quiet | Out-Null
-        OK "넣었습니다 (VM 안에만 둡니다)"
     } else {
-        Bad "토큰 파일이 없습니다: $TokenFile"
-        Say "노션에 못 씁니다. 읽기만 됩니다."
+        # 토큰 파일 이름이 두 가지로 돌아다닙니다. packages/dc_notion/token.py
+        # 는 notion_token 과 notion_token.txt 를 둘 다 찾는데 여기 기본값은
+        # .txt 하나뿐이라, SECURITY.md 대로 확장자 없이 만든 사람은 늘
+        # "토큰 파일이 없습니다" 만 봤습니다. 없으면 다른 이름도 봅니다.
+        if (-not (Test-Path $TokenFile)) {
+            $대안 = "$env:USERPROFILE\.config\darkchoco\notion_token"
+            if (Test-Path $대안) { $TokenFile = $대안 }
+        }
+        if (Test-Path $TokenFile) {
+            & $VBox guestcontrol $Vm --username $User --passwordfile $PwFile `
+                run --wait-stdout -- /bin/bash -lc "mkdir -p ~/.config/darkchoco" | Out-Null
+            & $VBox guestcontrol $Vm --username $User --passwordfile $PwFile `
+                copyto --target-directory "/home/$User/.config/darkchoco/" $TokenFile | Out-Null
+            # **넣은 파일 이름 그대로 chmod 합니다.** notion_token.txt 를 박아
+            # 두면 -TokenFile 로 다른 이름을 준 순간 권한이 안 걸립니다.
+            $토큰이름 = Split-Path -Leaf $TokenFile
+            VmRun "chmod 600 ~/.config/darkchoco/$토큰이름" -Quiet | Out-Null
+            OK "넣었습니다 — $토큰이름 (VM 안에만 둡니다)"
+        } else {
+            Bad "토큰 파일이 없습니다: $TokenFile"
+            Say "notion_token 과 notion_token.txt 둘 다 봤습니다."
+            Say "노션에 못 씁니다. 읽기만 됩니다."
+        }
     }
 
     # ── 7. 점검 ────────────────────────────────────────────────────
@@ -193,7 +207,10 @@ try {
     Say "  powershell -File scripts\VM에서-돌리기.ps1 'crawl --limit 3'"
     Say "  powershell -File scripts\VM에서-돌리기.ps1 'crawl --apply'"
     Say ""
-    Say "코드를 고친 뒤 다시 넣으려면 -Sync 를 주십시오."
+    # -Sync 는 이 스크립트가 아니라 VM에서-돌리기.ps1 의 스위치입니다.
+    # 여기 param 에는 없어서, 안내대로 치면 파라미터 오류만 났습니다.
+    Say "코드를 고친 뒤 다시 넣으려면 돌리기 쪽에 -Sync 를 주십시오."
+    Say "  powershell -File scripts\VM에서-돌리기.ps1 -Sync 'crawl --limit 3'"
     Write-Host ""
 }
 finally {

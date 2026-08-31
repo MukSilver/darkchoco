@@ -14,6 +14,7 @@ CLAUDE.md §3-8: 이 프로파일의 값은 사람이 실제 대상 마크업(sn
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlparse
 
 # 각 최상위 키는 whitelist.yaml의 platform 값과 대응한다. 값을 채우지 않은 선택자 키는
 # 생략해도 된다 — 생략된 키는 collector의 기존 기본값으로 자동 대체된다.
@@ -73,8 +74,26 @@ PROFILES: dict[str, dict[str, str]] = {
 
 
 def get_profile(source: dict[str, Any]) -> dict[str, str]:
-    """source(whitelist.yaml 항목)의 platform 필드로 프로파일을 찾는다. 없으면 빈 dict."""
+    """source 의 platform 필드로 프로파일을 찾는다. 없으면 주소로 한 번 더 본다.
+
+    **hub 경로에는 platform 을 넣는 자리가 없다.** whitelist.yaml 을 쓰던
+    시절에는 사람이 거기에 적어 주었는데, 지금 모으기.py 가 만드는 source 에는
+    name 과 url 뿐이라 이 함수가 언제나 빈 dict 를 냈다. 그 결과 수집기 넷이
+    전부 범용 추측 선택자로 돌고, 사람이 스냅샷을 보고 채워 둔 darkforums
+    프로파일은 한 번도 쓰이지 않았다.
+
+    그래서 platform 이 없으면 **주소의 호스트 이름표**로 찾는다.
+    darkforums.st · darkforums.ru 처럼 도메인 끝이 바뀌어도 같은 사이트다.
+    이름표 하나와 통째로 같을 때만 맞다고 본다 — 부분 일치로 두면 엉뚱한
+    곳에 남의 선택자가 붙는다. platform 을 적어 주면 그 쪽이 이긴다.
+    """
     platform = source.get("platform")
-    if not platform:
-        return {}
-    return PROFILES.get(platform, {})
+    if platform:
+        return PROFILES.get(platform, {})
+
+    url = source.get("url") or ""
+    호스트 = urlparse(url if "://" in url else f"//{url}").hostname or ""
+    for 이름표 in 호스트.lower().split("."):
+        if 이름표 in PROFILES:
+            return PROFILES[이름표]
+    return {}
