@@ -7,6 +7,7 @@ CLAUDE.md §4.2 브라우저·네트워크 보안 규칙에 대응하는 값들�
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 # --- Tor ---
 TOR_SOCKS_PROXY = os.environ.get("TOR_SOCKS_PROXY", "socks5://127.0.0.1:9050")
@@ -80,7 +81,14 @@ SESSIONS_DIR = os.environ.get("SESSIONS_DIR", "sessions")
 SNAPSHOTS_DIR = os.environ.get("SNAPSHOTS_DIR", "snapshots")
 OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "output")
 RUN_LOG_PATH = os.environ.get("RUN_LOG_PATH", "run_log.json")
-KOREA_KEYWORDS_PATH = os.environ.get("KOREA_KEYWORDS_PATH", "keywords/korea_keywords.txt")
+# **모듈 기준 절대경로입니다.** 위의 sessions·snapshots·output 은 돌린 자리에
+# 생기는 산출물이라 상대경로가 맞지만, 이 파일은 코드와 함께 따라다니는 재료라
+# 어느 자리에서 돌리든 같은 것을 찾아야 합니다. 8/30 통합 때 상대경로인 채로
+# 남아서 파일을 못 찾고 있었습니다
+KOREA_KEYWORDS_PATH = os.environ.get(
+    "KOREA_KEYWORDS_PATH",
+    str(Path(__file__).resolve().parent / "keywords" / "korea_keywords.txt"),
+)
 # 사이트 전체 헤드라인 순회(content_sample.crawl_site) 중단 시 체크포인트 저장 위치.
 # sessions/ 와 같은 named volume(darkweb-sessions)에 두면 컨테이너 재실행 사이에도 남는다.
 CHECKPOINT_DIR = os.environ.get("CHECKPOINT_DIR", SESSIONS_DIR)

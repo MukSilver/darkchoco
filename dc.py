@@ -436,6 +436,10 @@ def cmd_auto(args) -> int:
     # 한쪽이 어긋납니다. 등록 명령에서 이미 같은 사고가 있었습니다
     수집끝 = cmd_run(argparse.Namespace(
         only=None, dry=args.dry, limit=0, due=True, db=None))
+    # 주의: --dry 가 막는 범위가 두 쪽이 다릅니다. 수집 어댑터는 ctx.dry 를
+    # 보고 요청 자체를 안 보내지만, 아래 명부 조사는 apply 가 노션 쓰기만
+    # 막고 사이트는 실제로 엽니다. 「dry 니까 밖으로 안 나간다」로 읽으면
+    # 안 됩니다
 
     print()
     print("  ── 명부 조사 ──")
@@ -659,7 +663,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("auto", help="수집과 명부 조사를 한 번에 (스케줄러용)")
     p.add_argument("--dry", action="store_true",
-                   help="밖에 요청을 안 보내고 노션에도 안 씁니다. 무엇이 돌지만 봅니다")
+                   help="수집은 요청을 안 보냅니다. 명부 조사는 열어는 보고 노션에만 안 씁니다")
     p.set_defaults(fn=cmd_auto)
 
     p = sub.add_parser("run", help="수집을 한 판 돌립니다")
