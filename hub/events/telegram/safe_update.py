@@ -662,7 +662,7 @@ def prompt_candidate_number(candidates: tuple[NotionCandidate, ...]) -> str | No
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Notion 자동 업데이트 전 대상 페이지 안전 검사")
-    parser.add_argument("--channel-json", type=Path, required=True, help="collect_messages.py가 만든 JSON")
+    parser.add_argument("--channel-json", type=Path, required=True, help="collect.py 가 만든 JSON")
     parser.add_argument(
         "--candidates-json", type=Path,
         help="테스트용 후보 JSON. 생략하면 NOTION_TOKEN으로 데이터 소스를 자동 탐색",

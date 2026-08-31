@@ -431,8 +431,11 @@ def cmd_auto(args) -> int:
 
     print()
     print("  ── 수집 ──")
+    # **사용자가 친 --dry 를 그대로 넘깁니다.** 예전에는 False 가 박혀 있어서
+    # auto --dry 를 쳐도 수집만 실제로 나갔습니다. 값을 두 곳에 따로 적으면
+    # 한쪽이 어긋납니다. 등록 명령에서 이미 같은 사고가 있었습니다
     수집끝 = cmd_run(argparse.Namespace(
-        only=None, dry=False, limit=0, due=True, db=None))
+        only=None, dry=args.dry, limit=0, due=True, db=None))
 
     print()
     print("  ── 명부 조사 ──")
@@ -656,7 +659,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("auto", help="수집과 명부 조사를 한 번에 (스케줄러용)")
     p.add_argument("--dry", action="store_true",
-                   help="노션에 안 씁니다. 무엇이 돌지만 봅니다")
+                   help="밖에 요청을 안 보내고 노션에도 안 씁니다. 무엇이 돌지만 봅니다")
     p.set_defaults(fn=cmd_auto)
 
     p = sub.add_parser("run", help="수집을 한 판 돌립니다")
