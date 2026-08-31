@@ -56,7 +56,7 @@ def load_channels(path: Path):
 def run_channel(channel: str, args):
     command = [
         sys.executable,
-        str(BASE_DIR / "telegram_pipeline.py"),
+        str(BASE_DIR / "pipeline.py"),
         channel,
         "--limit", str(args.limit),
     ]

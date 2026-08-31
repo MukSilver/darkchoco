@@ -15,6 +15,10 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote, urlencode
 
+# `hub` 로 시작하는 경로를 쓰므로 저장소 뿌리가 검색 경로에 있어야 합니다.
+# 파일 경로로 직접 부르면 이 폴더만 들어가서 못 찾습니다.
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+
 from hub.events.telegram.safe_update import (
     MatchDecision,
     NotionCandidate,
