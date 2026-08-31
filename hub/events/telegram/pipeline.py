@@ -76,7 +76,7 @@ def main():
     if not args.skip_collect:
         collect_command = [
             sys.executable,
-            str(BASE_DIR / "collect_messages.py"),
+            str(BASE_DIR / "collect.py"),
             args.channel,
             "--limit", str(args.limit),
             "--output", str(json_path),
@@ -95,14 +95,14 @@ def main():
 
     run_step("2/3 자동 분석 보고서 생성", [
         sys.executable,
-        str(BASE_DIR / "deep_analyze_messages.py"),
+        str(BASE_DIR / "analyze.py"),
         "--input", str(json_path),
         "--output", str(report_path),
     ])
 
     notion_command = [
         sys.executable,
-        str(BASE_DIR / "notion_report_sync.py"),
+        str(BASE_DIR / "report.py"),
         "--channel-json", str(json_path),
         "--report", str(report_path),
         "--data-source-name", args.data_source_name,

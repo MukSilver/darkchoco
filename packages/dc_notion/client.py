@@ -21,6 +21,10 @@ import urllib.error
 import urllib.request
 
 from .token import find_token
+# 노션은 글자를 조각 목록으로 줍니다. 그것을 한 줄로 잇는 함수가
+# value.py 에 있는데 여기서 `_plain` 이라는 이름으로 부르고 있었습니다.
+# dls-observatory 에서 옮겨 오면서 가져오는 줄이 빠졌습니다
+from .value import plain_text as _plain
 from typing import Any
 
 # 재시도해야 할 네트워크 오류들. 500개 행을 순차로 쓰는 동안 한 번쯤은
