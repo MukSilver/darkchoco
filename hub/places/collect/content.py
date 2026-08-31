@@ -39,6 +39,27 @@ except ImportError:  # pragma: no cover - requirements.txt 에 있지만 방어�
     detect = None
     LangDetectException = Exception  # type: ignore[assignment,misc]
 
+
+class _진행바없음:
+    """tqdm 이 없을 때 대신 쓰는 빈 진행바. crawl_site 가 쓰는 것만 받습니다.
+
+    진행바는 사람이 보라고 띄우는 것이지 수집의 일부가 아닙니다. 안
+    깔렸다고 사이트 순회가 죽으면 안 됩니다 — 화면만 조용해집니다.
+    """
+
+    def __init__(self, *_a, **_kw):
+        self.total = None
+
+    def update(self, _n: int = 1) -> None:
+        pass
+
+    def set_postfix_str(self, _s: str) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
+
+
 if TYPE_CHECKING:
     from playwright.sync_api import Page
 
@@ -262,8 +283,14 @@ def summarize_posts(posts: list[dict[str, str]], sample_note: str) -> dict[str, 
         if total == 0:
             result["사용 언어"] = {"state": "CONFIRMED_ABSENT"}
         else:
+            # **꼴을 extract/lang.py 쪽에 맞춥니다.** 그쪽은 「러시아어」처럼
+            # 한글 이름을 내는데 여기만 langdetect 코드(ru · ko)를 내서, 같은
+            # 「사용 언어」 칸에 두 꼴이 섞여 들어가고 있었습니다. 이름표는
+            # lang.py 의 표 하나만 씁니다. 표에 없는 코드는 코드 그대로 둡니다
+            from hub.places.extract.lang import _이름 as _언어이름  # noqa: PLC0415
             parts = [
-                f"{lang} {count}건({count * 100 // total}%)" for lang, count in distribution.most_common()
+                f"{_언어이름.get(lang, lang)} {count}건({count * 100 // total}%)"
+                for lang, count in distribution.most_common()
             ]
             result["사용 언어"] = {
                 "value": ", ".join(parts),
@@ -516,7 +543,13 @@ def crawl_site(
     # 함수 안에 있는 이 줄만 옛 경로로 남아 있었습니다. 부르면 ModuleNotFoundError 로
     # 죽습니다. structure.py 는 이미 같은 폴더에 옮겨져 있습니다
     from hub.places.collect import structure  # 지연 import: structure.py는 이 모듈을 참조하지 않음
-    from tqdm import tqdm             # 지연 import: 설치 전에도 --help 가 뜨게 한다
+    # tqdm 은 진행바일 뿐인데 안 깔려 있으면 여기서 ImportError 로 죽어
+    # 사이트 순회가 통째로 날아갑니다. langdetect 는 이미 막아 두었는데
+    # 이쪽만 안 막혀 있었습니다. 없으면 진행바 없이 그냥 돕니다
+    try:
+        from tqdm import tqdm      # 지연 import: 설치 전에도 --help 가 뜨게 한다
+    except ImportError:
+        tqdm = _진행바없음
 
     source_id = source.get("name") or source.get("url", "unknown")
     profile = site_profiles.get_profile(source)

@@ -68,17 +68,47 @@ def test_dc_safety_살균만_맨몸으로_된다():
     assert code == 0, "살균만 쓰는데 requests 가 딸려 온다\n" + out[:400]
 
 
-def test_dls_observatory_가_맨몸으로_돈다():
-    """이 앱은 requirements.txt 가 없다. 표준 라이브러리만으로 돌아야 한다."""
-    r = subprocess.run(
-        [sys.executable, "-c", 막기 + "import runpy, sys\n"
-         "sys.argv = ['diagnose.py', '--help']\n"
-         "try: runpy.run_path('diagnose.py', run_name='__main__')\n"
-         "except SystemExit: pass\n"],
-        cwd=ROOT / "hub", capture_output=True, text=True,
-        encoding="utf-8", errors="replace", timeout=60)
-    합 = (r.stdout or "") + (r.stderr or "")
-    assert "ModuleNotFoundError" not in 합, "표준 라이브러리만으로 안 돈다\n" + 합[:500]
+def test_hub_가_맨몸으로_돈다():
+    """hub 는 requirements.txt 가 없다. 표준 라이브러리만으로 돌아야 한다.
+
+    2026-08-31 에 대상을 바꿨다. 전에는 cwd=hub 에서 diagnose.py 를 돌렸는데
+    그 파일은 dls-observatory 와 함께 2026-08-30 에 사라졌다. 단정이
+    ModuleNotFoundError 만 보고 있어서 FileNotFoundError 가 나도 통과했다.
+    검사가 아무것도 안 지키고 있었다. 지금은 hub 의 뼈대 모듈을 직접 불러
+    보고, 종료 코드까지 본다. 파일이 없어지면 그 자리에서 실패한다.
+    """
+    뼈대 = ("hub.places.run", "hub.events.run", "hub.sched", "hub.places.egress")
+    for 이름 in 뼈대:
+        r = subprocess.run(
+            [sys.executable, "-c", 막기 + f"import {이름}\n"],
+            cwd=ROOT, capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=60,
+            env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+        합 = (r.stdout or "") + (r.stderr or "")
+        assert r.returncode == 0, f"{이름} 이 맨몸으로 안 불러진다\n" + 합[:500]
+
+
+def test_dc_telegram_순수로직이_맨몸으로_된다():
+    """telethon 없이 store · timeutil 을 쓸 수 있어야 한다.
+
+    2026-08-31 까지 __init__ 이 .client 를 바로 불러 telethon 이 있어야만
+    했다. 늦은 import 로 바꾼 것을 여기서 잠근다.
+    """
+    code, out = _돌리기(
+        "from dc_telegram import parse_day, merge_records\n"
+        "print(parse_day('2026-08-27'))")
+    assert code == 0, "순수 로직만 쓰는데 telethon 이 딸려 온다\n" + out[:400]
+
+
+def test_dc_telegram_접속은_늦은import를_지킨다():
+    """반대로 너무 느슨해지지 않았는지 본다. make_client 는 telethon 이 필요하다."""
+    code, out = _돌리기("import dc_telegram\n"
+                        "try:\n"
+                        "    dc_telegram.make_client\n"
+                        "    print('샜다')\n"
+                        "except ImportError:\n"
+                        "    print('막힘')\n")
+    assert "막힘" in out, "telethon 없이 make_client 가 나온다\n" + out[:400]
 
 
 def test_무거운것은_부를때만_요구한다():

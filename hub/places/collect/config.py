@@ -10,7 +10,13 @@ import os
 from pathlib import Path
 
 # --- Tor ---
-TOR_SOCKS_PROXY = os.environ.get("TOR_SOCKS_PROXY", "socks5://127.0.0.1:9050")
+# **기본값을 비웁니다.** 예전 기본값은 "socks5://127.0.0.1:9050" 이었는데,
+# hub 의 나가는 문(egress.py)은 socks 로 시작하는 주소를 받으면 「표준
+# 라이브러리로 못 탑니다」로 예외를 냅니다. 지금은 이 값을 아무도 안 읽어서
+# 안 드러나지만, 누가 쓰는 순간 바로 걸립니다. 비워 두면 egress 가 환경
+# 변수를 스스로 보고, 그것도 없으면 「보호가 없으면 안 나갑니다」로 막습니다.
+# 넣을 것은 tor 의 HTTPTunnelPort 주소입니다 (예: http://127.0.0.1:9080).
+TOR_SOCKS_PROXY = os.environ.get("TOR_SOCKS_PROXY", "")
 
 # --- 타임아웃 / 지연 ---
 PAGE_LOAD_TIMEOUT_MS = 60_000  # §M2 availability: 타임아웃 시 "상태: 미확인"
@@ -76,13 +82,20 @@ DOMAIN_PARKING_KEYWORDS = (
 )
 
 # --- 경로 ---
+# **hub 의 데이터 자리에 못박습니다.** 도커 안을 전제로 쓸 때는 상대경로가
+# 맞았습니다. 컨테이너의 작업 폴더가 하나뿐이라 "snapshots" 가 언제나 같은
+# 곳이었습니다. 지금은 hub 이 부르고, dc.py 를 어느 자리에서 돌리느냐에 따라
+# 스냅샷과 체크포인트가 그때그때 다른 폴더에 흩어집니다. --resume 이 어제
+# 남긴 체크포인트를 못 찾는 것도 같은 까닭입니다.
+# hub/data 는 run.py 의 places.db 가 이미 쓰는 자리이고 .gitignore 에 들어
+# 있습니다. 원문 HTML 이 저장소로 딸려 올라가지 않습니다.
+_데이터 = Path(__file__).resolve().parents[3] / "hub" / "data"
 WHITELIST_PATH = os.environ.get("WHITELIST_PATH", "whitelist.yaml")
-SESSIONS_DIR = os.environ.get("SESSIONS_DIR", "sessions")
-SNAPSHOTS_DIR = os.environ.get("SNAPSHOTS_DIR", "snapshots")
+SESSIONS_DIR = os.environ.get("SESSIONS_DIR", str(_데이터 / "sessions"))
+SNAPSHOTS_DIR = os.environ.get("SNAPSHOTS_DIR", str(_데이터 / "snapshots"))
 OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "output")
 RUN_LOG_PATH = os.environ.get("RUN_LOG_PATH", "run_log.json")
-# **모듈 기준 절대경로입니다.** 위의 sessions·snapshots·output 은 돌린 자리에
-# 생기는 산출물이라 상대경로가 맞지만, 이 파일은 코드와 함께 따라다니는 재료라
+# **모듈 기준 절대경로입니다.** 이 파일은 코드와 함께 따라다니는 재료라
 # 어느 자리에서 돌리든 같은 것을 찾아야 합니다. 8/30 통합 때 상대경로인 채로
 # 남아서 파일을 못 찾고 있었습니다
 KOREA_KEYWORDS_PATH = os.environ.get(

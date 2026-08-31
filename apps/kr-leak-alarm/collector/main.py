@@ -259,8 +259,13 @@ def _print_new(items: list[dict[str, Any]]) -> None:
         print("\n신규 건 없음.")
         return
 
-    kr_items = [i for i in items if int(i.get("kr_score") or 0) >= 60]
-    supply_only = [i for i in items if i not in kr_items]
+    # 두 목록은 같은 기준의 앞뒤다. 전에는 `i not in kr_items` 로 dict 를 통째로
+    # 값 비교해서 건수가 늘면 느려졌다. 같은 판정식을 한 번 더 쓰면 결과는 같다.
+    def _is_kr(item: dict[str, Any]) -> bool:
+        return int(item.get("kr_score") or 0) >= 60
+
+    kr_items = [i for i in items if _is_kr(i)]
+    supply_only = [i for i in items if not _is_kr(i)]
 
     print(f"\n{'='*72}\n  🚨 신규 {len(items)}건 "
           f"(한국 관련 {len(kr_items)} · 공급망 {len(supply_only)})\n{'='*72}")

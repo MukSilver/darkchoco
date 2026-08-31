@@ -14,6 +14,8 @@
 | `dc_notion` | 노션 API·토큰 | 세 곳의 래퍼 중 HTTP 계층만 |
 | `dc_safety` | 안전 HTTP·텍스트 살균 | kr-leak-alarm |
 | `dc_ransomfeed` | 랜섬 피드 주소·가져오기 | 두 앱이 각자 긁던 것 |
+| `dc_console` | 콘솔 UTF-8 출력 | 여섯 군데에 복사돼 있던 여덟 줄 |
+| `dc_store` | 수집 결과 한 표(SQLite) | hub 와 skills 가 같이 쓰는 저장소 |
 
 ## 왜 이렇게 나눴나
 
@@ -45,6 +47,11 @@ from dc_safety import SafeHttpClient
 `dc_safety.ALLOWED_HOSTS` 에 먼저 넣어야 합니다.
 거기 없으면 요청 자체가 차단됩니다. 그 자체가 검토 지점입니다.
 
+이 목록이 실제로 거는 범위는 `dc_safety.SafeHttpClient` 를 쓰는 코드뿐입니다.
+2026-08-31 기준으로 `apps/kr-leak-alarm` 하나입니다. `hub/` 은 나가는 문이
+`hub/places/egress.py` 로 따로 있어 이 목록이 걸리지 않습니다. 둘을 한 문으로
+모을지는 팀이 정할 일입니다.
+
 ## 테스트
 
 ```bash
@@ -54,3 +61,7 @@ python packages/tests/test_dc_safety_ransomfeed.py
 ```
 
 전부 네트워크 없이 돕니다.
+
+`test_dc_safety_ransomfeed.py` 만 `SafeHttpClient` 를 만들므로 requests 가
+필요합니다. `pip install -e "packages[safety]"` 로 깝니다. 나머지 둘은 기본
+설치만으로 돕니다.

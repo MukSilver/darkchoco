@@ -82,8 +82,10 @@ ransomware.live 같은 공개 CTI 프로젝트는 이미 150개 이상 랜섬웨
 
 ### 2. 네트워크 계층 — 하드코딩된 허용목록
 
-`collector/http_client.py` 의 `ALLOWED_HOSTS` 에 있는 8개 호스트 외에는
-**어떤 요청도 나가지 않습니다.** 리다이렉트를 따라갈 때도 목적지를 재검증하므로
+`packages/dc_safety/http.py` 의 `ALLOWED_HOSTS` 에 있는 8개 호스트 외에는
+**어떤 요청도 나가지 않습니다.**
+(`collector/http_client.py` 는 그 이름을 그대로 넘겨주는 껍데기입니다.
+원본이 `packages/` 로 옮겨졌습니다.) 리다이렉트를 따라갈 때도 목적지를 재검증하므로
 소스가 오염되어도 임의 서버로 끌려가지 않습니다.
 
 ```
@@ -268,14 +270,17 @@ copy vendors.example.json vendors.json     # Windows
 ### 벤더 순회 검색
 
 핵심 벤더 침해는 몇 주 전 사고인 경우가 많아 '최근 100건' 피드에 안 잡힙니다.
-그래서 매 실행마다 워치리스트의 **일부(기본 8개)만 검색 엔드포인트로 확인**하고,
+그래서 매 실행마다 워치리스트의 **일부(기본 5개)만 검색 엔드포인트로 확인**하고,
 다음 실행에서는 그다음 구간을 돌립니다. 레이트리밋을 피하면서 며칠에 걸쳐 전체를 훑는 방식입니다.
 커서는 DB 에 저장되어 실행 간에 이어집니다.
 
 ```json
-"vendor_search_per_run": 8,
-"vendor_search_delay_seconds": 1.5
+"vendor_search_per_run": 5,
+"vendor_search_delay_seconds": 3.0
 ```
+
+2026-08-19 에 벤더 검색이 짧은 시간에 수백 건을 쏴서 IP 가 막힌 뒤 완화한 값입니다.
+`config.py` 의 `DEFAULTS` 와 `config.example.json` 이 같은 값을 씁니다.
 
 ### 알림 노이즈 조절
 
@@ -429,12 +434,26 @@ git push -u origin main
 
 ## 프로젝트 구조
 
+이 앱은 저장소 최상위의 `packages/` 를 함께 씁니다. **앱 폴더만 받으면 import 에서
+멈춥니다.** `collector/__init__.py` 가 `packages/` 를 `sys.path` 에 넣고,
+`http_client.py` 는 `dc_safety`, `sources/ransomlook.py` 는 `dc_ransomfeed`,
+`main.py` 는 `dc_console` 을 부릅니다. 저장소 전체를 받으십시오.
+
+```
+darkchoco-team/
+├── packages/                ← 이 앱이 함께 쓰는 공용 부품 (앱 폴더 밖)
+│   ├── dc_safety/           안전 HTTP · 살균 (http_client.py 의 원본)
+│   ├── dc_ransomfeed/       랜섬 피드 주소 상수
+│   └── dc_console/          콘솔 UTF-8 설정
+└── apps/kr-leak-alarm/      ← 아래가 이 앱
+```
+
 ```
 Kr-Leak-alarm/
 ├── collector/
 │   ├── main.py              CLI 진입점
 │   ├── safety.py            ★ 살균 · URL 무력화 · VMware 탐지 · Tor 게이트
-│   ├── http_client.py       ★ 허용목록 기반 안전 HTTP 클라이언트
+│   ├── http_client.py       ★ dc_safety.http 로 넘기는 껍데기 (허용목록 원본은 packages/)
 │   ├── kr_filter.py         한국 관련성 4단계 판별 엔진 (축 1)
 │   ├── supply_filter.py     공급망 위험 4단계 판별 엔진 (축 2)
 │   ├── store.py             SQLite 저장소 · NEW 상태 관리

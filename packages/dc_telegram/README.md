@@ -55,7 +55,10 @@ asyncio.run(collect_messages(
 ))
 ```
 
-**기본값은 두 옵션 모두 끈 상태**라, 어느 앱에서 불러도 예전 동작을 해치지 않습니다.
+기본값은 `incremental=False` · `from_day=to_day=None` · `with_meta=True` 입니다.
+앞의 둘이 꺼져 있어 어느 앱에서 불러도 예전 동작을 해치지 않습니다.
+`with_meta` 만 켜져 있습니다. 발신자·포워드·리액션이 필요 없으면
+`with_meta=False` 로 끕니다.
 
 ## 환경변수
 

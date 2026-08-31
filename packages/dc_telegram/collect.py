@@ -5,7 +5,9 @@
   · from_day / to_day         날짜 범위 (tg-korea-alert)
   · with_meta=True            발신자·포워드·리액션 (tg-notion-report)
 
-기본값은 둘 다 끈 상태라, 어느 앱에서 불러도 예전 동작을 해치지 않습니다.
+앞의 둘(incremental · from_day/to_day)이 기본값에서 꺼져 있어, 어느 앱에서
+불러도 예전 동작을 해치지 않습니다. with_meta 만 기본값이 True 입니다.
+메타데이터가 필요 없으면 with_meta=False 로 끕니다.
 """
 
 from __future__ import annotations

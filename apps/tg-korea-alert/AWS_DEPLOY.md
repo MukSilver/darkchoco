@@ -14,6 +14,14 @@ source files, the server needs these local state/secret files:
 
 Never commit these files to Git. They are already excluded by `.gitignore`.
 
+`korea_alert_monitor.py` (the service itself) runs from this folder alone. The
+helper scripts do not: `check_login.py`, `list_channels.py` and
+`collect_messages.py` import `dc_telegram`, which lives in the repository's
+top-level `packages/` folder — outside this app folder. If you want to run them
+on the server, copy the whole repository instead of this folder, keeping the
+`apps/tg-korea-alert` and `packages/` layout, because those scripts resolve
+`packages/` from the repository root two directories above the app folder.
+
 Before copying the SQLite database, stop the local monitor so its WAL is fully
 checkpointed and the database has a consistent snapshot.
 

