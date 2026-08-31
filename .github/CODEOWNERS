@@ -1,21 +1,25 @@
 # 폴더마다 주인을 정합니다.
 # 자기 앱 폴더는 본인이 바로 머지해도 됩니다.
 # packages 와 hub 는 공용이라 리뷰 한 명이 필요합니다.
+#
+# 2026-08-31. 멘토가 역할을 배정하면서 최현서가 서비스 개발과 수집기 전부를
+# 주도하게 됐습니다. 원래 주인은 그대로 두고 @grute02 를 더했습니다.
+# 여럿이 적힌 곳은 그중 한 명이 승인하면 됩니다. 주인이 바뀌는 것이 아닙니다.
 
-/apps/kr-leak-alarm/     @60secAgo
-/apps/tg-korea-alert/    @minsmiths
+/apps/kr-leak-alarm/     @60secAgo @grute02
+/apps/tg-korea-alert/    @minsmiths @grute02
 /skills/                 @grute02
-/packages/               @MukSilver @minsmiths @60secAgo @leesubhin060-max
+/packages/               @MukSilver @minsmiths @60secAgo @leesubhin060-max @grute02
 
 # 통합 크롤러. 노션 다크웹 DB 811줄에 씁니다.
 # 여기가 잘못되면 팀원이 몇 주간 손으로 적은 것이 지워집니다.
-/hub/                    @MukSilver
+/hub/                    @MukSilver @grute02
 
 # 이 둘은 특히 봅니다.
 #   write.py   노션에 쓰는 유일한 곳 (관문 5개)
 #   egress.py  밖으로 나가는 유일한 길 (Tor 관문)
-/hub/places/write.py     @MukSilver @60secAgo
-/hub/places/egress.py    @MukSilver @60secAgo
+/hub/places/write.py     @MukSilver @60secAgo @grute02
+/hub/places/egress.py    @MukSilver @60secAgo @grute02
 
 /docs/                   @MukSilver
 /.github/                @MukSilver
