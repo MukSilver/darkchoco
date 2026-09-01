@@ -12,11 +12,12 @@ Dockerfile text eol=lf
 *.cmd      text eol=crlf
 *.ps1      text eol=crlf
 
-# 셸 스크립트는 반드시 LF 입니다. CRLF 면 bash 가 
- 에 걸려
-# "$'
-': command not found" 로 통째로 안 돕니다. 윈도우에서 파일을
-# 고칠 때 조용히 CRLF 가 되는 것을 여기서 막습니다.
+# 셸 스크립트는 반드시 LF 입니다. CRLF 면 bash 가 줄 끝의 캐리지리턴에 걸려
+# "command not found" 로 통째로 안 돕니다. 윈도우에서 파일을 고칠 때
+# 조용히 CRLF 가 되는 것을 여기서 막습니다.
+#
+# 2026-08-31: 이 주석에 캐리지리턴이 글자가 아니라 진짜 문자로 박혀 있어서
+# 문장이 두 줄로 끊겼고, git 이 그 조각을 규칙 이름으로 읽어 경고를 냈습니다.
 *.sh text eol=lf
 
 # 파이썬도 LF 로 못박습니다. 규칙이 없으면 autocrlf 설정이 사람마다 달라
