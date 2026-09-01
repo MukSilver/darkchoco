@@ -38,8 +38,15 @@ PAGE_WAIT_UNTIL = "domcontentloaded"
 # 무인 자동 크롤링(PAGE_LOAD_TIMEOUT_MS)보다 여유를 둔다 — .onion 히든서비스는 clearnet보다
 # 회선 구성이 느려서 특히 필요하다.
 LOGIN_PAGE_LOAD_TIMEOUT_MS = 90_000
-REQUEST_DELAY_MIN_SEC = 3.0  # CLAUDE.md §4.2-6: 요청 간 3~5초 랜덤 지연
-REQUEST_DELAY_MAX_SEC = 5.0
+# **3~5초로는 실제로 차단당했습니다.** 2026-08-26 pwnforums 실크롤에서
+# 그 값으로 속도 제한("Slow down now")에 걸려 크롤이 중단됐고, 담당자
+# 확인을 거쳐 6~10초로 올렸습니다. 통합 전 저장소(whs4-dark)에는 그 값이
+# 들어 있는데 흡수 시점이 그보다 앞이라 팀 저장소에는 3~5초가 남아
+# 있었습니다. 2026-08-31 에 되돌립니다.
+#
+# 한 판이 길어집니다. run.py 의 깊은판_상한초 를 같이 올려 두었습니다.
+REQUEST_DELAY_MIN_SEC = 6.0
+REQUEST_DELAY_MAX_SEC = 10.0
 
 # --- 콘텐츠 표본 ---
 CONTENT_SAMPLE_SIZE = 50  # 요구사항 5: 표본 기본 50건

@@ -28,6 +28,11 @@ async def main():
             print(f"이 스크립트가 보는 세션 파일: {SESSION_PATH}")
             print("세션을 만드는 스크립트: apps/tg-korea-alert/test.py"
                   " (세션을 그 앱 폴더에 만듭니다)")
+            # 만든 세션을 손으로 옮겨야 합니다. 그 한 걸음을 안 적어 두면
+            # test.py 를 돌리고도 여기서 다시 막힙니다
+            print("만든 뒤 이 자리로 옮기십시오:")
+            print("  copy apps\\tg-korea-alert\\telegram_session.session "
+                  "hub\\events\\telegram\\")
             return
 
         me = await client.get_me()
