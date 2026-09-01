@@ -56,7 +56,7 @@ scripts\run.bat                             :: 실제 수집
                     ┌──────────────────────────────────────────┐
   공개 CTI API      │ ransomware.live · ransomlook · ransomfeed │
   (HTTPS)           └────────────────────┬─────────────────────┘
-                                         │  collector/http_client.py
+                                         │  packages/dc_safety/http.py
                                          │  허용목록 · HTTPS 강제 · 크기 상한
                     ┌────────────────────▼─────────────────────┐
   정규화            │ collector/sources/*.py  →  LeakRecord     │
@@ -94,7 +94,8 @@ scripts\run.bat                             :: 실제 수집
 | `collector/data/kr_keywords.json` | 한국 기업·기관 키워드 | **높음** |
 | `collector/data/supply_keywords.json` | 글로벌 벤더 워치리스트 | **높음** |
 | `collector/sources/*.py` | 소스별 API 어댑터 | 중 (API 변경 시) |
-| `collector/http_client.py` | 네트워크 보안 계층 | 낮음 |
+| `packages/dc_safety/http.py` | 네트워크 보안 계층 (허용목록 원본) | 낮음 |
+| `collector/http_client.py` | 위 이름을 그대로 넘기는 껍데기. 여기를 고쳐도 효과 없음 | 낮음 |
 | `collector/store.py` | SQLite 저장·NEW 상태 | 낮음 |
 | `collector/export.py` | 웹 데이터 생성 | 낮음 |
 | `web/index.html` | 대시보드 전체 | 중 |
@@ -289,8 +290,8 @@ python -m collector.main doctor   # 환경·보안 설정 점검
 단순 기능 테스트가 아니라 **실제 공격 페이로드를 넣어 방어가 동작하는지** 확인합니다.
 XSS·SQL 인젝션·SSRF·CSV 인젝션·API 스키마 변경·레이트리밋 회로차단 등이 포함됩니다.
 
-**코드를 수정한 뒤에는 반드시 이걸 돌려주세요.** 특히 `safety.py`, `http_client.py`,
-`store.py` 를 건드렸다면요.
+**코드를 수정한 뒤에는 반드시 이걸 돌려주세요.** 특히 `safety.py`,
+`packages/dc_safety/http.py`, `store.py` 를 건드렸다면요.
 
 <br>
 

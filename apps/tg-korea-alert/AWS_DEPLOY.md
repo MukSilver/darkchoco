@@ -14,13 +14,22 @@ source files, the server needs these local state/secret files:
 
 Never commit these files to Git. They are already excluded by `.gitignore`.
 
-`korea_alert_monitor.py` (the service itself) runs from this folder alone. The
-helper scripts do not: `check_login.py`, `list_channels.py` and
+`/home/ubuntu/telegram-monitor` must stay a flat copy of this app folder:
+`deploy/install_aws_ubuntu.sh` runs `requirements.txt` and
+`chmod 600 .env telegram_session.session alert_monitor.db` from that directory,
+and `deploy/telegram-monitor.service` starts
+`/home/ubuntu/telegram-monitor/korea_alert_monitor.py`. Copying the whole
+repository there instead breaks all three. `korea_alert_monitor.py` (the service
+itself) needs nothing outside this folder.
+
+The helper scripts do: `check_login.py`, `list_channels.py` and
 `collect_messages.py` import `dc_telegram`, which lives in the repository's
-top-level `packages/` folder — outside this app folder. If you want to run them
-on the server, copy the whole repository instead of this folder, keeping the
-`apps/tg-korea-alert` and `packages/` layout, because those scripts resolve
-`packages/` from the repository root two directories above the app folder.
+top-level `packages/` folder and is resolved from the repository root two
+directories above the app folder. They therefore cannot run from the flat
+service copy. To use them on the server, place a separate full-repository copy
+elsewhere (for example `/home/ubuntu/darkchoco-team`), keeping the
+`apps/tg-korea-alert` and `packages/` layout, and run them from
+`apps/tg-korea-alert` inside it. Leave the service directory alone.
 
 Before copying the SQLite database, stop the local monitor so its WAL is fully
 checkpointed and the database has a consistent snapshot.

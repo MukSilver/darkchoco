@@ -328,11 +328,26 @@ def notion_request(token: str, method: str, path: str, payload: dict | None = No
       · 502·503·504 도 다시 보낸다 (전에는 한 번 끊기면 그대로 중단)
       · 요청 사이를 벌려 초당 3건을 넘기지 않는다
       · 재시도 3회에서 6회로 늘었다
+      · 한 번의 읽기 타임아웃이 30초에서 60초로 늘었다
 
     노션 판 번호는 이 앱 것(NOTION_VERSION)을 그대로 쓴다. data_sources 는
     판마다 응답이 달라서 공용 기본값으로 바꾸면 판정이 어긋난다.
 
     NotionError 는 RuntimeError 를 물려받으므로 잡는 쪽은 손댈 것이 없다.
+
+    대부분 나아진 것인데 대신 딸려 온 것이 둘이다. 2026-09-01 에 확인만
+    하고 코드는 안 건드렸다. 여기 적어 두는 이유는, 둘 다 지금 고치면
+    나은지 아닌지를 사람이 정해야 하기 때문이다.
+
+      1. 최악의 경우 한 요청이 훨씬 오래 매달린다. 재시도 6회 × 타임아웃
+         60초에 백오프까지 더해진다. 통합 전에는 telegram_schedule.ps1 이
+         예약 작업에 ExecutionTimeLimit 1시간을 걸어 이것을 잘랐는데,
+         그 스크립트가 통합본에 없다. 지금은 상한이 아무 데도 없다.
+      2. dc_notion 은 verbose 가 기본 True 라 「[notion] 429 rate limit」
+         같은 줄이 표준출력에 섞인다. monitor.py 가 자식 프로세스의
+         표준출력을 그대로 로그 파일에 담으므로 로그에도 들어간다.
+         메시지 원문이 아니라 재시도 사실만 찍히므로 유출은 아니다.
+         조용히 하려면 여기서 Notion(..., verbose=False) 로 만들면 된다.
     """
     client = _clients.get(token)
     if client is None:

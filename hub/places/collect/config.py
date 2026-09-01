@@ -97,7 +97,15 @@ DOMAIN_PARKING_KEYWORDS = (
 # hub/data 는 run.py 의 places.db 가 이미 쓰는 자리이고 .gitignore 에 들어
 # 있습니다. 원문 HTML 이 저장소로 딸려 올라가지 않습니다.
 _데이터 = Path(__file__).resolve().parents[3] / "hub" / "data"
-WHITELIST_PATH = os.environ.get("WHITELIST_PATH", "whitelist.yaml")
+# WHITELIST_PATH 는 없앴다(2026-09-01).
+#
+# 통합 전 저장소는 investigate.py:42-59, 271-278 에서 whitelist.yaml 을 승인 관문으로 썼다 —
+# 등재 안 된 URL 이면 거부하고, source_type=forum 이 아니면 거부했다. 통합본에는 그 관문이
+# 없다. docs/지금까지.md 「흡수하지 않은 것」이 `whitelist.yaml — 폐기. 명부 등재를 승인으로
+# 간주` 로 판단을 적어 두었다(커밋 0750ddc).
+#
+# 그런데 이 파일에는 상수만 남아 있어서, 읽는 사람이 관문이 아직 있는 줄로 읽을 수 있었다.
+# 아무도 안 읽는 값이라 지운다. **지금 승인은 노션 명부에 그 줄이 있느냐다.**
 SESSIONS_DIR = os.environ.get("SESSIONS_DIR", str(_데이터 / "sessions"))
 SNAPSHOTS_DIR = os.environ.get("SNAPSHOTS_DIR", str(_데이터 / "snapshots"))
 OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "output")
@@ -121,5 +129,12 @@ SITE_MAP_MAX_PAGES_PER_CATEGORY = 5
 
 # --- 브라우저 launch 인자 ---
 # 주의: --no-sandbox, --disable-setuid-sandbox 는 절대 추가하지 않는다 (CLAUDE.md §4.2-1).
-# CI의 security.yml 이 이 파일을 포함한 전체 코드에서 해당 문자열을 grep 하여 검증한다.
+#
+# **이 값을 읽는 곳은 hub/places/fetch.py 의 브라우저세션.__enter__ 하나다.**
+# 통합하면서 launch 에 넘기는 자리가 빠져 한동안 아무도 안 읽는 값이었다 —
+# 2026-09-01 에 다시 이었다.
+#
+# 통합 전 저장소에는 .github/workflows/security.yml 이 이 문자열을 전체 코드에서
+# grep 해 막는 잡이 있었는데, 통합본 .github/workflows/ci.yml 에는 대응 잡이 없다.
+# **지금 이 규칙을 붙잡는 것은 이 주석과 목록이 비어 있다는 사실뿐이다.**
 BROWSER_LAUNCH_ARGS: list[str] = []
