@@ -146,8 +146,8 @@ python -m collector.main doctor
 ### Windows
 
 ```bat
-git clone <이 저장소 URL>
-cd Kr-Leak-alarm
+git clone <darkchoco-team 저장소 URL>
+cd darkchoco-team/apps/kr-leak-alarm
 
 scripts\check-env.bat        :: 환경 점검 (Python 설치 여부 · 보안 설정)
 scripts\run.bat              :: 가상환경 생성 → 의존성 설치 → 수집
@@ -165,8 +165,8 @@ scripts\open-dashboard.bat   :: 대시보드 열기 (127.0.0.1:8787)
 ### macOS / Linux
 
 ```bash
-git clone <이 저장소 URL>
-cd Kr-Leak-alarm
+git clone <darkchoco-team 저장소 URL>
+cd darkchoco-team/apps/kr-leak-alarm
 chmod +x scripts/run.sh
 ./scripts/run.sh
 python -m collector.main serve
@@ -407,23 +407,30 @@ python -m collector.main run --baseline           # 이번 수집분을 전부 �
 
 ## Git 배포
 
+이 앱은 **`darkchoco-team` 저장소의 `apps/kr-leak-alarm` 하위 폴더**입니다.
+저장소는 최상위에 하나뿐이니 이 폴더에서 `git init` 이나 `git remote add` 를
+하지 마십시오. 중첩 저장소가 생겨 커밋이 엉뚱한 원격으로 갑니다.
+
 `.gitignore` 가 다음을 **자동으로 제외**합니다 — 그대로 push해도 안전합니다.
 
 - `.env`(웹훅·SMTP), `config.json`, `vendors.json` (비밀정보·개인 설정·거래처 목록)
-- `data/` (SQLite DB), `logs/`
-- `web/data/*.js`, `web/data/*.json` (수집된 피해 기업 데이터)
+- `/data/` (SQLite DB), `logs/`
+- `/web/data/*` (수집된 피해 기업 데이터). `.gitkeep` 만 남깁니다
 - `tor/captures/`, `tor/raw/` (다크웹 원문 스냅샷)
+
+`collector/data/` 의 키워드 JSON 둘은 **코드**라서 제외 대상이 아닙니다.
+최상위 `.gitignore` 의 통짜 `data/` 규칙이 이 폴더까지 먹지 않도록
+이 폴더 `.gitignore` 가 `!collector/data/` 로 되살려 둡니다. 지우지 마십시오.
 
 즉 **코드만 공개되고 수집 데이터는 로컬에 남습니다.** 피해 기업 정보가 실수로
 공개 저장소에 올라가는 사고를 구조적으로 막습니다.
 
 ```bash
-git init
-git add .
+cd <darkchoco-team 저장소 루트>
+git add apps/kr-leak-alarm
 git status                    # ← 위 항목들이 목록에 없는지 꼭 확인
-git commit -m "feat: Kr-Leak-alarm 초기 구현"
-git remote add origin <저장소 URL>
-git push -u origin main
+git commit -m "feat(kr-leak-alarm): ..."
+git push
 ```
 
 > **GitHub Pages 배포 주의** — 대시보드는 정적 파일이라 Pages에도 올라가지만,

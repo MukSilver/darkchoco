@@ -189,9 +189,17 @@ class 브라우저세션:
                 "playwright 가 안 깔렸습니다. "
                 "bash scripts/돌릴자리-만들기.sh 가 깝니다") from None
         호스트포트 = self.프록시.split("://", 1)[-1]
+        # **launch 인자는 collect/config.py 의 BROWSER_LAUNCH_ARGS 하나로
+        # 둡니다.** 원본은 investigate.py:288-290 과 login_session.py:67-71
+        # 이 그 상수를 launch 에 넘겼는데, 통합하면서 넘기는 자리가 빠져
+        # 상수만 남았습니다. 「여기에 --no-sandbox 를 넣지 않는다」는 안전
+        # 규칙이 아무 데도 안 닿는 값을 지키고 있던 셈입니다.
+        # 지금 값은 빈 목록이라 동작은 그대로입니다. 다시 이어 둡니다.
+        from hub.places.collect import config              # noqa: PLC0415
         self._pw = sync_playwright().start()
         self._br = self._pw.chromium.launch(
-            headless=True, proxy={"server": f"http://{호스트포트}"})
+            headless=True, proxy={"server": f"http://{호스트포트}"},
+            args=list(getattr(config, "BROWSER_LAUNCH_ARGS", []) or []))
         return self
 
     def __exit__(self, *a):

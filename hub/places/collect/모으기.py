@@ -66,14 +66,95 @@ def _쉬기():
 
 
 def _돌리기(모은것: dict, 못돈것: list, 이름: str, 부르기):
-    """수집기 하나. 죽어도 나머지를 돕니다."""
+    """수집기 하나. 죽어도 나머지를 돕니다.
+
+    **CrawlInterrupted 만 빼고입니다.** 그것은 「이 수집기가 실패했다」가
+    아니라 「이 판의 결과가 불완전하다」는 신호입니다(content.py 의
+    CrawlInterrupted 문서). 챌린지에 막혀 사이트 순회가 중간에 끊긴 것이라,
+    여기서 삼키고 못돈것 에만 적으면 반쪽짜리 값이 그대로 Place 로 가서
+    노션에 써집니다. 덮어쓰는칸(상태·확인일·주소·어니언 주소·최근 활동)은
+    조건 없이 갈아 끼워지니 더 그렇습니다.
+
+    원본 investigate.py:307-316 이 이 예외를 받아 「결과가 불완전하므로
+    리포트를 만들지 않습니다」로 멈추고 종료코드 2 를 냈습니다. 통합하면서
+    그 자리가 사라졌으므로, 위로 올려 보내 모으기() 가 같은 판단을 합니다.
+    """
+    from hub.places.collect.content import CrawlInterrupted   # noqa: PLC0415
     try:
         r = 부르기()
+    except CrawlInterrupted:
+        raise                   # 판을 멈춥니다. 여기서 삼키지 않습니다
     except Exception as e:      # noqa: BLE001
         못돈것.append(f"{이름}({type(e).__name__})")
         return
     if isinstance(r, dict):
         모은것.update(r)
+
+
+def _주소뺀까닭(까닭: str) -> str:
+    """중단 사유에서 괄호로 붙은 주소를 뗍니다.
+
+    content.py 가 `챌린지 감지: <까닭> (<주소>)` 꼴로 던집니다.
+    그 주소가 어니언일 수 있어 사람이 보는 칸에 그대로 두지 않습니다.
+    """
+    i = 까닭.rfind(" (")
+    return 까닭[:i] if i > 0 and 까닭.rstrip().endswith(")") else 까닭
+
+
+def _외부언급적기(p: Place, 모은것: dict) -> None:
+    """⑤ crossref 가 내놓는 것은 `_발견된_외부_언급` 하나뿐입니다.
+
+    칸이름 표에도 조각 표에도 이 열쇠가 없어서 「칸 옮기기」 루프가 통째로
+    버리고 있었습니다. 원본은 report_generator 가 「발견」 섹션에 실었습니다
+    (investigate.py:203-212).
+
+    **값은 안 적습니다.** 규칙/FAQ 원문과 게시글 제목에서 뽑은 것이라
+    onion 주소·t.me 채널이 그대로 들어 있고, 살펴볼것 은 화면으로 나갑니다.
+    p.연결된곳 에 넣지도 않습니다 — 그 칸은 「우리 명부에 있는 곳」만
+    담는데(probe/forum.py 의 links.찾기), 여기 후보는 명부와 대조를 안 한
+    것이라 섞으면 칸의 뜻이 무너집니다. 원본도 확정 칸에는 안 넣었습니다.
+
+    그래서 **몇 건을 어떤 갈래로 봤는지만** 남깁니다. 값은 스냅샷에 있습니다.
+    """
+    언급 = 모은것.get("_발견된_외부_언급") or []
+    if not isinstance(언급, list) or not 언급:
+        return
+    어니언 = sum(1 for x in 언급 if ".onion" in str(x).lower())
+    채널 = sum(1 for x in 언급 if "t.me/" in str(x).lower())
+    그밖 = len(언급) - 어니언 - 채널
+    조각들 = [f"어니언 {어니언}", f"채널 {채널}", f"그 밖 {그밖}"]
+    덧붙임(p, f"규칙 페이지·게시글 제목에서 외부 언급 {len(언급)}건 "
+             f"({' · '.join(조각들)}) — 스냅샷에서 확인할 것")
+
+
+def _후보적기(p: Place, 모은것: dict, activity, content) -> None:
+    """운영자 후보 · 눈에 띄는 유출 후보 · 최근 한국 관련 건. **건수만.**
+
+    셋 다 `_표본_게시글` 에 category 가 붙어 있어야 뜻이 있습니다. 그것은
+    content.crawl_site() 경로에서만 붙으므로 단일 페이지 경로에서는 대개
+    빈 결과입니다 — 정상입니다(원본 investigate.py:233-235 주석).
+
+    핸들과 게시글 제목은 안 적습니다. 제목에 유출 대상 이름이 그대로 들어
+    있는 것이 흔해서, 화면으로 나가는 살펴볼것 에 올릴 값이 아닙니다.
+    """
+    표본들 = 모은것.get("_표본_게시글") or []
+    if not 표본들:
+        return
+    try:
+        운영자 = activity.find_operator_candidates(표본들) or {}
+        눈에띔 = content.find_notable_leak_candidates(표본들) or []
+        한국것 = content.find_korea_specific_leaks(표본들) or []
+    except Exception:       # noqa: BLE001  후보 뽑기가 죽어도 수집 결과는 씁니다
+        return
+    조각들 = []
+    if 운영자.get("handles"):
+        조각들.append(f"운영자 후보 {len(운영자['handles'])}명")
+    if 눈에띔:
+        조각들.append(f"눈에 띄는 유출 후보 {len(눈에띔)}건")
+    if 한국것:
+        조각들.append(f"한국 관련 최근 {len(한국것)}건")
+    if 조각들:
+        덧붙임(p, " · ".join(조각들) + " — 스냅샷에서 확인할 것")
 
 
 def 모으기(연것, 이름: str, *, 갈래: str = "forum",
@@ -101,74 +182,116 @@ def 모으기(연것, 이름: str, *, 갈래: str = "forum",
     page = 연것.page
     돈것 = 0
 
-    if page is None:
-        # 글자만 있는 것으로 되는 것만 돕니다. 나머지는 왜 못 했는지 적습니다.
-        못돈것 += [n for n in 차례 if page가필요한가(n)]
-        _돌리기(모은것, 못돈것, "crossref",
-              lambda: crossref.run({"첫 화면": 연것.본문}, src))
-        돈것 = 1
-    else:
-        아이디 = src.get("name") or src.get("url") or "unknown"
-
-        def _찍기(꼬리):
-            try:
-                snapshot.save_snapshot(page, 아이디, 꼬리)
-            except Exception:       # noqa: BLE001  증거를 못 남겨도 조사는 돕니다
-                pass
-
-        # ① 살아있나
-        _돌리기(모은것, 못돈것, "availability", lambda: availability.run(page, src))
-        _찍기("availability_home")
-
-        # ② 구조. 규칙 페이지를 봤다가 돌아옵니다
-        _쉬기()
-        _돌리기(모은것, 못돈것, "structure", lambda: structure.run(page, src))
-        _찍기("structure_home_after")
-
-        # ③④ 어디서 표본을 뜨나. **여기가 갈립니다.**
-        표본주소 = src.get("sample_list_url")
-        씨앗 = 모은것.get("_사이트_카테고리_시드", [])
-        if 표본주소:
-            try:
-                from hub.places.collect import config      # noqa: PLC0415
-                page.goto(표본주소, timeout=config.PAGE_LOAD_TIMEOUT_MS,
-                          wait_until=config.PAGE_WAIT_UNTIL)
-                _찍기("sample_list_page")
-            except Exception:       # noqa: BLE001
-                pass
-            _쉬기()
-            _돌리기(모은것, 못돈것, "stats", lambda: stats.run(page, src))
-            _쉬기()
-            _돌리기(모은것, 못돈것, "content", lambda: content.run(page, src))
-        elif 씨앗:
-            _쉬기()
-            _돌리기(모은것, 못돈것, "stats", lambda: stats.run(page, src))
-            # **사이트 전체를 재귀로 돕니다.** 이것이 빠지면 홈페이지
-            # 한 장만 보고 끝나서 (5)(7) 이 빈손이 됩니다.
-            _돌리기(모은것, 못돈것, "content",
-                  lambda: content.crawl_site(page, src, 씨앗, resume=False))
+    # **CrawlInterrupted 는 판 전체를 멈춥니다.** 아래 어느 수집기에서
+    # 나든 여기서 받습니다. _돌리기 가 안 삼키고 올려 보냅니다.
+    try:
+        if page is None:
+            # 글자만 있는 것으로 되는 것만 돕니다. 나머지는 왜 못 했는지 적습니다.
+            못돈것 += [n for n in 차례 if page가필요한가(n)]
+            _돌리기(모은것, 못돈것, "crossref",
+                  lambda: crossref.run({"첫 화면": 연것.본문}, src))
+            돈것 = 1
         else:
+            아이디 = src.get("name") or src.get("url") or "unknown"
+
+            def _찍기(꼬리):
+                try:
+                    snapshot.save_snapshot(page, 아이디, 꼬리)
+                except Exception:   # noqa: BLE001  증거를 못 남겨도 조사는 돕니다
+                    pass
+
+            # ① 살아있나
+            _돌리기(모은것, 못돈것, "availability", lambda: availability.run(page, src))
+            _찍기("availability_home")
+
+            # ② 구조. 규칙 페이지를 봤다가 돌아옵니다
             _쉬기()
-            _돌리기(모은것, 못돈것, "stats", lambda: stats.run(page, src))
+            _돌리기(모은것, 못돈것, "structure", lambda: structure.run(page, src))
+            _찍기("structure_home_after")
+
+            # ③④ 어디서 표본을 뜨나. **여기가 갈립니다.**
+            표본주소 = src.get("sample_list_url")
+            씨앗 = 모은것.get("_사이트_카테고리_시드", [])
+            if 표본주소:
+                try:
+                    from hub.places.collect import config      # noqa: PLC0415
+                    page.goto(표본주소, timeout=config.PAGE_LOAD_TIMEOUT_MS,
+                              wait_until=config.PAGE_WAIT_UNTIL)
+                    _찍기("sample_list_page")
+                except Exception:       # noqa: BLE001
+                    pass
+                _쉬기()
+                _돌리기(모은것, 못돈것, "stats", lambda: stats.run(page, src))
+                _쉬기()
+                _돌리기(모은것, 못돈것, "content", lambda: content.run(page, src))
+            elif 씨앗:
+                _쉬기()
+                _돌리기(모은것, 못돈것, "stats", lambda: stats.run(page, src))
+                # **사이트 전체를 재귀로 돕니다.** 이것이 빠지면 홈페이지
+                # 한 장만 보고 끝나서 (5)(7) 이 빈손이 됩니다.
+                _돌리기(모은것, 못돈것, "content",
+                      lambda: content.crawl_site(page, src, 씨앗, resume=False))
+            else:
+                _쉬기()
+                _돌리기(모은것, 못돈것, "stats", lambda: stats.run(page, src))
+                _쉬기()
+                _돌리기(모은것, 못돈것, "content", lambda: content.run(page, src))
+
+            # ⑤ 앞에서 모은 글자를 다시 씁니다. 새 요청을 안 만듭니다
+            글자 = {"표본 게시글 제목": " ".join(
+                x.get("title", "") for x in 모은것.get("_표본_게시글", []))}
+            규칙 = 모은것.get("_들어가는_법_구조", {})
+            if isinstance(규칙, dict) and "value" in 규칙:
+                글자["규칙/FAQ 페이지 원문"] = 규칙["value"]
+            _돌리기(모은것, 못돈것, "crossref", lambda: crossref.run(글자, src))
+
+            # ⑥ 가입 조건
             _쉬기()
-            _돌리기(모은것, 못돈것, "content", lambda: content.run(page, src))
+            _돌리기(모은것, 못돈것, "access", lambda: access.run(page, src))
 
-        # ⑤ 앞에서 모은 글자를 다시 씁니다. 새 요청을 안 만듭니다
-        글자 = {"표본 게시글 제목": " ".join(
-            x.get("title", "") for x in 모은것.get("_표본_게시글", []))}
-        규칙 = 모은것.get("_들어가는_법_구조", {})
-        if isinstance(규칙, dict) and "value" in 규칙:
-            글자["규칙/FAQ 페이지 원문"] = 규칙["value"]
-        _돌리기(모은것, 못돈것, "crossref", lambda: crossref.run(글자, src))
+            # ⑦ ④ 가 만든 표본 게시글을 받습니다
+            _돌리기(모은것, 못돈것, "activity",
+                  lambda: activity.run(모은것.get("_표본_게시글", []), src))
 
-        # ⑥ 가입 조건
-        _쉬기()
-        _돌리기(모은것, 못돈것, "access", lambda: access.run(page, src))
+            # ⑦-2 원본 investigate.py:236-239 가 ⑦ 다음에 부르던 셋입니다.
+            # 통합하면서 호출부가 통째로 빠져 정의만 남은 죽은 코드였습니다
+            # (activity.find_operator_candidates ·
+            #  content.find_notable_leak_candidates ·
+            #  content.find_korea_specific_leaks).
+            #
+            # 원본은 결과를 profile_report_generator 의 MD 템플릿에 실었는데
+            # hub 에는 그 템플릿이 없고, 노션에 새 칸을 만들지 않는 것이
+            # 규칙입니다. 그래서 **건수만** 살펴볼것에 올려 사람이 스냅샷을
+            # 되짚게 합니다. 제목·핸들 값은 안 적습니다.
+            _후보적기(p, 모은것, activity, content)
 
-        # ⑦ ④ 가 만든 표본 게시글을 받습니다
-        _돌리기(모은것, 못돈것, "activity",
-              lambda: activity.run(모은것.get("_표본_게시글", []), src))
-        돈것 = len(차례) - len([x for x in 못돈것 if not x.startswith("_")])
+            돈것 = len(차례) - len([x for x in 못돈것 if not x.startswith("_")])
+    except content.CrawlInterrupted as e:
+        # 원본 investigate.py:307-316 과 같은 판단입니다.
+        # 「결과가 불완전하므로 리포트를 만들지 않습니다.」
+        #
+        # 여기서 모은것 을 통째로 버립니다. 아래 「칸 옮기기」로 내려보내면
+        # 반쪽짜리 값이 Place 에 실리고, 덮어쓰는칸은 조건 없이 갈아
+        # 끼워집니다. 두드림 을 되돌려 놓아 노션값() 이 빈 dict 를 내게
+        # 하고(place.py 의 「두드리지 않았으면 아무것도 안 씁니다」),
+        # 못본이유 로 봤나() 도 False 로 만듭니다 — 둘 다 겁니다.
+        #
+        # 자동 재로그인·자동 챌린지 우회는 만들지 않습니다. 사람이 풀고
+        # 다시 돌리는 것이 유일한 길입니다.
+        까닭 = str(getattr(e, "reason", "") or e)
+        p.두드림 = False
+        # **주소는 뺍니다.** content.py 가 던지는 글자에 어니언 주소가
+        # 붙어 있습니다. 지금은 merge.py 의 안건드림칸 때문에 이 칸이
+        # 밖으로 안 나가지만, 그 규칙이 바뀌면 그때 새어 나갑니다.
+        # 위 [20][21] 에서 값을 일부러 뺀 것과 같은 기준으로 맞춥니다
+        p.못본이유 = f"크롤이 중단됐습니다: {_주소뺀까닭(까닭)}"[:180]
+        덧붙임(p, "챌린지로 중단됐습니다 — 결과가 불완전해 이번 판 값은 "
+                "안 씁니다. 사람이 챌린지를 푼 뒤 다시 돌리십시오")
+        return p
+
+    # ⑤ 가 찾은 외부 언급. page 가 없는 갈래에서도 crossref 는 돌아서
+    # 여기서 한 번만 봅니다.
+    _외부언급적기(p, 모은것)
 
     # ── 칸 옮기기
     for 키, 값 in 모은것.items():
