@@ -30,6 +30,15 @@ class 브라우저없음(RuntimeError):
     """Playwright 가 안 깔렸습니다."""
 
 
+# **HTML 이 아니면 본문을 안 받습니다.** 명부 주소가 아카이브나 덤프를
+# 돌려주면 유출물이 우리 프로세스로 들어옵니다. 통합 전 저장소(Notion-DLS)의
+# tor_probe.py 가 설계 원칙 4번으로 두고 있던 장치인데 옮겨 오면서 빠졌습니다.
+#
+# packages/dc_safety 에도 같은 장치가 있지만 그쪽 목록은 API 용(json·xml)이라
+# HTML 페이지를 받는 이 자리에는 못 씁니다.
+받을_종류 = ("text/html", "text/plain", "application/xhtml", "application/xml")
+
+
 @dataclass
 class 연것:
     """연 결과. 무엇으로 열었든 같은 모양입니다.
@@ -116,10 +125,15 @@ def _http로(주소, *, 프록시, 오프너, timeout, 갈래) -> 연것:
     })
     try:
         with op.open(req, timeout=timeout) as resp:
-            원본 = resp.read(600_000)
             r.상태코드 = getattr(resp, "status", 200) or 200
             r.헤더 = {k.lower(): v for k, v in resp.headers.items()}
             r.최종주소 = resp.geturl()
+            종류 = (r.헤더.get("content-type") or "").split(";")[0].strip().lower()
+            if 종류 and not any(종류.startswith(t) for t in 받을_종류):
+                # 상태코드와 헤더는 이미 받았으므로 「열리기는 했다」는 남습니다
+                r.못본이유 = f"HTML 이 아니라 본문을 안 받았습니다: {종류}"
+                return r
+            원본 = resp.read(600_000)
     except urllib.error.HTTPError as e:
         r.상태코드 = e.code
         try:
