@@ -18,7 +18,6 @@
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 from typing import Iterator
@@ -49,8 +48,8 @@ def _설정():
 def _항목으로(r) -> Item:
     """LeakRecord 를 표 한 줄로 바꿉니다.
 
-    판정 결과(kr_tier · supply_tier)는 raw 에 넣습니다. 표의 이름 있는 칸에
-    그 개념이 없기 때문입니다. 나중에 칸을 만들면 옮기면 됩니다.
+    판정 결과(kr_tier · supply_tier)는 raw 에 dict 로 넣습니다. 표의 이름
+    있는 칸에 그 개념이 없기 때문입니다. 나중에 칸을 만들면 옮기면 됩니다.
 
     today 를 받았지만 안에서 쓰지 않고 있었습니다. 날짜는 run.한판 이
     store.put(it, ctx.today) 로 따로 넣습니다. 안 쓰는 인자를 두면 여기서도
@@ -81,7 +80,11 @@ def _항목으로(r) -> Item:
         country=r.country or "",
         kind="유출 게시",
         got_by=f"kr-leak-alarm/{r.source}",
-        raw=json.dumps({k: v for k, v in 부가.items() if v}, ensure_ascii=False),
+        # dc_store 가 dict 를 받아 자기가 JSON 으로 만듭니다(contract.Item.raw 는
+        # dict, _impl.put 이 json.dumps 를 겁니다). 여기서 미리 만들어 넘기면
+        # 두 겹이 되어 raw like '%"kr_tier"%' 로 못 찾습니다.
+        # ransomlive.py 와 tg_post.py 는 처음부터 dict 를 넘깁니다
+        raw={k: v for k, v in 부가.items() if v},
     )
 
 
