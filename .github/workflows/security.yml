@@ -17,7 +17,8 @@ on:
     branches: [main]
 
 jobs:
-  코드검사:
+  # 잡 ID 는 영문·숫자·-·_ 만 됩니다. ci.yml 과 같은 이유로 바꿨습니다.
+  code-check:
     name: 코드에 금지한 것이 들어왔나
     runs-on: ubuntu-latest
     steps:
@@ -74,7 +75,7 @@ jobs:
             exit 1
           fi
 
-  비밀값이력:
+  secret-history:
     name: 커밋 이력에 비밀값이 섞였나
     runs-on: ubuntu-latest
     # **첫 판은 실패해도 넘어갑니다.** 옛 커밋에 무엇이 있는지 아직 안 봤습니다.

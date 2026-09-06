@@ -7,7 +7,10 @@ on:
   pull_request:
 
 jobs:
-  부품:
+  # 잡 ID 는 영문·숫자·-·_ 만 됩니다. 한글이면 깃허브가 파일 단계에서 막아
+  # 잡이 하나도 안 돕니다. 2026-08-28 부터 50번이 전부 그렇게 실패했습니다.
+  # 화면에 보이는 이름은 name: 이라 한글 그대로 둡니다.
+  parts:
     name: 공용 부품과 툴킷
     runs-on: ubuntu-latest
     steps:
@@ -38,7 +41,7 @@ jobs:
         env:
           PYTHONIOENCODING: utf-8
 
-  앱:
+  apps:
     name: 앱 자체 테스트
     runs-on: ubuntu-latest
     steps:
@@ -68,7 +71,7 @@ jobs:
         env:
           PYTHONIOENCODING: utf-8
 
-  스킬:
+  skills:
     name: skills 검사
     runs-on: ubuntu-latest
     steps:
@@ -88,7 +91,7 @@ jobs:
         env:
           PYTHONIOENCODING: utf-8
 
-  설치전:
+  no-install:
     name: 설치 없이 --help 가 뜨는지
     runs-on: ubuntu-latest
     steps:
