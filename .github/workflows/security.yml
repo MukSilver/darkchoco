@@ -78,6 +78,11 @@ jobs:
   secret-history:
     name: 커밋 이력에 비밀값이 섞였나
     runs-on: ubuntu-latest
+    # gitleaks 가 PR 커밋 목록을 읽습니다. 이 권한이 없으면 스캔 전에 403 으로 죽습니다.
+    # 2026-09-06 첫 실행이 그랬습니다. 그때까지 이 잡은 한 번도 스캔한 적이 없습니다.
+    permissions:
+      contents: read
+      pull-requests: read
     # **첫 판은 실패해도 넘어갑니다.** 옛 커밋에 무엇이 있는지 아직 안 봤습니다.
     # 한 번 돌려 결과를 보고 깨끗하면 이 줄을 지웁니다.
     continue-on-error: true

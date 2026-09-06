@@ -80,7 +80,9 @@ jobs:
         with:
           python-version: "3.11"
       # CI 가 skills/ 를 아예 안 부르고 있었습니다. 도구 둘이 거기 있습니다.
-      # 아무것도 안 깝니다 — 이 검사들은 표준 라이브러리만 씁니다.
+      # skills/collect/fetch.py 가 requests 를 부릅니다. 전에는 「표준 라이브러리만」 이라 안 깔았는데
+      # 2026-09-06 첫 실행에서 ModuleNotFoundError 로 멈췄습니다. 잡 ID 가 한글이던 때는 여기까지 온 적이 없습니다.
+      - run: pip install requests
       - name: skills 아래 검사 전부
         run: |
           set -e
