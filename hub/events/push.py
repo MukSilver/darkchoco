@@ -3,6 +3,7 @@
     python hub/events/push.py                  미리보기. 노션에 안 씁니다
     python hub/events/push.py --kr             한국 건만
     python hub/events/push.py --limit 20 --apply   스무 줄만 실제로 씁니다
+    python hub/events/push.py --db ~/data/darkchoco.db --kr   다른 표(최현서 랜섬 표)를 읽습니다
 
 **여기까지가 끊겨 있었습니다.** 어댑터가 받아 온 것이 SQLite 에서 끝나고
 사람 눈까지 안 갔습니다. 기사에 쓰려면 그것을 봐야 하는데 지금은
@@ -16,26 +17,41 @@ items 표에는 채널 공지와 광고도 같이 들어 있습니다. 피해자
 
 ## 안 보내는 것
 
-items 29칸 중 아홉만 보냅니다. **본문은 안 보냅니다.**
+items 29칸 중 열일곱만 보냅니다. **본문은 안 보냅니다.**
 
     body    411줄 (91%)   게시글 본문
-    raw     448줄          원본 응답
+    raw     448줄          원본 응답. 「발견일」 과 「규모 출처」 두 키만 꺼내 씁니다
     clues   448줄
 
 수집 DB 에 본문 칸이 아예 없습니다. 그 설계를 그대로 따릅니다.
 CLAUDE.md 의 「나가는 것은 필드명, 패턴, 건수뿐이다」와도 맞습니다.
 
+## 자동으로 올라간 줄은 「미검토」 입니다
+
+2026-09-06 부터 수집 DB 에 「검토 여부」 칸이 있습니다. 여기서 올린 줄은 전부
+미검토이고 수집자는 「자동」 입니다. 지도 · 통계 · 검증 큐는 미검토 줄을 안 봅니다.
+사람이 노션에서 사건 O / X 를 고르면 그때 사건이 됩니다.
+
+같이 올리는 칸 여덟: 검토 여부 · 수집자 · 소스 · UID · 주장 규모 · 규모 출처 ·
+발견일 · 한국 관련(+근거).
+
+**빈 규모는 「없음」 이 아니라 모르는 것입니다.** 칸을 아예 안 보냅니다. `-` 나 `n/a` 처럼
+없다는 표시로 온 것도 같이 봅니다. 발견일은 UTC 를 KST 로 옮긴 뒤에 자릅니다.
+
 ## 겹치는 것을 어떻게 거르나
 
-노션에 이미 있는 줄을 원문 URL 로 봅니다. URL 이 없는 줄은
-자료 제목과 게시 플랫폼을 묶어 봅니다. **사람이 쓴 줄을 안 덮습니다.**
-새로 만들기만 하고 있는 줄은 건드리지 않습니다.
+**UID 가 먼저입니다.** items.uid 가 노션 UID 칸에 있으면 같은 글입니다.
+UID 가 없는 옛 줄은 원문 URL 로, URL 도 없으면 자료 제목과 게시 플랫폼을 묶어 봅니다.
+**사람이 쓴 줄을 안 덮습니다.** 새로 만들기만 하고 있는 줄은 건드리지 않습니다.
+사람이 「사건 X」 로 닫은 줄도 UID 가 막아 다시 안 들어옵니다.
 """
 from __future__ import annotations
 
 import argparse
+import json
 import sqlite3
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -62,8 +78,23 @@ from dc_notion import Notion  # noqa: E402
     "telegram": "확인 못 함",     # 채널 글은 무엇인지 사람이 봐야 갈립니다
     "forum": "확인 못 함",
 }
+# 최현서 표의 kind 는 노션 선택지 글자 그대로 들어 있습니다 (랜섬웨어 유출 · 확인 못 함).
+# 그 글자가 선택지에 있으면 그것을 쓰고, 비어 있으면 venue_kind 로 물러납니다.
+게시성격_선택지 = {"랜섬웨어 유출", "DB 판매", "DB 무료 공개", "접근 권한 판매",
+             "사기 의심", "기타", "확인 못 함"}
 
-보낼칸 = 9
+# items.source → 노션 「소스」. 어느 수집기가 가져왔나. [사건] 화면의 탭입니다.
+소스 = {"ransom": "랜섬웨어", "ransomlive": "랜섬웨어",
+      "telegram": "텔레그램", "forum": "포럼", "kit": "포럼"}
+
+# **값이 아니라 「없다」는 표시입니다.** 집계처가 규모 칸에 이런 것을 넣어 보냅니다.
+# skills/collect/sources/ransomlive.py 의 DASH 와 같게 봅니다. 그쪽은 세는 자리에만
+# 있었고 올리는 자리에는 없어서, 대시뿐인 줄이 노션에 규모 `-` 로 들어갈 뻔했습니다.
+DASH = {"-", "--", "---", "—", "–", "n/a", "N/A", "na", "unknown", "Unknown", "?"}
+
+KST = timezone(timedelta(hours=9))
+
+보낼칸 = 17
 
 
 def _글(v: str) -> dict:
@@ -80,11 +111,94 @@ def _날(v: str) -> dict | None:
     return None
 
 
-def 만들기(줄: sqlite3.Row) -> dict:
-    """items 한 줄을 노션 속성으로 옮깁니다. 빈 값은 아예 안 보냅니다."""
+def _값(줄, 칸: str) -> str:
+    """칸이 없는 표(옛 스키마)에서도 죽지 않게 읽습니다. 없거나 비면 빈 문자열입니다."""
+    try:
+        v = 줄[칸] if 칸 in 줄.keys() else None
+    except Exception:  # noqa: BLE001
+        v = None
+    if v is None:
+        return ""
+    return v if isinstance(v, str) else str(v)
+
+
+def _raw(raw: str) -> dict:
+    """raw(원본 응답 JSON)를 dict 로. 깨졌거나 dict 가 아니면 빈 dict 입니다."""
+    if not raw:
+        return {}
+    try:
+        d = json.loads(raw)
+    except (ValueError, TypeError):
+        return {}
+    return d if isinstance(d, dict) else {}
+
+
+def _발견일(raw: str) -> dict | None:
+    """집계처가 처음 본 날. 두 어댑터가 이름을 달리 붙여서 둘 다 봅니다.
+
+        ransomlive.py (최현서 랜섬 표)    raw["발견일"]
+        ransom_kr.py  (팀 hub 표)        raw["discovered"]
+
+    **UTC 를 KST 로 옮긴 뒤에 자릅니다.** 집계처 시각은 UTC 인데 그냥 열 글자를 자르면
+    15시 이후에 발견된 건이 하루 앞선 날로 박힙니다. 실측으로 기본표 315건 중 152건이
+    그 구간이다. 게시일과의 차이가 게시 지연을 재는 유일한 신호라 하루가 어긋나면 못 쓴다.
+    `collect/stats.py` 의 `_kst()` 와 같은 규칙을 쓴다. 두 도구가 다른 날을 말하면 안 된다.
+    """
+    d = _raw(raw)
+    v = str(d.get("발견일") or d.get("discovered") or "").strip()
+    if not v:
+        return None
+    if len(v) == 10:                      # 날짜만 온 것은 시간대를 따질 것이 없다
+        return _날(v)
+    try:
+        t = datetime.fromisoformat(v.replace("Z", "+00:00"))
+    except ValueError:
+        return _날(v[:10])
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=timezone.utc)
+    return _날(t.astimezone(KST).strftime("%Y-%m-%d"))
+
+
+def _규모출처(raw: str, src: str | None) -> str:
+    """규모를 어디서 봤나. **raw 에 적힌 것이 먼저입니다.**
+
+    `ransomlive.py` 가 집계처 응답을 보고 raw["규모 출처"] 에 이미 적어 둡니다. 실측 두 건이
+    집계처 API 에는 없고 웹 UI 와 원 출처에만 있었고, 이 칸은 바로 그 구분을 남기려고 만들었습니다.
+    수집기 이름으로 되짚으면, 사람이 원 출처에서 본 규모를 넣었을 때 「집계처 API」 로 도장이 찍힙니다.
+    어느 수집기인지도 모르면 출처를 모르는 것이므로 칸을 안 보냅니다.
+    """
+    적힘 = str(_raw(raw).get("규모 출처") or "").strip()
+    if 적힘:
+        return "집계처 API" if 적힘.startswith("집계처") else "원 출처"
+    if not src:
+        return ""
+    return "집계처 API" if src == "랜섬웨어" else "원 출처"
+
+
+def _한국관련(줄) -> tuple[str, str]:
+    """(한국 관련, 근거). 집계처 country 와 대상 도메인만 봅니다.
+
+    한글 · 기업명 · 공급망 벤더 목록은 아직 안 봅니다. 그 규칙은 M1 설계 때 정합니다.
+    모르면 「미확인」 이고 근거는 비웁니다. 사람이 노션에서 고칩니다.
+    """
+    if _값(줄, "country").strip().upper() == "KR":
+        return "직접", "country=KR"
+    if _값(줄, "target_domain").strip().lower().endswith(".kr"):
+        return "직접", ".kr 도메인"
+    return "미확인", ""
+
+
+def 만들기(줄) -> dict:
+    """items 한 줄을 노션 속성으로 옮깁니다. 빈 값은 아예 안 보냅니다.
+
+    sqlite3.Row 를 받지만 r["칸"] 과 r.keys() 만 쓰므로 dict 도 됩니다 (시험용).
+    """
     p: dict = {
         "자료 제목": {"title": [{"text": {"content": (줄["title"] or "제목 없음")[:2000]}}]},
-        "수집자": {"select": {"name": "최현서"}},
+        # 자동으로 올라온 줄입니다. 사람이 노션에서 사건 O / X 를 고르기 전에는
+        # 지도 · 통계 · 검증 큐가 안 봅니다 (프젝 DEV.md 4-9).
+        "수집자": {"select": {"name": "자동"}},
+        "검토 여부": {"select": {"name": "미검토"}},
     }
     if 줄["target_org"]:
         p["대상 조직"] = _글(줄["target_org"])
@@ -106,9 +220,35 @@ def 만들기(줄: sqlite3.Row) -> dict:
     if 이름:
         p["국가"] = {"select": {"name": 이름}}
 
-    성격 = 게시성격.get(줄["venue_kind"] or "")
+    kind = _값(줄, "kind").strip()
+    성격 = kind if kind in 게시성격_선택지 else 게시성격.get(_값(줄, "venue_kind"))
     if 성격:
         p["게시 성격"] = {"select": {"name": 성격}}
+
+    # ── 2026-09-06 에 더한 칸 ──
+    src = 소스.get(_값(줄, "source").strip())
+    if src:
+        p["소스"] = {"select": {"name": src}}
+
+    uid = _값(줄, "uid").strip()
+    if uid:
+        p["UID"] = _글(uid)
+
+    규모 = _값(줄, "claimed_size").strip()
+    if 규모 and 규모.strip() not in DASH:
+        p["주장 규모"] = _글(규모)
+        출처 = _규모출처(_값(줄, "raw"), src)
+        if 출처:
+            p["규모 출처"] = {"select": {"name": 출처}}
+
+    발견 = _발견일(_값(줄, "raw"))
+    if 발견:
+        p["발견일"] = 발견
+
+    관련, 근거 = _한국관련(줄)
+    p["한국 관련"] = {"select": {"name": 관련}}
+    if 근거:
+        p["한국 관련 근거"] = _글(근거)
 
     return p
 
@@ -119,20 +259,39 @@ def _열쇠(url: str, 제목: str, 곳: str) -> str:
     return u if u else "%s|%s" % ((제목 or "").strip(), (곳 or "").strip())
 
 
-def 이미있는것(n: Notion) -> set[str]:
-    """노션에 이미 있는 줄의 열쇠. 사람이 쓴 것도 여기 들어갑니다."""
-    본것 = set()
+def _열쇠들(줄) -> tuple[str, str]:
+    """(uid, 열쇠). uid 가 비면 첫 값은 빈 문자열입니다."""
+    return _값(줄, "uid").strip(), _열쇠(_값(줄, "post_url"), _값(줄, "title"), _값(줄, "venue"))
+
+
+def _겹치나(줄, 본uid: set[str], 본열쇠: set[str]) -> bool:
+    """uid 나 열쇠 어느 하나라도 본 것이면 겹칩니다. uid 가 없는 줄은 열쇠로만 봅니다."""
+    uid, k = _열쇠들(줄)
+    return (bool(uid) and uid in 본uid) or k in 본열쇠
+
+
+def _노션줄의_열쇠(r: dict) -> tuple[str, str]:
+    """노션 한 줄에서 (UID, 열쇠). UID 칸이 없던 옛 줄은 UID 가 빈 문자열입니다."""
+    p = r.get("properties") or {}
+
+    def 글(칸: str) -> str:
+        v = (p.get(칸) or {}).get("rich_text") or []
+        return "".join(x.get("plain_text", "") for x in v)
+
+    제목 = "".join(x.get("plain_text", "")
+                 for x in ((p.get("자료 제목") or {}).get("title") or []))
+    return 글("UID").strip(), _열쇠(글("원문 URL"), 제목, 글("게시 플랫폼"))
+
+
+def 이미있는것(n: Notion) -> tuple[set[str], set[str]]:
+    """노션에 이미 있는 줄의 (UID 들, 열쇠들). 사람이 쓴 것도 여기 들어갑니다."""
+    본uid, 본것 = set(), set()
     for r in n.query_all(수집DB):
-        p = r.get("properties") or {}
-
-        def 글(칸: str) -> str:
-            v = (p.get(칸) or {}).get("rich_text") or []
-            return "".join(x.get("plain_text", "") for x in v)
-
-        제목 = "".join(x.get("plain_text", "")
-                     for x in ((p.get("자료 제목") or {}).get("title") or []))
-        본것.add(_열쇠(글("원문 URL"), 제목, 글("게시 플랫폼")))
-    return 본것
+        uid, k = _노션줄의_열쇠(r)
+        if uid:
+            본uid.add(uid)
+        본것.add(k)
+    return 본uid, 본것
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -187,18 +346,21 @@ def main(argv: list[str] | None = None) -> int:
 
     n = Notion()
     print("  노션에 이미 있는 것을 봅니다...", flush=True)
-    본것 = 이미있는것(n)
-    print("  노션에 %d줄이 있습니다" % len(본것))
+    본uid, 본것 = 이미있는것(n)
+    print("  노션에 %d줄이 있습니다 (UID 가 찬 줄 %d)" % (len(본것), len(본uid)))
 
     # **표 안에서도 겹칩니다.** URL 이 없는 줄은 제목과 곳으로만 가리는데,
     # 같은 글이 여러 채널에 퍼지면 열쇠가 같아집니다. 448줄이 열쇠로는
     # 414개입니다. 그대로 밀면 노션에 34줄이 중복으로 생깁니다.
-    새것, 본열쇠 = [], set(본것)
+    # UID 가 먼저고, 그 다음이 열쇠입니다. 어느 하나라도 본 것이면 뺍니다.
+    새것 = []
     for r in 줄들:
-        k = _열쇠(r["post_url"], r["title"], r["venue"])
-        if k in 본열쇠:
+        if _겹치나(r, 본uid, 본것):
             continue
-        본열쇠.add(k)
+        uid, k = _열쇠들(r)
+        if uid:
+            본uid.add(uid)
+        본것.add(k)
         새것.append(r)
     겹침 = len(줄들) - len(새것)
     print("  겹치는 %d줄을 뺐습니다. 올릴 것은 %d줄입니다" % (겹침, len(새것)))
@@ -209,14 +371,19 @@ def main(argv: list[str] | None = None) -> int:
         print()
         print("  올라갈 칸 %d개" % 보낼칸)
         print("    자료 제목 · 대상 조직 · 게시자 핸들 · 게시 플랫폼 · 원문 URL")
-        print("    게시 시각 · 수집일 · 국가 · 게시 성격 · 수집자(최현서)")
+        print("    게시 시각 · 수집일 · 국가 · 게시 성격")
+        print("    검토 여부(미검토) · 수집자(자동) · 소스 · UID · 주장 규모 · 규모 출처 · 발견일 · 한국 관련(+근거)")
         print()
         print("  안 올라가는 것")
         print("    body · raw · clues · sample_path — 수집 DB 에 그 칸이 없습니다")
         print()
         for r in 새것[:5]:
-            print("    %-46s %s · %s" % ((r["title"] or "")[:46],
-                                        r["venue_kind"], r["country"] or "-"))
+            p = 만들기(r)
+            print("    %-46s %s · %s · 한국 관련 %s" % (
+                (r["title"] or "")[:46],
+                (p.get("소스") or {}).get("select", {}).get("name", "-"),
+                r["country"] or "-",
+                p["한국 관련"]["select"]["name"]))
         if len(새것) > 5:
             print("    ... 그리고 %d줄 더" % (len(새것) - 5))
         return 0
