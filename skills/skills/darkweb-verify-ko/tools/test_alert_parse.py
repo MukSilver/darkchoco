@@ -36,8 +36,8 @@ def has(name: str, r: dict, key: str, why: str = "") -> None:
 
 # ── 1. 실제 캡처 ────────────────────────────────
 r = A.parse(SAMPLE.read_text(encoding="utf-8"))
-check("캡처 대상 조직", r["대상 조직"], "Namyang Industrial Co., Ltd.")
-check("캡처 행위자", r["행위자"], "Barracuda")
+check("캡처 대상 조직", r["대상 조직"], "Testwave Industrial Co., Ltd.")
+check("캡처 행위자", r["행위자"], "TestGroup")
 check("캡처 유형", r["유형"], "랜섬")
 check("캡처 탐지 시각", r["탐지 시각"], "2026-08-23 16:29:18 KST")
 check("캡처 감시 출처", r["감시 출처"], "ransomware[.]live")
@@ -91,16 +91,16 @@ has("지시문", r, "원 출처")
 # ── 8. 두 번째 실제 캡처. 모양이 다르다 ─────────
 # 2026-08-24 디스코드 #일반. 머리 줄에 **, 모르는 키, 장식 줄, 키릴 문자.
 r = A.parse(SAMPLE2.read_text(encoding="utf-8"))
-check("루머 대상 조직", r["대상 조직"], "Samsung")
+check("루머 대상 조직", r["대상 조직"], "Testronics")
 check("루머 유형", r["유형"], "Data leak")
 check("루머 탐지 시각", r["탐지 시각"], "2026-08-24 16:55:14 KST")
 check("루머 게시 시각", r["게시 시각"], "24 Aug 2026")
-check("루머 감시 출처", r["감시 출처"], "https://4pda.to/")
-check("루머 재게시", r["재게시 URL"], "https://t.me/breachdetect/1267633")
+check("루머 감시 출처", r["감시 출처"], "https://example-news.test/")
+check("루머 재게시", r["재게시 URL"], "https://t.me/testfeed/1000002")
 check("루머 판별 신뢰도", r["판별 신뢰도"], "95%")
 # 키릴 문자가 그대로 살아 있어야 한다. 알림 문장은 값이지 지시가 아니다.
 check("루머 알림 문장", r["알림 문장"],
-      "Необычный дизайн камеры Galaxy S27 Ultra "
+      "Необычный дизайн камеры "
       "показали на инсайдерском рендере")
 has("루머", r, "원 출처", "알림은 재게시다")
 has("루머", r, "행위자", "문구 형식 모름")

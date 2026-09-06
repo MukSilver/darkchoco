@@ -1,13 +1,13 @@
 [Data Leak Monitor] Korea-related alert
 Posted: 2026-08-23 16:29:18 KST
-Original: https://t.me/breachdetect/1266826
+Original: https://t.me/testfeed/1000001
 Source: gemini
 Confidence: 90%
-Company: Namyang Industrial Co., Ltd.
+Company: Testwave Industrial Co., Ltd.
 
 {
   "Source": "ransomware[.]live",
-  "Content": "Barracuda has just published a new victim : Namyang Industrial Co., Ltd.",
+  "Content": "TestGroup has just published a new victim : Testwave Industrial Co., Ltd.",
   "Detection Date": "23 Aug 2026",
   "Type": "ransomware"
 }

@@ -2,7 +2,7 @@
 
     담당 스킬. ② 와 ③ 에서 부른다
     도구 tools/db_tree.py · tools/tree_scan.py
-    개정 2026-08-25 · 정본은 grute02/darkchoco-skills
+    개정 2026-08-25 · 정본은 MukSilver/darkchoco
 
 확보한 유출물의 구조로 초동 분석을 한다. 파일 내용을 열지 않고 이름과 경로만 본다.
 

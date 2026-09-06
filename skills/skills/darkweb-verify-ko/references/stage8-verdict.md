@@ -2,7 +2,7 @@
 
     담당 사람. 스킬이 끝난 뒤에 한다
     도구 없음
-    개정 2026-08-21 · 정본은 grute02/darkchoco-skills
+    개정 2026-08-21 · 정본은 MukSilver/darkchoco
 
 판정자가 한다. 프롬프트 없음.
 

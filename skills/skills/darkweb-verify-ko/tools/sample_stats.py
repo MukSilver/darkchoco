@@ -9,11 +9,16 @@
 --rows 를 주면 그만큼만 읽고, 잘랐다는 사실을 출력에 적는다.
 
     python sample_stats.py member.csv
+    python sample_stats.py ②샘플.txt
     python sample_stats.py treethink.sql --table member_tb
     python sample_stats.py member.csv --rows 50000 --md 출력.md
 
 **출력에 값이 하나도 안 나온다.** 분포와 규칙성만 낸다.
-CSV 와 SQL INSERT 덤프를 받는다.
+CSV·TSV·구분자 텍스트와 SQL INSERT 덤프를 받는다.
+`.sql` 이 아니면 전부 구분자 텍스트로 읽는다. 쉼표·탭·파이프·세미콜론·콜론을 본다.
+
+**칸 이름 줄이 없어도 된다.** 첫 줄이 값이면 `칸1`, `칸2` 로 이름을 짓는다.
+헤더인지 애매하면 값으로 본다. 값을 칸 이름으로 삼으면 산출물에 그대로 나간다.
 파이썬 3 표준 라이브러리만 쓴다. Kali VM 에서 그대로 돈다.
 """
 from __future__ import annotations
@@ -98,12 +103,60 @@ def synth_marks(vals: list[str]) -> list[str]:
 HASH_LEN = {32: "MD5", 40: "SHA-1", 56: "SHA-224", 64: "SHA-256", 128: "SHA-512"}
 
 
+def looks_like_header(header: list[str], rows: list[list[str]]) -> bool:
+    """첫 줄이 칸 이름인가 값인가.
+
+    **모르면 값으로 본다.** 값을 칸 이름으로 삼으면 산출물에 그대로 나간다.
+    이 도구는 값을 안 내는 것이 존재 이유다. 칸 이름을 잃는 편이 낫다.
+
+    2026-08-28 에 이 판별이 숫자만 봐서, 헤더 없는 샘플의 첫 줄이
+    `## 칸 목록` 에 통째로 찍혔다. 바로 위에 "실제 값은 하나도 없다" 가 있었다.
+    """
+    if not header:
+        return False
+    for h in header:
+        s = (h or "").strip()
+        if not s:
+            return False                      # 빈 칸 이름은 없다
+        if "@" in s or len(s) > 40:
+            return False                      # 이메일이거나 너무 길다
+        if PAT["숫자"].match(s) or PAT["날짜"].match(s):
+            return False
+    if not rows:
+        return False                          # 견줄 것이 없으면 값으로 본다
+
+    # 첫 줄의 종류가 아랫줄과 같으면 그것은 값이다.
+    #
+    # **`기타 문자열` 은 뺀다.** 칸 이름은 거의 다 그것으로 판정되므로,
+    # 그것까지 세면 헤더가 있는 파일도 값으로 보게 된다. 실제로 그랬다.
+    # `email`·`passwd`·`phone` 이 든 CSV 가 통째로 `칸1, 칸2, 칸3` 이 됐다.
+    # `한글이름` 도 뺀다. `이름`·`주소` 같은 칸 이름이 두 글자 한글이라
+    # 아랫줄의 사람 이름과 같은 종류로 잡힌다. 실제로 `이름,전화번호,주소` 가
+    # 통째로 값으로 판정됐다. 두 글자 한글은 칸 이름일 수도 값일 수도 있어
+    # 판별에 쓸 수 없다
+    애매 = ("기타 문자열", "한글이름")
+    같은_종류 = 0
+    for i, h in enumerate(header):
+        col = [r[i] for r in rows[:20] if i < len(r) and (r[i] or "").strip()]
+        if not col:
+            continue
+        k = guess([h])
+        if k not in 애매 and k == guess(col[:5]):
+            같은_종류 += 1
+    # 하나라도 값과 같은 종류면 그 줄은 값이다.
+    # 칸 이름이 우연히 이메일이나 전화번호 꼴일 수는 없다
+    return 같은_종류 == 0
+
+
 def read_csv(path: Path, limit: int) -> tuple[list[str], list[list[str]]]:
     with path.open("r", encoding="utf-8", errors="replace", newline="") as f:
         head = f.read(8192)
         f.seek(0)
         try:
-            dialect = csv.Sniffer().sniff(head, delimiters=",\t|;")
+            # 콜론을 넣는다. `email:password:phone` 이 유출물에서 가장 흔한 꼴인데
+            # kit_out.py 는 콜론을 구분자로 세어 샘플을 떼어 내고 여기는 안 셌다.
+            # 그러면 세 칸짜리 줄이 한 칸으로 읽혔다
+            dialect = csv.Sniffer().sniff(head, delimiters=",\t|;:")
         except csv.Error:
             dialect = csv.excel
         r = csv.reader(f, dialect)
@@ -116,7 +169,7 @@ def read_csv(path: Path, limit: int) -> tuple[list[str], list[list[str]]]:
             if limit and i >= limit:
                 break
             rows.append(row)
-    if any(PAT["숫자"].match(h or "") for h in header) and len(header) > 2:
+    if not looks_like_header(header, rows):
         rows.insert(0, header)
         header = [f"칸{i+1}" for i in range(len(header))]
     return header, rows

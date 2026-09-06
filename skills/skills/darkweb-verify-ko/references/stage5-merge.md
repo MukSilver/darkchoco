@@ -2,7 +2,7 @@
 
     담당 스킬
     도구 없음
-    개정 2026-08-24 · 정본은 grute02/darkchoco-skills
+    개정 2026-08-24 · 정본은 MukSilver/darkchoco
 
 형식 변환과 출처 태그까지. 항목 배치는 사람이 확인한다.
 
