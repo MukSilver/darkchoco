@@ -108,6 +108,9 @@ for k in ("press", "infostealer", "claim_url", "url"):
     if k not in b.raw:
         fails.append("raw 에 %s 가 없다: %r" % (k, sorted(b.raw)))
 check("산업 분야", b.raw.get("산업 분야"), "Financial Services")
+# 발견일은 집계처가 처음 본 날이다. 게시 지연을 잴 유일한 시각 신호라 버리지 않는다
+check("KR 발견일", a.raw.get("발견일"), "2026-08-25T20:57:25.789152+00:00")
+check("recent 발견일", b.raw.get("발견일"), "2026-01-15T13:48:29.435004+00:00")
 
 # ── 7. 빈 칸이 문자열 'None' 이 되지 않는다 ─────
 check("몸값 빈칸", a.price, "")

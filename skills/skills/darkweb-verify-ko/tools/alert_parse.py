@@ -45,7 +45,7 @@ BODY = {
 # ── 알려진 문장에서 행위자를 뽑는다 ─────────────
 # 형식이 소스마다 다르다. 아는 것만 잡고 나머지는 못 봄으로 둔다.
 ACTOR = [
-    # ransomware.live : "Barracuda has just published a new victim : X"
+    # ransomware.live : "TestGroup has just published a new victim : X"
     re.compile(r"^\W*([A-Za-z0-9][\w .\-]{1,30}?)\s+has\s+just\s+published", re.I),
     # "New victim of <group>"
     re.compile(r"\bnew\s+victim\s+of\s+([A-Za-z0-9][\w .\-]{1,30})", re.I),

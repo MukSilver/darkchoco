@@ -19,6 +19,7 @@ from pathlib import Path
 # 이 줄은 하는 일이 없습니다.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "packages"))
 
-from dc_store import KEY, Item, Store  # noqa: E402,F401
+# SCHEMA 도 넘겨줍니다. collect/track.py 와 시험 파일이 표를 만들 때 씁니다 (2026-09-06).
+from dc_store import KEY, SCHEMA, Item, Store  # noqa: E402,F401
 
-__all__ = ["Item", "Store", "KEY"]
+__all__ = ["Item", "Store", "KEY", "SCHEMA"]

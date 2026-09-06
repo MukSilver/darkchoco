@@ -39,6 +39,26 @@
 `data_size` 와 `ransom` 이 API 에 있는데 Kr-Leak-alarm 의 어댑터가 안 읽는다.
 그래서 `주장 규모` 가 늘 못 봄이었다. 여기서는 읽는다.
 KR 115줄 기준으로 `data_size` 는 9줄에만 차 있다. 적지만 없는 것보다 낫다.
+
+## 그런데 그 9줄도 믿으면 안 된다
+
+2026-08-29 에 양쪽으로 틀린 것이 드러났다.
+
+**하나. 값이 대시뿐인 줄이 「있음」 으로 세어진다.**
+`Sample Ltd` 가 `-`, `SAMPLE STUDIOS` 가 `---` 다. 빈 값이 아니라서 세어졌다.
+
+**둘. 빈 줄이 「주장 없음」 이 아니다.** 집계처가 안 긁은 것일 수 있다.
+
+| 케이스 | 규모 | 원 출처 | 이 사이트 웹 UI | 이 API |
+|---|---|---|---|---|
+| sampleenc | 50GB | 있음 | 있음 | **없음** |
+| samplemotor | 400.00GB | 있음 | **없음** | **없음** |
+
+**집계처가 그룹마다 다르게 긁는다.** qilin 사이트의 size 칸은 아예 안 긁는 것으로 보인다.
+그래서 `claimed_size` 가 비었다고 규모 주장이 없는 것이 아니다.
+
+값은 원문 그대로 저장하고, `raw["규모 출처"]` 에 집계처가 줬는지를 적는다.
+세는 자리에서만 대시를 갈라 낸다. **이 칸으로 대상을 고르지 마라.**
 """
 from __future__ import annotations
 
@@ -54,6 +74,9 @@ from collect.store import Item, Store  # noqa: E402
 
 VER = "ransomlive v1"
 BASE = "https://api.ransomware.live/v2"
+
+# 값이 아니라 「없다」 는 표시다. 세는 자리에서만 쓴다. 저장은 원문 그대로 한다
+DASH = {"-", "--", "---", "—", "–", "n/a", "N/A", "na", "unknown", "Unknown", "?"}
 
 # 엔드포인트마다 칸 이름이 다르다. 여기만 고치면 새 엔드포인트가 붙는다
 FEEDS = {
@@ -118,9 +141,18 @@ def to_item(row: dict, f: dict, feed: str) -> Item:
         price=g(row, "ransom"),                # 위와 같다
         kind="랜섬웨어 유출",
         country=g(row, "country"),
+        # **빈 규모를 「주장 없음」 으로 읽으면 안 된다.** 집계처가 안 긁은 것일 수 있다.
+        # 2026-08-29 실측 두 건이 그랬다. sampleenc 50GB 는 이 사이트 웹 UI 에만 있었고
+        # samplemotor 400.00GB 는 원 출처에만 있었다. API 는 둘 다 비어 있었다
         raw=dict(extra, **{"산업 분야": g(row, f["sector"]),
                            "엔드포인트": feed,
-                           "재게시 자리": mirror}),
+                           "재게시 자리": mirror,
+                           # 집계처가 처음 본 날. 게시일(published)과의 차이가 게시 지연을
+                           # 재는 유일한 시각 신호다. 2026-09-06 까지 버리고 있었다.
+                           # uid 열쇠에는 안 든다 — 같은 건이 다시 와도 줄이 안 갈린다
+                           "발견일": g(row, f["seen"]),
+                           "규모 출처": ("집계처 API" if g(row, "data_size")
+                                      else "**안 옴.** 원 출처를 봐야 안다")}),
         got_by=VER,
     )
 
@@ -160,6 +192,23 @@ def run(feed: str, db: Path | None, dry: bool, limit: int) -> int:
                      ("주장 규모", "data_size"), ("몸값", "ransom")):
         n = sum(1 for r in rows if g(r, key))
         print("    %-10s %3d/%d  (%s)" % (our, n, len(rows), key))
+
+    # **규모 칸이 양쪽으로 틀렸다.** 값이 대시뿐인데 위에서 「있음」 으로 세어지고,
+    # 반대로 집계처가 안 긁은 빈 줄이 「주장 없음」 으로 읽힌다.
+    # 2026-08-29 실측이다. 저장은 원문 그대로 두고 세는 자리에서만 가른다
+    sizes = [g(r, "data_size") for r in rows]
+    dash = [s for s in sizes if s and s.strip() in DASH]
+    real = [s for s in sizes if s and s.strip() not in DASH]
+    empty = len(sizes) - len(dash) - len(real)
+    print()
+    print("규모 칸을 그대로 믿지 마라")
+    print("    값이 있는 줄   %3d" % len(real))
+    print("    대시뿐인 줄    %3d   `-` `---` 따위. 값이 아닌데 위에서 함께 세어졌다"
+          % len(dash))
+    print("    비어 있는 줄   %3d   **「주장 없음」 이 아니다**" % empty)
+    print("    빈 줄은 집계처가 안 긁은 것일 수 있다. 원 출처를 봐야 안다.")
+    print("    2026-08-29 에 두 건 확인됐다. sampleenc 50GB 는 이 사이트 웹 UI 에만,")
+    print("    samplemotor 400.00GB 는 원 출처에만 있었다. 둘 다 API 는 비어 있었다.")
 
     if not db:
         print("\n--db 를 주면 넣는다")

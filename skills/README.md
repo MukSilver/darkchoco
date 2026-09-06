@@ -3,13 +3,56 @@
 WHS 4 darkchoco
 다크웹 유출 주장 검증 스킬과 도구
 
+**2026-09-06 부터 정본은 팀 레포 `MukSilver/darkchoco` 의 이 폴더(`skills/`)다.**
+그 전 정본이던 `grute02/darkchoco-skills` 는 그날 멈췄다. 공용 부품(수집 표 · 노션 클라이언트 · 콘솔)은
+`../packages/` 에 있고, 여기 `collect/store.py` 와 `tools/notion.py` 는 그것을 넘겨주는 껍데기다.
+
+## 제어판부터 켠다
+
+도구가 스물여섯 개다. 사용법은 각 파일 맨 위에 적혀 있지만, 무엇부터 칠지
+모르겠으면 제어판을 켠다.
+
+**이 폴더(`skills/`)에서 친다.** 레포 뿌리에서 치면 `run.py` 를 못 찾는다.
+
+```bash
+cd skills
+pip install -r requirements.txt
+python run.py
+```
+
+윈도우에서는 `skills\실행\1 제어판.bat` 을 더블클릭해도 된다.
+
+```
+다크초코 제어판
+
+  현황 보기        표에 무엇이 있나 · 최근 실행
+  수집             한 바퀴 · 소스별
+  알림             감시 채널 읽기 · 디스코드로 보내기
+  큐와 케이스       검증 큐 상태 · 브리핑
+  재료 분석        inspect · 샘플 통계 · 트리
+  노션             조회 · 기록
+  설정 점검        빠진 설정 찾기
+```
+
+**제어판은 새 기능을 만들지 않는다.** 기존 도구를 고르고 인자를 맞춰 부른다.
+실행 전에 무엇을 돌리는지 명령 그대로 보이므로, 익숙해지면 직접 쳐도 된다.
+
+세 가지를 대신 막아 준다.
+
+| | |
+|---|---|
+| 표 자리가 갈리는 것 | 늘 절대경로로 준다. 다른 자리에 표가 있으면 알린다 |
+| 검증 큐가 비는 것 | `--notify --go` 와 `--queue` 를 같이 안 준다 |
+| 실수로 밖에 나가는 것 | 보내기·쓰기는 한 번 더 묻는다. 기본은 미리보기다 |
+
 ## 설치
 
 ### Claude Code
 
 ```bash
-git clone https://github.com/grute02/darkchoco-skills.git
-cp -r darkchoco-skills/skills/darkweb-verify-ko ~/.claude/skills/
+git clone https://github.com/MukSilver/darkchoco.git
+cp -r darkchoco/skills/skills/darkweb-verify-ko ~/.claude/skills/
+cd darkchoco/skills          # 도구를 직접 칠 때는 여기가 작업 폴더다
 ```
 
 클로드를 새로 켠 뒤 `유출 주장 검증해줘` 라고 하면 걸린다.
@@ -19,8 +62,8 @@ cp -r darkchoco-skills/skills/darkweb-verify-ko ~/.claude/skills/
 레포를 작업 폴더로 쓰거나, `AGENTS.md` 를 작업 폴더에 복사한다.
 
 ```bash
-git clone https://github.com/grute02/darkchoco-skills.git
-cd darkchoco-skills
+git clone https://github.com/MukSilver/darkchoco.git
+cd darkchoco/skills
 codex
 ```
 

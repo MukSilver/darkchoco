@@ -59,7 +59,7 @@ POST_LIKE = re.compile(
     r"|all\s+(the\s+)?(data|customer|client|files)"
     r"|has\s+been\s+(hacked|breached|compromised)"
     r"|data\s+(is\s+)?(for\s+sale|leaked|published)"
-    # 2026-08-26. Sampleyang 건이 "Selling fresh full database dumps of company X" 였는데
+    # 2026-08-26. Testwave 건이 "Selling fresh full database dumps of company X" 였는데
     # 회사 소개로 잘못 봤다. 파는 문장, 덤프 표기, 규모 표기를 넣는다
     r"|sell(ing)?\b[^.]{0,60}\b(database|data|dump)"
     r"|\bdumps?\b|\bfor\s+sale\b"
