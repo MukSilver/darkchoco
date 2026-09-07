@@ -235,6 +235,9 @@ class RansomwareLiveSource(Source):
             discovered=parse_timestamp(pick("discovered", "attackdate")),
             post_url=pick("post_url", "claim_url", "link"),
             source=self.name,
+            # 응답에 있는데 여태 안 읽던 둘이다. 머리 주석의 필드 목록에도 적혀 있다.
+            data_size=str(pick("data_size") or ""),
+            ransom=str(pick("ransom") or ""),
         ).finalize()
 
 

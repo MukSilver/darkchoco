@@ -56,7 +56,36 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 KST = timezone(timedelta(hours=9))
-DEFAULT_DB = Path.home() / "data" / "darkchoco.db"      # DEV 4-3. 제어판이 쓰는 자리
+def _표찾기() -> Path:
+    """수집 표 자리. 환경변수 → 팀 레포 안 → 홈 순서로 **있는 것**을 고른다.
+
+    2026-09-07 에 두 표를 하나로 합치면서 자리를 팀 레포 `hub/data/` 로 옮겼다.
+    거기가 통합 수집기가 이미 쓰던 자리이고, 두 경로가 같은 파일에 써야 같은 사건이
+    한 줄로 뭉친다. `.gitignore` 의 `hub/data/` 가 git 으로 나가는 것을 막는다.
+
+    **레포 밖에 두던 규칙은 공개 레포(darkchoco-skills) 시절 것이다.** 팀 레포는
+    비공개이고 통합 수집기가 이미 레포 안에 쌓고 있었다. 그래도 본문이 든 파일이라
+    커밋에 안 들어가는지는 늘 확인한다.
+
+    스킬을 `cp -R` 로 떼어 가면 레포가 없다. 그때는 홈 자리로 떨어진다.
+    """
+    import os
+    쓸것 = os.environ.get("DARKCHOCO_DB")
+    if 쓸것:
+        return Path(쓸것)
+    for p in (_레포() / "hub" / "data" / "darkchoco.db",
+              Path.home() / "data" / "darkchoco.db"):
+        if p.is_file():
+            return p
+    return _레포() / "hub" / "data" / "darkchoco.db"
+
+
+def _레포() -> Path:
+    """이 파일에서 본 저장소 뿌리. skills/collect/x.py 기준 두 칸 위다."""
+    return Path(__file__).resolve().parents[2]
+
+
+DEFAULT_DB = _표찾기()      # DEV 4-3. 제어판이 쓰는 자리
 
 STATES = ("게시 중", "공개됨", "사라짐", "연장", "안 보임", "불명")
 SRCS = ("agg", "origin")

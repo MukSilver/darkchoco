@@ -43,11 +43,26 @@ TOOLS = HERE / "skills" / "darkweb-verify-ko" / "tools"
 CFG = Path(os.environ.get("DARKCHOCO_CONFIG_DIR",
                           Path.home() / ".config" / "darkchoco"))
 
-# 수집 표. **레포 밖에 둔다.** 게시글 본문이 들어가는 파일이라 공개 레포에 두지
-# 않는다. .gitignore 가 막고 있지만 그것은 안전망이고, 애초에 밖에 두는 것이 설계다
-# — 그 파일의 주석도 「표가 우연히 레포 밖에 있어서 살았다」 고 적고 있다.
+# 수집 표. 2026-09-07 부터 **팀 레포 안 `hub/data/`** 다. 통합 수집기가 이미 쓰던
+# 자리이고, 두 수집 경로가 같은 파일에 써야 같은 사건이 한 줄로 뭉친다.
+#
+# 전에는 「레포 밖에 둔다」 가 규칙이었다. 게시글 본문이 든 파일을 **공개** 레포에
+# 두지 않으려던 것이다. 팀 레포는 비공개이고 `.gitignore` 의 `hub/data/` 가 막는다.
+# 그래도 커밋에 안 들어가는지는 늘 확인한다 — 막는 것이 규칙 하나뿐이다.
+#
 # 셸 cwd 에 따라 다른 파일이 열리던 일이 있어 절대경로로 고정한다.
-DB = Path(os.environ.get("DARKCHOCO_DB", Path.home() / "data" / "darkchoco.db"))
+def _표자리() -> Path:
+    쓸것 = os.environ.get("DARKCHOCO_DB")
+    if 쓸것:
+        return Path(쓸것)
+    for p in (Path.home() / "darkchoco-team" / "hub" / "data" / "darkchoco.db",
+              Path.home() / "data" / "darkchoco.db"):
+        if p.is_file():
+            return p
+    return Path.home() / "darkchoco-team" / "hub" / "data" / "darkchoco.db"
+
+
+DB = _표자리()
 
 # 여기도 표가 생긴다. 문서의 수집 명령이 레포 안을 가리켜 왔고, 팀 통합 수집기는
 # 자기 레포 안에 따로 쌓는다. 2026-09-02 에 세 자리에 서로 다른 표가 있었고
@@ -57,6 +72,8 @@ DB_ALSO = [
     HERE / "data" / "darkchoco.db",
     Path.home() / "data" / "darkchoco.db",
     Path.home() / "darkchoco-team" / "hub" / "data" / "darkchoco.db",
+    # 2026-09-07 에 합치기 전 판. 되돌릴 일이 있으면 여기 있다
+    Path.home() / "data" / "darkchoco.백업_20260907.db",
 ]
 
 STYLE = q.Style([
