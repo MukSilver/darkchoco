@@ -170,7 +170,13 @@ Tor를 경유하는 작업은 GitHub Actions에서 실행하지 않습니다.
 for f in packages/tests/test_*.py; do python "$f"; done
 ```
 
-총 **233개**이며, 외부 요청 없이 표준 라이브러리만으로 동작합니다.
+총 **237개**(2026-08-31 기준)이며, 외부 요청 없이 표준 라이브러리만으로 동작합니다.
+검사를 더하면 이 값이 낡습니다. `docs/흐름.md` · `docs/지금까지.md` 에도 같은
+값이 적혀 있으니 셋을 같이 고칩니다. 세는 법은 이렇습니다.
+
+```bash
+grep -c "^def test_" packages/tests/test_*.py | awk -F: '{s+=$2} END {print s}'
+```
 
 | 파일 | 검사 대상 |
 |---|---|

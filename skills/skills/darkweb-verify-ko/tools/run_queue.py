@@ -322,7 +322,11 @@ def do_case(case: Path, use_notion: bool) -> dict:
     done = st.setdefault("끝낸 단계", [])
     stop: list[str] = []
 
-    # ② 는 사람이 한다. 재료가 들어왔는지만 본다
+    # ② 는 사람이 한다. 재료가 들어왔는지만 본다.
+    #
+    # **샘플은 사람이 `②샘플.txt` 로 저장한다.** 게시글을 읽는 김에 샘플 줄만
+    # 옮기면 되므로 도구가 뽑아 주는 것보다 손이 적게 간다.
+    # 사람이 어차피 본문을 한 번 읽어야 하고 그것이 관문이다.
     body = case / "②본문.md"
     sample = case / "②샘플.txt"
     st["샘플 있음"] = sample.exists() and sample.stat().st_size > 0

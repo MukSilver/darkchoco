@@ -7,9 +7,16 @@ CLAUDE.md §4.2 브라우저·네트워크 보안 규칙에 대응하는 값들�
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 # --- Tor ---
-TOR_SOCKS_PROXY = os.environ.get("TOR_SOCKS_PROXY", "socks5://127.0.0.1:9050")
+# **기본값을 비웁니다.** 예전 기본값은 "socks5://127.0.0.1:9050" 이었는데,
+# hub 의 나가는 문(egress.py)은 socks 로 시작하는 주소를 받으면 「표준
+# 라이브러리로 못 탑니다」로 예외를 냅니다. 지금은 이 값을 아무도 안 읽어서
+# 안 드러나지만, 누가 쓰는 순간 바로 걸립니다. 비워 두면 egress 가 환경
+# 변수를 스스로 보고, 그것도 없으면 「보호가 없으면 안 나갑니다」로 막습니다.
+# 넣을 것은 tor 의 HTTPTunnelPort 주소입니다 (예: http://127.0.0.1:9080).
+TOR_SOCKS_PROXY = os.environ.get("TOR_SOCKS_PROXY", "")
 
 # --- 타임아웃 / 지연 ---
 PAGE_LOAD_TIMEOUT_MS = 60_000  # §M2 availability: 타임아웃 시 "상태: 미확인"
@@ -31,8 +38,15 @@ PAGE_WAIT_UNTIL = "domcontentloaded"
 # 무인 자동 크롤링(PAGE_LOAD_TIMEOUT_MS)보다 여유를 둔다 — .onion 히든서비스는 clearnet보다
 # 회선 구성이 느려서 특히 필요하다.
 LOGIN_PAGE_LOAD_TIMEOUT_MS = 90_000
-REQUEST_DELAY_MIN_SEC = 3.0  # CLAUDE.md §4.2-6: 요청 간 3~5초 랜덤 지연
-REQUEST_DELAY_MAX_SEC = 5.0
+# **3~5초로는 실제로 차단당했습니다.** 2026-08-26 pwnforums 실크롤에서
+# 그 값으로 속도 제한("Slow down now")에 걸려 크롤이 중단됐고, 담당자
+# 확인을 거쳐 6~10초로 올렸습니다. 통합 전 저장소(whs4-dark)에는 그 값이
+# 들어 있는데 흡수 시점이 그보다 앞이라 팀 저장소에는 3~5초가 남아
+# 있었습니다. 2026-08-31 에 되돌립니다.
+#
+# 한 판이 길어집니다. run.py 의 깊은판_상한초 를 같이 올려 두었습니다.
+REQUEST_DELAY_MIN_SEC = 6.0
+REQUEST_DELAY_MAX_SEC = 10.0
 
 # --- 콘텐츠 표본 ---
 CONTENT_SAMPLE_SIZE = 50  # 요구사항 5: 표본 기본 50건
@@ -75,12 +89,34 @@ DOMAIN_PARKING_KEYWORDS = (
 )
 
 # --- 경로 ---
-WHITELIST_PATH = os.environ.get("WHITELIST_PATH", "whitelist.yaml")
-SESSIONS_DIR = os.environ.get("SESSIONS_DIR", "sessions")
-SNAPSHOTS_DIR = os.environ.get("SNAPSHOTS_DIR", "snapshots")
+# **hub 의 데이터 자리에 못박습니다.** 도커 안을 전제로 쓸 때는 상대경로가
+# 맞았습니다. 컨테이너의 작업 폴더가 하나뿐이라 "snapshots" 가 언제나 같은
+# 곳이었습니다. 지금은 hub 이 부르고, dc.py 를 어느 자리에서 돌리느냐에 따라
+# 스냅샷과 체크포인트가 그때그때 다른 폴더에 흩어집니다. --resume 이 어제
+# 남긴 체크포인트를 못 찾는 것도 같은 까닭입니다.
+# hub/data 는 run.py 의 places.db 가 이미 쓰는 자리이고 .gitignore 에 들어
+# 있습니다. 원문 HTML 이 저장소로 딸려 올라가지 않습니다.
+_데이터 = Path(__file__).resolve().parents[3] / "hub" / "data"
+# WHITELIST_PATH 는 없앴다(2026-09-01).
+#
+# 통합 전 저장소는 investigate.py:42-59, 271-278 에서 whitelist.yaml 을 승인 관문으로 썼다 —
+# 등재 안 된 URL 이면 거부하고, source_type=forum 이 아니면 거부했다. 통합본에는 그 관문이
+# 없다. docs/지금까지.md 「흡수하지 않은 것」이 `whitelist.yaml — 폐기. 명부 등재를 승인으로
+# 간주` 로 판단을 적어 두었다(커밋 0750ddc).
+#
+# 그런데 이 파일에는 상수만 남아 있어서, 읽는 사람이 관문이 아직 있는 줄로 읽을 수 있었다.
+# 아무도 안 읽는 값이라 지운다. **지금 승인은 노션 명부에 그 줄이 있느냐다.**
+SESSIONS_DIR = os.environ.get("SESSIONS_DIR", str(_데이터 / "sessions"))
+SNAPSHOTS_DIR = os.environ.get("SNAPSHOTS_DIR", str(_데이터 / "snapshots"))
 OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "output")
 RUN_LOG_PATH = os.environ.get("RUN_LOG_PATH", "run_log.json")
-KOREA_KEYWORDS_PATH = os.environ.get("KOREA_KEYWORDS_PATH", "keywords/korea_keywords.txt")
+# **모듈 기준 절대경로입니다.** 이 파일은 코드와 함께 따라다니는 재료라
+# 어느 자리에서 돌리든 같은 것을 찾아야 합니다. 8/30 통합 때 상대경로인 채로
+# 남아서 파일을 못 찾고 있었습니다
+KOREA_KEYWORDS_PATH = os.environ.get(
+    "KOREA_KEYWORDS_PATH",
+    str(Path(__file__).resolve().parent / "keywords" / "korea_keywords.txt"),
+)
 # 사이트 전체 헤드라인 순회(content_sample.crawl_site) 중단 시 체크포인트 저장 위치.
 # sessions/ 와 같은 named volume(darkweb-sessions)에 두면 컨테이너 재실행 사이에도 남는다.
 CHECKPOINT_DIR = os.environ.get("CHECKPOINT_DIR", SESSIONS_DIR)
@@ -93,5 +129,12 @@ SITE_MAP_MAX_PAGES_PER_CATEGORY = 5
 
 # --- 브라우저 launch 인자 ---
 # 주의: --no-sandbox, --disable-setuid-sandbox 는 절대 추가하지 않는다 (CLAUDE.md §4.2-1).
-# CI의 security.yml 이 이 파일을 포함한 전체 코드에서 해당 문자열을 grep 하여 검증한다.
+#
+# **이 값을 읽는 곳은 hub/places/fetch.py 의 브라우저세션.__enter__ 하나다.**
+# 통합하면서 launch 에 넘기는 자리가 빠져 한동안 아무도 안 읽는 값이었다 —
+# 2026-09-01 에 다시 이었다.
+#
+# 통합 전 저장소에는 .github/workflows/security.yml 이 이 문자열을 전체 코드에서
+# grep 해 막는 잡이 있었는데, 통합본 .github/workflows/ci.yml 에는 대응 잡이 없다.
+# **지금 이 규칙을 붙잡는 것은 이 주석과 목록이 비어 있다는 사실뿐이다.**
 BROWSER_LAUNCH_ARGS: list[str] = []

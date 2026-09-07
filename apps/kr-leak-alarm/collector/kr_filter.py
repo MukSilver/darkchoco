@@ -28,6 +28,16 @@ TIER_SCORE = {"none": 0, "review": 30, "likely": 60, "strong": 80, "confirmed": 
 _HANGUL_RE = re.compile(r"[가-힣ᄀ-ᇿ㄰-㆏]")
 _KEYWORD_PATH = Path(__file__).parent / "data" / "kr_keywords.json"
 
+# exclude 목록에서 '북한' 을 가리키는 항목만 골라내는 패턴.
+# exclude_north_korea 스위치는 이름 그대로 북한 제외어만 켜고 꺼야 한다.
+# 전에는 이 스위치가 exclude 목록 전체를 껐다 — koreatown·korea town·kia ora·
+# hyundai motor america dealership directory 까지 같이 꺼져서, 설정을 끄는 사람이
+# 무엇을 끄는지 알 수 없었다. 그래서 북한 항목만 여기서 가려낸다.
+_NK_TERM_RE = re.compile(
+    r"north\s+korea|korea\s*,\s*north|dprk|democratic people's republic|pyongyang",
+    re.IGNORECASE,
+)
+
 
 def _load_keywords() -> dict[str, list[str]]:
     try:
@@ -78,6 +88,8 @@ class KrClassifier:
         self.entities = _compile_boundary(kw["entities"])
         self.weak = _compile_boundary(kw["weak_signals"])
         self.exclude = _compile_boundary(kw["exclude"] + excl)
+        # 이 중 북한 항목만 exclude_north_korea 스위치의 대상이다. 나머지는 항상 적용된다.
+        self.exclude_nk_terms = {term for term, _ in self.exclude if _NK_TERM_RE.search(term)}
 
         self.exclude_nk = bool(cfg.get("exclude_north_korea", True))
         self.min_tier = cfg.get("min_tier_to_report", "likely")
@@ -108,11 +120,19 @@ class KrClassifier:
 
         # ── 2) 한국 도메인 ──
         matched_tld = next((t for t in self.kr_tlds if website.endswith(t)), None)
+        # safety.extract_domain() 은 ASCII 도메인만 뽑는다. 그래서 '.한국' 같은
+        # 한글 TLD 는 website 가 빈 문자열이 되고, kr_tlds 에 값이 있어도 위 줄에
+        # 절대 걸리지 않았다. 피해자명 원문에서도 같은 목록으로 한 번 더 본다.
+        # (전에는 여기서 '.kr' 하나만 하드코딩으로 봤다.)
+        victim_tld = None
+        if not matched_tld and victim.strip():
+            victim_tail = victim.rstrip()
+            victim_tld = next((t for t in self.kr_tlds if victim_tail.endswith(t)), None)
         if matched_tld:
             reasons.append(f"한국 도메인({matched_tld})")
             tier = _max_tier(tier, "strong")
-        elif f" {victim}".rstrip().endswith(".kr"):
-            reasons.append("피해자명이 .kr 도메인")
+        elif victim_tld:
+            reasons.append(f"피해자명이 {victim_tld} 도메인")
             tier = _max_tier(tier, "strong")
 
         # ── 3) 한국 기업·기관명 ──
@@ -148,13 +168,16 @@ class KrClassifier:
         # ── 6) 제외 규칙 ──
         if tier != "none":
             for term, pat in self.exclude:
+                # 북한 제외어만 exclude_north_korea 로 끌 수 있다.
+                # koreatown·kia ora 같은 나머지 제외어는 스위치와 무관하게 항상 적용한다.
+                if term in self.exclude_nk_terms and not self.exclude_nk:
+                    continue
                 if pat.search(full_blob):
                     # country=KR 처럼 강한 증거가 있으면 제외어가 있어도 유지
                     if tier == "confirmed":
                         reasons.append(f"제외어 '{term}' 감지되었으나 country=KR 이므로 유지")
                         break
-                    if self.exclude_nk:
-                        return "none", 0, [f"제외어 매칭 '{term}'"]
+                    return "none", 0, [f"제외어 매칭 '{term}'"]
 
         return tier, TIER_SCORE[tier], reasons
 

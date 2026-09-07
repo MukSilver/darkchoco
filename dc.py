@@ -436,6 +436,10 @@ def cmd_auto(args) -> int:
     # 한쪽이 어긋납니다. 등록 명령에서 이미 같은 사고가 있었습니다
     수집끝 = cmd_run(argparse.Namespace(
         only=None, dry=args.dry, limit=0, due=True, db=None))
+    # 주의: --dry 가 막는 범위가 두 쪽이 다릅니다. 수집 어댑터는 ctx.dry 를
+    # 보고 요청 자체를 안 보내지만, 아래 명부 조사는 apply 가 노션 쓰기만
+    # 막고 사이트는 실제로 엽니다. 「dry 니까 밖으로 안 나간다」로 읽으면
+    # 안 됩니다
 
     print()
     print("  ── 명부 조사 ──")
@@ -470,6 +474,28 @@ def cmd_run(args) -> int:
 
 
 def cmd_plan(args) -> int:
+    """무엇이 언제 도는지 봅니다. **두 갈래를 다 보여 줍니다.**
+
+    예전에는 사건 어댑터만 나왔습니다. `auto` 가 도는 것은 사건 수집과
+    명부 조사 둘인데 화면에는 한쪽만 있어서, telegram · forum · ransom 이
+    언제 도는지 보려면 코드를 열어야 했습니다.
+
+    차례표가 둘로 나뉘어 있습니다 (`darkchoco.db` · `places.db`). 서로
+    안 보므로 여기서도 따로 열어 두 표를 잇달아 찍습니다.
+    """
+    _사건차례()
+    _명부차례()
+    print()
+    print("  때 된 것만:    python dc.py run --due")
+    print("  전부:          python dc.py run")
+    print("  하나만:        python dc.py run --only <이름>")
+    print("  명부만:        python dc.py crawl --due")
+    print()
+    return 0
+
+
+def _사건차례() -> None:
+    """사건 수집 어댑터가 언제 도는지. hub/events 쪽 차례표를 봅니다."""
     from hub.events import registry, run as 사건
     from hub.sched import Sched
 
@@ -477,8 +503,7 @@ def cmd_plan(args) -> int:
     if not es:
         print()
         print("  등록된 어댑터가 없습니다. hub/events/sources/ 에 파일을 놓으십시오.")
-        print()
-        return 0
+        return
 
     sch = Sched(사건.기본_표())
     try:
@@ -516,15 +541,77 @@ def cmd_plan(args) -> int:
 
     print()
     print(f"  지금 돌 때가 된 것 {때된것}개")
+
+
+def _명부차례() -> None:
+    """명부 조사 갈래가 언제 도는지. hub/places 쪽 차례표를 봅니다."""
+    from hub.places import run as 크롤
+    from hub.sched import Sched
+
+    # 차례표에 적히는 이름(`crawl:<갈래>`)을 dc.py 가 따로 지으면 두 곳이
+    # 어긋납니다. run.py 가 쓰는 것을 그대로 가져다 씁니다.
+    이름짓기 = 크롤._차례이름
+
+    sch = Sched(크롤.기본_표())
+    try:
+        상태 = {r["name"]: r for r in sch.상태()}
+        남은 = {g: sch.다음까지(이름짓기(g), 크롤.주기[g]) for g in 크롤.갈래들}
+    finally:
+        sch.close()
+
     print()
-    print("  때 된 것만:    python dc.py run --due")
-    print("  전부:          python dc.py run")
-    print("  하나만:        python dc.py run --only <이름>")
+    print(f"명부 갈래 {len(크롤.갈래들)}개")
     print()
-    return 0
+    # 주기 칸을 12로 잡습니다. 「12시간마다」가 폭 10 을 꽉 채워 다음 칸과
+    # 붙어 버렸습니다 (한글은 한 글자가 두 칸입니다).
+    print("  " + 채움("갈래", 16) + 채움("주기", 12) + 채움("다음", 12) + "어디로")
+    print("  " + "─" * 76)
+    때된것 = 0
+    for g in 크롤.갈래들:
+        분 = 크롤.주기[g]
+        주기 = f"{분//60}시간마다" if 분 >= 60 and 분 % 60 == 0 else f"{분}분마다"
+        r = 상태.get(이름짓기(g))
+        if r is None:
+            다음 = "아직 안 돎"
+            때된것 += 1
+        elif r["fails"]:
+            다음 = f"{r['fails']}번 실패"
+            때된것 += 1 if 남은[g] <= 0 else 0
+        elif 남은[g] <= 0:
+            다음 = "지금"
+            때된것 += 1
+        else:
+            남 = 남은[g]
+            다음 = f"{남//60}시간 뒤" if 남 >= 60 else f"{남}분 뒤"
+        print("  " + 채움(g, 16) + 채움(주기, 12) + 채움(다음, 12)
+              + "노션 다크웹 DB")
+
+    print()
+    print(f"  지금 돌 때가 된 갈래 {때된것}개")
 
 
 # ── install-task ─────────────────────────────────
+def _반쪽경고() -> None:
+    """이 PC 에 걸면 절반만 돈다고 미리 말해 둡니다.
+
+    `auto` 의 절반은 명부 조사입니다. 그쪽은 Tor 를 거쳐야 나가는데
+    (`hub/tool.json` 이 `runs_in: "vm"`), 윈도우에는 tor 가 없어
+    `hub/places/egress.py` 가 막습니다. 그래서 이 PC 에 걸어 두면 수집만
+    돌고 명부 조사는 매번 빈손으로 돌아옵니다.
+
+    **거는 인자를 바꾸지 않고 말로만 알립니다.** `run --due` 로 되돌리면
+    스케줄러가 명부 조사를 영영 안 부르던 옛 상태로 돌아갑니다. 무엇을
+    걸지는 팀이 정할 일이라 여기서는 사실만 적습니다.
+    """
+    print()
+    print("  알아 두십시오 — 이 PC 에 걸면 절반만 돕니다.")
+    print("    auto 의 절반은 명부 조사이고 그쪽은 Tor 를 거쳐야 나갑니다.")
+    print("    윈도우에는 tor 가 없어 egress.py 가 막습니다. 수집만 돕니다.")
+    print("    명부까지 돌리려면 VM 안에서 겁니다:")
+    print("      powershell -File scripts\\VM에서-돌리기.ps1 \"auto\"")
+    print("      또는 VM 안 crontab 한 줄. docs/안전하게-돌리기.md 를 보십시오.")
+
+
 def cmd_install_task(args) -> int:
     """윈도우 작업 스케줄러에 등록합니다. 등록 명령을 만들어 줍니다."""
     이름 = "Darkchoco-Collect"
@@ -535,6 +622,7 @@ def cmd_install_task(args) -> int:
     인자 = "auto"
 
     if args.show:
+        _반쪽경고()
         print()
         print("  이 명령을 PowerShell 에 붙여 넣으면 등록됩니다.")
         print()
@@ -576,6 +664,9 @@ def cmd_install_task(args) -> int:
                        errors="replace")
     print((r.stdout or "").strip() or (r.stderr or "").strip())
     if r.returncode == 0:
+        # 걸고 나서도 한 번 더 말해 둡니다. --show 를 안 거치고 바로 거는
+        # 사람이 있어서, --show 에만 적어 두면 못 봅니다.
+        _반쪽경고()
         print()
         print("  끄려면:  python dc.py install-task --remove")
     return r.returncode
@@ -659,7 +750,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("auto", help="수집과 명부 조사를 한 번에 (스케줄러용)")
     p.add_argument("--dry", action="store_true",
-                   help="밖에 요청을 안 보내고 노션에도 안 씁니다. 무엇이 돌지만 봅니다")
+                   help="수집은 요청을 안 보냅니다. 명부 조사는 열어는 보고 노션에만 안 씁니다")
     p.set_defaults(fn=cmd_auto)
 
     p = sub.add_parser("run", help="수집을 한 판 돌립니다")
@@ -671,7 +762,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="주기가 찬 것만. 스케줄러가 이것을 씁니다")
     p.set_defaults(fn=cmd_run)
 
-    sub.add_parser("plan", help="어떤 어댑터가 몇 분마다 도는지").set_defaults(fn=cmd_plan)
+    sub.add_parser(
+        "plan", help="어댑터와 명부 갈래가 몇 분마다 도는지").set_defaults(fn=cmd_plan)
 
     p = sub.add_parser("install-task", help="작업 스케줄러에 등록합니다")
     p.add_argument("--every", type=int, default=10, help="몇 분마다 (기본 10)")

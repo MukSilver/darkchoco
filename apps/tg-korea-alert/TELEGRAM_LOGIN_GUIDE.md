@@ -111,7 +111,7 @@ python check_login.py
 ## 6. 파일별 역할
 
 ```text
-telegram/
+apps/tg-korea-alert/
 ├── test.py                    # 최초 QR 로그인 및 세션 생성
 ├── check_login.py             # 기존 세션 로그인 상태 확인
 ├── TELEGRAM_LOGIN_GUIDE.md    # 이 문서

@@ -310,6 +310,22 @@ async def main(args):
 
     api_id = int(os.environ["TELEGRAM_API_ID"])
     api_hash = os.environ["TELEGRAM_API_HASH"]
+    # 키가 없으면 켜지 않는다. 원본이 os.environ[...] 로 읽어 즉시 죽인 자리다.
+    # 경고만 찍고 상주 실행에 들어가면 프로세스는 정상으로 보이는데 회사명 기반
+    # 한국 판별(DART 대조·Gemini 판정)이 통째로 빠져, classify() 가
+    # source="gemini-key-missing" · conclusive=False 로 끝나 한국 기업 유출 글이
+    # 디스코드로 안 나가면서 오류도 안 난다. 경고는 기동 때 한 번뿐이라
+    # systemd 로 며칠 돌리면 journal 에서 밀려 사라진다. 조용히 반쪽으로 도는 것보다
+    # 기동을 막는 편이 낫다. 빠진 키를 한 번에 알리려고 KeyError 대신 직접 검사한다.
+    # 값이 빈 문자열인 경우도 없는 것으로 본다(빈 키로는 어차피 판별을 못 한다).
+    missing_keys = [
+        name for name in ("DART_API_KEY", "GEMINI_API_KEY") if not os.environ.get(name, "").strip()
+    ]
+    if missing_keys:
+        raise RuntimeError(
+            f"{', '.join(missing_keys)} 가 .env 에 없습니다. "
+            "회사명 기반 한국 판별이 빠진 채로 상주 실행하지 않도록 기동을 멈춥니다."
+        )
     dart_api_key = os.environ["DART_API_KEY"]
     gemini_api_key = os.environ["GEMINI_API_KEY"]
     database = open_database(args.database)

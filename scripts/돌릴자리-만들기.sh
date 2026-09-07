@@ -297,11 +297,18 @@ fi
 export TOR_SOCKS_PROXY="http://127.0.0.1:${PORT}"
 export PYTHONIOENCODING=utf-8
 
-if [ -z "${NOTION_TOKEN:-}" ] && [ ! -f ~/.config/darkchoco/notion_token.txt ]; then
+# 토큰 파일 이름이 두 가지로 돌아다닙니다. packages/dc_notion/token.py 는
+# notion_token 과 notion_token.txt 를 둘 다 찾는데 여기서는 .txt 만 봤습니다.
+# SECURITY.md 대로 확장자 없이 만든 사람은 토큰을 넣어 두고도 "없습니다" 를
+# 봤습니다. 부품이 찾는 것과 같은 두 자리를 봅니다.
+if [ -z "${NOTION_TOKEN:-}" ] &&
+   [ ! -f ~/.config/darkchoco/notion_token ] &&
+   [ ! -f ~/.config/darkchoco/notion_token.txt ]; then
     bad "노션 토큰이 없습니다. 읽기만 되고 못 씁니다"
     say "둘 중 하나로 넣으십시오."
-    say "  echo '토큰' > ~/.config/darkchoco/notion_token.txt"
+    say "  echo '토큰' > ~/.config/darkchoco/notion_token"
     say "  또는 ~/.bashrc 에  export NOTION_TOKEN=..."
+    say "notion_token.txt 도 그대로 읽습니다. 이름은 둘 다 됩니다."
     say "**저장소에 넣지 마십시오.** 이 자리에만 둡니다."
 else
     ok "노션 토큰이 있습니다"

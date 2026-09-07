@@ -22,7 +22,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REFS = HERE.parent / "references"
-REPO = "grute02/darkchoco-skills"
+REPO = "MukSilver/darkchoco"   # 2026-09-06 까지는 grute02/darkchoco-skills 였다. 정본이 팀 레포 skills/ 로 옮겨 갔다
 
 # 누가 돌리는가. SKILL.md 의 단계 표와 같은 내용이다.
 # 여기가 바뀌면 SKILL.md 도 같이 고친다.
@@ -42,6 +42,9 @@ WHO = {
 
 RUN = re.compile(r"python3? +((?:tools/)?[a-z_]+\.py)")
 BLOCK = re.compile(r"^    담당 .*\n    도구 .*\n    개정 .*\n", re.M)
+ADAY = re.compile(r"^    개정 (\d{4}-\d{2}-\d{2})", re.M)
+# 정본이 이 저장소로 옮겨 온 날. 이 이전의 개정 이력은 여기에 없다. keep_earlier 참조.
+이전날 = "2026-09-06"
 
 
 def bare(s: str) -> str:
@@ -72,7 +75,13 @@ def git_date(p: Path, body: str) -> str:
     이력을 최신부터 거슬러 올라가며 본문이 지금과 같은 마지막 자리를 찾는다.
     머리만 바뀐 커밋은 본문이 같으므로 그냥 지나간다.
     """
-    rel = "skills/darkweb-verify-ko/references/" + p.name
+    # 저장소 뿌리 기준 경로를 **git 에게 물어서** 얻는다. 박아 두면 안 된다.
+    # 2026-09-06 에 정본이 팀 레포 skills/ 아래로 옮겨 가면서 뿌리 기준 경로가
+    # skills/skills/darkweb-verify-ko/references/ 로 한 겹 깊어졌다. 박힌 옛 경로로는
+    # git log 가 빈 값을 내고 아래 today 로 떨어져, 본문이 안 바뀐 문서 열한 개의
+    # 개정일이 전부 그날로 밀렸다. 이 함수가 막으려던 바로 그 일이다.
+    prefix = git(["rev-parse", "--show-prefix"]) or ""
+    rel = prefix.strip() + p.name
     # `:/` 를 붙여 저장소 뿌리 기준으로 읽게 한다.
     # 안 붙이면 이 파일이 도는 폴더 기준이라 경로를 못 찾고 빈 값이 나온다.
     log = git(["log", "--format=%H %ad", "--date=short", "--", ":/" + rel])
@@ -89,6 +98,25 @@ def git_date(p: Path, body: str) -> str:
             break
         found = when.strip()
     return found
+
+
+def keep_earlier(p: Path, t: str, found: str) -> str:
+    """이전 이전의 개정일은 파일에 적힌 것이 정본이다. 이력이 그 시절을 모른다.
+
+    2026-09-06 에 정본이 `grute02/darkchoco-skills` 에서 팀 레포 `skills/` 로 옮겨 왔다.
+    **저장소를 옮기면 이력이 그 자리에서 새로 시작한다.** 참조 문서 열한 개가 한 커밋으로
+    통째로 들어와서, 이 저장소 이력만 보면 8/21 에 마지막으로 고친 문서와 8/26 에 고친 문서가
+    같은 날이 된다. 뭉갠 날짜는 되돌릴 수 없다. 그 시절은 파일에 적힌 값이 유일한 기록이다.
+
+    **이전 날 이후는 이 저장소가 안다.** 그러니 계산값이 이전 날보다 뒤면 그것을 쓴다.
+    안 그러면 본문을 새로 고쳐도 개정일이 옛 날짜에 얼어붙는다. 적힌 날짜가 전부 이전 날
+    이후가 되면 이 함수는 하는 일이 없어진다.
+    """
+    m = ADAY.search(t)
+    적힘 = m.group(1) if m else ""
+    if not 적힘 or 적힘 >= 이전날:
+        return found
+    return found if found > 이전날 else 적힘
 
 
 def tools_of(body: str) -> str:
@@ -108,7 +136,8 @@ def stamp(p: Path, check: bool) -> bool:
 
     body = BLOCK.sub("", t)
     block = "    담당 %s\n    도구 %s\n    개정 %s · 정본은 %s\n" % (
-        WHO.get(p.name, "확인 필요"), tools_of(body), git_date(p, body), REPO)
+        WHO.get(p.name, "확인 필요"), tools_of(body),
+        keep_earlier(p, t, git_date(p, body)), REPO)
 
     rest = "\n".join(lines[1:]).lstrip("\n")
     rest = BLOCK.sub("", rest).lstrip("\n")

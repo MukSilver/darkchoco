@@ -2,7 +2,7 @@
 
     담당 사람. 스킬을 부르기 전에 한다
     도구 tools/kit_out.py
-    개정 2026-08-27 · 정본은 grute02/darkchoco-skills
+    개정 2026-08-27 · 정본은 MukSilver/darkchoco
 
 사람이 한다. **프롬프트 없음.**
 

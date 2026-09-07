@@ -48,11 +48,12 @@ class Needs:
     packages: list[str] = field(default_factory=list)   # 파이썬 모듈 이름
     secrets: list[str] = field(default_factory=list)    # 환경변수 이름
     files: list[str] = field(default_factory=list)      # 있어야 하는 파일
-    docker: bool = False
-    tor: bool = False
+    docker: bool = False        # 참이면 docker 명령이 PATH 에 있어야 합니다
+    tor: bool = False           # 참이면 TOR_SOCKS_PROXY 가 있어야 합니다
 
     def 모자란것(self, env: dict, root: Path) -> list[str]:
         import importlib.util
+        import shutil
 
         모자람 = []
         for m in self.packages:
@@ -67,6 +68,20 @@ class Needs:
         for f in self.files:
             if not (root / f).exists():
                 모자람.append(f"{f} 없음")
+        # docker 와 tor 를 안 보고 있었습니다. 그 둘이 있어야 도는 어댑터를
+        # 붙이면 모자란 줄 모르고 들어가 "실패" 로 잡힙니다. 준비가 안 된
+        # 것은 실패가 아니라 "안 씀" 입니다.
+        #
+        # 여기서는 밖에 요청을 보내지 않고, 있는지만 봅니다.
+        #   docker  PATH 에 명령이 있는가. 데몬이 떠 있는지까지 보려면
+        #           docker info 를 돌려야 하는데, 돌리기 전에 훑는 자리라
+        #           여기서 프로세스를 띄우지 않습니다
+        #   tor     hub/places/egress.py 와 같은 기준입니다. 그쪽도
+        #           TOR_SOCKS_PROXY 가 있어야 밖으로 나갑니다
+        if self.docker and shutil.which("docker") is None:
+            모자람.append("docker 없음")
+        if self.tor and not (env.get("TOR_SOCKS_PROXY") or "").strip():
+            모자람.append("TOR_SOCKS_PROXY 비어 있음")
         return 모자람
 
 

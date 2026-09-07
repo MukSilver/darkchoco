@@ -52,7 +52,11 @@ python dc.py readme --write
 
 ## 공용 부품을 고칠 때
 
-`packages/` 아래 다섯을 말합니다.
+`packages/` 아래 여섯을 말합니다. 수를 다시 셌습니다 — 다섯이 아닙니다.
+
+```
+dc_console · dc_notion · dc_ransomfeed · dc_safety · dc_store · dc_telegram
+```
 
 **철칙이 하나 있습니다. `packages/` 는 `apps/` 를 부르지 않습니다.** 방향이
 한쪽입니다. 반대로 부르면 도구 하나를 떼어 낼 수 없게 됩니다.

@@ -1,4 +1,20 @@
-"""Telegram 수집 → 분석 보고서 → Notion 안전 동기화를 한 번에 실행한다."""
+"""Telegram 수집 → 분석 보고서 → Notion 안전 동기화를 한 번에 실행한다.
+
+**직접 부르는 스크립트다. hub 어댑터가 아니다.**
+
+hub/events/registry.py 는 hub/events/sources/ 안의 파일만 어댑터로 세고,
+dc.py 도 hub/events/run.py 도 이 폴더를 부르지 않는다. 통합 전
+telegram_pipeline.py 도 같은 방식이었으니 기능이 깨진 것은 아니다.
+다만 docs/흐름.md 가 「events/telegram/ 9종으로 흡수」라고만 적어 두어
+dc.py 로 도는 것처럼 읽힌다. 그래서 부르는 법을 여기 적어 둔다.
+(`dc.py list` 에 보이는 telegram 은 hub/places 쪽 갈래로 다른 것이다.)
+
+    python hub/events/telegram/pipeline.py https://t.me/<채널>
+    python hub/events/telegram/pipeline.py https://t.me/<채널> --apply-notion
+
+--apply-notion 을 빼면 미리보기다. Notion 에 쓰지 않는다.
+채널 목록을 한꺼번에 돌리려면 monitor.py 가 이 파일을 채널마다 부른다.
+"""
 
 import argparse
 import json

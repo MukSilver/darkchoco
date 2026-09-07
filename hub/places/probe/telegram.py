@@ -265,7 +265,12 @@ def 조사(채널들: list, *, dry: bool = False, limit: int = 0,
     for i, c in enumerate(채널들):
         if limit and i >= limit:
             return
+        # **프록시와 이음사전을 받아 놓고 한곳() 에 안 넘기고 있었습니다.**
+        # 안 넘기면 한곳() 이 환경 변수에서 프록시를 다시 줍는데, 거기가
+        # 비어 있으면 보호없음 이 나서 한 줄도 못 봅니다. 이음사전을 안
+        # 주면 「연결된 곳」이 언제나 빕니다
         if isinstance(c, dict):
-            yield 한곳(c.get("주소") or "", 마지막, c.get("이름") or "")
+            yield 한곳(c.get("주소") or "", 마지막, c.get("이름") or "",
+                     프록시=프록시, 이음사전=이음사전)
         else:
-            yield 한곳(c, 마지막)
+            yield 한곳(c, 마지막, 프록시=프록시, 이음사전=이음사전)

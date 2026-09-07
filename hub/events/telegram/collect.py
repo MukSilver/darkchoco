@@ -37,7 +37,9 @@ def parse_args():
     parser.add_argument(
         "channel",
         type=parse_channel,
-        help="채널 username, t.me URL 또는 list_channels.py에서 확인한 ID",
+        # 옮겨 오기 전 이름(list_channels.py)을 가리키고 있었습니다.
+        # 이 폴더에서 채널 목록을 보여 주는 것은 channels.py 입니다.
+        help="채널 username, t.me URL 또는 channels.py에서 확인한 ID",
     )
     parser.add_argument(
         "--limit",
@@ -116,7 +118,13 @@ async def collect(channel, limit: int, output: Path, incremental: bool = False):
     await client.connect()
     try:
         if not await client.is_user_authorized():
-            raise RuntimeError("로그인된 세션이 없습니다. 먼저 test.py를 실행하세요.")
+            # 이 폴더에는 test.py 가 없습니다. 세션을 만드는 것은
+            # apps/tg-korea-alert/test.py 이고, 세션 파일은 그 앱 폴더에
+            # 생깁니다. 여기서 보는 자리는 SESSION_PATH 입니다.
+            raise RuntimeError(
+                f"로그인된 세션이 없습니다. 이 스크립트가 보는 세션 파일은 "
+                f"{SESSION_PATH} 입니다. 세션을 만드는 스크립트는 "
+                f"apps/tg-korea-alert/test.py 이고 세션을 그 앱 폴더에 만듭니다.")
 
         entity = await client.get_entity(channel)
         channel_info = await get_channel_metadata(client, entity)

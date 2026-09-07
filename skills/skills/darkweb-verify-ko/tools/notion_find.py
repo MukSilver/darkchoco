@@ -29,7 +29,14 @@ def find_db(name: str) -> tuple[str, str]:
     if not hits:
         raise SystemExit(f"'{name}' 이름의 DB를 못 찾았다. notion.py search 로 확인할 것")
     if len(hits) > 1:
-        raise SystemExit("같은 이름이 여럿이다: " + ", ".join(title_of(h) for h in hits))
+        # **정확히 같은 이름을 먼저 본다.** `search` 가 부분 일치라
+        # `랜섬웨어 DB` 를 주면 `랜섬웨어 DB, 참고용` 이 함께 걸린다.
+        # 2026-08-29 higen 건에서 그 DB 하나만 조회 실패로 남았다
+        exact = [h for h in hits if title_of(h).strip() == name.strip()]
+        if len(exact) != 1:
+            names = ", ".join(title_of(h) for h in hits)
+            raise SystemExit(f"같은 이름이 여럿이다: {names}. 정확한 이름을 줄 것")
+        hits = exact
     return hits[0]["id"], title_of(hits[0])
 
 

@@ -20,7 +20,9 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 출처들 = HERE / "sources"
 
-__all__ = ["Entry", "목록", "불러오기"]
+# 하나() 가 빠져 있었습니다. run.한판 이 registry.하나 를 부르는데 __all__ 에
+# 없어서, 지금은 모듈 경로로 불러 돌지만 import * 로 바꾸면 그때 터집니다.
+__all__ = ["Entry", "목록", "하나", "불러오기"]
 
 
 @dataclass

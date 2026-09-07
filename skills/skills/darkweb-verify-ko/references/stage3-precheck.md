@@ -2,7 +2,7 @@
 
     담당 스킬
     도구 tools/alert_parse.py · tools/feed_parse.py · tools/inspect.py · tools/notion_find.py
-    개정 2026-08-26 · 정본은 grute02/darkchoco-skills
+    개정 2026-08-26 · 정본은 MukSilver/darkchoco
 
 출력 범위: 관련 자료가 있는지까지만. 판정하지 않는다.
 
@@ -70,7 +70,7 @@
 | 대상 조직이 제조사이고 문장은 제품 이야기다 | 회사 이름만 보고 이은 것이다 |
 
 2026-08-24 에 받은 알림이 그랬다. 러시아 IT 뉴스의 휴대폰 렌더 기사인데
-`Type: Data leak`, `Company: Samsung`, `Confidence: 95%` 로 왔다.
+`Type: Data leak`, `Company: Testronics`, `Confidence: 95%` 로 왔다.
 표본은 `tools/alert_samples/product_rumor_fp.txt` 다.
 
 **신뢰도 숫자가 높다고 유출 사고라는 뜻이 아니다.**

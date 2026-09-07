@@ -32,6 +32,7 @@ from hub.places.backoff import 기록 as 두드림기록  # noqa: E402
 from hub.places.merge import 합치기  # noqa: E402
 from hub.places.place import Place  # noqa: E402
 from hub.places.extract import links
+from hub.places import egress  # noqa: E402
 from hub.places.probe import forum, ransom, telegram  # noqa: E402
 
 __all__ = ["한갈래", "여러갈래", "표로", "기본_표", "갈래들",
@@ -113,12 +114,17 @@ def _쌓기(db: Path, 갈래: str, 목록: list[Place]) -> None:
 #
 #     ① 볼 곳 고르기   write.py 가 노션에서 읽습니다
 #     ② 나가는 길      egress.py — 갈래 상관없이 하나
-#     ③ 열기           갈래마다 여는 법이 다릅니다   ← 표
-#     ④ 뽑기           수집기                        ← 표 (다음 단계)
+#     ③ 열기           갈래마다 여는 법이 다릅니다   ← 갈래표
+#     ④ 뽑기           수집기                        ← 깊게볼갈래
 #     ⑤ 합치기         merge.py
 #     ⑥ 쓰기           write.py 관문 다섯
 #
 # 갈래가 넷째로 늘어도 표에 한 줄만 더합니다.
+#
+# **④ 는 갈래표에 없습니다.** 표에 든 것은 여는법 · 앞선것 · 동시 ·
+# 마지막 넷뿐이고, 깊게 볼 갈래는 아래 `깊게볼갈래` 집합이 정합니다.
+# 표에 「뽑기」 칸이 있는 것처럼 적혀 있어서 여기를 실제와 맞춥니다 —
+# 갈래를 더할 때는 갈래표와 깊게볼갈래 두 곳을 봐야 합니다.
 
 
 def _텔레그램_열기(r, 상황):
@@ -179,7 +185,10 @@ def _랜섬_앞선것(줄들, 상황):
 
 # 깊은 판 전체 상한. 한 줄이 오래 걸리는 것과 판이 안 끝나는 것은
 # 다릅니다. 상한이 없어서 다섯 시간 넘게 걸려 있던 적이 있습니다.
-깊은판_상한초 = 60 * 60
+# 요청 간격을 6~10초로 올리면서 같이 늘렸습니다. 8/30 실측이 55분이었고
+# 늘어난 지연으로 70~90분이 됩니다. 60분이면 뒤쪽 줄이 잘립니다.
+# 12시간마다 도는 판이라 90분은 여유가 있습니다
+깊은판_상한초 = 90 * 60
 
 갈래표 = {
     "telegram": {
@@ -627,6 +636,28 @@ def 여러갈래(대상: list[str] | None = None, *, apply: bool = False,
         돌것 = [g for g, _ in 차례(db)]
     else:
         돌것 = list(갈래들)
+
+    # **나가기 전에 정말 Tor 인지 한 번 물어봅니다.**
+    #
+    # 오프너() 는 프록시 주소가 socks 로 시작하는지만 봅니다. 주소가
+    # 잘못 잡혔거나 터널이 죽었어도 크롤러가 그대로 돌아, 아무 말 없이
+    # 그 프록시로 명부 수백 줄을 두드립니다. 스케줄러로 걸어 두면
+    # 사람이 못 알아챕니다. SECURITY.md 는 「Tor 가 없으면 아무것도
+    # 하지 않습니다」라고 적어 두었는데 확인하는 자리가 없었습니다.
+    #
+    # 통합 전 저장소(Notion-DLS)의 tor_probe.py 가 나가기 전에 하던
+    # 검사입니다. 2026-08-31 에 되살립니다.
+    #
+    # Tor 를 안 쓰는 갈래(egress.뺀갈래)만 돌 때는 건너뜁니다.
+    if 돌것 and any(g not in egress.뺀갈래() for g in 돌것):
+        확인 = egress.출구확인(tor)
+        if not 확인["된다"]:
+            if not 조용히:
+                print(f"  ✗ {확인['말']}", flush=True)
+                print("    아무것도 하지 않고 끝냅니다.", flush=True)
+            return [갈래결과(갈래=g, 오류="Tor 확인 실패") for g in 돌것]
+        if not 조용히:
+            print(f"  {확인['말']}", flush=True)
 
     # 「연결된 곳」을 채우려면 세 명부를 다 알아야 합니다. 한 판에 한 번만
     # 만들고 갈래마다 물려 줍니다.
