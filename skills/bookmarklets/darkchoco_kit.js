@@ -648,6 +648,8 @@
           if (xf) q.push('order=' + (sort === 'views' ? 'view_count' : sort === 'replies' ? 'reply_count' : 'last_post_date'), 'direction=desc');
           else q.push('datecut=9999', 'prefix=0', 'sortby=' + sort, 'order=desc');
         }
+        /* XenForo 는 쪽이 경로에 붙는다. 이어 받기로 /page-3 에서 시작하면 /page-3/page-4 가 되므로 먼저 뗀다 */
+        if (xf) u = u.replace(/\/page-\d+$/i, '');
         if (pg > 1) { if (xf) u += '/page-' + pg; else q.push('page=' + pg); }
         return u + (q.length ? '?' + q.join('&') : '');
       };
@@ -665,13 +667,21 @@
         else q.push('page=' + pg);
         return u + (q.length ? '?' + q.join('&') : '');
       };
+  /* 2026-09-07. 늘 2쪽부터 다시 시작하고 있었다. 4쪽을 열어 두고 눌러도 4쪽 → 2쪽 → 3쪽으로 가서
+     뒤쪽을 못 이어 받았다. 21쪽짜리를 나눠 받으려면 이어가기가 있어야 한다.
+     이제 주소에 적힌 쪽 번호에서 시작한다. 없으면 1쪽이다 */
+      const 쪽번호 = u => {
+        const m = String(u).match(/[?&]page=(\d+)|\/page-(\d+)/i);
+        return m ? (parseInt(m[1] || m[2], 10) || 1) : 1;
+      };
   /* 한 게시판에서 할당된 건수가 찰 때까지 쪽을 넘긴다. 새 글이 안 늘면 마지막 쪽으로 보고 멈춘다 */
       const crawl = async (base, tag, live, quota) => {
         const start = targets.length;
-        for (let pg = 1; pg <= 500 && !ABORT; pg++) {
+        const 시작 = 쪽번호(base);
+        for (let pg = 시작; pg < 시작 + 500 && !ABORT; pg++) {
           if (targets.length - start >= quota) break;
           const before = targets.length;
-          if (pg === 1 && live && !cfg.sort) {
+          if (pg === 시작 && live && !cfg.sort) {
             pickScope(document).els.forEach(e => grab(e));
           } else {
             try {
@@ -701,7 +711,7 @@
           const got = targets.length - before;
           say(`목록 모으는 중 · ${tag || '이 게시판'} ${pg}쪽 · 새로 ${got}건 · 목록 누적 ${targets.length}건`);
           if (ABORT) break;
-          if (pg > 1 && got === 0) break; /* 더 안 늘면 끝. 전수로 돌릴 때의 안전장치 */
+          if (pg > 시작 && got === 0) break; /* 더 안 늘면 끝. 전수로 돌릴 때의 안전장치 */
         }
   /* 할당보다 많이 담겼으면(한 쪽에 여러 건이라) 잘라 낸다 */
         const over = (targets.length - start) - quota;
@@ -735,7 +745,10 @@
 
       let listMd = `# ${location.hostname} 글 목록\n\n${VER}\n출처 : ${location.href}`
         + (cfg.sort ? `\n정렬 : ${{ views: '조회 많은 순', replies: '답글 많은 순', lastpost: '최신순' }[cfg.sort]}` : '')
-        + `\n영역 : ${sc.how}\n확인 : ${stamp()}\n대상 ${targets.length}건\n`;
+        + `\n영역 : ${sc.how}\n확인 : ${stamp()}\n대상 ${targets.length}건\n`
+  /* 이어 받은 것인지 결과에 남긴다. 안 적으면 나중에 앞쪽이 빠진 목록인 줄 모른다 */
+        + (쪽번호(location.href) > 1
+           ? `이어 받기 : ${쪽번호(location.href)}쪽부터. **앞쪽은 이 파일에 없다**\n` : '');
       if (!withBodies) listMd += `\n>> 여기까지는 제목과 URL뿐이다. 본문과 답글이 필요하면 위 초록색 「본문 받기」 버튼을 누를 것.\n`
         + `>> ${targets.length}건 × 간격 2.5~5초라 ${Math.max(1, Math.ceil(targets.length * 3.75 / 60))}분쯤 걸린다. 다 끝난 뒤에 복사할 것.\n`;
       if (pgN > 1) {
