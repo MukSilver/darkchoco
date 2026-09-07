@@ -84,6 +84,13 @@ class KrClassifier:
         excl = [str(k).lower() for k in cfg.get("exclude_keywords", []) if k]
 
         self.kr_tlds = tuple(t.lower() for t in kw["kr_tlds"])
+        # 설명문 **안에서** 한국 도메인을 찾는 패턴. `website` 칸은 위 tuple 로 보는데,
+        # 그 칸이 빈 글(포럼·텔레그램 게시물)은 도메인이 제목이나 본문에만 있다.
+        # 긴 것부터 대야 `.co.kr` 이 `.kr` 에 먼저 먹히지 않는다.
+        _꼬리 = "|".join(re.escape(t.lstrip(".")) for t in
+                       sorted(self.kr_tlds, key=len, reverse=True))
+        self.kr_domain_re = re.compile(
+            r"(?<![\w.-])[\w-]+(?:\.[\w-]+)*\.(?:%s)(?![\w-])" % _꼬리, re.IGNORECASE)
         self.conglomerates = _compile_boundary(kw["conglomerates"] + extra)
         self.entities = _compile_boundary(kw["entities"])
         self.weak = _compile_boundary(kw["weak_signals"])
@@ -166,7 +173,17 @@ class KrClassifier:
         # 뜻은 아니다 — 파는 사람이 남의 이름을 대는 글도 있다. 사람이 볼 목록에는
         # 올리되 확정으로 세지 않는다. 문턱이 likely 인 쪽(알림)은 이 변화의 영향을 안 받는다.
         if tier == "none":
+            # 설명문 안의 한국 도메인. 위 2) 는 `website` 칸만 보는데, 포럼·텔레그램
+            # 게시물은 그 칸이 비고 도메인이 제목이나 본문에 글로만 있다.
+            # 「treethink.kr full dump」 같은 제목이 통째로 빠져나갔다 (2026-09-07).
+            m = self.kr_domain_re.search(full_blob)
+            if m:
+                reasons.append(f"설명문에 한국 도메인 '{m.group(0).lower()}' (검토 필요)")
+                tier = "review"
+
             for term, pat in self.conglomerates + self.entities + self.weak:
+                if tier != "none":
+                    break
                 if pat.search(full_blob):
                     reasons.append(f"설명문에 '{term}' 언급 (검토 필요)")
                     tier = "review"

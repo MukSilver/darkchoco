@@ -183,6 +183,23 @@ def test_포럼_줄은_대상_조직이_비어도_올린다():
         assert push.사건인가(_기본(source=s, target_org="어떤 회사"))[0] is True
 
 
+def test_글_안의_한국_도메인을_잡는다():
+    """포럼 글은 도메인이 칸이 아니라 제목·본문에 글로만 있다.
+
+    2026-09-07. 애슐리 재유포 조사가 다루는 글이 이 꼴이다 — 제목에 피해 도메인이
+    그대로 있고 대상 조직 칸은 비어 있다.
+    """
+    for 제목 in ("treethink.kr full dump", "selling daouwood.co.kr database",
+               "DB: some-univ.ac.kr 2026"):
+        p = push.만들기(_기본(source="forum", country="", target_domain="", target_org="",
+                           venue="darkforums.st", title=제목, body=""))
+        assert "한국 도메인" in _글(p, "한국 관련 근거"), 제목
+    # 한국 도메인이 아니면 안 걸린다. 근거 칸 자체가 안 나갈 수도 있다
+    p = push.만들기(_기본(source="telegram", country="", target_domain="", target_org="",
+                       venue="chan", title="selling example.com database", body=""))
+    assert "한국 도메인" not in (_글(p, "한국 관련 근거") if "한국 관련 근거" in p else "")
+
+
 def test_포럼은_판정이_없어도_근거를_남긴다():
     p = push.만들기(_기본(source="forum", country="", target_domain="", target_org="",
                        title="Selling something", body="nothing korean here"))
