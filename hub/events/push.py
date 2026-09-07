@@ -58,7 +58,22 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "packages"))
 sys.path.insert(0, str(ROOT))
 
+from dc_kr import KrClassifier  # noqa: E402
 from dc_notion import Notion  # noqa: E402
+
+_clf: KrClassifier | None = None
+
+
+def _분류기() -> KrClassifier:
+    """처음 부를 때만 만듭니다. 키워드 파일을 읽는 값이 있습니다.
+
+    문턱을 `review` 로 둡니다. 알림은 `likely` 위만 보내지만 여기는 노션에 올리는
+    자리라, 사람이 봐야 할 것도 목록에 올려 놓고 검토에서 가르는 편이 낫습니다.
+    """
+    global _clf
+    if _clf is None:
+        _clf = KrClassifier({"min_tier_to_report": "review"})
+    return _clf
 
 수집DB = "5160ce53-7ce2-4271-879e-06f3ad9957cf"
 기본표 = ROOT / "hub" / "data" / "darkchoco.db"
@@ -175,17 +190,67 @@ def _규모출처(raw: str, src: str | None) -> str:
     return "집계처 API" if src == "랜섬웨어" else "원 출처"
 
 
-def _한국관련(줄) -> tuple[str, str]:
-    """(한국 관련, 근거). 집계처 country 와 대상 도메인만 봅니다.
+class _판정재료:
+    """`dc_kr` 이 보는 다섯 칸. **어느 칸을 넣을지가 소스마다 다릅니다.**
 
-    한글 · 기업명 · 공급망 벤더 목록은 아직 안 봅니다. 그 규칙은 M1 설계 때 정합니다.
-    모르면 「미확인」 이고 근거는 비웁니다. 사람이 노션에서 고칩니다.
+    판정기는 피해자 이름과 주소에서 걸리면 등급을 높게 주고, 설명문에서만 걸리면
+    「사람이 봐야 함」(review) 으로 낮춥니다. 랜섬 줄은 피해자와 도메인이 차 있어
+    높은 등급이 나오지만, 텔레그램·포럼 글은 그 칸이 비어 있고 글만 있어서
+    **아무리 잘 걸려도 review 가 천장입니다.** 그래서 review 도 받습니다.
     """
-    if _값(줄, "country").strip().upper() == "KR":
-        return "직접", "country=KR"
-    if _값(줄, "target_domain").strip().lower().endswith(".kr"):
-        return "직접", ".kr 도메인"
-    return "미확인", ""
+
+    def __init__(self, 줄):
+        본문 = (_값(줄, "title") + " " + _값(줄, "body"))[:4000]
+        self.victim = _값(줄, "target_org")
+        self.website = _값(줄, "target_domain") or _값(줄, "venue")
+        self.description = 본문
+        self.country = _값(줄, "country")
+        self.sector = str(_raw(_값(줄, "raw")).get("산업 분야") or "")
+
+
+def _한국관련(줄) -> tuple[str, str]:
+    """(한국 관련, 근거). 판정은 `dc_kr` 한 곳에서 합니다.
+
+    부품이 내는 등급 다섯을 노션 선택지 셋으로 접습니다.
+
+        confirmed · strong · likely   →   직접
+        review                        →   미확인.  **근거는 남깁니다**
+        none                          →   미확인
+
+    포럼 줄은 판정이 안 나와도 근거를 적습니다. 킷은 자동으로 안 돌고 사람이 골라
+    돌린 글이라, 「신호가 없다」 가 「한국과 무관하다」 는 뜻이 아니기 때문입니다.
+    """
+    등급, _점수, 근거 = _분류기().classify(_판정재료(줄))
+    if 등급 in ("confirmed", "strong", "likely"):
+        return "직접", " · ".join(근거)[:2000]
+    if 소스.get(_값(줄, "source").strip()) == "포럼":
+        따로 = 근거 + ["사람이 고른 글. 대상 조직은 검토하면서 채운다"]
+        return "미확인", " · ".join(따로)[:2000]
+    return "미확인", " · ".join(근거)[:2000]
+
+
+def 사건인가(줄) -> tuple[bool, str]:
+    """노션에 올릴 자격이 있나. (올릴 것인가, 왜 올리나)
+
+    **피해자가 없으면 사건이 아닙니다.** items 표에는 채널 공지와 광고도 같이 있습니다.
+    다만 포럼은 다릅니다. 킷은 자동으로 안 돕니다 — 사람이 브라우저에서 글을 열고
+    눌러야 돕니다. 그 줄은 이미 한 번 걸러진 글이고, 대상 조직이 빈 것은 피해자가
+    없어서가 아니라 포럼 글에서는 회사 이름이 칸이 아니라 문장으로만 있어서입니다.
+    """
+    if 소스.get(_값(줄, "source").strip()) == "포럼":
+        return True, "사람이 킷을 돌린 글"
+    return bool(_값(줄, "target_org").strip()), ""
+
+
+def 외국인가(줄) -> bool:
+    """`--kr` 이 뺄 줄. **명백히 외국인 것만 뺍니다.**
+
+    전에는 country=='KR' 인 줄만 통과시켰습니다. 그러면 국가를 모르는 텔레그램·포럼은
+    영원히 0줄입니다. 놓친 것은 눈에 안 보이고 섞인 것은 검토에서 걸러지므로,
+    모르는 것은 올리고 사람이 사건 O / X 로 가릅니다.
+    """
+    c = _값(줄, "country").strip().upper()
+    return bool(c) and c not in ("KR", "UNKNOWN", "N/A", "-")
 
 
 def 만들기(줄) -> dict:
@@ -321,26 +386,35 @@ def main(argv: list[str] | None = None) -> int:
     # 피해자가 없으면 사건이 아닙니다. 그것이 가르는 가장 단순한 기준입니다.
     # 표에는 그대로 두고 노션에만 안 올립니다. 나중에 어댑터가 유출 글을
     # 가려내게 되면 그때 올라갑니다.
-    조건, 값 = ["forgotten = 0", "target_org != ''"], []
-    if a.모두:
-        조건 = ["forgotten = 0"]
-    if a.kr:
-        조건.append("upper(country) = 'KR'")
+    # **관문을 SQL 에 두지 않습니다.** 소스마다 자격이 다른데 조건문에 넣으면
+    # 조건이 계속 자라고 시험을 못 씁니다. 넓게 뽑아 파이썬에서 가릅니다.
+    조건, 값 = ["forgotten = 0"], []
     if a.new:
         조건.append("is_new = 1")
     q = "select * from items where " + " and ".join(조건) + " order by first_seen desc"
-    if a.limit:
-        q += " limit %d" % a.limit
-    줄들 = list(c.execute(q, 값))
+    전부 = list(c.execute(q, 값))
 
-    전체 = c.execute("select count(*) from items where forgotten = 0").fetchone()[0]
+    # **--limit 은 거른 뒤에 겁니다.** SQL 에 걸면 스무 줄을 뽑아 거기서 또 빼므로
+    # 실제로 올라가는 것이 몇 줄일지 미리 알 수 없습니다.
+    줄들, 사건아님, 외국 = [], 0, 0
+    for r in 전부:
+        if not a.모두 and not 사건인가(r)[0]:
+            사건아님 += 1
+            continue
+        if a.kr and 외국인가(r):
+            외국 += 1
+            continue
+        줄들.append(r)
+        if a.limit and len(줄들) >= a.limit:
+            break
+
     print()
-    print("  items 표 %d줄 중 %d줄을 골랐습니다" % (전체, len(줄들)))
-    if not a.모두:
-        뺀것 = c.execute(
-            "select count(*) from items where forgotten = 0 and target_org = ''"
-        ).fetchone()[0]
-        print("    대상 조직이 없는 %d줄은 뺐습니다. 유출 사건이 아닙니다" % 뺀것)
+    print("  items 표 %d줄 중 %d줄을 골랐습니다" % (len(전부), len(줄들)))
+    if 사건아님:
+        print("    대상 조직이 없는 %d줄은 뺐습니다. 유출 사건이 아닙니다" % 사건아님)
+        print("      (포럼 줄은 사람이 킷을 돌린 글이라 대상 조직이 비어도 올립니다)")
+    if 외국:
+        print("    국가가 한국이 아닌 %d줄은 뺐습니다. 모르는 것은 올립니다" % 외국)
     if not 줄들:
         return 0
 

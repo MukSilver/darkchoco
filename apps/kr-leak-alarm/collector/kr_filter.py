@@ -1,192 +1,34 @@
-"""
-kr_filter.py — 한국 관련 피해자 판별 엔진.
+"""kr_filter.py — 한국 관련 피해자 판별 엔진. 구현은 packages/dc_kr 로 옮겼습니다.
 
-4단계 등급으로 분류한다. 등급이 높을수록 확실하다.
+    from .kr_filter import TIER_SCORE, KrClassifier
 
-  confirmed (100) : 애그리게이터가 country=KR 로 태깅
-  strong    (80)  : 피해자 도메인이 .kr / .co.kr 계열
-  likely     (60) : 한국 대기업·기관명 매칭, 또는 한글 포함
-  review     (30) : 약한 신호만 존재 (설명문에 'Korea' 언급 등) → 사람이 확인 필요
-  none        (0) : 한국 무관
+부르는 쪽은 그대로입니다. 2026-09-07 에 노션에 올리는 쪽(hub/events/push.py)도
+같은 판정을 써야 해서 공용으로 올렸고, 여기는 그것을 넘겨주기만 합니다.
 
-북한(DPRK) 관련 항목은 다른 KR 신호가 없으면 제외한다.
+옮긴 이유는 하나입니다. **같은 물음에 두 곳이 다른 답을 내면 안 됩니다.**
+기업명·기관명 목록은 앞으로 계속 늘어나는데, 판정이 두 벌이면 늘릴 때마다
+손으로 맞춰야 하고 언젠가 갈립니다. 키워드 파일도 부품 쪽으로 같이 갔습니다.
+
+등급 뜻과 판정 차례는 packages/dc_kr/kr_filter.py 에 그대로 있습니다.
 """
 
 from __future__ import annotations
 
-import json
-import logging
-import re
+import sys
 from pathlib import Path
-from typing import Any
 
-log = logging.getLogger(__name__)
+# 저장소 안에서 돌 때를 위한 자리입니다. `pip install -e packages` 를 했으면
+# 이 줄은 하는 일이 없습니다.
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "packages"))
 
-TIER_ORDER = ["none", "review", "likely", "strong", "confirmed"]
-TIER_SCORE = {"none": 0, "review": 30, "likely": 60, "strong": 80, "confirmed": 100}
-
-_HANGUL_RE = re.compile(r"[가-힣ᄀ-ᇿ㄰-㆏]")
-_KEYWORD_PATH = Path(__file__).parent / "data" / "kr_keywords.json"
-
-# exclude 목록에서 '북한' 을 가리키는 항목만 골라내는 패턴.
-# exclude_north_korea 스위치는 이름 그대로 북한 제외어만 켜고 꺼야 한다.
-# 전에는 이 스위치가 exclude 목록 전체를 껐다 — koreatown·korea town·kia ora·
-# hyundai motor america dealership directory 까지 같이 꺼져서, 설정을 끄는 사람이
-# 무엇을 끄는지 알 수 없었다. 그래서 북한 항목만 여기서 가려낸다.
-_NK_TERM_RE = re.compile(
-    r"north\s+korea|korea\s*,\s*north|dprk|democratic people's republic|pyongyang",
-    re.IGNORECASE,
+from dc_kr.kr_filter import (  # noqa: E402,F401
+    TIER_ORDER,
+    TIER_SCORE,
+    KrClassifier,
+    _compile_boundary,
+    _HANGUL_RE,
+    _load_keywords,
+    _max_tier,
 )
 
-
-def _load_keywords() -> dict[str, list[str]]:
-    try:
-        with _KEYWORD_PATH.open("r", encoding="utf-8") as fh:
-            data = json.load(fh)
-    except (OSError, json.JSONDecodeError) as exc:
-        log.error("키워드 파일 로드 실패(%s) — 기본값으로 계속합니다.", exc)
-        data = {}
-    return {
-        "kr_tlds": data.get("kr_tlds", [".kr"]),
-        "conglomerates": [k.lower() for k in data.get("conglomerates", [])],
-        "entities": [k.lower() for k in data.get("entities", [])],
-        "weak_signals": [k.lower() for k in data.get("weak_signals", [])],
-        "exclude": [k.lower() for k in data.get("exclude", [])],
-    }
-
-
-def _compile_boundary(terms: list[str]) -> list[tuple[str, re.Pattern[str]]]:
-    """단어 경계 매칭 패턴을 만든다. 'kia' 가 'nokia' 에 걸리지 않게 한다."""
-    out: list[tuple[str, re.Pattern[str]]] = []
-    for term in terms:
-        term = term.strip().lower()
-        if not term:
-            continue
-        escaped = re.escape(term)
-        # 한글은 \b 가 제대로 동작하지 않으므로 경계 조건을 분기
-        if _HANGUL_RE.search(term):
-            pattern = escaped
-        else:
-            pattern = rf"(?<![a-z0-9]){escaped}(?![a-z0-9])"
-        try:
-            out.append((term, re.compile(pattern, re.IGNORECASE)))
-        except re.error:
-            continue
-    return out
-
-
-class KrClassifier:
-    def __init__(self, cfg: dict[str, Any] | None = None):
-        cfg = cfg or {}
-        kw = _load_keywords()
-
-        extra = [str(k).lower() for k in cfg.get("extra_keywords", []) if k]
-        excl = [str(k).lower() for k in cfg.get("exclude_keywords", []) if k]
-
-        self.kr_tlds = tuple(t.lower() for t in kw["kr_tlds"])
-        self.conglomerates = _compile_boundary(kw["conglomerates"] + extra)
-        self.entities = _compile_boundary(kw["entities"])
-        self.weak = _compile_boundary(kw["weak_signals"])
-        self.exclude = _compile_boundary(kw["exclude"] + excl)
-        # 이 중 북한 항목만 exclude_north_korea 스위치의 대상이다. 나머지는 항상 적용된다.
-        self.exclude_nk_terms = {term for term, _ in self.exclude if _NK_TERM_RE.search(term)}
-
-        self.exclude_nk = bool(cfg.get("exclude_north_korea", True))
-        self.min_tier = cfg.get("min_tier_to_report", "likely")
-        if self.min_tier not in TIER_ORDER:
-            self.min_tier = "likely"
-
-    # ── 판별 ────────────────────────────────────────────────
-    def classify(self, record: Any) -> tuple[str, int, list[str]]:
-        """(tier, score, reasons) 반환."""
-        victim = (record.victim or "").lower()
-        website = (record.website or "").lower()
-        desc = (record.description or "").lower()
-        country = (record.country or "").upper()
-        sector = (record.sector or "").lower()
-
-        name_blob = f"{victim} {website} {sector}"
-        full_blob = f"{name_blob} {desc}"
-
-        reasons: list[str] = []
-        tier = "none"
-
-        # ── 1) country 태그 (가장 확실) ──
-        if country == "KR":
-            tier = "confirmed"
-            reasons.append("소스 country=KR")
-        elif country == "KP":
-            return "none", 0, ["country=KP (북한) — 대상 아님"]
-
-        # ── 2) 한국 도메인 ──
-        matched_tld = next((t for t in self.kr_tlds if website.endswith(t)), None)
-        # safety.extract_domain() 은 ASCII 도메인만 뽑는다. 그래서 '.한국' 같은
-        # 한글 TLD 는 website 가 빈 문자열이 되고, kr_tlds 에 값이 있어도 위 줄에
-        # 절대 걸리지 않았다. 피해자명 원문에서도 같은 목록으로 한 번 더 본다.
-        # (전에는 여기서 '.kr' 하나만 하드코딩으로 봤다.)
-        victim_tld = None
-        if not matched_tld and victim.strip():
-            victim_tail = victim.rstrip()
-            victim_tld = next((t for t in self.kr_tlds if victim_tail.endswith(t)), None)
-        if matched_tld:
-            reasons.append(f"한국 도메인({matched_tld})")
-            tier = _max_tier(tier, "strong")
-        elif victim_tld:
-            reasons.append(f"피해자명이 {victim_tld} 도메인")
-            tier = _max_tier(tier, "strong")
-
-        # ── 3) 한국 기업·기관명 ──
-        for term, pat in self.conglomerates:
-            if pat.search(name_blob):
-                reasons.append(f"한국 기업명 '{term}'")
-                tier = _max_tier(tier, "likely")
-                break
-
-        if tier in ("none", "review"):
-            for term, pat in self.entities:
-                if pat.search(name_blob):
-                    reasons.append(f"한국 기관/지명 '{term}'")
-                    tier = _max_tier(tier, "likely")
-                    break
-
-        # ── 4) 한글 포함 ──
-        if _HANGUL_RE.search(record.victim or ""):
-            reasons.append("피해자명에 한글 포함")
-            tier = _max_tier(tier, "likely")
-
-        # ── 5) 약한 신호 (설명문에만 존재) ──
-        if tier == "none":
-            for term, pat in self.entities + self.weak:
-                if pat.search(full_blob):
-                    reasons.append(f"설명문에 '{term}' 언급 (검토 필요)")
-                    tier = "review"
-                    break
-            if tier == "none" and _HANGUL_RE.search(record.description or ""):
-                reasons.append("설명문에 한글 포함 (검토 필요)")
-                tier = "review"
-
-        # ── 6) 제외 규칙 ──
-        if tier != "none":
-            for term, pat in self.exclude:
-                # 북한 제외어만 exclude_north_korea 로 끌 수 있다.
-                # koreatown·kia ora 같은 나머지 제외어는 스위치와 무관하게 항상 적용한다.
-                if term in self.exclude_nk_terms and not self.exclude_nk:
-                    continue
-                if pat.search(full_blob):
-                    # country=KR 처럼 강한 증거가 있으면 제외어가 있어도 유지
-                    if tier == "confirmed":
-                        reasons.append(f"제외어 '{term}' 감지되었으나 country=KR 이므로 유지")
-                        break
-                    return "none", 0, [f"제외어 매칭 '{term}'"]
-
-        return tier, TIER_SCORE[tier], reasons
-
-    def meets_threshold(self, tier: str) -> bool:
-        try:
-            return TIER_ORDER.index(tier) >= TIER_ORDER.index(self.min_tier)
-        except ValueError:
-            return False
-
-
-def _max_tier(a: str, b: str) -> str:
-    return a if TIER_ORDER.index(a) >= TIER_ORDER.index(b) else b
+__all__ = ["TIER_ORDER", "TIER_SCORE", "KrClassifier"]
