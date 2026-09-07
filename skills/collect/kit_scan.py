@@ -43,6 +43,15 @@ REUP = ("credit", "not my leak", "not mine", "reup", "re-up", "repost", "re-post
 # 값이 든 줄로 보이는 꼴. 세기만 하고 내용은 안 낸다
 VALUE = (re.compile(r'","'), re.compile(r"[\w.+-]+@[\w-]+\.[\w.]{2,}"))
 CUT = (9, 19, 14, 24)      # 쪽당 10·20·15·25건에서 잘린 흔적
+# 인사만 한 답글. 받아만 간 사람이다. 재유포 후보에서 뺀다
+THANKS = re.compile(
+    r"^\W*(thx|thanks?|ty|tysm|thank you|nice|good|great|cool|gg|\+rep|rep\+|bump|"
+    r"appreciate\w*|legend|goat|based|first|awesome|amazing|perfect|useful|"
+    r"감사|고마|굿|잘 ?쓸|ㄱㅅ)\b", re.I)
+# 답글에 뭔가 실려 있다고 볼 꼴. 링크 · 파일 이름 · 도메인
+CARRY = (re.compile(r"https?://|magnet:|\.onion\b", re.I),
+         re.compile(r"\b[\w.-]+\.(zip|rar|7z|csv|sql|txt|tar|gz)\b", re.I),
+         re.compile(r"\b[\w-]+\.(co\.kr|or\.kr|ac\.kr|go\.kr|kr|com|net|org|io|it|fr)\b", re.I))
 
 
 class 글:
@@ -51,6 +60,7 @@ class 글:
         self.url = ""
         self.게시자 = ""
         self.게시물 = []          # (라벨, 이름, 시작줄)
+        self.본문 = []            # 게시물마다 그 글의 줄 목록. 게시물과 자리가 같다
         self.줄 = []              # (줄번호, 본문)
         self.답글쪽 = 1
         self.쪽표시 = False
@@ -84,12 +94,13 @@ def 읽기(path: Path) -> list:
             m = re.match(r"(원문|답글 \d+)\s+(\S+)", ln[4:].strip())
             라벨, 이름 = (m.group(1), m.group(2)) if m else (ln[4:].strip()[:12], "?")
             이제.게시물.append((라벨, 이름, i))
+            이제.본문.append([])
             if 라벨 == "원문":
                 이제.게시자 = 이름
         else:
             이제.줄.append((i, ln))
-            if 라벨:
-                이제.줄[-1] = (i, ln)
+            if 이제.본문 and ln.strip() not in ("```", ""):
+                이제.본문[-1].append(ln)
     return [g for g in 글들 if g.제목 not in ("수집 요약", "추출된 단서", "못 가져온 것")]
 
 
@@ -115,6 +126,49 @@ def 걸린것(g: 글, 낱말들) -> dict:
     return out
 
 
+def _실린것(t: str) -> set:
+    """글에 실린 링크·파일 이름·도메인. 소문자로 모은다. 값은 안 낸다."""
+    s = set()
+    for p in CARRY:
+        for m in p.finditer(t or ""):
+            s.add(m.group(0).lower())
+    return s
+
+
+def 답글자(글들: list, actors: list) -> list:
+    """조사 대상의 글에 답글을 단 사람들. 재유포 후보를 좁히는 자리다.
+
+    **많이 나타난 사람과 뭔가 올린 사람은 다르다.** 스물다섯 글에 「thx」만 단 사람은
+    받아만 간 사람이고, 여덟 글에 링크를 남긴 사람이 재유포자에 가깝다.
+    그래서 인사만 한 답글을 빼고 「실린 것이 있는 답글」 을 따로 센다.
+
+    반환 [(이름, 스레드 수, 답글 수, 실린 답글 수)]. 실린 답글 많은 순.
+    """
+    낮은 = [a.lower() for a in actors]
+    표 = {}
+    for g in 글들:
+        if not g.게시자 or g.게시자.lower() not in 낮은:
+            continue                      # 조사 대상의 글만 본다
+        원문토큰 = _실린것("\n".join(g.본문[0])) if g.본문 else set()
+        for (라벨, 이름, _), 본문 in zip(g.게시물, g.본문):
+            if 라벨 == "원문" or 이름.lower() in 낮은:
+                continue
+            t = "\n".join(본문).strip()
+            인사 = bool(THANKS.match(t)) and len(t) < 120
+            # 인용을 걸러야 한다. 답글이 원문을 통째로 인용하면 그 안의 도메인과 샘플이 같이
+            # 걸린다. 실측에서 상위 답글자의 「실림」 이 거의 다 인용이었다. 원문에 없던 것만 센다
+            새것 = _실린것(t) - 원문토큰
+            r = 표.setdefault(이름, {"글": set(), "답글": 0, "실림": 0, "무엇": set()})
+            r["글"].add(g.제목)
+            r["답글"] += 1
+            if not 인사 and 새것:
+                r["실림"] += 1
+                r["무엇"] |= 새것
+    out = [(n, len(v["글"]), v["답글"], v["실림"], sorted(v["무엇"])[:4]) for n, v in 표.items()]
+    out.sort(key=lambda x: (-x[3], -x[1], -x[2]))
+    return out
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="킷 수집 파일에서 재유포 후보를 추린다. 읽기만 한다")
     ap.add_argument("files", nargs="+", help="킷이 낸 .txt · .md")
@@ -122,6 +176,8 @@ def main(argv=None) -> int:
                     help="조사 대상 핸들. 여러 번 줄 수 있다. 기본은 애슐리 두 핸들")
     ap.add_argument("--targets", help="쫓는 도메인 목록 파일. 한 줄에 하나")
     ap.add_argument("--full", action="store_true", help="걸린 줄 번호를 다 보인다")
+    ap.add_argument("--repliers", type=int, nargs="?", const=20, default=0, metavar="N",
+                    help="조사 대상 글에 답글을 단 사람을 상위 N명 보인다 (기본 20)")
     a = ap.parse_args(argv)
 
     actors = a.actor or ["AshleyWood2022", "KoreanAshley"]
@@ -131,10 +187,11 @@ def main(argv=None) -> int:
         도메인 = [l.strip() for l in Path(a.targets).read_text(encoding="utf-8").split("\n")
                 if l.strip() and not l.startswith("#")]
 
-    후보, 잘림, 값있음 = [], [], []
+    후보, 잘림, 값있음, 모든글 = [], [], [], []
     for f in a.files:
         p = Path(f)
         글들 = 읽기(p)
+        모든글 += 글들
         print("=" * 74)
         print("%s  ·  스레드 %d" % (p.name, len(글들)))
         print("=" * 74)
@@ -194,9 +251,26 @@ def main(argv=None) -> int:
         for fn, g in 값있음:
             print("   %-52s 값으로 보이는 줄 %d" % (g.제목[:52], g.값줄))
 
+    답글꾼 = 답글자(모든글, actors) if a.repliers else []
+    if a.repliers:
+        print()
+        print("=" * 74)
+        print("조사 대상 글에 답글을 단 사람 — 실린 것이 있는 답글 많은 순")
+        print("=" * 74)
+        print("「실림」 은 인사말이 아니고 **원문에 없던** 링크·파일 이름·도메인이 든 답글이다.")
+        print("원문을 인용만 한 답글은 안 센다. 인용에는 원문의 도메인과 샘플이 그대로 들어 있다.")
+        print()
+        print("%-22s %6s %6s %6s   %s" % ("사람", "스레드", "답글", "실림", "무엇이 실렸나"))
+        print("-" * 74)
+        for n, s, r, c, 무엇 in 답글꾼[:a.repliers]:
+            print("%-22s %6d %6d %6d   %s" % (n[:22], s, r, c, " · ".join(무엇)[:34]))
+        보임 = sum(1 for x in 답글꾼 if x[3])
+        print()
+        print("답글을 단 사람 %d명 · 그중 실린 것이 있는 사람 %d명" % (len(답글꾼), 보임))
+
     print()
     print("스레드 %d · 재유포 후보 %d · 답글 잘림 %d · 원문 든 글 %d"
-          % (sum(len(읽기(Path(f))) for f in a.files), len(후보), len(잘림), len(값있음)))
+          % (len(모든글), len(후보), len(잘림), len(값있음)))
     return 0
 
 
