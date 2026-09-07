@@ -7,6 +7,9 @@
  *   판정 실패      → 구조 진단
  * 결과가 0건이면 진단을 자동으로 붙인다. 그 화면을 그대로 공유하면 된다.
  * 여러 명이 같이 쓰므로 확인자 이름은 박아 두지 않는다. 상자의 「확인자」 칸에 적으면 결과에 들어간다.
+ * v2.6 — 스레드 안 답글 쪽 넘김을 넣었다. 전에는 글 주소를 한 번만 불러 첫 쪽 답글만 받았다.
+ *         댓글이 많은 글은 뒤쪽을 통째로 놓쳤다 (bf.st 에서 답글이 9 에, pwn 에서 19 에 몰려 드러났다).
+ *         목록 쪽 넘김에서 물음표 뒤가 날아가던 것도 같은 날 고쳤다.
  * v2.5a — 요청 간격 하한 2초를 넣었다. 전에는 하한이 없어 0.1 을 적으면 0.1 로 돌았다.
  *         2026-08-24 압축본에서 소스를 찾아 레포에 복구하면서 함께 고쳤다.
  * v2.5 — 「목록 몇 쪽까지」와 「본문 최대 몇 건」을 「글 몇 건까지」 하나로 합쳤다. 쪽 넘김은 도구가 알아서 한다.
@@ -104,6 +107,9 @@
   const tLinks = links.filter(isThread);
   const uF = new Set(fLinks.map(a => key(A(a)))).size;
   const uT = new Set(tLinks.map(a => key(A(a)))).size;
+/* 글 하나에서 답글 쪽을 몇 쪽까지 따라갈지. 쪽마다 요청이 한 번 나가므로 상한을 둔다.
+   쪽당 10~20건이니 20쪽이면 답글 200~400건이다. 거기서 멈추면 결과에 그렇게 적는다 */
+  const THREAD_PAGES_MAX = 20;
   const BODY_SEL = '.post_body, [id^="pid_"], article.message .bbWrapper, .message-body';
   const nBody = document.querySelectorAll(BODY_SEL).length;
   const KIND = nBody ? 'page' : (uT >= 5 && uT >= uF) ? 'list' : uF >= 5 ? 'index' : 'unknown';
@@ -488,6 +494,20 @@
       if (pg > 1) { if (xf) u += '/page-' + pg; else q.push('page=' + pg); }
       return u + (q.length ? '?' + q.join('&') : '');
     };
+/* 스레드 안 답글 쪽 주소. 목록과 달리 글 주소다. XenForo 는 /page-N, MyBB 는 ?page=N.
+   showthread.php?tid=… 처럼 조건이 물음표 뒤에 있는 꼴이 있어 page 만 갈아 끼운다 */
+    const threadUrl = (base, pg) => {
+      const xf = /\/threads?\//.test(base);
+      const hash = base.indexOf('#');
+      const noHash = hash < 0 ? base : base.slice(0, hash);
+      const qmark = noHash.indexOf('?');
+      let u = (qmark < 0 ? noHash : noHash.slice(0, qmark)).replace(/\/$/, '');
+      const q = qmark < 0 ? [] : noHash.slice(qmark + 1).split('&')
+        .filter(s => s && !/^page=/i.test(s));
+      if (xf) u = u.replace(/\/page-\d+$/, '') + '/page-' + pg;
+      else q.push('page=' + pg);
+      return u + (q.length ? '?' + q.join('&') : '');
+    };
 /* 한 게시판에서 할당된 건수가 찰 때까지 쪽을 넘긴다. 새 글이 안 늘면 마지막 쪽으로 보고 멈춘다 */
     const crawl = async (base, tag, live, quota) => {
       const start = targets.length;
@@ -659,6 +679,39 @@
           try { posts = EX[eng](doc).filter(p => p.body); }
           catch (e) { posts = RAW(doc); fails.push(`${t.url} : 추출기 오류(${e}) → 최후 수단으로 ${posts.length}건 건짐`); }
           if (!posts.length) { posts = RAW(doc); if (!posts.length) fails.push(`${t.url} : empty`); }
+/* 2026-09-07. 여기서 글 주소를 한 번만 불러 첫 쪽 답글만 받고 있었다. 댓글이 많은 글은
+   뒤쪽을 통째로 놓쳤다. 답글 수가 9 나 19 에 몰려 있는 것으로 드러났다 — 쪽당 10·20건에서 잘린 것이다.
+   퍼간 사람이 답글로 원 게시자를 밝히는 일이 흔해서, 뒤쪽을 놓치면 조사가 통째로 헛돈다.
+   같은 글이 다시 오면 마지막 쪽으로 보고 멈춘다. 목록 쪽 넘김과 같은 방식이다 */
+          let 쪽수 = 1, 잘림 = '';
+          if (posts.length) {
+            const 열쇠 = p => `${p.author}|${p.date}|${(p.body || '').slice(0, 80)}`;
+            const 본것 = new Set(posts.map(열쇠));
+            for (let pg = 2; pg <= THREAD_PAGES_MAX && !ABORT; pg++) {
+              await wait();
+              let 더 = [];
+              const pu = threadUrl(t.url, pg);
+              try {
+                const r2 = await fetch(pu, { credentials: 'same-origin' });
+                const h2 = await r2.text();
+                const 막힘 = CHL.test(h2.slice(0, 6000)) ? 'Cloudflare 챌린지 페이지'
+                          : (r2.status === 429 || r2.status === 503) ? `HTTP ${r2.status} 레이트리밋 의심` : null;
+                if (막힘) { out.push(`\n> 중단. ${막힘}. 이후 요청은 보내지 않았다.\n`);
+                          fails.push(`${pu} : ${막힘}`); ABORT = true; break; }
+                if (!r2.ok) { fails.push(`${pu} : HTTP ${r2.status}`); break; }
+                const d2 = new DOMParser().parseFromString(h2, 'text/html');
+                더 = (EX[engOf(d2) || eng] || EX[eng])(d2).filter(p => p.body);
+              } catch (e) { fails.push(`${pu} : ${e && e.message || '요청 실패'}`); break; }
+              const 새것 = 더.filter(p => !본것.has(열쇠(p)));
+              if (!새것.length) break;      /* 같은 글만 다시 왔다. 마지막 쪽이다 */
+              새것.forEach(p => 본것.add(열쇠(p)));
+              posts = posts.concat(새것);
+              쪽수 = pg;
+              say(`본문 받는 중 ${n}/${total}건 · ${t.title.slice(0, 26)} · 답글 ${pg}쪽 · 누적 ${posts.length}건`);
+              if (pg === THREAD_PAGES_MAX) 잘림 = ` · ${THREAD_PAGES_MAX}쪽에서 멈췄다. 더 있을 수 있다`;
+            }
+          }
+          if (쪽수 > 1 || 잘림) out.push(`- 답글 쪽 : ${쪽수}쪽까지 받음${잘림}\n`);
           posts.forEach((p, i) => {
             if (p.hrefs && p.hrefs.length) scan(p.hrefs.join('\n')); /* 잘리지 않은 주소로 단서를 보강한다 */
             out.push(`\n### ${i === 0 ? '원문' : '답글 ' + i}  ${p.author}  ${p.date}\n\n\`\`\`\n${proc(p.body)}\n\`\`\`\n`);
