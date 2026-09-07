@@ -625,9 +625,22 @@
         seen.add(k); targets.push(Object.assign({ url: abs, title: (tag ? `[${tag}] ` : '') + C(a.textContent), tag: tag || '' }, metaOf(a)));
       } };
   /* 목록 주소 만들기. 정렬을 고르면 그 순서로 다시 받는다 */
+  /* 2026-09-07. 물음표 뒤를 통째로 버리고 있었다. 게시판 주소가 `/Forum-이름` 꼴이면 버릴 것이
+     없어 멀쩡했는데, 검색 결과(`search.php?action=results&sid=…`)와 사용자 글 찾기
+     (`?action=finduser&uid=…`)와 `forumdisplay.php?fid=…` 는 조건이 물음표 뒤에 있다.
+     그것을 버리니 2쪽 요청이 검색 폼을 받아 왔고, 글이 0건이라 「더 안 늘면 끝」에 걸려
+     1쪽에서 멈췄다. 200 으로 오니 실패로도 안 남아 「글 없는 게시판」과 구별되지 않았다.
+     이제 있던 조건은 그대로 두고 page 만 갈아 끼운다. */
       const listUrl = (base, pg, sort) => {
         const xf = base.includes('/forums/');
-        let u = base.replace(/[?#].*$/, '').replace(/\/$/, ''); const q = [];
+        const hash = base.indexOf('#');
+        const noHash = hash < 0 ? base : base.slice(0, hash);
+        const qmark = noHash.indexOf('?');
+        let u = (qmark < 0 ? noHash : noHash.slice(0, qmark)).replace(/\/$/, '');
+        /* 원래 있던 조건을 살린다. page 와 정렬 칸만 우리가 다시 정한다 */
+        const drop = /^(page|sortby|order|direction|datecut|prefix)$/i;
+        const q = qmark < 0 ? [] : noHash.slice(qmark + 1).split('&')
+          .filter(s => s && !drop.test(s.split('=')[0]));
         if (sort) {
           if (xf) q.push('order=' + (sort === 'views' ? 'view_count' : sort === 'replies' ? 'reply_count' : 'last_post_date'), 'direction=desc');
           else q.push('datecut=9999', 'prefix=0', 'sortby=' + sort, 'order=desc');
