@@ -131,9 +131,71 @@ def test_한국_관련은_country_와_kr_도메인으로_본다():
     p = push.만들기(_기본(country="", target_domain="foo.co.kr"))
     assert _select(p, "한국 관련") == "직접"
     assert ".kr" in _글(p, "한국 관련 근거")
-    p = push.만들기(_기본(country="", target_domain="foo.com"))
+    # 피해자명이 한글이면 그것만으로도 직접이다. 그래서 여기서는 영문 이름을 쓴다
+    p = push.만들기(_기본(country="", target_domain="foo.com", target_org="Acme Ltd",
+                       title="Nothing", body=""))
     assert _select(p, "한국 관련") == "미확인"
-    assert "한국 관련 근거" not in p
+
+
+def test_한국_기업명과_한글은_글에서도_잡는다():
+    """텔레그램·포럼 글은 피해자 칸이 비어 본문만 있다. 그래도 근거는 남아야 한다.
+
+    글에서 이름을 본 것은 그 회사가 피해자라는 뜻이 아니라서 「직접」 으로 안 올린다.
+    미확인으로 목록에 올리고 근거를 보여 사람이 가른다.
+    """
+    p = push.만들기(_기본(source="telegram", country="", target_domain="", target_org="",
+                       venue="어떤채널", title="Samsung Electronics database", body=""))
+    assert _select(p, "한국 관련") == "미확인"
+    assert "samsung" in _글(p, "한국 관련 근거").lower()
+    p = push.만들기(_기본(source="telegram", country="", target_domain="", target_org="",
+                       venue="chan", title="어느 회사 고객 정보", body=""))
+    assert _select(p, "한국 관련") == "미확인"
+    assert _글(p, "한국 관련 근거")
+
+    # 피해자 칸에 있으면 등급이 올라간다. 그것이 「직접」 이다
+    p = push.만들기(_기본(source="telegram", country="", target_domain="",
+                       target_org="Samsung Electronics", venue="chan", title="dump", body=""))
+    assert _select(p, "한국 관련") == "직접"
+
+
+def test_설명문에만_걸리면_미확인이되_근거는_남는다():
+    """kr_filter 의 review 등급. 사람이 봐야 한다는 뜻이라 미확인으로 둔다."""
+    p = push.만들기(_기본(source="telegram", country="", target_domain="", target_org="",
+                       title="Some dump", body="the seller mentions korea in passing"))
+    assert _select(p, "한국 관련") == "미확인"
+    assert _글(p, "한국 관련 근거")          # 근거는 비우지 않는다
+
+
+def test_북한_건은_한국으로_안_센다():
+    p = push.만들기(_기본(country="KP", target_domain="", target_org="",
+                       title="North Korea related dump", body=""))
+    assert _select(p, "한국 관련") == "미확인"
+
+
+def test_포럼_줄은_대상_조직이_비어도_올린다():
+    """킷은 자동으로 안 돈다. 사람이 골라 돌린 글이라 이미 한 번 걸러진 것이다."""
+    올림, 왜 = push.사건인가(_기본(source="forum", target_org="", venue="어느포럼"))
+    assert 올림 is True
+    assert 왜
+    # 랜섬·텔레그램은 대상 조직이 있어야 한다
+    for s in ("ransom", "telegram"):
+        assert push.사건인가(_기본(source=s, target_org=""))[0] is False
+        assert push.사건인가(_기본(source=s, target_org="어떤 회사"))[0] is True
+
+
+def test_포럼은_판정이_없어도_근거를_남긴다():
+    p = push.만들기(_기본(source="forum", country="", target_domain="", target_org="",
+                       title="Selling something", body="nothing korean here"))
+    assert _select(p, "한국 관련") == "미확인"
+    assert "사람이 고른 글" in _글(p, "한국 관련 근거")
+
+
+def test_명백한_외국만_뺀다():
+    """--kr 의 뜻. 국가를 아는데 한국이 아닌 것만 뺀다. 모르는 것은 올린다."""
+    assert push.외국인가(_기본(country="US")) is True
+    assert push.외국인가(_기본(country="KR")) is False
+    assert push.외국인가(_기본(country="")) is False          # 모른다
+    assert push.외국인가(_기본(country="Unknown")) is False    # 모른다는 표시다
 
 
 def test_게시_성격은_kind_가_선택지에_있으면_그것이다():

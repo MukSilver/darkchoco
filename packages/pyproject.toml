@@ -28,6 +28,9 @@ all = ["requests>=2.31", "telethon>=1.36,<2"]
 # 폴더 이름이 곧 패키지 이름입니다. 여기서만 찾습니다.
 packages = [
     "dc_console",
+    # 2026-09-07. 한국 관련 판정을 apps/kr-leak-alarm 에서 올렸습니다.
+    # 노션에 올리는 쪽과 알림 쪽이 같은 판정을 써야 해서입니다.
+    "dc_kr",
     "dc_notion",
     "dc_ransomfeed",
     "dc_safety",
@@ -40,3 +43,7 @@ packages = [
 
 [tool.setuptools.package-dir]
 "" = "."
+
+# 키워드 목록은 코드 옆에 둡니다. 파일이 빠지면 판정이 조용히 기본값으로 떨어집니다.
+[tool.setuptools.package-data]
+dc_kr = ["data/*.json"]
