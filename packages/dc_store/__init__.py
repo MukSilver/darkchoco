@@ -15,6 +15,6 @@ skills/collect 는 `from collect.store import ...` 를 그대로 쓸 수 있습�
 그쪽 store.py 가 이 모듈을 넘겨주는 전달 모듈로 남아 있습니다.
 """
 
-from ._impl import KEY, Item, Store
+from ._impl import KEY, SCHEMA, Item, Store
 
-__all__ = ["Item", "Store", "KEY"]
+__all__ = ["Item", "Store", "KEY", "SCHEMA"]

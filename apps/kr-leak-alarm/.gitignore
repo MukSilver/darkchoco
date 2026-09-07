@@ -16,6 +16,16 @@ secrets/
 *.db-wal
 *.db-shm
 
+# ── 상위 .gitignore 의 통짜 `data/` 되돌리기 ────────────────
+# 통합본 최상위 .gitignore 가 `data/` 를 넣어서, 위 ★ 경고가 말하던 그 사고가
+# 실제로 났다. 아무 위치의 data 폴더가 다 걸려 collector/data (필수 코드)와
+# web/data/.gitkeep 이 통째로 제외된다. 디렉터리가 제외되면 그 아래 되살리기
+# 규칙(!/web/data/.gitkeep)도 같이 죽는다.
+# 하위 .gitignore 규칙이 상위보다 우선하므로, 여기서 이 두 경로만 되살린다.
+# 위 `/data/` 는 그대로 두므로 앱 DB 폴더(apps/kr-leak-alarm/data/)는 계속 막힌다.
+!collector/data/
+!/web/data/
+
 # 수집된 피해 기업 데이터 — 공개 저장소에 절대 올라가면 안 됨
 /web/data/*
 !/web/data/.gitkeep

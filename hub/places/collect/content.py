@@ -18,6 +18,7 @@ import json
 import logging
 import random
 import re
+from functools import lru_cache
 import time
 from collections import Counter
 from pathlib import Path
@@ -37,6 +38,27 @@ try:
 except ImportError:  # pragma: no cover - requirements.txt 에 있지만 방어적으로 처리
     detect = None
     LangDetectException = Exception  # type: ignore[assignment,misc]
+
+
+class _진행바없음:
+    """tqdm 이 없을 때 대신 쓰는 빈 진행바. crawl_site 가 쓰는 것만 받습니다.
+
+    진행바는 사람이 보라고 띄우는 것이지 수집의 일부가 아닙니다. 안
+    깔렸다고 사이트 순회가 죽으면 안 됩니다 — 화면만 조용해집니다.
+    """
+
+    def __init__(self, *_a, **_kw):
+        self.total = None
+
+    def update(self, _n: int = 1) -> None:
+        pass
+
+    def set_postfix_str(self, _s: str) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
+
 
 if TYPE_CHECKING:
     from playwright.sync_api import Page
@@ -116,6 +138,11 @@ def _load_keywords() -> list[str]:
     (2026-08-25, darkforums 실크롤 감사 중 발견 — 사이트 전체 후보 수가 109건이 아니라
     136건으로 27건 부풀려져 있었다).
     """
+    return [줄 for 줄 in _키워드_줄들() if not 줄.startswith("!")]
+
+
+def _키워드_줄들() -> list[str]:
+    """키워드 파일에서 주석과 빈 줄을 뺀 줄만 돌려준다. 없으면 빈 목록."""
     path = Path(config.KOREA_KEYWORDS_PATH)
     if not path.exists():
         return []
@@ -124,6 +151,48 @@ def _load_keywords() -> list[str]:
         for line in path.read_text(encoding="utf-8").splitlines()
         if line.strip() and not line.strip().startswith("#")
     ]
+
+
+def 키워드_파일_있나() -> bool:
+    """키워드 파일이 실제로 있는지. 「파일이 없어 못 셌다」와 「세어 보니 0건이다」를
+    가르는 데 쓴다. 이 둘이 구분되지 않으면 부재의 근거가 아닌 것이 「없음」 자리에 들어간다."""
+    return Path(config.KOREA_KEYWORDS_PATH).exists()
+
+
+def _load_exclusions() -> list[str]:
+    """제외어. 파일에서 `!` 로 시작하는 줄이다.
+
+    이것이 없으면 북한 관련 게시물(`north korea`, `pyongyang`)과 지명이 겹치는
+    해외 표현(`koreatown`, `kia ora`)이 전부 한국 관련 후보로 잡힌다.
+    apps/kr-leak-alarm 이 같은 이유로 같은 축을 두고 있고 CI 에서 시험한다."""
+    return [줄[1:].strip() for 줄 in _키워드_줄들() if 줄.startswith("!") and 줄[1:].strip()]
+
+
+_한글_RE = re.compile(r"[가-힣]")
+
+
+@lru_cache(maxsize=4096)
+def _낱말_정규식(term: str) -> re.Pattern[str]:
+    r"""낱말 경계를 보는 정규식. `kia` 가 `nokia` 에 걸리지 않게 한다.
+
+    한글에는 `\b` 가 제대로 걸리지 않으므로 경계 조건을 나눈다.
+    apps/kr-leak-alarm/collector/kr_filter.py 의 _compile_boundary() 와 같은 방식이다."""
+    escaped = re.escape(term)
+    if _한글_RE.search(term):
+        return re.compile(escaped, re.IGNORECASE)
+    # **최상위 도메인은 앞 경계를 보지 않습니다.** `.co.kr` 앞에는 언제나
+    # 도메인 이름이 붙으므로(example.co.kr), 앞에 영숫자가 오면 안 된다는
+    # 조건을 걸면 도메인이 하나도 안 걸립니다
+    if term.startswith("."):
+        return re.compile(rf"{escaped}(?![a-z0-9])", re.IGNORECASE)
+    return re.compile(rf"(?<![a-z0-9]){escaped}(?![a-z0-9])", re.IGNORECASE)
+
+
+def _한국_관련인가(제목: str, 포함: list[str], 제외: list[str]) -> bool:
+    """제목이 한국 관련 후보인지. 제외어가 하나라도 걸리면 후보에서 뺀다."""
+    if any(_낱말_정규식(kw).search(제목) for kw in 제외):
+        return False
+    return any(_낱말_정규식(kw).search(제목) for kw in 포함)
 
 
 def collect_posts(
@@ -214,8 +283,14 @@ def summarize_posts(posts: list[dict[str, str]], sample_note: str) -> dict[str, 
         if total == 0:
             result["사용 언어"] = {"state": "CONFIRMED_ABSENT"}
         else:
+            # **꼴을 extract/lang.py 쪽에 맞춥니다.** 그쪽은 「러시아어」처럼
+            # 한글 이름을 내는데 여기만 langdetect 코드(ru · ko)를 내서, 같은
+            # 「사용 언어」 칸에 두 꼴이 섞여 들어가고 있었습니다. 이름표는
+            # lang.py 의 표 하나만 씁니다. 표에 없는 코드는 코드 그대로 둡니다
+            from hub.places.extract.lang import _이름 as _언어이름  # noqa: PLC0415
             parts = [
-                f"{lang} {count}건({count * 100 // total}%)" for lang, count in distribution.most_common()
+                f"{_언어이름.get(lang, lang)} {count}건({count * 100 // total}%)"
+                for lang, count in distribution.most_common()
             ]
             result["사용 언어"] = {
                 "value": ", ".join(parts),
@@ -232,13 +307,21 @@ def summarize_posts(posts: list[dict[str, str]], sample_note: str) -> dict[str, 
                 "top2": [(lang, count * 100 // total) for lang, count in top2],
             }
 
-    keywords = _load_keywords()
-    matches = [p for p in posts if any(kw in p["title"] for kw in keywords)]
-    result["한국 관련 유출"] = {
-        "value": f"후보 {len(matches)}건",
-        "observed_at": today,
-        "source": f"{sample_note} 중 키워드 매칭 — 확정 필요",
-    }
+    # **파일이 없으면 「없음」이 아니라 「못 봄」입니다.** 예전에는 키워드 목록이
+    # 없어도 조용히 빈 목록을 써서 「후보 0건」이 그대로 노션에 찍혔습니다.
+    # 8/30 통합 때 파일이 안 따라오는 바람에, 걸려야 할 제목까지 0건으로
+    # 나가고 있었습니다. 부재의 근거가 아닌 것이 부재의 자리에 들어갑니다
+    if not 키워드_파일_있나():
+        result["한국 관련 유출"] = {"state": "BLOCKED", "reason": "키워드 목록 파일 없음"}
+    else:
+        포함 = _load_keywords()
+        제외 = _load_exclusions()
+        matches = [p for p in posts if _한국_관련인가(p["title"], 포함, 제외)]
+        result["한국 관련 유출"] = {
+            "value": f"후보 {len(matches)}건",
+            "observed_at": today,
+            "source": f"{sample_note} 중 키워드 매칭 — 확정 필요",
+        }
 
     pii_types = _detect_pii_types(posts)
     if pii_types:
@@ -456,8 +539,17 @@ def crawl_site(
     - resume=True면 이전에 남긴 체크포인트가 있는지 먼저 확인하고, 있으면 거기서부터
       이어서 진행한다(처음부터 다시 돌지 않음).
     """
-    from collectors import structure  # 지연 import: structure.py는 이 모듈을 참조하지 않음
-    from tqdm import tqdm             # 지연 import: 설치 전에도 --help 가 뜨게 한다
+    # 8/30 에 apps/forum-crawler 를 hub 로 합칠 때 위쪽 import 넷은 고쳤는데
+    # 함수 안에 있는 이 줄만 옛 경로로 남아 있었습니다. 부르면 ModuleNotFoundError 로
+    # 죽습니다. structure.py 는 이미 같은 폴더에 옮겨져 있습니다
+    from hub.places.collect import structure  # 지연 import: structure.py는 이 모듈을 참조하지 않음
+    # tqdm 은 진행바일 뿐인데 안 깔려 있으면 여기서 ImportError 로 죽어
+    # 사이트 순회가 통째로 날아갑니다. langdetect 는 이미 막아 두었는데
+    # 이쪽만 안 막혀 있었습니다. 없으면 진행바 없이 그냥 돕니다
+    try:
+        from tqdm import tqdm      # 지연 import: 설치 전에도 --help 가 뜨게 한다
+    except ImportError:
+        tqdm = _진행바없음
 
     source_id = source.get("name") or source.get("url", "unknown")
     profile = site_profiles.get_profile(source)

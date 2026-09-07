@@ -2,7 +2,7 @@
 
     담당 스킬. 따로 부른다. 노션이 있을 때만
     도구 tools/notion_row.py
-    개정 2026-08-26 · 정본은 grute02/darkchoco-skills
+    개정 2026-08-26 · 정본은 MukSilver/darkchoco
 
 노션 DB 에 넣는 자리다. 밖으로 내보내는 형태는 `references/publish.md` 를 본다.
 

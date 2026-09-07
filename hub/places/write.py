@@ -26,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "packages"))
 from dc_notion import Notion  # noqa: E402
 
 from hub.places.place import (  # noqa: E402
-    Place, 기계칸, 빈칸만칸, 사람판정_상태)
+    Place, 기계칸, 빈칸만칸, 사람판정_상태, 자동금지칸)
 
 __all__ = ["명부", "반영결과", "갈래별_DB"]
 
@@ -61,6 +61,24 @@ class 반영결과:
     없는옵션: list = field(default_factory=list)   # 스키마 선택지에 없음
     사람글: list = field(default_factory=list)     # 사람이 이미 써 둔 칸
     사람판정: str = ""                             # 압수됨·인계됨. 안 건드림
+    금지칸: list = field(default_factory=list)     # 자동금지칸. 값이 와도 안 씀
+
+
+자리표시자 = {"미확인", "미기입", "-", "—", "?", "unknown", "n/a", "none"}
+
+
+def _사람이_쓴것(값: str) -> bool:
+    """그 칸을 사람이 실제로 채웠는지.
+
+    **자리표시자는 빈 칸으로 봅니다.** 노션 선택지에 「미기입」이 들어 있어서,
+    그 값이 박힌 줄은 빈칸만칸 규칙에 걸려 기계가 영원히 못 채웁니다.
+    세 DB 의 「유통 자리」와 「출처」가 실제로 그렇습니다.
+
+    통합 전 저장소(Notion-DLS)의 mapping.json 이 placeholders 로 두고 있던
+    규칙입니다. 옮겨 오면서 빠졌습니다. 2026-08-31 에 되살립니다.
+    """
+    v = (값 or "").strip()
+    return bool(v) and v.lower() not in 자리표시자
 
 
 class 명부:
@@ -121,6 +139,17 @@ class 명부:
             r.안바뀜 = True
             return r
 
+        # 0. **자동금지칸은 어느 조사기가 값을 채워 보내도 안 씁니다.**
+        #    통합 전 저장소의 report_generator.FORBIDDEN_AUTO_FIELDS 가
+        #    하던 일입니다. 노션에 닿기 직전 한 자리에서 봅니다 —
+        #    조사기마다 지키게 하면 새 조사기가 붙을 때 빠집니다.
+        #    지금은 노션값() 이 이 칸들을 안 내므로 걸릴 일이 없습니다.
+        #    걸린다면 그것이 바로 알아야 하는 일이라 조용히 안 버립니다.
+        막힌것 = sorted(set(값) & 자동금지칸)
+        for 칸 in 막힌것:
+            값.pop(칸, None)
+        r.금지칸 = 막힌것
+
         # 1. 스키마에 없는 칸은 걸러냅니다. 여기서 안 거르면 노션이 조용히
         #    건너뛰고, 우리는 썼다고 믿습니다.
         쓸것, 없는칸 = {}, []
@@ -136,7 +165,7 @@ class 명부:
         #    「선택지에 없다」고 알릴 이유가 없습니다.
         찬것, 사람글 = {}, []
         for 칸, v in 쓸것.items():
-            if 칸 in 빈칸만칸 and (줄.현재.get(칸) or "").strip():
+            if 칸 in 빈칸만칸 and _사람이_쓴것((줄.현재.get(칸) or "")):
                 사람글.append(칸)
                 continue
             찬것[칸] = v
@@ -200,6 +229,14 @@ def _글자(prop) -> str:
         return "".join(x.get("plain_text", "") for x in prop.get(t) or [])
     if t == "select":
         return (prop.get("select") or {}).get("name", "") or ""
+    if t == "status":
+        # 원본(Notion-DLS/notion.py read_value)에 있던 갈래입니다. 옮겨
+        # 오면서 빠졌습니다. 이것이 없으면 status 타입 칸의 지금 값을 늘
+        # "" 로 읽습니다. 「상태」가 status 타입이면 반영() 의
+        # 사람판정_상태 검사와 노션값() 의 압수됨·인계됨 보호가
+        # 한 번도 안 걸려, 사람이 판정해 둔 줄을 online 이 덮습니다.
+        # 아래 _속성으로() 에 status 쓰기를 더하면서 같이 되살립니다.
+        return (prop.get("status") or {}).get("name", "") or ""
     if t == "url":
         return prop.get("url") or ""
     if t == "date":
@@ -220,10 +257,27 @@ def _속성으로(값: dict, 스키마: dict) -> dict:
     for 칸, v in 값.items():
         t = 스키마.get(칸)
         if t == "select":
-            out[칸] = {"select": {"name": str(v)}}
+            # 이름을 100자로 자릅니다. 노션 select·status 이름 상한이고,
+            # 넘기면 그 줄이 400 으로 실패합니다. 원본
+            # (Notion-DLS/notion.py build_value)이 [:100] 을 걸어 두었는데
+            # 옮겨 오면서 빠졌습니다. 「어떤 곳인지」처럼 긴 글이 select 인
+            # 칸이 하나라도 있으면 그 줄만 조용히 못 씁니다.
+            out[칸] = {"select": {"name": str(v)[:100]}}
+        elif t == "status":
+            # status 는 select 와 **다른 타입**입니다. 이 갈래가 없어서
+            # else 로 떨어져 rich_text 를 보내고 있었고, 노션은 그 줄에
+            # 400 을 냅니다(반영() 의 update_page 가 r.오류 로 잡아 화면에만
+            # 남고, 그 줄은 조용히 안 써집니다).
+            # 읽는 쪽 _옵션읽기() 는 status 를 이미 보고 있었으니
+            # 어긋남이었습니다.
+            #
+            # **status 는 옵션 자동 생성이 안 됩니다.** 스키마에 이미 있는
+            # 이름이어야 하고, 그 검사는 반영() 3단계 선택지 검사가 합니다
+            # (_옵션읽기() 가 status 옵션도 담아 둡니다).
+            out[칸] = {"status": {"name": str(v)[:100]}}
         elif t == "multi_select":
             이름들 = v if isinstance(v, list) else [v]
-            out[칸] = {"multi_select": [{"name": str(x)} for x in 이름들]}
+            out[칸] = {"multi_select": [{"name": str(x)[:100]} for x in 이름들]}
         elif t == "date":
             out[칸] = {"date": {"start": str(v)}}
         elif t == "url":
@@ -267,6 +321,10 @@ def 표로(결과: list[반영결과], *, apply: bool) -> str:
         if r.건너뛴칸:
             줄들.append(f"  {' ' * 폭}!! 스키마에 없는 칸: {' · '.join(r.건너뛴칸)}")
 
+            문제 += 1
+        if r.금지칸:
+            # 사람이 판단하는 칸에 기계 값이 왔습니다. 안 썼지만 알립니다.
+            줄들.append(f"  {' ' * 폭}!! 사람 칸이라 안 쓴 값: {' · '.join(r.금지칸)}")
             문제 += 1
     줄들.append("")
     머리 = "썼습니다" if apply else "미리보기입니다. --apply 를 주면 씁니다"

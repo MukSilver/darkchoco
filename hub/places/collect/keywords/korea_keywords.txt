@@ -1,0 +1,238 @@
+# 한국 관련 유출 후보 판별용 키워드 목록.
+# hub/places/collect/content.py 의 _load_keywords() / _load_exclusions() 가 읽습니다.
+#
+# 형식
+#   한 줄에 하나. 빈 줄과 '#' 로 시작하는 줄은 무시합니다.
+#   '!' 로 시작하면 제외어입니다. 제외어가 제목에 있으면 후보에서 뺍니다.
+#   대소문자는 구분하지 않습니다. 라틴 문자는 낱말 경계를 봅니다.
+#
+# 출처
+#   2026-08-31 에 apps/kr-leak-alarm/collector/data/kr_keywords.json 에서 옮겼습니다.
+#   그쪽이 상위 판이고 CI 로 오탐 시험을 돌립니다 (.github/workflows/ci.yml).
+#   그쪽을 고치면 이 파일도 같이 고쳐야 합니다. 자동으로 따라오지 않습니다.
+#
+# 원래 이 파일에 있던 leak / leaked / database / db dump 는 뺐습니다.
+#   칸 이름이 「한국 관련 유출」인데 일반 유출어까지 세면 무관한 글이 섞입니다.
+#   content.py 의 KOREA_SPECIFIC_KEYWORDS 주석이 지적한 것과 같은 문제입니다.
+
+
+# --- 한국 최상위 도메인 (12개) ---
+.ac.kr
+.busan.kr
+.co.kr
+.go.kr
+.kr
+.mil.kr
+.ne.kr
+.or.kr
+.pe.kr
+.re.kr
+.seoul.kr
+.한국
+
+# --- 지명 · 국호 · 약한 신호 (74개) ---
+asan medical
+busan
+chaebol
+chung-ang university
+chungcheong
+daegu
+daejeon
+ewha womans
+gangnam
+gangwon
+gwangju
+gyeonggi
+gyeongsang
+hana bank
+hana financial
+hanguk
+hangul
+hanyang university
+ibk
+incheon
+incheon national university
+industrial bank of korea
+jeju
+jeolla
+jtbc
+kaist
+kb financial
+kb kookmin
+kbs
+kdb
+kepco
+konkuk university
+kookmin bank
+korail
+korea
+korea development bank
+korea electric power
+korea railroad
+korea university
+korean
+krw
+kt corp
+kt corporation
+kt telecom
+kt&g
+kyung hee
+mbc korea
+nh bank
+nonghyup
+pangyo
+postech
+republic of korea
+rok 
+samsung medical
+sangam
+sbs korea
+sejong city
+seoul
+seoul national university
+seoul national university hospital
+severance hospital
+shinhan bank
+shinhan financial
+snu
+sogang university
+songdo
+south korea
+sungkyunkwan
+ulsan
+won (krw)
+woori bank
+woori financial
+yeouido
+yonsei
+
+# --- 기업 · 기관 이름 (101개) ---
+amorepacific
+asiana airlines
+binggrae
+celltrion
+cj cheiljedang
+cj corp
+cj enm
+cj logistics
+cj olive
+coupang
+daewoo
+doosan
+e-mart
+emart
+gs caltex
+gs engineering
+gs holdings
+gs retail
+hanjin
+hanjin heavy
+hanmi pharm
+hanwha
+hite jinro
+hyosung
+hyundai
+jeju air
+kakao
+kia corp
+kia motors
+kolon
+korean air
+krafton
+kumho
+lg chem
+lg cns
+lg display
+lg electronics
+lg energy
+lg hausys
+lg household
+lg innotek
+lg uplus
+lotte
+naver
+ncsoft
+netmarble
+nexon
+nongshim
+orion corp
+ottogi
+posco
+samsung
+shinsegae
+sk broadband
+sk ecoplant
+sk hynix
+sk innovation
+sk networks
+sk on
+sk shieldus
+sk siltron
+sk telecom
+t'way air
+tway air
+yuhan corp
+금호
+기아
+네이버
+넥슨
+넷마블
+농심
+대우
+대한항공
+두산
+롯데
+빙그레
+삼성
+셀트리온
+신세계
+아모레퍼시픽
+아시아나
+에스케이
+엔씨소프트
+엘지
+오뚜기
+오리온
+유한양행
+이마트
+제주항공
+카카오
+코오롱
+쿠팡
+크래프톤
+티웨이
+포스코
+하이트진로
+한미약품
+한진
+한화
+현대
+효성
+
+# --- 한글 지명·국호 (10개) ---
+# ① kr_keywords.json 에는 한글이 기업명으로만 있어서 한국어 제목이
+# 하나도 안 걸립니다. apps/tg-korea-alert 와 hub/events/telegram 이
+# 쓰는 것과 같은 항목을 가져왔습니다.
+# 「국내」는 뺐습니다 — 한국어 게시물이면 주제와 무관하게 걸립니다
+대한민국
+한국
+한국인
+서울
+부산
+인천
+대구
+대전
+광주
+울산
+
+# --- 제외어. 이것이 있으면 후보에서 뺍니다 (10개) ---
+!democratic people's republic of korea
+!dprk
+!hyundai motor america dealership directory
+!kia ora
+!korea town
+!korea, north
+!koreatown
+!north korea
+!north korean
+!pyongyang

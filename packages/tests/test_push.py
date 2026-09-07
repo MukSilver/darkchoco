@@ -1,0 +1,206 @@
+"""push.py 의 칸 옮기기와 겹침 열쇠 시험. 노션에 붙지 않습니다.
+
+    python packages/tests/test_push.py
+
+2026-09-06 에 여덟 칸을 더했습니다. 검토 여부 · 수집자(자동) · 소스 · UID · 주장 규모 ·
+규모 출처 · 발견일 · 한국 관련(+근거). 자동으로 올라간 줄은 「미검토」 라서 사람이
+사건 O/X 를 고르기 전에는 지도와 통계에 안 잡힙니다.
+"""
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+
+from hub.events import push  # noqa: E402
+
+
+class 줄(dict):
+    """sqlite3.Row 흉내. r["칸"] 과 r.keys() 만 쓰입니다."""
+
+
+def _기본(**바꿈) -> 줄:
+    r = 줄(uid="u-1", source="ransom", venue="어떤그룹", venue_kind="dls", actor="",
+           target_org="어떤 회사", target_domain="example.co.kr", title="어떤 회사",
+           post_url="http://example.invalid/post/1", posted_at="2026-09-01T00:00:00+00:00",
+           first_seen="2026-09-02", country="KR", kind="랜섬웨어 유출", claimed_size="",
+           raw="", forgotten=0, is_new=1)
+    r.update(바꿈)
+    return r
+
+
+def _select(p: dict, 칸: str) -> str:
+    return p[칸]["select"]["name"]
+
+
+def _글(p: dict, 칸: str) -> str:
+    return "".join(x["text"]["content"] for x in p[칸]["rich_text"])
+
+
+def test_자동_줄은_미검토_자동이다():
+    p = push.만들기(_기본())
+    assert _select(p, "검토 여부") == "미검토"
+    assert _select(p, "수집자") == "자동"
+
+
+def test_소스는_items_source_로_간다():
+    assert _select(push.만들기(_기본(source="ransom")), "소스") == "랜섬웨어"
+    assert _select(push.만들기(_기본(source="ransomlive")), "소스") == "랜섬웨어"
+    assert _select(push.만들기(_기본(source="telegram")), "소스") == "텔레그램"
+    assert _select(push.만들기(_기본(source="forum")), "소스") == "포럼"
+    assert "소스" not in push.만들기(_기본(source="뭔지모름"))
+
+
+def test_uid_가_올라간다():
+    p = push.만들기(_기본(uid="abc"))
+    assert _글(p, "UID") == "abc"
+    assert "UID" not in push.만들기(_기본(uid=""))
+
+
+def test_규모가_있으면_출처도_같이_간다():
+    p = push.만들기(_기본(claimed_size="12 GB"))
+    assert _글(p, "주장 규모") == "12 GB"
+    assert _select(p, "규모 출처") == "집계처 API"
+    p = push.만들기(_기본(source="telegram", claimed_size="3만 건"))
+    assert _select(p, "규모 출처") == "원 출처"
+    # 빈 규모는 「없음」 이 아니다. 칸을 아예 안 보낸다
+    p = push.만들기(_기본(claimed_size=""))
+    assert "주장 규모" not in p and "규모 출처" not in p
+
+
+def test_대시뿐인_규모는_안_올린다():
+    """`-` 나 `n/a` 는 값이 아니라 없다는 표시다. ransomlive 의 DASH 와 같게 본다."""
+    for v in ("-", "---", "n/a", "N/A", "Unknown", "?", "  -  "):
+        p = push.만들기(_기본(claimed_size=v))
+        assert "주장 규모" not in p, v
+        assert "규모 출처" not in p, v
+
+
+def test_규모_출처는_raw_에_적힌_것이_먼저다():
+    """ransomlive 가 raw["규모 출처"] 에 진짜 출처를 적어 둔다. 수집기 이름으로 되짚지 않는다."""
+    p = push.만들기(_기본(claimed_size="12 GB",
+                       raw=json.dumps({"규모 출처": "**안 옴.** 원 출처를 봐야 안다"})))
+    assert _select(p, "규모 출처") == "원 출처"
+    p = push.만들기(_기본(claimed_size="12 GB", raw=json.dumps({"규모 출처": "집계처 API"})))
+    assert _select(p, "규모 출처") == "집계처 API"
+
+
+def test_출처를_모르는_수집기면_규모_출처를_안_보낸다():
+    p = push.만들기(_기본(source="뭔지모름", claimed_size="12 GB"))
+    assert _글(p, "주장 규모") == "12 GB"
+    assert "규모 출처" not in p
+
+
+def test_발견일은_raw_에서_온다():
+    p = push.만들기(_기본(raw=json.dumps({"발견일": "2026-08-30 12:00:00"})))
+    assert p["발견일"]["date"]["start"] == "2026-08-30"
+    assert "발견일" not in push.만들기(_기본(raw=""))
+    assert "발견일" not in push.만들기(_기본(raw="{깨진 json"))
+    assert "발견일" not in push.만들기(_기본(raw=json.dumps({"발견일": ""})))
+
+
+def test_발견일은_영문_키도_읽는다():
+    """팀 어댑터(hub/events/sources/ransom_kr.py)는 raw["discovered"] 로 넣는다."""
+    p = push.만들기(_기본(raw=json.dumps({"discovered": "2026-08-30 12:00:00"})))
+    assert p["발견일"]["date"]["start"] == "2026-08-30"
+    # 둘 다 있으면 한글 키가 먼저다
+    p = push.만들기(_기본(raw=json.dumps({"발견일": "2026-08-01 00:00:00",
+                                      "discovered": "2026-08-30 12:00:00"})))
+    assert p["발견일"]["date"]["start"] == "2026-08-01"
+
+
+def test_발견일은_KST_로_옮긴_뒤_자른다():
+    """집계처 시각은 UTC 다. 그대로 자르면 15시 이후가 하루 앞선 날이 된다."""
+    p = push.만들기(_기본(raw=json.dumps({"발견일": "2026-08-30T15:30:00+00:00"})))
+    assert p["발견일"]["date"]["start"] == "2026-08-31"
+    # 시간대 표시가 없으면 UTC 로 본다. stats.py 의 _kst 와 같은 규칙이다
+    p = push.만들기(_기본(raw=json.dumps({"발견일": "2026-08-30 15:30:00"})))
+    assert p["발견일"]["date"]["start"] == "2026-08-31"
+    # 날짜만 온 것은 그대로 둔다
+    p = push.만들기(_기본(raw=json.dumps({"발견일": "2026-08-30"})))
+    assert p["발견일"]["date"]["start"] == "2026-08-30"
+
+
+def test_한국_관련은_country_와_kr_도메인으로_본다():
+    p = push.만들기(_기본(country="KR", target_domain=""))
+    assert _select(p, "한국 관련") == "직접"
+    assert "country=KR" in _글(p, "한국 관련 근거")
+    p = push.만들기(_기본(country="", target_domain="foo.co.kr"))
+    assert _select(p, "한국 관련") == "직접"
+    assert ".kr" in _글(p, "한국 관련 근거")
+    p = push.만들기(_기본(country="", target_domain="foo.com"))
+    assert _select(p, "한국 관련") == "미확인"
+    assert "한국 관련 근거" not in p
+
+
+def test_게시_성격은_kind_가_선택지에_있으면_그것이다():
+    assert _select(push.만들기(_기본(kind="랜섬웨어 유출", venue_kind="forum")), "게시 성격") == "랜섬웨어 유출"
+    assert _select(push.만들기(_기본(kind="확인 못 함", venue_kind="dls")), "게시 성격") == "확인 못 함"
+    # kind 가 비면 전처럼 venue_kind 로
+    assert _select(push.만들기(_기본(kind="", venue_kind="dls")), "게시 성격") == "랜섬웨어 유출"
+    assert "게시 성격" not in push.만들기(_기본(kind="", venue_kind="그밖"))
+
+
+def test_전에_보내던_아홉_칸은_그대로다():
+    p = push.만들기(_기본())
+    for k in ("자료 제목", "대상 조직", "게시자 핸들", "게시 플랫폼", "원문 URL",
+              "게시 시각", "수집일", "국가", "게시 성격"):
+        if k == "게시자 핸들":
+            continue          # actor 가 비어서 안 간다. 전과 같다
+        assert k in p, k
+    assert _select(p, "국가") == "한국"
+
+
+def test_본문은_안_간다():
+    p = push.만들기(_기본())
+    for k in ("body", "raw", "clues", "sample_path", "본문"):
+        assert k not in p
+
+
+def test_열쇠는_uid_가_먼저다():
+    assert push._열쇠들(_기본(uid="u", post_url="http://x")) == ("u", "http://x")
+    assert push._열쇠들(_기본(uid="", post_url="http://x")) == ("", "http://x")
+    assert push._열쇠들(_기본(uid="", post_url="", title="t", venue="v")) == ("", "t|v")
+
+
+def test_겹침은_uid_나_url_어느_하나로도_걸린다():
+    본uid, 본열쇠 = {"u-1"}, {"http://seen"}
+    assert push._겹치나(_기본(uid="u-1", post_url="http://new"), 본uid, 본열쇠)
+    assert push._겹치나(_기본(uid="u-9", post_url="http://seen"), 본uid, 본열쇠)
+    assert not push._겹치나(_기본(uid="u-9", post_url="http://new"), 본uid, 본열쇠)
+    # uid 가 없는 줄은 url 로만 본다
+    assert not push._겹치나(_기본(uid="", post_url="http://new"), 본uid, 본열쇠)
+
+
+def test_노션_줄에서_uid_와_열쇠를_읽는다():
+    페이지 = {"properties": {
+        "자료 제목": {"title": [{"plain_text": "t"}]},
+        "원문 URL": {"rich_text": []},
+        "게시 플랫폼": {"rich_text": [{"plain_text": "v"}]},
+        "UID": {"rich_text": [{"plain_text": "u-7"}]},
+    }}
+    uid, 열쇠 = push._노션줄의_열쇠(페이지)
+    assert uid == "u-7" and 열쇠 == "t|v"
+    # UID 칸이 없던 옛 줄
+    del 페이지["properties"]["UID"]
+    assert push._노션줄의_열쇠(페이지) == ("", "t|v")
+
+
+if __name__ == "__main__":
+    시험 = [(k, v) for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
+    실패 = 0
+    for 이름, f in 시험:
+        try:
+            f()
+            print("  통과  %s" % 이름)
+        except AssertionError as e:  # noqa: PERF203
+            실패 += 1
+            print("  실패  %s  %s" % (이름, e))
+        except Exception as e:  # noqa: BLE001
+            실패 += 1
+            print("  오류  %s  %s: %s" % (이름, type(e).__name__, e))
+    print("%d개 중 %d개 실패" % (len(시험), 실패))
+    raise SystemExit(1 if 실패 else 0)

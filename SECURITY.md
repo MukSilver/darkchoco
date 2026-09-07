@@ -26,13 +26,22 @@
 토큰 파일을 권하는 이유가 있습니다. 환경변수로 넘기면 `docker inspect` 와 셸
 기록에 남습니다. 파일은 권한으로 막을 수 있습니다.
 
-공용 부품이 아래 자리를 차례로 봅니다.
+공용 부품(`packages/dc_notion/token.py` 의 `TOKEN_PLACES`)이 아래 자리를 차례로
+봅니다. 새로 만드실 때는 셋째 자리를 쓰십시오.
 
 ```
 NOTION_TOKEN_FILE 이 가리키는 파일
 /run/secrets/notion_token
-~/.config/darkchoco/notion_token
+~/.config/darkchoco/notion_token          ← 이것을 쓰십시오
+~/.config/darkchoco/notion_token.txt      skills 가 쓰던 이름. 그대로 받습니다
+./.notion_token.txt                       skills 가 쓰던 이름. 그대로 받습니다
+~/.notion_token
 ```
+
+**이름이 여럿인 것은 옛 설정을 안 깨려고 남겨 둔 것입니다.** `scripts/` 의
+`VM에-올리기.ps1` 과 `돌릴자리-만들기.sh` 도 `notion_token` 과
+`notion_token.txt` 를 둘 다 봅니다. 목록에서 이름을 지우면 이미 그 이름으로
+넣어 둔 사람의 토큰이 안 읽힙니다.
 
 `skills/skills/darkweb-verify-ko` 는 환경변수를 아예 안 받습니다. 그 방침을
 일부러 지키고 있으니 바꾸지 마십시오.
@@ -72,29 +81,36 @@ NOTION_TOKEN_FILE 이 가리키는 파일
 
 ## Tor 를 쓰는 도구
 
-`apps/forum-crawler` 와 `apps/dls-observatory/tor_probe.py` 가 히든서비스에
-붙습니다.
+<!-- 2026-08-30 에 apps/forum-crawler · apps/dls-observatory ·
+     apps/tg-notion-report 셋을 지웠고 whitelist.yaml 도 같이 폐기했습니다.
+     그 셋을 가리키던 안내를 지금 자리로 옮겨 적습니다. -->
 
-- **승인된 주소만 봅니다.** `whitelist.yaml` 에 있는 것만입니다
-- **격리된 자리에서 돌립니다.** forum-crawler 는 자기 도커 이미지 안에서만 돕니다
-- **Tor 경유가 되는지 먼저 확인합니다.** 안 되면 아무것도 하지 않고 끝냅니다
+통합 크롤러(`hub/places/`)가 히든서비스에 붙습니다. `python dc.py crawl` 과
+`python dc.py auto` 가 그것입니다.
+
+- **나가는 길이 하나입니다.** `hub/places/egress.py` 만 밖으로 나갑니다
+- **Tor 가 없으면 아무것도 안 합니다.** 확인은 `python dc.py doctor --net`
+- **격리된 자리에서 돌립니다.** `hub/tool.json` 이 `runs_in: "vm"` 입니다.
+  절차는 [안전하게 돌리기](docs/안전하게-돌리기.md) 에 있습니다
 
 ---
 
 ## 노션에 쓰는 도구
 
-`apps/dls-observatory` 와 `apps/tg-notion-report` 가 팀 노션을 고칩니다.
+`hub/places/write.py` 가 팀 노션을 고치는 유일한 자리입니다.
 
 - **미리보기가 기본입니다.** `--apply` 를 안 붙이면 안 씁니다
-- **대상이 하나로 확정될 때만 씁니다.** 후보가 0개거나 2개 이상이면 멈춥니다
-- **사람이 쓴 칸은 안 건드립니다**
+- **노션 스키마를 실제로 읽고 그 밖의 칸은 걸러냅니다.** 칸을 늘리지 않습니다
+- **사람이 쓴 칸은 안 건드립니다.** `압수됨` 과 `인계됨` 은 사람이 판정합니다
 
-`apps/tg-notion-report/telegram_schedule.ps1 -Install` 은 매일 두 번 사람 없이
-노션에 씁니다. 걸어 두셨으면 무엇이 도는지 알고 계셔야 합니다. 확인은 이렇게 합니다.
+`python dc.py install-task` 로 걸면 사람 없이 돕니다. 걸어 두셨으면 무엇이
+도는지 알고 계셔야 합니다. 확인은 이렇게 합니다.
 
-```bash
-Get-ScheduledTask -TaskName "WHS-Telegram-Monitor" -ErrorAction SilentlyContinue
+```powershell
+Get-ScheduledTask -TaskName "Darkchoco-Collect" -ErrorAction SilentlyContinue
 ```
+
+VM 안에서는 crontab 한 줄입니다. `crontab -l` 로 봅니다.
 
 ---
 

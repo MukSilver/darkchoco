@@ -128,13 +128,13 @@ check("AI 회사 소개", F.desc_kind(ROWS[1][4]), "회사 소개(AI 가 지음)
 check("N/A", F.desc_kind(ROWS[2][4]), "N/A")
 check("빈칸", F.desc_kind(ROWS[3][4]), "빈칸")
 check("표시 없는 회사 소개",
-      F.desc_kind("Sample University offers a range of educational services."),
+      F.desc_kind("Testfield University offers a range of educational services."),
       "회사 소개로 보임")
 
-# 실데이터에서 실제로 나온 꼴들. 2026-08-26 에 Sampleyang 건을 회사 소개로 잘못 봤다
+# 실데이터에서 실제로 나온 꼴들. 2026-08-26 에 Testwave 건을 회사 소개로 잘못 봤다
 for s, want in [
-    ("Selling fresh full database dumps of company Sampleyang Industrial", "게시글 문장"),
-    ("We possess all the core technical data of Sample Solution", "게시글 문장"),
+    ("Selling fresh full database dumps of company Testwave Industrial", "게시글 문장"),
+    ("We possess all the core technical data of Testbridge Solution", "게시글 문장"),
     ("Lines:73.481.539 / size: 3Gb zipped", "게시글 문장"),
     ("9 000 000 rows", "게시글 문장"),
     ("[AI generated] Freight forwarding and logistics company.", "회사 소개(AI 가 지음)"),

@@ -161,15 +161,25 @@ class Store:
         # 본문 셋은 같이 움직인다. 따로 두면 본문과 그 출처가 어긋난다.
         # 실제로 body 만 바뀌고 body_kind 가 "회사 소개" 로 남는 일을 겪었다
         본문셋 = ("body", "body_kind", "body_via")
+        # 2026-08-31. 지운 줄에 값이 되살아나던 것을 막는다.
+        # forget() 이 본문·샘플 경로·단서를 지우고 forgotten=1 을 남기는데,
+        # put() 이 그 표시를 보지 않아 같은 글이 다시 들어오면 본문이_처음이다
+        # 가 참이 되어 body 를 다시 채웠다. sample_path 와 clues 도 옛 값이
+        # 비었다는 이유로 새 값이 들어갔다. 지운 것은 지운 채로 둔다.
+        # 다시 받아야 하면 줄을 지우고 새로 넣는다.
+        지운줄 = bool(cur["forgotten"])
+        지움유지 = ("sample_path", "clues")
         진짜본문이_왔다 = (it.body and it.body_kind == "게시글 본문"
                      and cur["body_kind"] != "게시글 본문")
         본문이_처음이다 = it.body and not cur["body"]
-        if 진짜본문이_왔다 or 본문이_처음이다:
+        if (진짜본문이_왔다 or 본문이_처음이다) and not 지운줄:
             for k in 본문셋:
                 keep[k] = d[k]
 
         for k, v in d.items():
             if k in 본문셋:
+                continue
+            if 지운줄 and k in 지움유지:
                 continue
             old = cur[k] if k in cur.keys() else ""
             if k == "via":                       # 어디서 알았나는 합친다
@@ -254,7 +264,11 @@ class Store:
         """본문과 샘플 경로를 지운다. 케이스가 끝나면 부른다.
 
         **줄 자체는 남긴다.** 지우면 같은 건이 새 건으로 다시 들어온다.
-        남는 것은 조직명, 행위자, 시각, 주소처럼 값이 아닌 것들이다."""
+        남는 것은 조직명, 행위자, 시각, 주소처럼 값이 아닌 것들이다.
+
+        지운 뒤에는 같은 글이 다시 들어와도 put() 이 본문·샘플 경로·단서를
+        다시 채우지 않는다. 되돌리려면 줄을 지우고 새로 넣는다.
+        """
         n = self.con.execute(
             "UPDATE items SET body='', body_kind='지움', sample_path='',"
             " clues='{}', forgotten=1 WHERE uid=? AND forgotten=0", (uid,)).rowcount

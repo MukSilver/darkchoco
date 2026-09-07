@@ -387,6 +387,11 @@ class CompanyCountryClassifier:
             count = self.database.execute("SELECT COUNT(*) FROM dart_companies").fetchone()[0]
             print(f"[dart] using cached company list ({count} companies)")
             return
+        if not self.dart_api_key:
+            # 키가 없으면 요청을 아예 보내지 않는다. 빈 키로 보내면 DART 가 오류를
+            # 돌려주고 그걸 다시 실패로 처리할 뿐이라, 헛요청만 한 번 나간다.
+            print("[dart] no API key; skipping sync and using the existing cache")
+            return
         try:
             companies = await asyncio.to_thread(fetch_dart_companies, self.dart_api_key)
         except RuntimeError as exc:
@@ -516,6 +521,18 @@ class CompanyCountryClassifier:
             dart_result = self._dart_match(candidate)
             if dart_result:
                 return dart_result
+
+        if not self.gemini_api_key:
+            # 키가 없을 때도 한도 소진과 같은 자리에서 멈춘다. 빈 키로 요청하면
+            # 401/400 을 받고 끝날 뿐이라 밖으로 헛요청을 내보내지 않는다.
+            return Classification(
+                False,
+                False,
+                "gemini-key-missing",
+                0.0,
+                candidate,
+                "No GEMINI_API_KEY; rules/cache/DART only",
+            )
 
         if self._gemini_disabled_until():
             return Classification(

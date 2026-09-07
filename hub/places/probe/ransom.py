@@ -47,7 +47,10 @@ from typing import Iterator
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "packages"))
 
-from dc_ransomfeed import RANSOMWARE_LIVE, rl_victims  # noqa: E402
+# 주소는 손으로 붙이지 않고 dc_ransomfeed 가 만들어 주는 것을 씁니다.
+# 그 패키지를 만든 이유가 「API 가 개편되면 여기만 고칩니다」인데,
+# /groups 만 f-string 으로 붙이고 있어서 반쯤 무너져 있었습니다.
+from dc_ransomfeed import rl_groups, rl_victims  # noqa: E402
 
 from hub.places.place import Place, 지금
 from hub.places.place import 오늘 as _오늘  # noqa: E402
@@ -93,15 +96,18 @@ _형식 = {
     "carding": "카딩",
 }
 
-# 노션 「국가」 칸이 받는 이름입니다. 여기 없는 코드는 안 씁니다.
-_나라 = {"KR": "한국", "US": "미국", "JP": "일본", "CN": "중국",
-        "RU": "러시아", "TR": "터키", "IN": "인도", "BR": "브라질",
-        "GB": "영국", "DE": "독일", "FR": "프랑스", "VN": "베트남",
-        "ID": "인도네시아", "TW": "대만"}
-
-
-class 막힘(Exception):
-    """연속으로 실패해 멈췄습니다. 차단 기간을 늘리지 않으려는 것입니다."""
+# 「국가」 이름표(_나라)와 `막힘` 예외를 여기서 지웠습니다. 2026-09-01.
+#
+#   _나라   정의만 있고 부르는 데가 없었습니다. 「국가」는 기계칸이 아니라
+#           (place.py 의 기계칸 목록에 없습니다) 이 조사기가 채울 수 없는
+#           칸입니다. 국가를 채우기로 정하면 그때 다시 넣습니다
+#   막힘    아무 데서도 raise 하지 않았습니다. 연속 실패로 멈추는 자리는
+#           _피해모으기() 안이고, 거기서는 예외를 올리지 않고 못본달 에
+#           「연속 실패로 멈춤」을 적고 break 합니다. 예외를 잡으려고
+#           import 하는 데도 없었습니다(레포 전체 확인)
+#
+# 안 쓰는 이름이 남아 있으면 다음 사람이 「국가도 채우는구나」,
+# 「막힘을 잡아야겠구나」로 읽습니다.
 
 
 def _받기(url: str, 마지막: list[float], op=None) -> object:
@@ -165,23 +171,62 @@ def _상태로(g: dict) -> tuple[str, bool]:
 
 
 def _주소들(g: dict) -> tuple[str, str]:
-    """(대표 주소, 나머지 미러) 를 돌려줍니다.
+    """(대표 주소, 나머지 DLS 미러) 를 돌려줍니다.
+
+    **type 이 DLS 인 것만 대표 후보로 둡니다.** 원본
+    (apps/dls-observatory/dls_fill.py:235-244)의 규칙인데 옮겨 오면서
+    빠져 있었습니다. 2026-09-01 에 되살립니다.
+
+    빠뜨리면 안 되는 이유가 있습니다. 랜섬 그룹은 DLS 옆에 협상용 Chat
+    미러를 같이 걸어 둡니다. type 을 안 보면 그 Chat 이 살아있다는
+    이유만으로 대표가 되고, 「주소」는 덮어쓰는칸(place.py)이라 사람이
+    적어 둔 DLS 주소 위에 그대로 덮입니다.
+
+    DLS 가 하나도 없으면 전체를 후보로 씁니다. 「DLS 가 없다」와
+    「위치가 없다」는 다릅니다.
 
     slug 가 스킴까지 붙은 주소입니다. fqdn 은 호스트만이라 노션 url 칸에
-    넣으면 링크가 안 걸립니다. 살아있는 미러를 대표로 씁니다.
+    넣으면 링크가 안 걸립니다. slug 가 없으면 http:// 를 붙여 보고,
+    그래도 http 로 시작하지 않으면 **대표로 안 씁니다.** 예전에는 이
+    설명을 적어 놓고 fqdn 을 그대로 넣고 있었습니다.
+
+    미러 쪽은 slug 를 먼저 씁니다. 원본은 fqdn 만 적었는데, 스킴이 붙은
+    편이 사람이 그대로 눌러 볼 수 있습니다.
+
+    **DLS 가 아닌 위치는 미러로 안 냅니다.** 「이전 주소」는 이 DLS 가
+    옮겨 다닌 자취를 적는 칸이고, 협상용 Chat 은 그것이 아닙니다. 섞어
+    두면 다음 사람이 Chat 을 옛 DLS 주소로 읽습니다.
+
+    원본은 그것을 「연결된 곳」에 "Chat: xxx.onion" 꼴로 적었습니다.
+    여기서는 안 적습니다 — place.py 의 자동금지칸 주석이 「연결된 곳」을
+    **우리 명부에 있는 곳일 때만** 쓰는 조건으로 빈칸만칸에 두었는데,
+    이 Chat 주소는 명부에 없는 값입니다. 어디에 적을지는 팀이 정할
+    일이라 남겨 둡니다.
     """
-    사는것, 죽은것 = [], []
-    for loc in (g.get("locations") or []):
-        if not isinstance(loc, dict):
-            continue
-        주소 = str(loc.get("slug") or loc.get("fqdn") or "").strip()
-        if not 주소:
-            continue
-        (사는것 if loc.get("available") else 죽은것).append(주소)
-    전부 = 사는것 + 죽은것
-    if not 전부:
+    locs = [loc for loc in (g.get("locations") or []) if isinstance(loc, dict)]
+    후보 = [loc for loc in locs
+          if str(loc.get("type") or "").upper() == "DLS"] or locs
+
+    대표, 미러 = "", []
+    if 후보:
+        # 살아있는 것을 먼저. 없으면 첫째를 씁니다(원본과 같습니다).
+        으뜸 = next((loc for loc in 후보 if loc.get("available")), 후보[0])
+        슬러그 = str(으뜸.get("slug") or "").strip()
+        호스트 = str(으뜸.get("fqdn") or "").strip()
+        주소 = 슬러그 or (f"http://{호스트}" if 호스트 else "")
+        if 주소.startswith("http"):
+            대표 = 주소
+        for loc in 후보:
+            if loc is 으뜸:
+                continue
+            x = str(loc.get("slug") or loc.get("fqdn") or "").strip()
+            if x and x not in 미러:
+                미러.append(x)
+
+    if not 대표 and not 미러:
+        # 쓸 만한 위치가 하나도 없을 때만 /groups 의 url 로 물러납니다.
         return str(g.get("url") or ""), ""
-    return 전부[0], " · ".join(전부[1:6])
+    return 대표, " · ".join(미러[:5])
 
 
 # ── 월별 피해 목록으로 세기 ────────────────────────────────────────
@@ -202,7 +247,9 @@ def _피해모으기(마지막: list[float], 개월수: int, op=None) -> tuple[d
     """그룹 이름 → {건수, 마지막활동, 업종, 한국건수} 로 모읍니다.
 
     /groups 에는 피해 건수가 없습니다. 월별 목록을 받아 세는 수밖에
-    없습니다. 한 달에 한 요청이라 기본 세 달이면 세 요청입니다.
+    없습니다. 한 달에 한 요청입니다. 기본은 위 `개월` 이 정하고 지금은
+    여섯이라 **여섯 요청**입니다. 「기본 세 달」이라고 적혀 있던 것은
+    2026-08-30 에 개월이 0 → 6 으로 바뀌기 전 설명입니다.
     """
     모음: dict = {}
     못본달: list[str] = []
@@ -256,8 +303,13 @@ def 조사(*, dry: bool = False, limit: int = 0,
         개월수: int = 개월, 프록시: str | None = None) -> Iterator[Place]:
     """랜섬 그룹 명부를 한 바퀴 봅니다.
 
-    요청 수는 1 + 개월수 입니다. 기본은 개월수가 0 이라 한 번입니다.
-    피해 집계는 dls_fill 소관입니다. 위 주석을 보십시오.
+    요청 수는 1 + 개월수 입니다. **개월수 기본값이 6**(위 `개월`)이라
+    실제로는 일곱 번 나가고, 62초 간격이라 한 판에 6분쯤 더 걸립니다.
+
+    「기본은 개월수가 0 이라 한 번입니다. 피해 집계는 dls_fill 소관입니다」
+    라고 적혀 있었습니다. 2026-08-30 에 개월을 0 → 6 으로 올리고 피해
+    집계를 이쪽으로 가져오면서(위 `개월` 주석) 이 설명만 안 고쳤습니다.
+    이 설명을 믿고 요청 수를 1로 잡으면 6분을 모르고 씁니다.
     """
     if dry:
         return
@@ -273,7 +325,7 @@ def 조사(*, dry: bool = False, limit: int = 0,
         return
 
     try:
-        그룹들 = _받기(f"{RANSOMWARE_LIVE}/groups", 마지막, op)
+        그룹들 = _받기(rl_groups(), 마지막, op)
     except (urllib.error.URLError, OSError, ValueError) as e:
         yield Place(갈래="ransom", 이름="(그룹 목록)",
                     못본이유=f"그룹 목록을 못 받았습니다: {e}",

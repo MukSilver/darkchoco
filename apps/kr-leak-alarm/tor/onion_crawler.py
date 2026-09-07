@@ -36,6 +36,8 @@ from collector.kr_filter import TIER_SCORE, KrClassifier
 from collector.safety import TorGateError, assert_tor_allowed, defang_url, sanitize_text
 from collector.sources.base import LeakRecord, parse_timestamp
 from collector.store import Store
+from collector.supply_filter import TIER_SCORE as SUPPLY_SCORE
+from collector.supply_filter import SupplyClassifier
 
 log = logging.getLogger(__name__)
 
@@ -181,7 +183,10 @@ def run_tor_scan(cfg: dict[str, Any], *, acknowledged: bool, dry_run: bool = Fal
         print(f"\n  {exc}\n")
         return 5
 
+    # main.py 의 run 경로와 같은 두 축을 쓴다. 전에는 여기서 한국 축만 돌려서
+    # tor-scan 을 한 번 돌리면 공급망 판정이 빠진 산출물이 나왔다.
     classifier = KrClassifier(cfg.get("kr_detection", {}))
+    supply = SupplyClassifier(cfg.get("supply_detection", {}), root=Path(cfg["_root"]))
     delay = max(2, int(tor_cfg.get("delay_seconds", 5)))
     save_raw = bool(tor_cfg.get("save_raw_html"))
     capture_dir = Path(cfg["_root"]) / "tor" / "captures"
@@ -226,20 +231,36 @@ def run_tor_scan(cfg: dict[str, Any], *, acknowledged: bool, dry_run: bool = Fal
                 ).finalize()
             )
 
-    # ── KR 판별 후 저장 ──
+    # ── 두 축 판별 후 저장 (main.py 와 같은 OR 규칙) ──
     matched = []
+    kr_hits = supply_hits = 0
     for rec in records:
         tier, score, reasons = classifier.classify(rec)
         rec.kr_tier, rec.kr_score, rec.kr_reasons = tier, score, reasons
-        if classifier.meets_threshold(tier):
+
+        s_tier, s_score, s_reasons = supply.classify(rec)
+        rec.supply_tier, rec.supply_score, rec.supply_reasons = s_tier, s_score, s_reasons
+
+        kr_ok = classifier.meets_threshold(tier)
+        supply_ok = supply.enabled and supply.meets_threshold(s_tier)
+        if kr_ok:
+            kr_hits += 1
+        if supply_ok:
+            supply_hits += 1
+        if kr_ok or supply_ok:
             matched.append(rec)
 
-    print(f"\n  후보 {len(records)}건 → 한국 관련 {len(matched)}건")
+    print(f"\n  후보 {len(records)}건 → 저장 대상 {len(matched)}건 "
+          f"(한국 관련 {kr_hits} · 공급망 {supply_hits}, 중복 포함)")
 
     min_score = TIER_SCORE.get(classifier.min_tier, 60)
+    # export 의 min_supply_score 기본값은 999 다. 안 넘기면 DB 에 이미 들어 있던
+    # 공급망 건까지 대시보드 산출물에서 통째로 빠진다. main.py 와 같은 값을 넘긴다.
+    min_supply = SUPPLY_SCORE.get(supply.min_tier, 50) if supply.enabled else 10_000
     with Store(resolve_path(cfg, "database")) as store:
         newly = store.upsert_many(matched)
-        export(store, resolve_path(cfg, "web_data_dir"), min_score=min_score)
+        export(store, resolve_path(cfg, "web_data_dir"),
+               min_score=min_score, min_supply_score=min_supply)
     print(f"  신규 {len(newly)}건 저장 완료.\n")
     return 0
 

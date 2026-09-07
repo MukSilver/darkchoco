@@ -58,7 +58,7 @@ $env:DISCORD_WEBHOOK_URL="복사한 Discord 웹훅 URL"
 python .\korea_alert_monitor.py
 ```
 
-기본값은 username이 각각 `osint_cti`, `breachdetect`인 채널이다. 실제 username이 달라지면 직접 지정한다.
+기본값은 username이 각각 `breachdetect`, `osint_cti`인 채널이다(코드의 `DEFAULT_CHANNELS` 순서). 실제 username이 달라지면 직접 지정한다.
 
 ```powershell
 python .\korea_alert_monitor.py --channels channel_username_1 channel_username_2
