@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>다크초코 대시보드</title>
+<style>
+  :root{
+    --바탕:#14161c; --판:#1b1e26; --판2:#22262f; --줄:#2c313c;
+    --글:#e6e8ee; --흐린글:#9aa2b4; --더흐린:#6b7385;
+    --점:#8b7bd8; --좋음:#7dc4a0; --기다림:#d8b45f; --나쁨:#d87b7b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--바탕);color:var(--글);
+       font:14px/1.6 "Pretendard","맑은 고딕",system-ui,sans-serif}
+  a{color:var(--점)}
+  .틀{max-width:1180px;margin:0 auto;padding:22px 18px 60px}
+
+  header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:6px}
+  h1{font-size:19px;margin:0;letter-spacing:-.01em}
+  .구운때{color:var(--더흐린);font-size:12px}
+  .경고{background:#3a2a2a;border:1px solid #5a3a3a;color:#f0c8c8;
+        padding:9px 12px;border-radius:7px;margin:12px 0;font-size:13px}
+
+  .요약{display:flex;gap:9px;flex-wrap:wrap;margin:16px 0 20px}
+  .칸{background:var(--판);border:1px solid var(--줄);border-radius:9px;
+      padding:11px 15px;min-width:112px}
+  .칸 b{display:block;font-size:23px;font-weight:600;letter-spacing:-.02em}
+  .칸 span{color:var(--흐린글);font-size:11.5px}
+  .칸.점 b{color:var(--점)} .칸.좋음 b{color:var(--좋음)}
+  .칸.기다림 b{color:var(--기다림)} .칸.나쁨 b{color:var(--나쁨)}
+
+  nav{display:flex;gap:5px;border-bottom:1px solid var(--줄);margin-bottom:18px}
+  nav button{background:none;border:0;border-bottom:2px solid transparent;
+             color:var(--흐린글);padding:9px 16px;font:inherit;font-size:14px;cursor:pointer}
+  nav button.켬{color:var(--글);border-bottom-color:var(--점)}
+  nav button:hover{color:var(--글)}
+
+  h2{font-size:14px;color:var(--흐린글);font-weight:600;margin:24px 0 9px;
+     text-transform:none;letter-spacing:.01em}
+  h2:first-child{margin-top:0}
+
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;color:var(--더흐린);font-weight:500;font-size:11.5px;
+     padding:6px 9px;border-bottom:1px solid var(--줄);white-space:nowrap}
+  td{padding:7px 9px;border-bottom:1px solid #232733;vertical-align:top}
+  /* 짧은 값이 한 글자씩 세로로 깨지던 것을 막는다. 넓으면 감싼 칸이 가로로 밀린다 */
+  td.짧음,th.짧음{white-space:nowrap}
+  td.제목{min-width:210px} td.근거{min-width:150px;max-width:330px}
+  tr:hover td{background:#1e222b}
+  .수{font-variant-numeric:tabular-nums;text-align:right}
+  .흐림{color:var(--흐린글)} .더흐림{color:var(--더흐린);font-size:12px}
+  .감쌈{overflow-x:auto;border:1px solid var(--줄);border-radius:9px;background:var(--판)}
+
+  .표{display:inline-block;padding:1px 7px;border-radius:4px;font-size:11.5px;
+      white-space:nowrap;border:1px solid transparent}
+  .미검토{background:#3a3520;color:#e8d48a;border-color:#4d4529}
+  .사건O{background:#1f3a2e;color:#8fd8b4;border-color:#2a4c3c}
+  .사건X{background:#332;color:#998;border-color:#443}
+  .직접{background:#2a2f4d;color:#a8b4f0;border-color:#39406b}
+  .미확인{background:#2a2d35;color:#9aa2b4;border-color:#363a45}
+
+  .명령{display:flex;gap:8px;align-items:center;margin:5px 0}
+  .명령 code{flex:1;background:#0f1116;border:1px solid var(--줄);border-radius:6px;
+             padding:7px 10px;font:12px ui-monospace,Consolas,monospace;
+             color:#cdd3e0;overflow-x:auto;white-space:nowrap}
+  .명령 button{background:var(--판2);border:1px solid var(--줄);color:var(--흐린글);
+               border-radius:6px;padding:7px 11px;font:inherit;font-size:12px;cursor:pointer}
+  .명령 button:hover{color:var(--글);border-color:var(--점)}
+  .명령 .이름{min-width:150px;color:var(--흐린글);font-size:12.5px}
+
+  .거르개{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:11px;align-items:center}
+  .거르개 button{background:var(--판);border:1px solid var(--줄);color:var(--흐린글);
+                 border-radius:99px;padding:4px 12px;font:inherit;font-size:12.5px;cursor:pointer}
+  .거르개 button.켬{background:var(--판2);color:var(--글);border-color:var(--점)}
+  .거르개 input{background:var(--판);border:1px solid var(--줄);color:var(--글);
+                border-radius:7px;padding:5px 11px;font:inherit;font-size:13px;min-width:190px}
+  .빔{color:var(--더흐린);padding:26px;text-align:center}
+  footer{color:var(--더흐린);font-size:12px;margin-top:34px;line-height:1.8}
+</style>
+</head>
+<body>
+<div class="틀">
+  <header>
+    <h1>다크초코 대시보드</h1>
+    <span class="구운때" id="구운때"></span>
+  </header>
+  <div id="탈">
+  </div>
+
+  <div class="요약" id="요약"></div>
+
+  <nav>
+    <button data-탭="제어판" class="켬">제어판</button>
+    <button data-탭="사건">사건</button>
+  </nav>
+
+  <section id="제어판"></section>
+  <section id="사건" hidden></section>
+
+  <footer>
+    <div>이 화면은 127.0.0.1 에만 뜹니다. 명령 단추는 <b>복사만</b> 하고 실행은 사람이 합니다.</div>
+    <div>본문과 개인정보 값은 담지 않습니다. 명부 셋은 노션이 정본이라 여기서 다시 그리지 않습니다.</div>
+  </footer>
+</div>
+
+<script src="data/dash.js" onerror="window.__못읽음=true"></script>
+<script>
+(function(){
+  const D = window.DASH;
+  const $ = (s)=>document.querySelector(s);
+  const 매김 = (n)=> (n==null?"-":Number(n).toLocaleString("ko-KR"));
+  const 안전 = (s)=> String(s==null?"":s).replace(/[&<>"']/g,
+      c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+  if (window.__못읽음 || !D){
+    $("#탈").innerHTML = '<div class="경고">구운 데이터가 없습니다. '
+      + '<code>python apps/dash/build.py</code> 를 먼저 돌리십시오.</div>';
+    return;
+  }
+  $("#구운때").textContent = "구운 때 " + D.구운때;
+
+  const 탈 = [];
+  if (!D.노션읽음) 탈.push("노션을 안 읽었습니다. [사건] 이 비어 있습니다."
+      + (D.노션오류 ? " (" + 안전(D.노션오류) + ")" : ""));
+  if (!D.제어판.표있음) 탈.push("수집 표가 없습니다: " + 안전(D.제어판.표));
+  if (탈.length) $("#탈").innerHTML = 탈.map(t=>'<div class="경고">'+t+'</div>').join("");
+
+  // ── 요약 ──────────────────────────────────────────
+  const 사건 = D.사건 || [];
+  const 셈 = (f)=> 사건.filter(f).length;
+  const 미검토 = 셈(x=>x.검토==="미검토");
+  const 사건O  = 셈(x=>x.검토==="사건 O" || !x.검토);
+  const 요약 = [
+    ["점",    D.제어판.줄수,        "수집 표 줄"],
+    ["",      사건.length,          "노션 사건"],
+    [미검토?"기다림":"", 미검토,     "미검토"],
+    ["좋음",  사건O,                "사건 O"],
+    ["",      D.제어판.관측,        "게시 상태 관측"],
+    ["",      D.요약.자리합,        "지도 자리"],
+  ];
+  $("#요약").innerHTML = 요약.map(([꼴,n,이름])=>
+    '<div class="칸 '+꼴+'"><b>'+매김(n)+'</b><span>'+이름+'</span></div>').join("");
+
+  // ── 제어판 ────────────────────────────────────────
+  const ev = D.제어판;
+  const 소스별 = Object.entries(ev.소스별||{}).map(([k,v])=>k+" "+매김(v)).join(" · ") || "빔";
+  let h = "";
+
+  h += '<h2>수집 표</h2><div class="감쌈"><table><tbody>'
+    + '<tr><td class="흐림">자리</td><td><code>'+안전(ev.표)+'</code></td></tr>'
+    + '<tr><td class="흐림">줄</td><td>'+매김(ev.줄수)+' <span class="더흐림">('+안전(소스별)+')</span></td></tr>'
+    + '<tr><td class="흐림">마지막 수집</td><td>'+안전(ev.마지막수집||"-")+'</td></tr>'
+    + '<tr><td class="흐림">게시 상태 관측</td><td>'+매김(ev.관측)+'건</td></tr>'
+    + '</tbody></table></div>';
+
+  h += '<h2>최근 수집 실행</h2>';
+  if (!(ev.실행||[]).length) h += '<div class="빔">아직 없습니다.</div>';
+  else h += '<div class="감쌈"><table><thead><tr><th>날</th><th>무엇</th>'
+    + '<th class="수">받음</th><th class="수">새것</th><th>메모</th></tr></thead><tbody>'
+    + ev.실행.map(r=>'<tr><td>'+안전((r.날||"").slice(0,10))+'</td><td>'+안전(r.무엇)
+      + '</td><td class="수">'+매김(r.받음)+'</td><td class="수">'+매김(r.새것)
+      + '</td><td class="더흐림">'+안전(r.메모)+'</td></tr>').join("")
+    + '</tbody></table></div>';
+
+  h += '<h2>설정</h2><div class="감쌈"><table><thead><tr><th>이름</th><th>무엇</th>'
+    + '<th>없으면 안 도는 것</th><th></th></tr></thead><tbody>'
+    + (ev.설정||[]).map(s=>'<tr><td><code>'+안전(s.이름)+'</code></td><td class="흐림">'
+      + 안전(s.무엇)+'</td><td class="더흐림">'+안전(s.쓰는곳)+'</td><td>'
+      + (s.있음 ? '<span class="표 사건O">있음</span>' : '<span class="표 미검토">없음</span>')
+      + '</td></tr>').join("")
+    + '</tbody></table></div>';
+
+  h += '<h2>자주 쓰는 명령 <span class="더흐림">— 눌러서 복사합니다. 실행은 터미널에서</span></h2>'
+    + (ev.명령||[]).map((c,i)=>'<div class="명령"><span class="이름">'+안전(c.이름)
+      + '</span><code id="명령'+i+'">'+안전(c.줄)+'</code>'
+      + '<button data-복사="명령'+i+'">복사</button></div>').join("");
+
+  h += '<h2>명부 <span class="더흐림">— 노션이 정본입니다. 여기서 다시 그리지 않습니다</span></h2>';
+  const 자리 = D.요약.자리 || {};
+  h += '<div class="감쌈"><table><thead><tr><th>명부</th><th class="수">자리</th></tr></thead><tbody>'
+    + [["forum","포럼"],["ransom","랜섬웨어"],["telegram","텔레그램"]].map(([k,이름])=>
+      '<tr><td>'+이름+'</td><td class="수">'+매김(자리[k])+'</td></tr>').join("")
+    + '</tbody></table></div>'
+    + '<div class="더흐림" style="margin-top:7px">굽기 산출물 기준'
+    + (D.요약.지도날 ? " (" + 안전(D.요약.지도날) + ")" : "") + '. 고치려면 노션에서 엽니다.</div>';
+  $("#제어판").innerHTML = h;
+
+  // ── 사건 ──────────────────────────────────────────
+  let 검토거르개 = "전부", 소스거르개 = "전부", 찾기 = "";
+  const 검토값 = ["전부","미검토","사건 O","사건 X"];
+  const 소스값 = ["전부","랜섬웨어","텔레그램","포럼"];
+
+  function 골라진(){
+    const q = 찾기.trim().toLowerCase();
+    return 사건.filter(x=>{
+      if (검토거르개!=="전부"){
+        const v = x.검토 || "사건 O";      // 빈칸은 사람이 올린 옛 사건이다 (DEV 4-9)
+        if (v !== 검토거르개) return false;
+      }
+      if (소스거르개!=="전부" && (x.소스||"") !== 소스거르개) return false;
+      if (q){
+        const 다 = [x.제목,x.대상,x.자리,x.핸들,x.근거,x.번호].join(" ").toLowerCase();
+        if (!다.includes(q)) return false;
+      }
+      return true;
+    });
+  }
+
+  function 그리기(){
+    const 목록 = 골라진();
+    let s = '<div class="거르개">'
+      + 검토값.map(v=>'<button data-검토="'+v+'" class="'+(v===검토거르개?"켬":"")+'">'+v
+        + ' <span class="더흐림">'+ (v==="전부" ? 사건.length
+            : 사건.filter(x=>(x.검토||"사건 O")===v).length) +'</span></button>').join("")
+      + '<span style="width:10px"></span>'
+      + 소스값.map(v=>'<button data-소스="'+v+'" class="'+(v===소스거르개?"켬":"")+'">'+v+'</button>').join("")
+      + '<input id="찾기" placeholder="대상 조직 · 자리 · 근거로 찾기" value="'+안전(찾기)+'">'
+      + '</div>';
+
+    if (!사건.length){
+      s += '<div class="빔">노션을 안 읽었거나 줄이 없습니다.</div>';
+    } else if (!목록.length){
+      s += '<div class="빔">고른 조건에 맞는 줄이 없습니다.</div>';
+    } else {
+      s += '<div class="감쌈"><table><thead><tr>'
+        + '<th>검토</th><th>대상 조직</th><th>자리</th><th>소스</th><th>한국</th>'
+        + '<th>근거</th><th>게시</th><th>규모</th><th></th></tr></thead><tbody>'
+        + 목록.map(x=>{
+            const 검토 = x.검토 || "사건 O";
+            const 검토꼴 = 검토==="미검토"?"미검토":(검토==="사건 X"?"사건X":"사건O");
+            const 한국꼴 = x.한국==="직접"?"직접":"미확인";
+            const 이름 = x.대상 || x.제목 || "(이름 없음)";
+            return '<tr>'
+              + '<td><span class="표 '+검토꼴+'">'+안전(검토)+'</span></td>'
+              + '<td>'+안전(이름)+ (x.번호?' <span class="더흐림">'+안전(x.번호)+'</span>':'') +'</td>'
+              + '<td class="흐림">'+안전(x.자리||"-")+'</td>'
+              + '<td class="흐림">'+안전(x.소스||"-")+'</td>'
+              + '<td>'+(x.한국?'<span class="표 '+한국꼴+'">'+안전(x.한국)+'</span>':'')+'</td>'
+              + '<td class="더흐림">'+안전(x.근거||"")+'</td>'
+              + '<td class="흐림">'+안전(x.게시||"")+'</td>'
+              + '<td class="흐림">'+안전(x.규모||"")+'</td>'
+              + '<td>'+(x.id?'<a href="https://www.notion.so/'+안전(x.id.replace(/-/g,""))
+                  +'" target="_blank" rel="noopener">노션</a>':'')+'</td>'
+              + '</tr>';
+          }).join("")
+        + '</tbody></table></div>'
+        + '<div class="더흐림" style="margin-top:8px">'+매김(목록.length)+'줄. '
+        + '<b>O / X 는 노션에서 고릅니다</b> — 팀원마다 자기 토큰이 있어야 여기서 쓸 수 있어서, '
+        + '지금은 보기만 합니다.</div>';
+    }
+    document.querySelector("#사건").innerHTML = s;
+    const i = document.querySelector("#찾기");
+    if (i){
+      i.oninput = (e)=>{ 찾기 = e.target.value; const 끝=e.target.selectionStart;
+        그리기(); const n=document.querySelector("#찾기"); n.focus(); n.setSelectionRange(끝,끝); };
+    }
+  }
+  그리기();
+
+  // ── 누르기 ────────────────────────────────────────
+  document.addEventListener("click", (e)=>{
+    const b = e.target.closest("button");
+    if (!b) return;
+    if (b.dataset.탭){
+      document.querySelectorAll("nav button").forEach(x=>x.classList.toggle("켬", x===b));
+      document.querySelector("#제어판").hidden = b.dataset.탭!=="제어판";
+      document.querySelector("#사건").hidden   = b.dataset.탭!=="사건";
+    }
+    if (b.dataset.복사){
+      const t = document.getElementById(b.dataset.복사).textContent;
+      navigator.clipboard.writeText(t).then(()=>{
+        const 옛 = b.textContent; b.textContent = "복사됨";
+        setTimeout(()=>{ b.textContent = 옛; }, 1200);
+      }).catch(()=>{ b.textContent = "복사 실패"; });
+    }
+    if (b.dataset.검토){ 검토거르개 = b.dataset.검토; 그리기(); }
+    if (b.dataset.소스){ 소스거르개 = b.dataset.소스; 그리기(); }
+  });
+})();
+</script>
+</body>
+</html>
