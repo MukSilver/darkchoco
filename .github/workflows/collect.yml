@@ -34,23 +34,27 @@ on:
     # 여섯 시간마다. UTC 기준이라 KST 로는 09 · 15 · 21 · 03 시입니다.
     - cron: "0 0,6,12,18 * * *"
   workflow_dispatch:
+    # **입력 이름도 잡 ID 와 같이 영문·숫자·-·_ 만 됩니다.** 한글로 두었더니
+    # 워크플로 파일 자체가 거부되어 잡이 시작도 못 했습니다 (2026-09-08).
+    # 화면에 보이는 글은 description 이라 한글 그대로 둡니다.
+    # 2026-08-28 에 잡 ID 가 한글이라 쉰 번이 전부 실패한 것과 같은 종류입니다.
     inputs:
-      올리기:
+      push_to_notion:
         description: "노션에 실제로 올릴지. 끄면 미리보기만 합니다"
         type: boolean
         default: true
-      랜섬:
+      do_ransom:
         description: "랜섬웨어 집계처를 볼지"
         type: boolean
         default: true
-      텔레그램:
+      do_telegram:
         description: "텔레그램 공개 미리보기를 볼지"
         type: boolean
         default: true
 
 # 겹쳐 돌지 않게 합니다. 같은 노션 DB 에 둘이 쓰면 겹침 판정이 어긋납니다.
 concurrency:
-  group: 수집
+  group: collect
   cancel-in-progress: false
 
 permissions:
@@ -75,19 +79,20 @@ jobs:
         # **환경변수 대신 파일로 둡니다.** 환경변수는 하위 프로세스 목록과
         # 셸 이력에 남습니다. dc_notion 이 NOTION_TOKEN_FILE 을 먼저 봅니다.
         env:
-          토큰: ${{ secrets.NOTION_TOKEN }}
-          채널: ${{ secrets.DARKCHOCO_CHANNELS }}
+          # **셸 변수 이름에도 한글을 안 씁니다.** bash 는 영문·숫자·_ 만 받습니다.
+          TOKEN_VALUE: ${{ secrets.NOTION_TOKEN }}
+          CHANNELS_VALUE: ${{ secrets.DARKCHOCO_CHANNELS }}
         run: |
           set -e
           mkdir -p "$RUNNER_TEMP/cfg"
-          if [ -z "$토큰" ]; then
+          if [ -z "$TOKEN_VALUE" ]; then
             echo "::error::NOTION_TOKEN 이 없습니다. 레포 Settings → Secrets 에 넣으십시오"
             exit 1
           fi
-          printf '%s' "$토큰" > "$RUNNER_TEMP/cfg/notion_token"
+          printf '%s' "$TOKEN_VALUE" > "$RUNNER_TEMP/cfg/notion_token"
           chmod 600 "$RUNNER_TEMP/cfg/notion_token"
-          if [ -n "$채널" ]; then
-            printf '%s\n' "$채널" > "$RUNNER_TEMP/cfg/telegram_channels"
+          if [ -n "$CHANNELS_VALUE" ]; then
+            printf '%s\n' "$CHANNELS_VALUE" > "$RUNNER_TEMP/cfg/telegram_channels"
             echo "채널 $(grep -cve '^\s*$' -e '^#' "$RUNNER_TEMP/cfg/telegram_channels" || true) 개"
           else
             echo "::warning::DARKCHOCO_CHANNELS 가 없습니다. 텔레그램을 건너뜁니다"
@@ -96,7 +101,7 @@ jobs:
       - name: 랜섬웨어 집계처
         # **한 소스가 막혀도 다음으로 갑니다.** 집계처가 GitHub 주소를 막을 수 있어
         # 여기서 죽으면 텔레그램까지 같이 못 돕니다.
-        if: ${{ github.event_name == 'schedule' || inputs.랜섬 }}
+        if: ${{ github.event_name == 'schedule' || inputs.do_ransom }}
         continue-on-error: true
         working-directory: skills
         env:
@@ -106,7 +111,7 @@ jobs:
         run: python -m collect.sources.ransomlive kr --db "$RUNNER_TEMP/darkchoco.db"
 
       - name: 텔레그램 공개 미리보기
-        if: ${{ github.event_name == 'schedule' || inputs.텔레그램 }}
+        if: ${{ github.event_name == 'schedule' || inputs.do_telegram }}
         continue-on-error: true
         working-directory: skills
         env:
@@ -154,8 +159,8 @@ jobs:
           if [ ! -f "$RUNNER_TEMP/darkchoco.db" ]; then
             echo "올릴 표가 없습니다"; exit 0
           fi
-          올릴까="${{ github.event_name == 'schedule' && 'yes' || inputs.올리기 }}"
-          if [ "$올릴까" = "yes" ] || [ "$올릴까" = "true" ]; then
+          DO_PUSH="${{ github.event_name == 'schedule' && 'yes' || inputs.push_to_notion }}"
+          if [ "$DO_PUSH" = "yes" ] || [ "$DO_PUSH" = "true" ]; then
             python hub/events/push.py --db "$RUNNER_TEMP/darkchoco.db" --kr --apply
           else
             echo "미리보기만 합니다"
