@@ -19,11 +19,14 @@
     "not_found_handling": "404-page"
   },
 
-  // 비밀값은 여기 안 적습니다. `wrangler secret put NOTION_TOKEN` 으로 넣습니다.
-  "vars": {
-    // Access 를 붙이기 전 시험할 때만 "yes". 그동안은 주소를 아는 사람이 다 봅니다.
-    "ACCESS_OPTIONAL": "no"
-  },
+  // 비밀값은 여기 안 적습니다. 둘 다 `wrangler secret put` 으로 넣습니다.
+  //
+  //   NOTION_TOKEN    노션 통합 토큰. O / X 를 쓸 때만 씁니다
+  //   DASH_PASSWORD   팀이 함께 쓰는 비밀번호. **없으면 아무도 못 들어옵니다**
+  //
+  // Cloudflare Access 는 등록된 도메인에만 걸립니다. workers.dev 주소에는 못 걸어
+  // 비밀번호로 잠급니다. 도메인이 생기면 Access 로 옮기면 되고, Worker 가 그때
+  // 붙는 헤더도 같이 봅니다.
 
   // 배포에 딸려 가면 안 되는 것.
   "assets_ignore": [

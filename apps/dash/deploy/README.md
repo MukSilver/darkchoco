@@ -15,32 +15,38 @@
 지도는 같은 데이터에서 「웹에 올림 = 예」 를 통과한 여덟 줄만 이름을 내보냅니다.
 자물쇠 없이 올리면 그 관문이 통째로 우회됩니다.
 
-### 1. Cloudflare Access 로 잠급니다
-
-Zero Trust → Access → Applications → Add an application → Self-hosted.
-도메인에 배포 주소를 넣고, 정책에 팀원 이메일을 넣습니다.
-
-Worker 는 `Cf-Access-Jwt-Assertion` 헤더가 있는지 봅니다. 없으면 403 입니다.
-Access 를 안 거치고 Worker 주소로 곧장 오는 길을 막습니다.
-
-**시험 중에만** `wrangler.jsonc` 의 `ACCESS_OPTIONAL` 을 `"yes"` 로 둘 수 있습니다.
-그동안은 주소를 아는 사람이 다 봅니다. 시험이 끝나면 되돌립니다.
-
-### 2. 노션 토큰을 비밀값으로
+### 1. 비밀번호와 토큰을 비밀값으로
 
 ```bash
 cd apps/dash/deploy
+npx wrangler secret put DASH_PASSWORD
 npx wrangler secret put NOTION_TOKEN
 ```
 
-붙여 넣으라고 나오면 토큰을 넣습니다. **파일이나 설정에 적지 않습니다.**
+붙여 넣으라고 나오면 값을 넣습니다. **파일이나 설정에 적지 않습니다.**
 
-### 3. 굽고 올립니다
+`DASH_PASSWORD` 는 팀이 함께 쓰는 비밀번호입니다. 브라우저 기본 인증이라 처음 열 때
+창이 뜨고 한 번 넣으면 브라우저가 기억합니다. **아이디 칸은 아무거나 됩니다.**
+
+**이 값이 없으면 아무도 못 들어옵니다.** 깜빡하고 배포했을 때 화면이 통째로 열려 있는
+것보다 낫다고 보고 그렇게 뒀습니다.
+
+`NOTION_TOKEN` 은 O / X 를 쓸 때만 씁니다. 없으면 화면은 보이고 O/X 만 안 됩니다.
+
+### 왜 Cloudflare Access 가 아닌가
+
+**Access 는 Cloudflare 에 등록된 도메인에만 걸립니다.** `workers.dev` 주소에는 못 겁니다.
+도메인이 생기면 그때 Access 로 옮기면 되고, Worker 가 `Cf-Access-Jwt-Assertion` 헤더도
+같이 보므로 코드를 안 고쳐도 됩니다. 둘 중 하나만 맞으면 통과합니다.
+
+### 2. 굽고 올립니다
 
 ```bash
 python apps/dash/build.py          # 노션과 표를 읽어 data/dash.js 를 만든다
 cd apps/dash/deploy && npx wrangler deploy
 ```
+
+올린 뒤 나오는 주소를 열면 비밀번호 창이 뜹니다.
 
 ## 무엇이 올라가나
 
