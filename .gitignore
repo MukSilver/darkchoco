@@ -50,3 +50,13 @@ apps/tg-korea-alert/tt.xlsx
 # monitor.py:12 가 이 이름으로 읽고, 통합 전 저장소가 막고 있던 것입니다
 telegram_channels.txt
 *_channels.txt
+
+# wrangler 가 만드는 로컬 캐시. **계정 ID 가 들어 있습니다.**
+# 배포에서는 apps/dash/.assetsignore 가 따로 막지만, 여기를 안 막으면
+# `git add -A` 한 번에 레포로 들어갑니다 (2026-09-08 에 실제로 안 막혀 있었습니다)
+.wrangler/
+
+# 대시보드가 구워 내는 데이터. **피해 조직 실명이 들어 있습니다.**
+# 위 `data/` 규칙에 우연히 걸려 지금도 안 들어가지만, 그 규칙을 `/data/` 로
+# 좁히는 순간 실명이 커밋됩니다. 우연에 기대지 않게 여기에 따로 적습니다
+apps/dash/data/
