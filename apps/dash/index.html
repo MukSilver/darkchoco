@@ -76,6 +76,14 @@
   .거르개 button.켬{background:var(--판2);color:var(--글);border-color:var(--점)}
   .거르개 input{background:var(--판);border:1px solid var(--줄);color:var(--글);
                 border-radius:7px;padding:5px 11px;font:inherit;font-size:13px;min-width:190px}
+  .고르기{display:flex;gap:3px}
+  .고르기 button{background:var(--판2);border:1px solid var(--줄);color:var(--흐린글);
+                 border-radius:5px;padding:2px 8px;font:inherit;font-size:11.5px;cursor:pointer;
+                 white-space:nowrap}
+  .고르기 button:hover{color:var(--글);border-color:var(--점)}
+  .고르기 button.지금{background:#1f3a2e;color:#8fd8b4;border-color:#2a4c3c}
+  .고르기 button.지금X{background:#332;color:#998;border-color:#443}
+  .고르기 button:disabled{opacity:.45;cursor:wait}
   .빔{color:var(--더흐린);padding:26px;text-align:center}
   footer{color:var(--더흐린);font-size:12px;margin-top:34px;line-height:1.8}
 </style>
@@ -100,7 +108,8 @@
   <section id="사건" hidden></section>
 
   <footer>
-    <div>이 화면은 127.0.0.1 에만 뜹니다. 명령 단추는 <b>복사만</b> 하고 실행은 사람이 합니다.</div>
+    <div>이 화면은 127.0.0.1 에만 뜹니다. 명령 단추는 <b>복사만</b> 하고 실행은 사람이 합니다.
+        노션에 쓰는 것은 <b>검토 여부 한 칸</b>뿐입니다.</div>
     <div>본문과 개인정보 값은 담지 않습니다. 명부 셋은 노션이 정본이라 여기서 다시 그리지 않습니다.</div>
   </footer>
 </div>
@@ -225,30 +234,38 @@
       s += '<div class="빔">고른 조건에 맞는 줄이 없습니다.</div>';
     } else {
       s += '<div class="감쌈"><table><thead><tr>'
-        + '<th>검토</th><th>대상 조직</th><th>자리</th><th>소스</th><th>한국</th>'
-        + '<th>근거</th><th>게시</th><th>규모</th><th></th></tr></thead><tbody>'
+        + '<th class="짧음">검토</th><th class="짧음">고르기</th><th>대상 조직</th>'
+        + '<th class="짧음">자리</th><th class="짧음">소스</th><th class="짧음">한국</th>'
+        + '<th>근거</th><th class="짧음">게시</th><th class="짧음">규모</th>'
+        + '<th class="짧음"></th></tr></thead><tbody>'
         + 목록.map(x=>{
             const 검토 = x.검토 || "사건 O";
             const 검토꼴 = 검토==="미검토"?"미검토":(검토==="사건 X"?"사건X":"사건O");
             const 한국꼴 = x.한국==="직접"?"직접":"미확인";
             const 이름 = x.대상 || x.제목 || "(이름 없음)";
             return '<tr>'
-              + '<td><span class="표 '+검토꼴+'">'+안전(검토)+'</span></td>'
-              + '<td>'+안전(이름)+ (x.번호?' <span class="더흐림">'+안전(x.번호)+'</span>':'') +'</td>'
-              + '<td class="흐림">'+안전(x.자리||"-")+'</td>'
-              + '<td class="흐림">'+안전(x.소스||"-")+'</td>'
-              + '<td>'+(x.한국?'<span class="표 '+한국꼴+'">'+안전(x.한국)+'</span>':'')+'</td>'
-              + '<td class="더흐림">'+안전(x.근거||"")+'</td>'
-              + '<td class="흐림">'+안전(x.게시||"")+'</td>'
-              + '<td class="흐림">'+안전(x.규모||"")+'</td>'
+              + '<td class="짧음"><span class="표 '+검토꼴+'" id="표'+안전(x.id)+'">'
+                + 안전(검토)+'</span></td>'
+              + '<td class="짧음"><div class="고르기" data-줄="'+안전(x.id)+'">'
+                + '<button data-값="사건 O" class="'+(검토==="사건 O"?"지금":"")+'">O</button>'
+                + '<button data-값="사건 X" class="'+(검토==="사건 X"?"지금X":"")+'">X</button>'
+                + '<button data-값="미검토" class="'+(검토==="미검토"?"지금":"")+'" title="미검토로 되돌린다">↺</button>'
+              + '</div></td>'
+              + '<td class="제목">'+안전(이름)+ (x.번호?' <span class="더흐림">'+안전(x.번호)+'</span>':'') +'</td>'
+              + '<td class="흐림 짧음">'+안전(x.자리||"-")+'</td>'
+              + '<td class="흐림 짧음">'+안전(x.소스||"-")+'</td>'
+              + '<td class="짧음">'+(x.한국?'<span class="표 '+한국꼴+'">'+안전(x.한국)+'</span>':'')+'</td>'
+              + '<td class="더흐림 근거">'+안전(x.근거||"")+'</td>'
+              + '<td class="흐림 짧음">'+안전(x.게시||"")+'</td>'
+              + '<td class="흐림 짧음">'+안전(x.규모||"")+'</td>'
               + '<td>'+(x.id?'<a href="https://www.notion.so/'+안전(x.id.replace(/-/g,""))
                   +'" target="_blank" rel="noopener">노션</a>':'')+'</td>'
               + '</tr>';
           }).join("")
         + '</tbody></table></div>'
         + '<div class="더흐림" style="margin-top:8px">'+매김(목록.length)+'줄. '
-        + '<b>O / X 는 노션에서 고릅니다</b> — 팀원마다 자기 토큰이 있어야 여기서 쓸 수 있어서, '
-        + '지금은 보기만 합니다.</div>';
+        + '<b>O / X 를 누르면 노션에 바로 반영됩니다.</b> ↺ 로 미검토로 되돌립니다. '
+        + '위 숫자는 다시 구워야 맞춰집니다.</div>';
     }
     document.querySelector("#사건").innerHTML = s;
     const i = document.querySelector("#찾기");
@@ -258,6 +275,41 @@
     }
   }
   그리기();
+
+  // ── 검토 여부 고르기 ──────────────────────────────
+  // 서버가 대신 노션에 씁니다. 토큰은 서버 자리에만 있고 여기로 안 옵니다.
+  async function 고르기(b){
+    const 칸 = b.closest(".고르기");
+    const 줄id = 칸.dataset.줄;
+    const 값 = b.dataset.값;
+    const 단추들 = [...칸.querySelectorAll("button")];
+    단추들.forEach(x=>{ x.disabled = true; });
+    try{
+      const r = await fetch("/api/review", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({page_id: 줄id, 검토: 값}),
+      });
+      const d = await r.json().catch(()=>({}));
+      if (!r.ok) throw new Error(d.오류 || ("HTTP " + r.status));
+
+      // 화면과 손에 든 데이터를 같이 고칩니다. 다시 구울 때까지 이 값이 맞습니다.
+      const 줄 = 사건.find(x=>x.id===줄id);
+      if (줄) 줄.검토 = 값;
+      const 표 = document.getElementById("표"+줄id);
+      if (표){
+        표.textContent = 값;
+        표.className = "표 " + (값==="미검토"?"미검토":(값==="사건 X"?"사건X":"사건O"));
+      }
+      단추들.forEach(x=>{
+        const 켬 = x.dataset.값===값;
+        x.className = 켬 ? (값==="사건 X" ? "지금X" : "지금") : "";
+      });
+    }catch(e){
+      alert("노션에 못 썼습니다.\n\n" + (e && e.message ? e.message : e));
+    }finally{
+      단추들.forEach(x=>{ x.disabled = false; });
+    }
+  }
 
   // ── 누르기 ────────────────────────────────────────
   document.addEventListener("click", (e)=>{
@@ -277,6 +329,7 @@
     }
     if (b.dataset.검토){ 검토거르개 = b.dataset.검토; 그리기(); }
     if (b.dataset.소스){ 소스거르개 = b.dataset.소스; 그리기(); }
+    if (b.dataset.값){ 고르기(b); }
   });
 })();
 </script>
