@@ -76,6 +76,16 @@
   .거르개 button.켬{background:var(--판2);color:var(--글);border-color:var(--점)}
   .거르개 input{background:var(--판);border:1px solid var(--줄);color:var(--글);
                 border-radius:7px;padding:5px 11px;font:inherit;font-size:13px;min-width:190px}
+  .일감줄{display:flex;gap:10px;align-items:center;margin:5px 0}
+  .일감줄 .돌리기{background:var(--판2);border:1px solid var(--줄);color:var(--글);
+                  border-radius:7px;padding:6px 14px;font:inherit;font-size:13px;
+                  cursor:pointer;min-width:190px;text-align:left}
+  .일감줄 .돌리기:hover:not(:disabled){border-color:var(--점)}
+  .일감줄 .돌리기:disabled{opacity:.45;cursor:not-allowed}
+  .일감줄 .돌리기.도는중{border-color:var(--기다림);color:var(--기다림)}
+  #로그{background:#0f1116;border:1px solid var(--줄);border-radius:8px;padding:11px 13px;
+        font:12px/1.55 ui-monospace,Consolas,monospace;color:#cdd3e0;
+        max-height:340px;overflow:auto;white-space:pre-wrap;word-break:break-all;margin-top:10px}
   .고르기{display:flex;gap:3px}
   .고르기 button{background:var(--판2);border:1px solid var(--줄);color:var(--흐린글);
                  border-radius:5px;padding:2px 8px;font:inherit;font-size:11.5px;cursor:pointer;
@@ -108,8 +118,8 @@
   <section id="사건" hidden></section>
 
   <footer>
-    <div>이 화면은 127.0.0.1 에만 뜹니다. 명령 단추는 <b>복사만</b> 하고 실행은 사람이 합니다.
-        노션에 쓰는 것은 <b>검토 여부 한 칸</b>뿐입니다.</div>
+    <div>이 화면은 127.0.0.1 에만 뜹니다. 돌릴 수 있는 것은 <b>정해진 목록</b>뿐이고
+        화면이 명령을 만들지 못합니다. 노션에 쓰는 것은 <b>검토 여부 한 칸</b>뿐입니다.</div>
     <div>본문과 개인정보 값은 담지 않습니다. 명부 셋은 노션이 정본이라 여기서 다시 그리지 않습니다.</div>
   </footer>
 </div>
@@ -181,19 +191,18 @@
       + '</td></tr>').join("")
     + '</tbody></table></div>';
 
-  h += '<h2>자주 쓰는 명령 <span class="더흐림">— 눌러서 복사합니다. 실행은 터미널에서</span></h2>'
+  h += '<h2>돌리기 <span class="더흐림">— 눌러서 실행합니다. 한 번에 하나만 돕니다</span></h2>'
+    + '<div id="일감">' + (ev.일감||[]).map(j=>
+        '<div class="일감줄"><button class="돌리기" data-일감="'+안전(j.열쇠)+'">'+안전(j.이름)+'</button>'
+        + '<span class="더흐림">'+안전(j.설명)+(j.밖?' · <b>밖으로 요청을 보냅니다</b>':'')+'</span></div>'
+      ).join("") + '</div>'
+    + '<pre id="로그" hidden></pre>';
+
+  h += '<h2>명령으로 치려면 <span class="더흐림">— 눌러서 복사합니다</span></h2>'
     + (ev.명령||[]).map((c,i)=>'<div class="명령"><span class="이름">'+안전(c.이름)
       + '</span><code id="명령'+i+'">'+안전(c.줄)+'</code>'
       + '<button data-복사="명령'+i+'">복사</button></div>').join("");
 
-  h += '<h2>명부 <span class="더흐림">— 노션이 정본입니다. 여기서 다시 그리지 않습니다</span></h2>';
-  const 자리 = D.요약.자리 || {};
-  h += '<div class="감쌈"><table><thead><tr><th>명부</th><th class="수">자리</th></tr></thead><tbody>'
-    + [["forum","포럼"],["ransom","랜섬웨어"],["telegram","텔레그램"]].map(([k,이름])=>
-      '<tr><td>'+이름+'</td><td class="수">'+매김(자리[k])+'</td></tr>').join("")
-    + '</tbody></table></div>'
-    + '<div class="더흐림" style="margin-top:7px">굽기 산출물 기준'
-    + (D.요약.지도날 ? " (" + 안전(D.요약.지도날) + ")" : "") + '. 고치려면 노션에서 엽니다.</div>';
   $("#제어판").innerHTML = h;
 
   // ── 사건 ──────────────────────────────────────────
@@ -311,6 +320,57 @@
     }
   }
 
+  // ── 일감 돌리기 ───────────────────────────────────
+  // 화면은 **열쇠만** 보냅니다. 무엇을 돌릴지는 서버의 run_jobs.py 가 정합니다.
+  let 지켜보기 = null;
+  function 단추들(){ return [...document.querySelectorAll(".돌리기")]; }
+
+  function 상태그리기(s){
+    const 로그 = document.querySelector("#로그");
+    if (!로그) return;
+    if (s.줄 && s.줄.length){
+      로그.hidden = false;
+      로그.textContent = s.줄.join("\n");
+      로그.scrollTop = 로그.scrollHeight;
+    }
+    단추들().forEach(b=>{
+      const 이것 = b.dataset.일감 === s.열쇠;
+      b.disabled = !!s.돌고있나;
+      b.classList.toggle("도는중", !!s.돌고있나 && 이것);
+    });
+    if (!s.돌고있나 && 지켜보기){
+      clearInterval(지켜보기); 지켜보기 = null;
+      const 끝말 = (s.코드===0) ? "끝났다" : ("끝났다 (코드 " + s.코드 + ")");
+      로그.textContent += "\n── " + 끝말 + " · " + (s.끝 || "") + " ──";
+      로그.scrollTop = 로그.scrollHeight;
+    }
+  }
+
+  async function 돌리기(b){
+    const 열쇠 = b.dataset.일감;
+    단추들().forEach(x=>{ x.disabled = true; });
+    try{
+      const r = await fetch("/api/run", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({열쇠}),
+      });
+      const s = await r.json().catch(()=>({}));
+      if (!r.ok) throw new Error(s.오류 || ("HTTP " + r.status));
+      상태그리기(s);
+      if (지켜보기) clearInterval(지켜보기);
+      지켜보기 = setInterval(async ()=>{
+        try{
+          const r2 = await fetch("/api/status", {
+            method:"POST", headers:{"Content-Type":"application/json"}, body:"{}"});
+          상태그리기(await r2.json());
+        }catch(e){ /* 서버가 멎으면 다음 번에 다시 본다 */ }
+      }, 1200);
+    }catch(e){
+      단추들().forEach(x=>{ x.disabled = false; });
+      alert("못 돌렸습니다.\n\n" + (e && e.message ? e.message : e));
+    }
+  }
+
   // ── 누르기 ────────────────────────────────────────
   document.addEventListener("click", (e)=>{
     const b = e.target.closest("button");
@@ -330,6 +390,7 @@
     if (b.dataset.검토){ 검토거르개 = b.dataset.검토; 그리기(); }
     if (b.dataset.소스){ 소스거르개 = b.dataset.소스; 그리기(); }
     if (b.dataset.값){ 고르기(b); }
+    if (b.dataset.일감){ 돌리기(b); }
   });
 })();
 </script>

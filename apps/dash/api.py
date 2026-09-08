@@ -73,9 +73,16 @@ def 검토바꾸기(page_id: str, 값: str) -> dict:
 
 
 def 처리(경로: str, 몸: bytes) -> tuple[int, dict]:
-    """(HTTP 코드, 돌려줄 것). serve.py 가 부릅니다."""
-    # **주소는 ASCII 로 둡니다.** 한글을 넣으면 브라우저가 퍼센트 인코딩해서 보내는데
-    # 서버가 그것을 그대로 비교해 안 맞습니다. 코드 안 이름은 한글이어도 됩니다.
+    """(HTTP 코드, 돌려줄 것). serve.py 가 부릅니다.
+
+    **주소는 ASCII 로 둡니다.** 한글을 넣으면 브라우저가 퍼센트 인코딩해서 보내는데
+    서버가 그것을 그대로 비교해 안 맞습니다. 코드 안 이름은 한글이어도 됩니다.
+    """
+    if 경로 == "/api/run":
+        return _돌리기(몸)
+    if 경로 == "/api/status":
+        import run_jobs
+        return 200, run_jobs.상태()
     if 경로 != "/api/review":
         return 404, {"오류": "그런 자리가 없습니다"}
     try:
@@ -90,3 +97,23 @@ def 처리(경로: str, 몸: bytes) -> tuple[int, dict]:
         return 400, {"오류": str(e)}
     except Exception as e:  # noqa: BLE001  노션이 막히거나 토큰이 없을 때
         return 502, {"오류": "%s: %s" % (type(e).__name__, str(e)[:300])}
+
+
+def _돌리기(몸: bytes) -> tuple[int, dict]:
+    """정해진 일감 하나를 돌립니다. **화면은 열쇠만 보냅니다.**
+
+    무엇을 돌릴지는 `run_jobs.일감()` 이 정합니다. 화면이 명령이나 인자를 넣지
+    못합니다. 목록에 없는 열쇠는 그냥 400 입니다.
+    """
+    import run_jobs
+
+    try:
+        d = json.loads(몸.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        return 400, {"오류": "json 이 아닙니다"}
+    if not isinstance(d, dict):
+        return 400, {"오류": "json 이 객체가 아닙니다"}
+    됐나, 왜 = run_jobs.시작(str(d.get("열쇠") or ""))
+    if not 됐나:
+        return 409 if "돌고 있" in 왜 else 400, {"오류": 왜}
+    return 200, run_jobs.상태()

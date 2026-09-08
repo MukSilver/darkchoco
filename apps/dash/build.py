@@ -93,6 +93,14 @@ def 제어판(db: Path) -> dict:
     d["설정"] = [{"이름": 이름, "무엇": 무엇, "쓰는곳": 쓰는곳,
                  "있음": (cfg / 이름).is_file()} for 이름, 무엇, 쓰는곳 in 설정]
     d["명령"] = [{"이름": 이름, "줄": 줄} for 이름, 줄 in 명령]
+    # 화면에서 눌러 돌릴 수 있는 것. **로컬에서만 돕니다** — 배포판은 남의 서버라
+    # 이 PC 의 수집기를 못 돌립니다. 그쪽에서는 위 「명령」 을 복사만 합니다.
+    try:
+        import run_jobs
+
+        d["일감"] = run_jobs.목록()
+    except Exception:  # noqa: BLE001
+        d["일감"] = []
     if not db.is_file():
         return d
 
