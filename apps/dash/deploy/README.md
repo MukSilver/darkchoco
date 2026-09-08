@@ -1,13 +1,34 @@
 # 대시보드 배포
 
-팀원이 각자 PC 없이 보고 O/X 를 고르게 합니다. **산출물 사이트와 별도 배포**입니다.
+팀원이 각자 PC 없이 보고 O/X 를 고르고 수집을 돌립니다. **산출물 사이트와 별도 배포**입니다.
 
-    로컬        python apps/dash/serve.py       — 굽기 · O/X · 일감 돌리기
-    배포        darkchoco-dash (Cloudflare)     — 보기 · O/X.  일감 돌리기는 없음
+    로컬        python apps/dash/serve.py       — 굽기 · O/X · 이 PC 에서 일감 돌리기
+    배포        darkchoco-dash (Cloudflare)     — 보기 · O/X · Actions 로 수집 돌리기
 
-일감 돌리기가 배포판에 없는 이유는 단순합니다. 남의 서버는 최현서 PC 의 수집기를
-못 돌립니다. 수집은 GitHub Actions 가 여섯 시간마다 합니다
-(`.github/workflows/collect.yml`).
+**최현서 PC 가 꺼져 있어도 팀원이 최신을 봅니다.** 화면이 열릴 때마다 Worker 가
+노션을 직접 읽습니다. 굽고 올리는 일이 필요 없습니다.
+
+    지금    노션 → Worker 가 열릴 때마다 직접 읽음 → 팀원이 봄
+    전에    노션 → 최현서 PC 에서 굽기 → 배포 → 그제야 팀원이 봄
+
+전에는 최현서가 굽고 올려야만 팀원 화면이 갱신됐습니다. 그러면 서버에 올린 뜻이
+없습니다. 2026-09-08 에 그것을 지적받아 바꿨습니다.
+
+## 배포판과 로컬판이 다른 것
+
+| | 로컬 | 배포 |
+|---|---|---|
+| 사건 목록 | 구운 파일 | **노션을 직접 읽음** (60초 캐시) |
+| O/X | 노션에 씀 | 노션에 씀 |
+| 수집 표 절 | 이 PC 의 SQLite | **안 냅니다** |
+| 일감 돌리기 | 이 PC 에서 실행 | **GitHub Actions 에 맡김** |
+| 최근 실행 · 설정 | 냅니다 | 안 냅니다 |
+
+「수집 표」 절을 배포판에 안 내는 이유는, 그 숫자가 최현서 PC 의 SQLite 를 센 것이라
+남의 서버에서는 셀 수가 없기 때문입니다. 0 을 내면 「표가 비었다」 로 읽혀 더 나쁩니다.
+
+`track.py` 쪽 일감 셋(집계처 · 관측 가져오기 · 보고서)은 워크플로가 아직 없어
+로컬에만 있습니다. 워크플로를 만들면 `worker.js` 의 `일감표` 에 더하면 됩니다.
 
 ## 반드시 자물쇠를 먼저 겁니다
 
@@ -33,9 +54,16 @@
 cd apps/dash/deploy
 npx wrangler secret put DASH_PASSWORD
 npx wrangler secret put NOTION_TOKEN
+npx wrangler secret put GH_TOKEN
 ```
 
 붙여 넣으라고 나오면 값을 넣습니다. **파일이나 설정에 적지 않습니다.**
+
+| 비밀값 | 없으면 |
+|---|---|
+| `DASH_PASSWORD` | **아무도 못 들어옵니다** |
+| `NOTION_TOKEN` | 화면이 통째로 안 나옵니다. 사건 목록을 이 토큰으로 읽습니다 |
+| `GH_TOKEN` | 보기와 O/X 는 되고 **수집 돌리기만** 안 됩니다 |
 
 `DASH_PASSWORD` 는 팀이 함께 쓰는 비밀번호입니다. 브라우저 기본 인증이라 처음 열 때
 창이 뜨고 한 번 넣으면 브라우저가 기억합니다. **아이디 칸은 아무거나 됩니다.**
@@ -43,7 +71,18 @@ npx wrangler secret put NOTION_TOKEN
 **이 값이 없으면 아무도 못 들어옵니다.** 깜빡하고 배포했을 때 화면이 통째로 열려 있는
 것보다 낫다고 보고 그렇게 뒀습니다.
 
-`NOTION_TOKEN` 은 O / X 를 쓸 때만 씁니다. 없으면 화면은 보이고 O/X 만 안 됩니다.
+`NOTION_TOKEN` 은 사건 목록을 읽고 O / X 를 쓰는 데 씁니다. 배포판은 구운 파일을
+안 쓰므로 이 값이 없으면 화면에 이유만 나옵니다.
+
+`GH_TOKEN` 은 화면의 [돌리기] 단추가 GitHub Actions 를 시작시킬 때 씁니다.
+GitHub → Settings → Developer settings → Personal access tokens 에서 만듭니다.
+
+    fine-grained 를 고르고 MukSilver/darkchoco 하나만 고릅니다
+    권한은 Actions: Read and write 하나면 됩니다
+    만료를 짧게 둡니다. 마감이 9/14 이므로 그 언저리가 적당합니다
+
+**Contents 나 Secrets 권한을 주지 않습니다.** 이 토큰으로 할 수 있는 것은
+`worker.js` 의 `일감표` 에 적힌 워크플로를 시작시키는 것뿐이어야 합니다.
 
 ### 왜 Cloudflare Access 가 아닌가
 
@@ -51,12 +90,14 @@ npx wrangler secret put NOTION_TOKEN
 도메인이 생기면 그때 Access 로 옮기면 되고, Worker 가 `Cf-Access-Jwt-Assertion` 헤더도
 같이 보므로 코드를 안 고쳐도 됩니다. 둘 중 하나만 맞으면 통과합니다.
 
-### 2. 굽고 올립니다
+### 2. 올립니다
 
 ```bash
-python apps/dash/build.py          # 노션과 표를 읽어 data/dash.js 를 만든다
 cd apps/dash/deploy && npx wrangler deploy
 ```
+
+**굽지 않아도 됩니다.** 배포판은 화면이 열릴 때마다 Worker 가 노션을 직접 읽습니다.
+`build.py` 는 로컬 화면(`serve.py`)에만 씁니다.
 
 올린 뒤 나오는 주소를 열면 비밀번호 창이 뜹니다.
 
@@ -76,8 +117,11 @@ curl -s -o /dev/null -w "%{http_code}\n" https://<주소>/data/dash.js
 ## 무엇이 올라가나
 
     index.html      화면
-    data/dash.js    구운 데이터
-    worker.js       O/X 를 노션에 쓰는 코드
+    worker.js       노션을 읽고 쓰고, Actions 를 시작시키는 코드
+    data/dash.js    올라가긴 하지만 **안 쓰입니다**
+
+`data/dash.js` 는 Worker 가 그 경로를 가로채므로 배포판에서 나가지 않습니다. 로컬
+화면이 쓰는 파일이라 폴더에 남아 있을 뿐입니다. 굽지 않은 채 올려도 화면은 정상입니다.
 
 `*.py` 와 `deploy/` 는 안 올라갑니다. 굽는 도구와 로컬 서버는 배포에 필요 없습니다.
 

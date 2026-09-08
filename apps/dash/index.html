@@ -138,12 +138,22 @@
       + '<code>python apps/dash/build.py</code> 를 먼저 돌리십시오.</div>';
     return;
   }
+  // 배포판에서는 Worker 가 노션을 직접 읽어 이 자리를 만듭니다. 그 읽기가 실패하면
+  // 화면이 통째로 비는 대신 여기서 이유를 보입니다.
+  if (D.오류){
+    $("#탈").innerHTML = '<div class="경고">'+안전(D.오류)+'</div>';
+    return;
+  }
   $("#구운때").textContent = "구운 때 " + D.구운때;
+
+  // **서버판인가.** 배포판은 최현서 PC 의 수집 표(SQLite)를 못 봅니다. 그 절을
+  // 0 으로 그리면 「표가 비었다」 로 읽혀 더 나쁩니다. 아예 다른 것을 냅니다.
+  const 서버 = !!D.제어판.서버;
 
   const 탈 = [];
   if (!D.노션읽음) 탈.push("노션을 안 읽었습니다. [사건] 이 비어 있습니다."
       + (D.노션오류 ? " (" + 안전(D.노션오류) + ")" : ""));
-  if (!D.제어판.표있음) 탈.push("수집 표가 없습니다: " + 안전(D.제어판.표));
+  if (!서버 && !D.제어판.표있음) 탈.push("수집 표가 없습니다: " + 안전(D.제어판.표));
   if (탈.length) $("#탈").innerHTML = 탈.map(t=>'<div class="경고">'+t+'</div>').join("");
 
   // ── 요약 ──────────────────────────────────────────
@@ -151,13 +161,14 @@
   const 셈 = (f)=> 사건.filter(f).length;
   const 미검토 = 셈(x=>x.검토==="미검토");
   const 사건O  = 셈(x=>x.검토==="사건 O" || !x.검토);
+  // 서버판에는 수집 표(SQLite)가 없어 그 두 칸을 안 냅니다. 로컬에서만 나옵니다.
   const 요약 = [
-    ["점",    D.제어판.줄수,        "수집 표 줄"],
+    ...(서버 ? [] : [["점", D.제어판.줄수, "수집 표 줄"]]),
     ["",      사건.length,          "노션 사건"],
     [미검토?"기다림":"", 미검토,     "미검토"],
     ["좋음",  사건O,                "사건 O"],
-    ["",      D.제어판.관측,        "게시 상태 관측"],
-    ["",      D.요약.자리합,        "지도 자리"],
+    ...(서버 ? [] : [["", D.제어판.관측, "게시 상태 관측"],
+                     ["", D.요약.자리합, "지도 자리"]]),
   ];
   $("#요약").innerHTML = 요약.map(([꼴,n,이름])=>
     '<div class="칸 '+꼴+'"><b>'+매김(n)+'</b><span>'+이름+'</span></div>').join("");
@@ -167,31 +178,46 @@
   const 소스별 = Object.entries(ev.소스별||{}).map(([k,v])=>k+" "+매김(v)).join(" · ") || "빔";
   let h = "";
 
-  h += '<h2>수집 표</h2><div class="감쌈"><table><tbody>'
-    + '<tr><td class="흐림">자리</td><td><code>'+안전(ev.표)+'</code></td></tr>'
-    + '<tr><td class="흐림">줄</td><td>'+매김(ev.줄수)+' <span class="더흐림">('+안전(소스별)+')</span></td></tr>'
-    + '<tr><td class="흐림">마지막 수집</td><td>'+안전(ev.마지막수집||"-")+'</td></tr>'
-    + '<tr><td class="흐림">게시 상태 관측</td><td>'+매김(ev.관측)+'건</td></tr>'
-    + '</tbody></table></div>';
+  if (서버){
+    // 배포판. 수집은 GitHub Actions 가 하고 이 화면은 노션을 직접 읽습니다.
+    // 수집 표 · 최근 실행 · 설정 셋은 최현서 PC 를 봐야 아는 것이라 안 냅니다.
+    h += '<h2>어디서 수집하나</h2><div class="감쌈"><table><tbody>'
+      + '<tr><td class="흐림">수집</td><td>GitHub Actions <span class="더흐림">'
+      + '— 여섯 시간마다 (KST 03 · 09 · 15 · 21시)</span></td></tr>'
+      + '<tr><td class="흐림">이 화면</td><td>노션을 열 때마다 직접 읽습니다 '
+      + '<span class="더흐림">— 최현서 PC 가 꺼져 있어도 최신입니다</span></td></tr>'
+      + '<tr><td class="흐림">노션 사건</td><td>'+매김(D.사건.length)+'줄</td></tr>'
+      + '</tbody></table></div>';
+  } else {
+    h += '<h2>수집 표</h2><div class="감쌈"><table><tbody>'
+      + '<tr><td class="흐림">자리</td><td><code>'+안전(ev.표)+'</code></td></tr>'
+      + '<tr><td class="흐림">줄</td><td>'+매김(ev.줄수)+' <span class="더흐림">('+안전(소스별)+')</span></td></tr>'
+      + '<tr><td class="흐림">마지막 수집</td><td>'+안전(ev.마지막수집||"-")+'</td></tr>'
+      + '<tr><td class="흐림">게시 상태 관측</td><td>'+매김(ev.관측)+'건</td></tr>'
+      + '</tbody></table></div>';
 
-  h += '<h2>최근 수집 실행</h2>';
-  if (!(ev.실행||[]).length) h += '<div class="빔">아직 없습니다.</div>';
-  else h += '<div class="감쌈"><table><thead><tr><th>날</th><th>무엇</th>'
-    + '<th class="수">받음</th><th class="수">새것</th><th>메모</th></tr></thead><tbody>'
-    + ev.실행.map(r=>'<tr><td>'+안전((r.날||"").slice(0,10))+'</td><td>'+안전(r.무엇)
-      + '</td><td class="수">'+매김(r.받음)+'</td><td class="수">'+매김(r.새것)
-      + '</td><td class="더흐림">'+안전(r.메모)+'</td></tr>').join("")
-    + '</tbody></table></div>';
+    h += '<h2>최근 수집 실행</h2>';
+    if (!(ev.실행||[]).length) h += '<div class="빔">아직 없습니다.</div>';
+    else h += '<div class="감쌈"><table><thead><tr><th>날</th><th>무엇</th>'
+      + '<th class="수">받음</th><th class="수">새것</th><th>메모</th></tr></thead><tbody>'
+      + ev.실행.map(r=>'<tr><td>'+안전((r.날||"").slice(0,10))+'</td><td>'+안전(r.무엇)
+        + '</td><td class="수">'+매김(r.받음)+'</td><td class="수">'+매김(r.새것)
+        + '</td><td class="더흐림">'+안전(r.메모)+'</td></tr>').join("")
+      + '</tbody></table></div>';
 
-  h += '<h2>설정</h2><div class="감쌈"><table><thead><tr><th>이름</th><th>무엇</th>'
-    + '<th>없으면 안 도는 것</th><th></th></tr></thead><tbody>'
-    + (ev.설정||[]).map(s=>'<tr><td><code>'+안전(s.이름)+'</code></td><td class="흐림">'
-      + 안전(s.무엇)+'</td><td class="더흐림">'+안전(s.쓰는곳)+'</td><td>'
-      + (s.있음 ? '<span class="표 사건O">있음</span>' : '<span class="표 미검토">없음</span>')
-      + '</td></tr>').join("")
-    + '</tbody></table></div>';
+    h += '<h2>설정</h2><div class="감쌈"><table><thead><tr><th>이름</th><th>무엇</th>'
+      + '<th>없으면 안 도는 것</th><th></th></tr></thead><tbody>'
+      + (ev.설정||[]).map(s=>'<tr><td><code>'+안전(s.이름)+'</code></td><td class="흐림">'
+        + 안전(s.무엇)+'</td><td class="더흐림">'+안전(s.쓰는곳)+'</td><td>'
+        + (s.있음 ? '<span class="표 사건O">있음</span>' : '<span class="표 미검토">없음</span>')
+        + '</td></tr>').join("")
+      + '</tbody></table></div>';
+  }
 
-  h += '<h2>돌리기 <span class="더흐림">— 눌러서 실행합니다. 한 번에 하나만 돕니다</span></h2>'
+  h += '<h2>돌리기 <span class="더흐림">— '
+    + (서버 ? '눌러서 GitHub Actions 에 맡깁니다. 로그는 GitHub 쪽에 있습니다'
+            : '눌러서 실행합니다. 한 번에 하나만 돕니다')
+    + '</span></h2>'
     + '<div id="일감">' + (ev.일감||[]).map(j=>
         '<div class="일감줄"><button class="돌리기" data-일감="'+안전(j.열쇠)+'">'+안전(j.이름)+'</button>'
         + '<span class="더흐림">'+안전(j.설명)+(j.밖?' · <b>밖으로 요청을 보냅니다</b>':'')+'</span></div>'
@@ -342,6 +368,12 @@
       clearInterval(지켜보기); 지켜보기 = null;
       const 끝말 = (s.코드===0) ? "끝났다" : ("끝났다 (코드 " + s.코드 + ")");
       로그.textContent += "\n── " + 끝말 + " · " + (s.끝 || "") + " ──";
+      // **끝났으면 새 줄을 바로 보여 줍니다.** 배포판에서 수집을 돌린 뜻이
+      // 「돌리고 나서 결과를 본다」 이므로, 사람이 새로고침을 기억할 일이 없게 합니다.
+      if (서버){
+        로그.textContent += "\n화면을 새로 읽습니다...";
+        setTimeout(()=>location.reload(), 1500);
+      }
       로그.scrollTop = 로그.scrollHeight;
     }
   }
@@ -364,7 +396,9 @@
             method:"POST", headers:{"Content-Type":"application/json"}, body:"{}"});
           상태그리기(await r2.json());
         }catch(e){ /* 서버가 멎으면 다음 번에 다시 본다 */ }
-      }, 1200);
+      // 로컬은 이 PC 의 프로세스라 자주 물어도 됩니다. 배포판은 물을 때마다
+      // GitHub API 를 부르므로 간격을 벌립니다. 여럿이 같이 보면 그만큼 곱해집니다.
+      }, 서버 ? 6000 : 1200);
     }catch(e){
       단추들().forEach(x=>{ x.disabled = false; });
       alert("못 돌렸습니다.\n\n" + (e && e.message ? e.message : e));
