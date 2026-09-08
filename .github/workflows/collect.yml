@@ -120,9 +120,13 @@ jobs:
           DARKCHOCO_CHANNELS: ${{ runner.temp }}/cfg/telegram_channels
           NOTION_TOKEN_FILE: ${{ runner.temp }}/cfg/notion_token
         run: |
+          # **`--no-ransom` 은 없는 옵션입니다.** 끄려면 `--ransom ""` 를 줍니다.
+          # 없는 옵션을 주면 argparse 가 죽고, 전에 있던 `|| 재시도` 가 옵션 없이
+          # 다시 불러 **앞 단계에서 이미 긁은 집계처를 같은 실행에서 두 번** 긁었습니다.
+          # continue-on-error 라 잡은 성공으로 보였습니다 (2026-09-08 에 발견).
+          # 실패하면 실패로 둡니다. 그것이 다음 단계를 막지 않게 continue-on-error 가 있습니다.
           if [ -f "$DARKCHOCO_CHANNELS" ]; then
-            python -m collect.main --db "$RUNNER_TEMP/darkchoco.db" --no-ransom || \
-              python -m collect.main --db "$RUNNER_TEMP/darkchoco.db"
+            python -m collect.main --db "$RUNNER_TEMP/darkchoco.db" --ransom ""
           else
             echo "채널 목록이 없어 건너뜁니다"
           fi
