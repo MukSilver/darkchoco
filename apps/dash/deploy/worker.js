@@ -18,12 +18,16 @@
  *
  * ## 누가 들어오나
  *
- * 앞에 **Cloudflare Access** 를 겁니다. 통과한 요청에는 `Cf-Access-Jwt-Assertion`
- * 헤더가 붙습니다. 그 헤더가 없으면 Access 를 안 거친 것이라 막습니다 —
- * Worker 주소로 곧장 오는 길을 닫는 자물쇠입니다.
+ * **팀이 함께 쓰는 비밀번호 하나로 잠급니다.** 브라우저 기본 인증(Basic)이라 처음 열 때
+ * 창이 뜨고, 한 번 넣으면 브라우저가 기억합니다. 비밀번호는 Cloudflare 비밀값
+ * `DASH_PASSWORD` 에 둡니다.
  *
- * `ACCESS_OPTIONAL` 을 "yes" 로 두면 그 검사를 끕니다. **Access 를 붙이기 전
- * 시험할 때만 씁니다.** 그동안은 주소를 아는 사람이 다 봅니다.
+ * **원래는 Cloudflare Access 로 잠그려 했습니다.** 그런데 Access 는 Cloudflare 에
+ * 등록된 도메인에만 걸립니다 — `workers.dev` 주소에는 못 겁니다. 도메인을 사면 그때
+ * 옮기면 되고, 그 준비로 Access 헤더도 같이 봅니다. 둘 중 하나만 맞으면 통과합니다.
+ *
+ * **`DASH_PASSWORD` 가 없으면 아무도 못 들어옵니다.** 비밀값을 깜빡한 채 배포했을 때
+ * 화면이 통째로 열려 있는 것보다 낫습니다.
  */
 
 const 검토값 = new Set(["미검토", "사건 O", "사건 X"]);
@@ -39,10 +43,54 @@ function json(코드, d) {
   });
 }
 
-/** Access 를 거쳐 왔나. 헤더가 없으면 자물쇠를 우회한 것이다. */
+/** 글자 수가 같은지부터 보고 한 글자씩 끝까지 본다. 답이 오는 시간으로 비밀번호를
+ *  더듬는 것을 막는다. 짧은 비밀번호라 큰 뜻은 없지만 이렇게 두는 것이 맞다. */
+function 같나(a, b) {
+  if (a.length !== b.length) return false;
+  let 다름 = 0;
+  for (let i = 0; i < a.length; i++) 다름 |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return 다름 === 0;
+}
+
+/** 들어와도 되나. Access 를 거쳤거나 비밀번호가 맞으면 된다. */
 function 통과했나(request, env) {
-  if ((env.ACCESS_OPTIONAL || "") === "yes") return true;
-  return !!request.headers.get("Cf-Access-Jwt-Assertion");
+  // 도메인이 생겨 Access 를 걸면 이 헤더가 붙는다. 그때는 비밀번호가 필요 없다.
+  if (request.headers.get("Cf-Access-Jwt-Assertion")) return true;
+
+  const 쓸것 = env.DASH_PASSWORD || "";
+  // **비밀값이 없으면 아무도 못 들어온다.** 깜빡하고 배포했을 때 통째로 열리는 것보다 낫다.
+  if (!쓸것) return false;
+
+  const 인증 = request.headers.get("Authorization") || "";
+  if (!인증.startsWith("Basic ")) return false;
+  let 푼것;
+  try {
+    // **atob 만 쓰면 한글 비밀번호가 안 맞는다.** atob 는 바이트를 Latin-1 글자로
+    // 돌려주는데, 브라우저는 비ASCII 를 UTF-8 로 인코딩해 보낸다. 바이트로 되돌려
+    // UTF-8 로 읽어야 원래 글자가 나온다. 영문만 쓰면 우연히 맞아 안 드러난다.
+    const 바이트 = Uint8Array.from(atob(인증.slice(6)), (c) => c.charCodeAt(0));
+    푼것 = new TextDecoder("utf-8").decode(바이트);
+  } catch {
+    return false;
+  }
+  const 자리 = 푼것.indexOf(":");
+  const 온것 = 자리 < 0 ? 푼것 : 푼것.slice(자리 + 1);   // 아이디는 안 본다
+  return 같나(온것, 쓸것);
+}
+
+/** 브라우저가 비밀번호 창을 띄우게 한다. */
+function 물어보기(env) {
+  if (!env.DASH_PASSWORD) {
+    return json(500, { 오류: "DASH_PASSWORD 가 없습니다. wrangler secret put 으로 넣으십시오" });
+  }
+  return new Response("비밀번호가 필요합니다.", {
+    status: 401,
+    headers: {
+      "WWW-Authenticate": 'Basic realm="darkchoco", charset="UTF-8"',
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-store",
+    },
+  });
 }
 
 /** 노션 page id 꼴인가. 32자 16진수(붙임표 허용). */
@@ -97,9 +145,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    if (!통과했나(request, env)) {
-      return json(403, { 오류: "Access 를 거치지 않았습니다" });
-    }
+    if (!통과했나(request, env)) return 물어보기(env);
 
     if (url.pathname === "/api/review") {
       if (request.method !== "POST") return json(405, { 오류: "POST 로 보내십시오" });
