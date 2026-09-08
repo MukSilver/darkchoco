@@ -20,7 +20,10 @@ if %ERRORLEVEL%==0 (set "PY=py -3") else (set "PY=python")
 
 rem 수집 표. **레포 밖에 둔다.** 게시글 본문이 들어가는 파일이다.
 rem run.py 와 같은 규칙이다. 환경변수가 있으면 그것이 먼저다.
-set "DB=%USERPROFILE%\data\darkchoco.db"
+rem 2026-09-07 에 표를 팀 레포 안 hub\data 로 합쳤다. 거기를 먼저 보고 없으면 옛 자리로 간다.
+rem run.py 는 스스로 같은 순서로 찾는다. 여기 값은 「0 처음설정」 이 보여 주는 용도다.
+set "DB=%REPO%\..\hub\data\darkchoco.db"
+if not exist "%DB%" set "DB=%USERPROFILE%\data\darkchoco.db"
 if defined DARKCHOCO_DB set "DB=%DARKCHOCO_DB%"
 
 rem 프젝 폴더와 검증 큐. 사람마다 자리가 다르니 DARKCHOCO_PROJ 로 덮는다.
