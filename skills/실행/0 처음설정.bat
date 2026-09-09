@@ -40,8 +40,15 @@ if exist "%DB%" (
 )
 
 echo.
-echo   검증 큐 폴더
-if exist "%QUEUE%" (echo     있다   %QUEUE%) else (echo     아직 없다. 큐를 만들 때 생긴다)
+echo   검증 큐 폴더   ^(VM 공유폴더. 재료가 들어오는 자리가 곧 큐다^)
+if exist "%QUEUE%" (
+  echo     있다   %QUEUE%
+) else (
+  echo     없다   %QUEUE%
+  echo            VirtualBox 공유폴더를 이 자리로 잡거나,
+  echo            다른 자리를 쓰면 DARKCHOCO_QUEUE 환경변수로 알려 준다
+  echo            케이스 하나가 폴더 하나다.  ^<케이스^>\상태.json 과 ^<케이스^>\자료\ 를 둔다
+)
 
 echo.
 if %MISSING% GTR 0 (

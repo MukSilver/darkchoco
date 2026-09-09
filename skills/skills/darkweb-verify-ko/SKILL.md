@@ -97,6 +97,7 @@ description: 다크웹 포럼·텔레그램·랜섬웨어 유출 사이트에서
 | ⑧ 판정 | 사람. 스킬 종료 후 | `references/stage8-verdict.md` |
 | ⑨ DB 입력 | **스킬**. 별도 호출. 노션이 있을 때만 | `references/stage9-db.md` |
 | 산출물 형태 | **스킬**. 별도 호출. ⑧ 뒤 | `references/publish.md` |
+| 폴더를 어디에 두나 | 사람. 처음 한 번 | `references/폴더배치.md` |
 
 ## 어떻게 쓰나
 
