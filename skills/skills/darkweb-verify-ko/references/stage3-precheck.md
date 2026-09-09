@@ -42,7 +42,7 @@
 
 **Kr-Leak-alarm 대시보드에서 온 건이면 이쪽이다.** 2026-08-26 에 넣었다.
 
-    python tools/feed_parse.py <krleak.db> --out 07_케이스/_큐
+    python tools/feed_parse.py <krleak.db> --out <공유폴더>
 
 둘은 같은 14칸을 낸다. 어느 쪽에서 왔든 아래 절차가 같다.
 다만 대시보드 경로는 `원 출처` 와 `공식 도메인` 이 실제로 채워진다.

@@ -3,7 +3,7 @@
 
     python -m collect.main --db data/darkchoco.db
     python -m collect.main --db data/darkchoco.db --notify --go
-    python -m collect.main --db data/darkchoco.db --queue 07_케이스/_큐
+    python -m collect.main --db data/darkchoco.db --queue <공유폴더>
     python -m collect.main --db data/darkchoco.db --dry
 
 ## 한 바퀴가 하는 일
