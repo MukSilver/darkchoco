@@ -31,8 +31,9 @@
         <케이스이름>/
             상태.json          {} 만 있어도 된다. 도구가 채운다
             자료/              **압축을 푼 재료를 여기 둔다.** inspect.py 가 이것을 본다
-            ②본문.md           사람이 게시글을 옮겨 둔다
-            ②샘플.txt          사람이 샘플 줄만 옮겨 둔다
+            킷출력.md           포럼 킷이 낸 md 를 그대로 둔다. 도구가 ② 재료로 앉힌다
+            ②본문.md           킷출력.md 가 있으면 도구가 만든다. 손으로 넣어도 된다
+            ②샘플.txt          같다. 이미 있으면 도구가 안 덮는다
             ③_재료판정.txt      도구가 쓴다
             ③재료.md           도구가 조립한다. 이것을 스킬 프롬프트에 넣는다
 
@@ -49,7 +50,8 @@
 
 한 건을 손으로 볼 거면 이 도구가 없어도 된다. 재료를 프롬프트에 넣으면 된다.
 
-    한다      ③-0 재료 판정 (inspect.py)
+    한다      ② 킷 출력을 재료로 앉히기 (kit_out.py). `킷출력.md` 가 있을 때만
+              ③-0 재료 판정 (inspect.py)
               ③-1 팀 DB 대조 (notion_find.py 여섯 번)
               ④ 샘플 패턴 (sample_stats.py)
               단계마다 무엇이 끝났고 무엇이 막혔는지 상태.json 에 적기
@@ -144,6 +146,35 @@ def forum_of(st: dict) -> str:
     if m:
         return m.group(1)
     return val(st, "감시 출처").split(",")[0].strip()
+
+
+# ── ③-0. 재료 판정 ─────────────────────────────
+def stage2_kit(case: Path, st: dict) -> list[str]:
+    """킷 출력 md 가 있으면 kit_out.py 로 ② 재료를 앉힌다.
+
+    **이미 `②본문.md` 가 있으면 아무것도 안 한다.** 사람이 손으로 넣었을 수 있고,
+    한 번 앉힌 것을 다시 덮으면 그 사이의 손질이 지워진다.
+
+    킷 출력은 케이스 폴더 바로 아래 `킷출력.md` 로 둔다. `자료/` 밑이 아니다.
+    거기는 유출물 자리라 게시글 md 가 섞이면 `inspect.py` 가 재료로 센다.
+    """
+    stop: list[str] = []
+    kit = case / "킷출력.md"
+    body = case / "②본문.md"
+
+    if not kit.exists():
+        st["킷 출력"] = "안 봄(킷출력.md 없음)"
+        return stop
+    if body.exists():
+        st["킷 출력"] = "안 봄(②본문.md 가 이미 있다)"
+        return stop
+
+    code, out = run([str(HERE / "kit_out.py"), str(case), str(kit)])
+    st["킷 출력"] = "확인함" if code == 0 else "못 봄(kit_out 실패)"
+    (case / "②_킷적용.txt").write_text(out, encoding="utf-8")
+    if code != 0:
+        stop.append("kit_out.py 가 실패했다. ②_킷적용.txt 를 볼 것")
+    return stop
 
 
 # ── ③-0. 재료 판정 ─────────────────────────────
@@ -250,9 +281,13 @@ def write_stage3_input(case: Path, st: dict) -> None:
     lines = ["# ③ 사전 확인 입력", "",
              "    케이스 %s" % case.name,
              "    들어온 곳 %s" % st.get("들어온 곳", "?"), "", "## 칸", ""]
+    # **칸이 없어도 돈다.** `feed_parse` · `alert_parse` 를 거치면 채워져 오지만,
+    # 사람이 케이스 폴더를 손으로 만들 때는 `상태.json` 이 `{}` 뿐이다. 전에는
+    # 그때 KeyError 로 죽었다 (2026-09-09 에 고쳤다). 없는 칸은 못 봄으로 적는다.
+    칸 = st.get("칸") or {}
     w = max(len(k) for k in ORDER)
     for k in ORDER:
-        lines.append("    %-*s  %s" % (w, k, st["칸"][k]))
+        lines.append("    %-*s  %s" % (w, k, 칸.get(k) or MISS))
 
     lines += ["", "## 기계가 이미 끝낸 것", "",
               "| 무엇 | 상태 | 어디 |",
@@ -358,11 +393,14 @@ def do_case(case: Path, use_notion: bool) -> dict:
     done = st.setdefault("끝낸 단계", [])
     stop: list[str] = []
 
-    # ② 는 사람이 한다. 재료가 들어왔는지만 본다.
+    # ② 의 관문은 사람이다. **원 게시물을 열고 포럼 킷을 누르는 것은 사람이 한다.**
+    # 브라우저에서 눌러야 결과가 나오므로 자동에 못 넣는다.
     #
-    # **샘플은 사람이 `②샘플.txt` 로 저장한다.** 게시글을 읽는 김에 샘플 줄만
-    # 옮기면 되므로 도구가 뽑아 주는 것보다 손이 적게 간다.
-    # 사람이 어차피 본문을 한 번 읽어야 하고 그것이 관문이다.
+    # 다만 킷이 낸 md 를 케이스 폴더에 두면 여기서 ② 재료로 앉힌다. 전에는 그것도
+    # 손으로 옮기게 두었는데, `kit_out.py` 가 이미 그 일을 하는데도 부르지 않고 있었다
+    # (2026-09-09 에 고쳤다). 사람이 본문을 한 번 읽는 것은 그대로다.
+    stop += stage2_kit(case, st)
+
     body = case / "②본문.md"
     sample = case / "②샘플.txt"
     st["샘플 있음"] = sample.exists() and sample.stat().st_size > 0
