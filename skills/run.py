@@ -97,6 +97,27 @@ def proj() -> Path | None:
     return guess if guess.is_dir() else None
 
 
+# ── 큐 폴더 ─────────────────────────────────────
+# **재료가 있는 자리가 곧 큐다** (2026-09-09 확정). 전에는 `07_케이스/_큐` 를 가리켰는데
+# 거기는 결과가 쌓이는 자리고 재료는 공유폴더에 들어온다. 두 자리를 갈라 두면
+# 경로를 두 벌 관리하게 되고, 실제로 `_큐` 폴더는 만들어진 적이 없다.
+#
+# **사람마다 공유폴더 이름이 다르다.** VirtualBox 설정에서 정하는 것이라
+# `VM공유폴더` 가 아닐 수 있다. 그래서 환경변수를 하나 더 둔다.
+#
+#   DARKCHOCO_QUEUE   이것이 있으면 무조건 이것
+#   없으면            <프젝>/VM공유폴더
+def queue_dir() -> Path | None:
+    q = os.environ.get("DARKCHOCO_QUEUE")
+    if q and Path(q).is_dir():
+        return Path(q)
+    p = proj()
+    if not p:
+        return None
+    guess = p / "VM공유폴더"
+    return guess if guess.is_dir() else None
+
+
 # ── 설정 점검 ───────────────────────────────────
 # (파일 이름, 무엇에 쓰나, 없으면 무엇이 막히나)
 NEEDS = [
@@ -261,12 +282,12 @@ def menu_collect() -> None:
             run(PY("-m", "collect.main", "--db", DB))
 
         elif pick == "round_queue":
-            p = proj()
-            if not p:
-                print("\n  프젝 폴더를 못 찾았다. DARKCHOCO_PROJ 를 정해야 한다.\n")
+            큐 = queue_dir()
+            if not 큐:
+                print("\n  큐 폴더를 못 찾았다. 공유폴더 자리를 DARKCHOCO_QUEUE 로 정한다.\n")
                 q.press_any_key_to_continue(style=STYLE).ask()
                 continue
-            run(PY("-m", "collect.main", "--db", DB, "--queue", p / "07_케이스" / "_큐"))
+            run(PY("-m", "collect.main", "--db", DB, "--queue", 큐))
 
         elif pick == "ransom":
             feed = q.select("어느 피드", style=STYLE, choices=[
@@ -329,12 +350,12 @@ def ask_channel() -> str | None:
 
 # ── 메뉴: 큐와 케이스 ─────────────────────────────
 def menu_queue() -> None:
-    p = proj()
-    if not p:
-        print("\n  프젝 폴더를 못 찾았다. DARKCHOCO_PROJ 를 정해야 한다.\n")
+    queue = queue_dir()
+    if not queue:
+        print("\n  큐 폴더를 못 찾았다. 공유폴더 자리를 DARKCHOCO_QUEUE 로 정한다.")
+        print("  프젝 폴더 아래 「VM공유폴더」 가 있으면 그것을 자동으로 쓴다.\n")
         q.press_any_key_to_continue(style=STYLE).ask()
         return
-    queue = p / "07_케이스" / "_큐"
     while True:
         pick = q.select("큐와 케이스   (%s)" % queue, style=STYLE, choices=[
             Choice("큐 상태 보기", "state"),
