@@ -1,0 +1,105 @@
+name: 게시 상태 추적
+
+# 랜섬 게시물이 아직 살아 있는지를 하루 한 번 봅니다. 결과는 **노션 수집 DB 의
+# 관측 칸**에 적습니다.
+#
+# ## 왜 collect.yml 과 따로 두나
+#
+# `collect.yml` 은 **새로 생긴 것**을 긁어 올립니다. 사라진 것은 모릅니다.
+# 목록에서 빠진 줄은 애초에 응답에 안 오니까요. 그래서 「협상 기한이 지난 뒤
+# 무엇이 됐나」 를 세려면 반대 방향이 필요합니다.
+#
+#   collect.yml    집계처에 있는 것 → 노션에 없으면 새로 만든다
+#   track.yml      노션에 있는 것   → 집계처에 없으면 「안 보임」 을 적는다
+#
+# ## 왜 SQLite 를 안 쓰나
+#
+# `collect.track agg` 는 로컬 SQLite 의 `post_obs` 에 관측을 쌓습니다. 여기서는
+# **실행마다 새 컨테이너라 그 표가 안 남습니다.** 그러면 「안 보임이 두 판
+# 연속이면 사라진 것」 규칙이 영원히 성립하지 않습니다.
+#
+# `track_push.py` 는 저장 자리를 노션으로 옮겨 그 문제를 풉니다. 직전 상태가
+# 노션 줄에 남아 있으므로 이력 표 없이도 두 판 연속을 가릅니다.
+#
+# ## 사람이 적은 것을 덮지 않습니다
+#
+# 관측자가 「집계처」 가 아닌 줄, 게시 상태가 「공개됨」 · 「사라짐」 인 줄은
+# 건너뜁니다. 사람이 Tor 로 보고 적은 값이 자동 실행에 지워지면 안 됩니다.
+#
+# ## 비밀값
+#
+#   NOTION_TOKEN   collect.yml 과 같은 것을 씁니다. 새로 넣을 것이 없습니다
+
+on:
+  schedule:
+    # 하루 한 번. UTC 21시라 KST 로는 다음 날 06시입니다.
+    # 집계처에 요청 한 번이라 자주 돌 이유가 없습니다.
+    - cron: "0 21 * * *"
+  workflow_dispatch:
+    # **입력 이름은 영문·숫자·-·_ 만 됩니다.** 한글로 두면 워크플로 파일이
+    # 통째로 거부됩니다 (2026-09-08 에 collect.yml 에서 겪었습니다).
+    inputs:
+      write_to_notion:
+        description: "노션에 실제로 쓸지. 끄면 무엇이 바뀔지만 봅니다"
+        type: boolean
+        default: true
+
+# 겹쳐 돌지 않게 합니다. 같은 줄에 둘이 쓰면 판정이 어긋납니다.
+# collect 와도 겹치면 안 되지만 그쪽은 새 줄을 만들고 여기는 기존 줄을 고치므로
+# 서로 다른 group 으로 둡니다.
+concurrency:
+  group: track
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  observe:
+    name: 집계처를 보고 노션에 적기
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 부품 설치
+        run: pip install -e "packages[all]"
+
+      - name: 비밀값을 파일로
+        # **환경변수 대신 파일로 둡니다.** 환경변수는 하위 프로세스 목록과
+        # 셸 이력에 남습니다. dc_notion 이 NOTION_TOKEN_FILE 을 먼저 봅니다.
+        env:
+          TOKEN_VALUE: ${{ secrets.NOTION_TOKEN }}
+        run: |
+          set -e
+          mkdir -p "$RUNNER_TEMP/cfg"
+          if [ -z "$TOKEN_VALUE" ]; then
+            echo "::error::NOTION_TOKEN 이 없습니다. 레포 Settings → Secrets 에 넣으십시오"
+            exit 1
+          fi
+          printf '%s' "$TOKEN_VALUE" > "$RUNNER_TEMP/cfg/notion_token"
+          chmod 600 "$RUNNER_TEMP/cfg/notion_token"
+
+      - name: 집계처 한 판 → 노션 관측 칸
+        # 집계처가 0건이거나 막히면 아무것도 안 씁니다. 그 판정이 도구 안에 있습니다.
+        env:
+          PYTHONUTF8: "1"
+          PYTHONIOENCODING: utf-8
+          NOTION_TOKEN_FILE: ${{ runner.temp }}/cfg/notion_token
+        run: |
+          set -e
+          DO_WRITE="${{ github.event_name == 'schedule' && 'yes' || inputs.write_to_notion }}"
+          if [ "$DO_WRITE" = "yes" ] || [ "$DO_WRITE" = "true" ]; then
+            python hub/events/track_push.py --apply
+          else
+            echo "미리보기만 합니다"
+            python hub/events/track_push.py
+          fi
+
+      - name: 토큰을 지운다
+        if: always()
+        run: rm -f "$RUNNER_TEMP/cfg/notion_token"
