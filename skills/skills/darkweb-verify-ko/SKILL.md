@@ -248,7 +248,7 @@ mysqldump 는 한 줄이 수 MB 다. 앞부분만 읽으면 표 구조도 규모
 **③④⑤⑥ 은 프롬프트 단계라 `run_queue.py` 가 대신 판단하지 않는다.**
 그쪽이 하는 것은 재료 판정, 팀 DB 대조, 샘플 패턴 산출, 상태 기록뿐이다.
 
-    feed_parse   krleak.db      → 07_케이스/_큐/<케이스>/재료.md · 상태.json
+    feed_parse   krleak.db      → <공유폴더>/<케이스>/재료.md · 상태.json
     run_queue    큐             → ③_재료판정.txt · ③_팀DB대조.md · ④_샘플패턴.md · ③재료.md
     kit_out      포럼 킷 출력    → ②본문.md · ②샘플.txt
     brief        큐             → 브리핑 한 장
