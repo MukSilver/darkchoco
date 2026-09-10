@@ -7,95 +7,166 @@
 <title>다크초코 대시보드</title>
 <style>
   :root{
-    --바탕:#14161c; --판:#1b1e26; --판2:#22262f; --줄:#2c313c;
-    --글:#e6e8ee; --흐린글:#9aa2b4; --더흐린:#6b7385;
+    /* 면. 바탕 → 판 → 판2 위로 올라오고, 깊판만 바탕보다 내려앉는다 */
+    --깊판:#0f1116; --바탕:#14161c; --판:#1b1e26; --판2:#22262f;
+    /* 선. 흐린줄은 표 안쪽이라 카드 테두리(--줄)보다 약하다.
+       139줄이 격자로 보이지 않게 하려는 것이다 */
+    --줄:#2c313c; --흐린줄:#232733;
+    /* 글 */
+    --글:#e6e8ee; --흐린글:#9aa2b4; --더흐린:#6b7385; --코드글:#cdd3e0;
+    /* 뜻을 나르는 색. --기다림 은 「사람이 손대면 없어지는 것」,
+       --나쁨 은 「손대야만 없어지는 것」이다. 이 선을 지킨다 */
     --점:#8b7bd8; --좋음:#7dc4a0; --기다림:#d8b45f; --나쁨:#d87b7b;
+    /* 짚고 있는 줄 */
+    --짚음:#1e222b;
+
+    /* 간격 눈금. 밑값이 2px 다. 4px 배수로 잡으면 td 세로 여백을 4 나 8 중에
+       골라야 하는데, 7→8px 은 139줄이면 278px 만큼 한 판에 덜 보인다는 뜻이고
+       4px 은 13px 글자에 너무 붙는다 */
+    --틈1:4px; --틈2:6px; --틈3:8px; --틈4:12px;
+    --틈5:16px; --틈6:24px; --틈7:40px;
+    /* 모서리. 나란히 놓이는 것끼리 1px 씩 다르면 「대충 만든」 인상이 거기서 온다 */
+    --둥1:4px; --둥2:8px; --둥알약:999px;
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--바탕);color:var(--글);
        font:14px/1.6 "Pretendard","맑은 고딕",system-ui,sans-serif}
   a{color:var(--점)}
-  .틀{max-width:1180px;margin:0 auto;padding:22px 18px 60px}
+  .틀{max-width:1180px;margin:0 auto;padding:var(--틈6) var(--틈5) 64px}
 
-  header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:6px}
-  h1{font-size:19px;margin:0;letter-spacing:-.01em}
+  header{display:flex;align-items:baseline;gap:var(--틈5);flex-wrap:wrap;margin-bottom:var(--틈2)}
+  h1{font-size:18px;font-weight:700;margin:0;letter-spacing:-.01em}
   .구운때{color:var(--더흐린);font-size:12px}
-  .경고{background:#3a2a2a;border:1px solid #5a3a3a;color:#f0c8c8;
-        padding:9px 12px;border-radius:7px;margin:12px 0;font-size:13px}
+  /* 화면에서 「이건 문제다」를 내는 유일한 자리다. 딱지 `.없음` 과 같은 색 가족을
+     쓰되 본문 덩어리라 글자를 한 단 밝게 잡는다 */
+  .경고{background:#3a2a2c;border:1px solid #4d3639;color:#e8b8b8;
+        padding:var(--틈4);border-radius:var(--둥2);margin:var(--틈4) 0;font-size:13px}
 
-  .요약{display:flex;gap:9px;flex-wrap:wrap;margin:16px 0 20px}
-  .칸{background:var(--판);border:1px solid var(--줄);border-radius:9px;
-      padding:11px 15px;min-width:112px}
-  .칸 b{display:block;font-size:23px;font-weight:600;letter-spacing:-.02em}
-  .칸 span{color:var(--흐린글);font-size:11.5px}
+  .요약{display:flex;gap:var(--틈3);flex-wrap:wrap;margin:var(--틈5) 0 var(--틈6)}
+  .칸{background:var(--판);border:1px solid var(--줄);border-radius:var(--둥2);
+      padding:var(--틈4) var(--틈5);min-width:112px}
+  .칸 b{display:block;font-size:22px;font-weight:600;letter-spacing:-.02em}
+  .칸 span{color:var(--흐린글);font-size:12px}
   .칸.점 b{color:var(--점)} .칸.좋음 b{color:var(--좋음)}
   .칸.기다림 b{color:var(--기다림)} .칸.나쁨 b{color:var(--나쁨)}
 
-  nav{display:flex;gap:5px;border-bottom:1px solid var(--줄);margin-bottom:18px}
-  nav button{background:none;border:0;border-bottom:2px solid transparent;
-             color:var(--흐린글);padding:9px 16px;font:inherit;font-size:14px;cursor:pointer}
+  nav{display:flex;gap:var(--틈1);border-bottom:1px solid var(--줄);margin-bottom:var(--틈6)}
+  /* 탭의 2px 표시선과 nav 의 1px 밑선이 1px 어긋나 겹쳐 있었다. 탭이 「선 위에
+     앉은」 게 아니라 「선 옆에 뜬」 것으로 보이던 전형적인 1px 이다 */
+  nav button{background:none;border:0;border-bottom:2px solid transparent;margin-bottom:-1px;
+             color:var(--흐린글);padding:var(--틈3) var(--틈5);font:inherit;font-size:14px;cursor:pointer}
   nav button.켬{color:var(--글);border-bottom-color:var(--점)}
   nav button:hover{color:var(--글)}
 
-  h2{font-size:14px;color:var(--흐린글);font-weight:600;margin:24px 0 9px;
+  /* **절 제목이 표 본문보다 흐리면 안 된다.** 전에는 14px `--흐린글`(7.1:1)이라
+     td(13.6:1)보다 1.9배 흐렸다. 1px 큰 것으로는 못 이긴다 — 사람 눈은 1px 차이보다
+     대비 1.9배를 먼저 읽는다. 한글 산세리프는 굵게 해도 「더 어두워질」 뿐
+     「더 커지지」 않으므로 크기도 한 칸 올린다 */
+  h2{font-size:15px;color:var(--글);font-weight:600;margin:var(--틈6) 0 var(--틈3);
      text-transform:none;letter-spacing:.01em}
   h2:first-child{margin-top:0}
+  /* 곁말이 h2 의 600 을 물려받아 반굵게 나오던 것을 끊는다 */
+  h2 .더흐림{font-weight:400}
 
   table{width:100%;border-collapse:collapse;font-size:13px}
-  th{text-align:left;color:var(--더흐린);font-weight:500;font-size:11.5px;
-     padding:6px 9px;border-bottom:1px solid var(--줄);white-space:nowrap}
-  td{padding:7px 9px;border-bottom:1px solid #232733;vertical-align:top}
+  /* 전에는 `--더흐린`(3.5:1)이라 WCAG AA(4.5)를 못 넘었다. 열 이름을 못 읽으면
+     「자리」와 「게시」가 무엇인지 헷갈리고, 그건 여럿이 같은 잣대로 판정하는 데
+     바로 걸린다. td 본문(13.6)보다는 흐리므로 「이름은 틀, 값이 내용」은 유지된다 */
+  th{text-align:left;color:var(--흐린글);font-weight:500;font-size:12px;
+     padding:var(--틈2) var(--틈3);border-bottom:1px solid var(--줄);white-space:nowrap}
+  /* 세로 여백을 8px 로 올리면 139줄에서 278px 만큼 한 판에 덜 보인다. 6px 을
+     눈금에 둔 이유가 이것이다 */
+  td{padding:var(--틈2) var(--틈3);border-bottom:1px solid var(--흐린줄);vertical-align:top}
   /* 짧은 값이 한 글자씩 세로로 깨지던 것을 막는다. 넓으면 감싼 칸이 가로로 밀린다 */
   td.짧음,th.짧음{white-space:nowrap}
   td.제목{min-width:210px} td.근거{min-width:150px;max-width:330px}
-  tr:hover td{background:#1e222b}
+  tr:hover td{background:var(--짚음)}
   .수{font-variant-numeric:tabular-nums;text-align:right}
   .흐림{color:var(--흐린글)} .더흐림{color:var(--더흐린);font-size:12px}
-  .감쌈{overflow-x:auto;border:1px solid var(--줄);border-radius:9px;background:var(--판)}
+  .감쌈{overflow-x:auto;border:1px solid var(--줄);border-radius:var(--둥2);background:var(--판)}
 
-  .표{display:inline-block;padding:1px 7px;border-radius:4px;font-size:11.5px;
-      white-space:nowrap;border:1px solid transparent}
-  .미검토{background:#3a3520;color:#e8d48a;border-color:#4d4529}
-  .사건O{background:#1f3a2e;color:#8fd8b4;border-color:#2a4c3c}
-  .사건X{background:#332;color:#998;border-color:#443}
-  .직접{background:#2a2f4d;color:#a8b4f0;border-color:#39406b}
-  .미확인{background:#2a2d35;color:#9aa2b4;border-color:#363a45}
+  /* 상태 딱지. **배지와 고르기 단추가 같은 색을 쓰므로 한 블록에서 낸다.**
+     전에는 `.고르기 button.지금` 이 값 여섯을 복사해 두 벌이었고, 한쪽만 고치면
+     어긋났다.
 
-  .명령{display:flex;gap:8px;align-items:center;margin:5px 0}
-  .명령 code{flex:1;background:#0f1116;border:1px solid var(--줄);border-radius:6px;
-             padding:7px 10px;font:12px ui-monospace,Consolas,monospace;
-             color:#cdd3e0;overflow-x:auto;white-space:nowrap}
+     대비를 다섯 다 7.3~7.6 으로 맞췄다. 전에는 4.4~8.3 으로 흩어져 있었고
+     **하필 AA(4.5)를 못 넘는 4.4 가 「사건 X」라는 판정 결과였다.** */
+  .표{display:inline-block;padding:0 var(--틈3);border-radius:var(--둥1);
+      font-size:12px;line-height:1.7;white-space:nowrap;border:1px solid transparent}
+  .미검토{background:#37301f;color:#e2c27f;border-color:#4a3f25}
+  .사건O,.있음,
+  .고르기 button.지금 {background:#1e352b;color:#86d3ae;border-color:#26463a}
+  /* **사건X 를 올리브에서 청회색으로 옮겼다.** 전 값(#998 on #332)은 미검토와
+     같은 노랑 계열이라, 113줄이 미검토인 표에서 「빛바랜 미검토」로 읽혔다.
+     판정을 마친 줄과 안 한 줄이 같은 색 가족에 있으면 안 된다 */
+  .사건X,
+  .고르기 button.지금X{background:#272c37;color:#b7bccb;border-color:#333846}
+  .직접{background:#302c3e;color:#c3bbe8;border-color:#3f394f}
+  .없음{background:#3a2a2c;color:#e0a3a3;border-color:#4d3639}
+  /* 「모른다」는 판정이 아니라 판정의 부재다. 채움을 빼고 테두리만 남긴다 */
+  .미확인{background:none;color:var(--흐린글);border-color:var(--줄)}
+
+  /* **좁아지면 code 상자가 실처럼 얇아진다.** 이름 150 + 단추 58 + 틈이 안 줄기
+     때문이다. 줄이 밖으로 밀리는 게 아니라 무엇을 복사하는지 못 읽게 된다 */
+  .명령{display:flex;gap:var(--틈3);align-items:center;margin:var(--틈1) 0;flex-wrap:wrap}
+  .명령 code{flex:1;min-width:0;background:var(--깊판);border:1px solid var(--줄);
+             border-radius:var(--둥2);padding:var(--틈2) var(--틈3);
+             font:12px ui-monospace,Consolas,monospace;
+             color:var(--코드글);overflow-x:auto;white-space:nowrap}
   .명령 button{background:var(--판2);border:1px solid var(--줄);color:var(--흐린글);
-               border-radius:6px;padding:7px 11px;font:inherit;font-size:12px;cursor:pointer}
+               border-radius:var(--둥2);padding:var(--틈2) var(--틈4);font:inherit;font-size:12px;
+               cursor:pointer;white-space:nowrap}
   .명령 button:hover{color:var(--글);border-color:var(--점)}
-  .명령 .이름{min-width:150px;color:var(--흐린글);font-size:12.5px}
+  .명령 button.실패{color:var(--나쁨);border-color:var(--나쁨)}
+  .명령 .이름{min-width:150px;color:var(--흐린글);font-size:12px}
 
-  .거르개{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:11px;align-items:center}
+  .거르개{display:flex;gap:var(--틈2);flex-wrap:wrap;margin-bottom:var(--틈4);align-items:center}
   .거르개 button{background:var(--판);border:1px solid var(--줄);color:var(--흐린글);
-                 border-radius:99px;padding:4px 12px;font:inherit;font-size:12.5px;cursor:pointer}
+                 border-radius:var(--둥알약);padding:var(--틈1) var(--틈4);font:inherit;
+                 font-size:12px;cursor:pointer}
   .거르개 button.켬{background:var(--판2);color:var(--글);border-color:var(--점)}
   .거르개 input{background:var(--판);border:1px solid var(--줄);color:var(--글);
-                border-radius:7px;padding:5px 11px;font:inherit;font-size:13px;min-width:190px}
-  .일감줄{display:flex;gap:10px;align-items:center;margin:5px 0}
+                border-radius:var(--둥2);padding:var(--틈1) var(--틈4);font:inherit;
+                font-size:13px;min-width:190px}
+  .일감줄{display:flex;gap:var(--틈3);align-items:center;margin:var(--틈1) 0;flex-wrap:wrap}
   .일감줄 .돌리기{background:var(--판2);border:1px solid var(--줄);color:var(--글);
-                  border-radius:7px;padding:6px 14px;font:inherit;font-size:13px;
+                  border-radius:var(--둥2);padding:var(--틈2) var(--틈4);font:inherit;font-size:13px;
                   cursor:pointer;min-width:190px;text-align:left}
   .일감줄 .돌리기:hover:not(:disabled){border-color:var(--점)}
   .일감줄 .돌리기:disabled{opacity:.45;cursor:not-allowed}
   .일감줄 .돌리기.도는중{border-color:var(--기다림);color:var(--기다림)}
-  #로그{background:#0f1116;border:1px solid var(--줄);border-radius:8px;padding:11px 13px;
-        font:12px/1.55 ui-monospace,Consolas,monospace;color:#cdd3e0;
-        max-height:340px;overflow:auto;white-space:pre-wrap;word-break:break-all;margin-top:10px}
-  .고르기{display:flex;gap:3px}
+  /* 「밖으로 요청을 보냅니다」. 그 줄에서 결과가 가장 큰 사실인데 지금은
+     `.더흐림` 안에 들어 있어 대비 3.5:1 로 화면에서 가장 안 보인다 */
+  .일감줄 b{color:var(--나쁨);font-weight:600}
+  #로그{background:var(--깊판);border:1px solid var(--줄);border-radius:var(--둥2);
+        padding:var(--틈4);font:12px/1.55 ui-monospace,Consolas,monospace;color:var(--코드글);
+        max-height:340px;overflow:auto;white-space:pre-wrap;word-break:break-all;
+        margin-top:var(--틈3)}
+  /* 딱지와 나란히 붙는 자리라 높이를 맞춘다. 전에는 칩 22.4px · 단추 25.2px 로
+     달라 밑선이 어긋났다. 세로 여백을 버리고 line-height 로 높이를 만들면
+     12px × 1.7 + 테두리 2 = 22.4px 로 둘이 정확히 같아진다.
+     칠하는 색은 위 딱지 블록에서 같이 낸다 */
+  .고르기{display:flex;gap:var(--틈1)}
   .고르기 button{background:var(--판2);border:1px solid var(--줄);color:var(--흐린글);
-                 border-radius:5px;padding:2px 8px;font:inherit;font-size:11.5px;cursor:pointer;
-                 white-space:nowrap}
+                 border-radius:var(--둥1);padding:0 var(--틈3);font:inherit;font-size:12px;
+                 line-height:1.7;cursor:pointer;white-space:nowrap}
   .고르기 button:hover{color:var(--글);border-color:var(--점)}
-  .고르기 button.지금{background:#1f3a2e;color:#8fd8b4;border-color:#2a4c3c}
-  .고르기 button.지금X{background:#332;color:#998;border-color:#443}
   .고르기 button:disabled{opacity:.45;cursor:wait}
-  .빔{color:var(--더흐린);padding:26px;text-align:center}
-  footer{color:var(--더흐린);font-size:12px;margin-top:34px;line-height:1.8}
+  .빔{color:var(--더흐린);padding:var(--틈6);text-align:center}
+  footer{color:var(--더흐린);font-size:12px;margin-top:var(--틈7);line-height:1.8}
+
+  /* 좁은 화면. **쿼리보다 flex-wrap 이 먼저다** — 쿼리는 내가 고른 폭에서만 듣고
+     wrap 은 모든 폭에서 듣는다. 위에서 이미 감싸 두었고, 여기서는 안 줄어드는
+     최소 폭만 푼다 */
+  @media (max-width:900px){
+    .틀{padding-left:var(--틈4);padding-right:var(--틈4)}
+    .명령 .이름{min-width:0;flex-basis:100%}
+    .일감줄 .더흐림{flex-basis:100%}
+  }
+  @media (max-width:560px){
+    /* 로컬은 여섯 칸, 서버는 세 칸이라 그냥 두면 판마다 다른 모양으로 삐죽 남는다 */
+    .요약 .칸{flex:1 1 calc(50% - var(--틈3));min-width:0}
+  }
 </style>
 </head>
 <body>
@@ -118,11 +189,25 @@
   <section id="사건" hidden></section>
 
   <footer>
-    <div>이 화면은 127.0.0.1 에만 뜹니다. 돌릴 수 있는 것은 <b>정해진 목록</b>뿐이고
+    <div><span id="어디">이 화면은 127.0.0.1 에만 뜹니다.</span> 돌릴 수 있는 것은 <b>정해진 목록</b>뿐이고
         화면이 명령을 만들지 못합니다. 노션에 쓰는 것은 <b>검토 여부 한 칸</b>뿐입니다.</div>
     <div>본문과 개인정보 값은 담지 않습니다. 명부 셋은 노션이 정본이라 여기서 다시 그리지 않습니다.</div>
   </footer>
 </div>
+
+<script>
+/* 같은 파일이 로컬(127.0.0.1)과 배포(workers.dev) 양쪽에 쓰입니다. 배포판에서
+   「127.0.0.1 에만 뜹니다」 가 그대로 보이면 사실과 다르고, 실명이 든 화면이라
+   오해가 위험합니다. 그래서 주소를 보고 문구를 바꿉니다. 데이터가 안 실려도
+   돌아야 하므로 dash.js 보다 앞에 둡니다. */
+(function(){
+  var 집 = ["127.0.0.1", "localhost", "[::1]"].indexOf(location.hostname) >= 0;
+  if (집) return;
+  var 자리 = document.getElementById("어디");
+  if (자리) 자리.textContent =
+    "이 화면은 팀 비밀번호로 잠겨 있습니다. 실명과 미검토 줄이 들어 있으니 링크를 밖으로 돌리지 마십시오.";
+})();
+</script>
 
 <script src="data/dash.js" onerror="window.__못읽음=true"></script>
 <script>
@@ -209,7 +294,10 @@
       + '<th>없으면 안 도는 것</th><th></th></tr></thead><tbody>'
       + (ev.설정||[]).map(s=>'<tr><td><code>'+안전(s.이름)+'</code></td><td class="흐림">'
         + 안전(s.무엇)+'</td><td class="더흐림">'+안전(s.쓰는곳)+'</td><td>'
-        + (s.있음 ? '<span class="표 사건O">있음</span>' : '<span class="표 미검토">없음</span>')
+        // **설정 유무에 노션 판정 클래스를 쓰지 않는다.** 없는 API 키는 「사람이
+        // 검토하기를 기다리는 중」이 아니라 「손대야만 없어지는 것」이다. 클래스를
+        // 같이 쓰면 나중에 한쪽 색을 고칠 때 다른 쪽이 조용히 따라 바뀐다
+        + (s.있음 ? '<span class="표 있음">있음</span>' : '<span class="표 없음">없음</span>')
         + '</td></tr>').join("")
       + '</tbody></table></div>';
   }
