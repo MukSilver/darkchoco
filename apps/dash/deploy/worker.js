@@ -426,9 +426,15 @@ function 실행을상태로(열쇠, run) {
   };
 }
 
-async function 최근실행(env) {
+/** 워크플로 하나의 마지막 실행을 봅니다.
+ *
+ *  **어느 파일을 볼지 받아야 합니다.** 전에는 `collect.yml` 로 박혀 있어서,
+ *  게시 상태 추적을 돌려도 화면에는 수집의 지난 실행이 떴다. 단추는 맞는 워크플로를
+ *  시작시키는데 상태만 딴 데를 보고 있어서 **아무 일도 안 일어난 것처럼 보였다.**
+ */
+async function 최근실행(env, 파일) {
   const r = await fetch(
-    `https://api.github.com/repos/${레포}/actions/workflows/collect.yml/runs?per_page=1`,
+    `https://api.github.com/repos/${레포}/actions/workflows/${파일}/runs?per_page=1`,
     { headers: gh머리(env.GH_TOKEN) },
   );
   if (!r.ok) {
@@ -459,9 +465,13 @@ async function 돌리기(request, env) {
 
   // 이미 도는 중이면 또 시작하지 않습니다. 같은 노션 DB 에 둘이 쓰면 겹침 판정이
   // 어긋납니다. 워크플로 쪽에도 concurrency 가 걸려 있지만 여기서 먼저 막습니다.
+  //
+  // **누를 그 워크플로를 봅니다.** 전에는 `collect.yml` 만 봐서 두 가지로 틀렸다 —
+  // 수집이 도는 중이면 게시 상태 추적까지 막혔고, 게시 상태 추적이 도는 중일 때
+  // 또 누르면 안 막혔다. 둘은 concurrency 무리가 서로 달라 따로 봐야 한다.
   let 앞것 = null;
   try {
-    앞것 = await 최근실행(env);
+    앞것 = await 최근실행(env, 일감.파일);
   } catch (e) {
     return json(502, { 오류: String((e && e.message) || e) });
   }
@@ -505,10 +515,15 @@ async function 상태보기(request, env) {
   } catch {
     열쇠 = "";
   }
+  // **열쇠가 가리키는 워크플로를 봅니다.** 화면이 열쇠를 안 보내면(첫 그리기 따위)
+  // 수집으로 물러섭니다. 목록에 없는 열쇠가 와도 같습니다.
+  const 일감 = 일감표[열쇠];
+  const 파일 = (일감 && 일감.파일) || "collect.yml";
   try {
-    const run = await 최근실행(env);
+    const run = await 최근실행(env, 파일);
     const s = 실행을상태로(열쇠, run);
-    // 수집이 끝났으면 다음 조회에서 새 줄이 보이게 캐시를 버립니다.
+    // 일감이 끝났으면 다음 조회에서 바뀐 것이 보이게 캐시를 버립니다.
+    // 수집은 줄이 늘고 게시 상태 추적은 관측 칸이 바뀝니다. 둘 다 다시 읽어야 합니다.
     if (!s.돌고있나) 캐시 = { 언제: 0, 몸: null };
     return json(200, s);
   } catch (e) {
