@@ -480,8 +480,11 @@
       if (지켜보기) clearInterval(지켜보기);
       지켜보기 = setInterval(async ()=>{
         try{
+          // **열쇠를 같이 보냅니다.** 안 보내면 서버가 수집 워크플로만 보고,
+          // 게시 상태 추적을 돌려도 화면에는 수집의 지난 실행이 뜬다.
           const r2 = await fetch("/api/status", {
-            method:"POST", headers:{"Content-Type":"application/json"}, body:"{}"});
+            method:"POST", headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({열쇠})});
           상태그리기(await r2.json());
         }catch(e){ /* 서버가 멎으면 다음 번에 다시 본다 */ }
       // 로컬은 이 PC 의 프로세스라 자주 물어도 됩니다. 배포판은 물을 때마다
