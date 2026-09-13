@@ -97,6 +97,7 @@ description: 다크웹 포럼·텔레그램·랜섬웨어 유출 사이트에서
 | ⑧ 판정 | 사람. 스킬 종료 후 | `references/stage8-verdict.md` |
 | ⑨ DB 입력 | **스킬**. 별도 호출. 노션이 있을 때만 | `references/stage9-db.md` |
 | 산출물 형태 | **스킬**. 별도 호출. ⑧ 뒤 | `references/publish.md` |
+| 영어 대화 문안 | **스킬**. 별도 호출. 흐름 밖 | `references/talk-en.md` |
 | 폴더를 어디에 두나 | 사람. 처음 한 번 | `references/폴더배치.md` |
 
 ## 어떻게 쓰나
@@ -123,6 +124,8 @@ description: 다크웹 포럼·텔레그램·랜섬웨어 유출 사이트에서
     "검증 DB에 넣게 정리해줘"  stage9-db.md
     "플래시 리포트로 내줘"     publish.md
     "X 게시물로 내줘"         publish.md
+    "영어 구어체로 옮겨줘"     talk-en.md
+    "질문지 영어로 바꿔줘"     talk-en.md
 
 ### ⑨ DB 입력
 
@@ -241,6 +244,8 @@ mysqldump 는 한 줄이 수 MB 다. 앞부분만 읽으면 표 구조도 규모
     tools/inspect.py        케이스 폴더 하나를 통째로. 종류 판정 후 위 도구에 태운다
     tools/verify_cfg.py     ⑥ 출력 방식 설정. md 로 낼지 화면에 낼지
     tools/stamp_refs.py     참조 문서 머리에 담당·도구·개정일 찍기
+    tools/en_style.py       한국어 문안을 영어 구어체로 옮길 프롬프트 조립
+    tools/en_style.json     영문 용어·말씨 규칙
 
 ### 큐를 거쳐 오는 길
 

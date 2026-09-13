@@ -413,6 +413,41 @@ def menu_material() -> None:
                       "db": "db_tree.py"}[pick], f))
 
 
+# ── 메뉴: 영어 문안 ──────────────────────────────
+# 도구는 번역을 안 한다. 붙여넣을 프롬프트를 조립해 줄 뿐이다.
+# 밖으로 요청을 보내지 않으므로 danger 를 안 단다.
+def menu_english() -> None:
+    while True:
+        pick = q.select("영어 문안", style=STYLE, choices=[
+            Choice("붙여넣을 프롬프트 만들기 (en_style prompt)", "prompt"),
+            Choice("A~E 묶음이 어떻게 갈리나 보기 (en_style parts)", "parts"),
+            Choice("← 뒤로", None),
+        ]).ask()
+        if pick is None:
+            return
+        f = q.path("한국어 문안 파일", style=STYLE).ask()
+        if not f or not Path(f).exists():
+            if f:
+                print("\n  그런 파일이 없다: %s\n" % f)
+                q.press_any_key_to_continue(style=STYLE).ask()
+            continue
+        if pick == "parts":
+            run(tool("en_style.py", "parts", f))
+            continue
+        tone = q.select("말씨", style=STYLE, choices=[
+            Choice("팀밖 — 밖으로 나가는 것. 슬랭 없이 담백하게", "팀밖"),
+            Choice("팀안 — 팀원끼리. 슬랭이 들어간다", "팀안"),
+        ]).ask()
+        if tone is None:
+            continue
+        part = q.text("묶음 하나만 (A~E). 전체면 비워 둔다", style=STYLE).ask()
+        out = Path(f).with_name("%s_영어프롬프트.txt" % Path(f).stem)
+        args = ["prompt", f, "--tone", tone, "--out", str(out)]
+        if part and part.strip():
+            args += ["--part", part.strip()]
+        run(tool("en_style.py", *args))
+
+
 # ── 메뉴: 노션 ───────────────────────────────────
 def menu_notion() -> None:
     while True:
@@ -581,6 +616,7 @@ def main() -> None:
             Choice("알림", "alert"),
             Choice("큐와 케이스", "queue"),
             Choice("재료 분석", "material"),
+            Choice("영어 문안 — 한국어를 영어 구어체로", "english"),
             Choice("통계와 추적 — 한국 관련 랜섬웨어 게시", "stats"),
             Choice("노션", "notion"),
             Choice("설정 점검", "config"),
@@ -604,6 +640,8 @@ def main() -> None:
             menu_queue()
         elif pick == "material":
             menu_material()
+        elif pick == "english":
+            menu_english()
         elif pick == "stats":
             menu_stats()
         elif pick == "notion":

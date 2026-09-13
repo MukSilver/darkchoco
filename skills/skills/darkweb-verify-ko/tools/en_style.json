@@ -1,0 +1,146 @@
+{
+  "_설명": "한국어 문안을 영어로 옮길 때 쓰는 용어·말씨 규칙 초판. 2026-09-13. 쓸수록 보강한다.",
+  "_고친날": "2026-09-13",
+  "_말씨": [
+    "팀안",
+    "팀밖"
+  ],
+  "_적용": "공통은 두 말씨에 다 걸린다. 말씨 규칙은 고른 쪽만 걸린다. 바꿔 쓰기는 파파고가 흔히 내는 꼴을 구어체로 되돌리는 짝이다. 예문은 리듬의 근거이지 베낄 문장이 아니다.",
+  "_왜 코드 밖에 두나": "tree_rules.json 과 같다. 말씨는 쓰면서 늘어나는데 그때마다 코드를 고치면 안 된다. 팀원이 직접 이 파일만 고칠 수 있어야 한다.",
+
+  "공통": [
+    {
+      "번호": "R19-1",
+      "이름": "주장은 출처에 귀속한다",
+      "왜": "confirms 와 proves 는 검증이 끝났다는 인상을 준다. 우리 다섯 축은 주장과 확인을 가르는데 문장으로 옮길 때 도로 뭉개진다",
+      "안 쓰는 것": ["confirms", "proves", "reveals", "exposes", "it is confirmed that"],
+      "쓰는 것": ["claims", "states", "alleges", "according to", "the post says"],
+      "본보기": "The source claims the archive contains over one million records, but we have not verified the full contents."
+    },
+    {
+      "번호": "R19-2",
+      "이름": "중립 용어 하나로 통일한다",
+      "왜": "한 문서 안에서 용어가 오락가락하면 앞 문장은 자료 전체를 뜻하고 뒤 문장은 검증된 명단을 뜻하게 된다. 2026-09-01 팀 지적이 그것이었다",
+      "기본": "records",
+      "조건부": {
+        "member data": "우리가 실제로 확인한 것에만 쓴다",
+        "personal information": "항목을 특정했을 때만 쓴다"
+      },
+      "본보기": "align on one term before writing"
+    },
+    {
+      "번호": "R19-3",
+      "이름": "불일치와 누락은 사람을 탓하지 않고 적는다",
+      "왜": "우리 산출물은 조직에 나간다. 책임을 묻는 문장이 되면 사실 전달이 막힌다",
+      "쓰는 것": ["discrepancy", "oversight", "flag a discrepancy", "correct an oversight"],
+      "본보기": "We wanted to flag a discrepancy between the record count in the post and what the sample shows."
+    },
+    {
+      "번호": "R19-4",
+      "이름": "내보내기 전에 대조한다",
+      "왜": "짧은 글일수록 단정하기 쉽다. X 게시물이 가장 위험하다",
+      "쓰는 것": ["cross-check the dates against the original source before it goes live", "go over"],
+      "가려 쓰는 것": {
+        "go over": "꼼꼼한 검토 일반",
+        "verify": "법률·감사·보안 절차",
+        "validate": "법률·감사·보안 절차"
+      }
+    }
+  ],
+
+  "말씨": {
+    "팀안": {
+      "무엇": "팀원끼리 주고받는 것. 디스코드·카카오톡·팀 채널",
+      "쓰는 것": [
+        "줄임말 — gonna, wanna, kinda, gotta",
+        "소문자로 시작하는 짧은 문장",
+        "감탄사와 호격 — yo, oh, ah, hey",
+        "한 문장 한 가지. 길어지면 줄을 나눈다",
+        "물음표 하나로 끝나는 직접적인 질문"
+      ],
+      "안 쓰는 것": [
+        "격식 인사 — Dear, Sincerely, Best regards",
+        "수동태",
+        "종속절이 둘 이상 붙은 긴 문장",
+        "we would like to 로 시작하는 문장"
+      ]
+    },
+    "팀밖": {
+      "무엇": "팀 밖으로 나가는 것. 기자·협업팀·외부 문의·인터뷰 질문지",
+      "쓰는 것": [
+        "짧고 담백한 평서문",
+        "능동태",
+        "구어체 동사구 — walk me through, look into, get back to, come from, end up",
+        "직접적인 질문. 한 번에 하나만",
+        "모르는 것은 모른다고 적는 문장 — we have not verified, we could not confirm"
+      ],
+      "안 쓰는 것": [
+        "슬랭 — yo, bro, dude, tbh, ngl, lol, lmao",
+        "지나친 친밀 표현과 이모지",
+        "격식 편지투 — I am writing to inform you, We hereby request",
+        "교과서 번역투 — Could you please explain in detail, It is possible to say that",
+        "상대를 치켜세우는 말. 목적이 흐려진다"
+      ],
+      "_왜 기본값인가": "실수했을 때 덜 위험한 쪽이다. 팀안 말씨가 밖으로 나가는 것보다 팀밖 말씨가 안에서 쓰이는 편이 낫다"
+    }
+  },
+
+  "바꿔 쓰기": [
+    {"딱딱": "Could you please explain in detail",     "구어": "can you walk me through"},
+    {"딱딱": "I would like to inquire about",          "구어": "I wanted to ask about"},
+    {"딱딱": "I am writing to ask",                    "구어": "quick question —"},
+    {"딱딱": "Is it correct to understand that",       "구어": "so, just to check —"},
+    {"딱딱": "Could you provide us with",              "구어": "could you send over"},
+    {"딱딱": "We would appreciate it if you could",    "구어": "would you mind"},
+    {"딱딱": "Please let me know if there is anything","구어": "let me know if anything"},
+    {"딱딱": "Thank you for your cooperation",         "구어": "thanks"},
+    {"딱딱": "Regarding the matter of",                "구어": "about"},
+    {"딱딱": "In the case that",                       "구어": "if"},
+    {"딱딱": "For the purpose of",                     "구어": "to"},
+    {"딱딱": "In order to",                            "구어": "to"},
+    {"딱딱": "At this point in time",                  "구어": "right now"},
+    {"딱딱": "A large number of",                      "구어": "a lot of"},
+    {"딱딱": "It is possible to say that",             "구어": "you could say"},
+    {"딱딱": "It seems that it is",                    "구어": "seems like"},
+    {"딱딱": "It is said that",                        "구어": "reportedly"},
+    {"딱딱": "As you may already know",                "구어": "(뺀다)"},
+    {"딱딱": "By any chance",                          "구어": "(뺀다. do you ~ 로 시작하면 된다)"},
+    {"딱딱": "I would be grateful if you could tell me","구어": "let me know"},
+    {"딱딱": "We have confirmed that",                 "구어": "the post says  (R19-1. 확인 전에는 confirmed 를 안 쓴다)"},
+    {"딱딱": "There is a possibility that",            "구어": "it might be that"},
+    {"딱딱": "Due to the fact that",                   "구어": "because"},
+    {"딱딱": "Prior to",                               "구어": "before"},
+    {"딱딱": "Subsequently",                           "구어": "then"}
+  ],
+
+  "파파고가 흔히 내는 꼴": [
+    {
+      "무엇": "주어 없는 한국어 문장을 It is 로 채운다",
+      "보기": "확인이 필요합니다  →  It is necessary to confirm",
+      "어떻게": "행위자를 살려 능동태로 — we need to check"
+    },
+    {
+      "무엇": "-에 대해서 를 about the matter of 로 늘린다",
+      "보기": "그 건에 대해서  →  regarding the matter of that case",
+      "어떻게": "about 하나로 줄인다"
+    },
+    {
+      "무엇": "-것 같습니다 를 It seems that it is 로 겹쳐 쓴다",
+      "보기": "맞는 것 같습니다  →  It seems that it is correct",
+      "어떻게": "seems right"
+    },
+    {
+      "무엇": "높임말을 격식 편지투로 옮긴다",
+      "보기": "알려 주시면 감사하겠습니다  →  I would be grateful if you could inform me",
+      "어떻게": "let me know. 한국어 높임은 영어 격식과 다른 축이다"
+    },
+    {
+      "무엇": "한 문장에 절을 다 밀어 넣는다",
+      "보기": "한국어 한 문장이 영어 한 문장이 된다",
+      "어떻게": "마침표로 끊는다. 영어 구어는 문장이 짧다"
+    }
+  ],
+
+  "예문": [],
+  "_예문_안내": "사람이 고른 20~40줄을 여기에 넣는다. 갈래(스터디/대화)와 등급(팀안/팀밖)을 같이 적는다. 말뭉치가 들어오기 전에는 비워 둔다. 지어낸 문장을 넣지 않는다 — 없는 말씨를 배우게 된다. 형태는 {\"갈래\": \"스터디\", \"등급\": \"팀밖\", \"줄\": \"...\"} 다."
+}

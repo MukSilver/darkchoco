@@ -38,6 +38,7 @@ WHO = {
     "tree-analysis.md": "스킬. ② 와 ③ 에서 부른다",
     "publish.md": "스킬. ⑨ 뒤에 부른다",
     "publishers.md": "자료. 사람이 찾아본다",
+    "talk-en.md": "스킬. 따로 부른다. 흐름 밖이다",
 }
 
 RUN = re.compile(r"python3? +((?:tools/)?[a-z_]+\.py)")
