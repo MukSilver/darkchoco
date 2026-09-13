@@ -120,7 +120,7 @@ venv 를 만들고 필요한 것을 깔고 모델을 받고 실제로 한 문장
 
 ## 파이썬이 없는 PC 에 줄 때
 
-**`scripts\build_exe.bat`** 을 돌리면 `dist	alkaid\` 가 나온다. 폴더째 주면 된다.
+**`scripts\build_exe.bat`** 을 돌리면 `dist\talkaid\` 가 나온다. 폴더째 주면 된다.
 
     크기      141 MB.  venv 보다 오히려 작다
     파이썬     필요 없다.  PATH 에 python 이 없어도 도는 것을 확인했다
