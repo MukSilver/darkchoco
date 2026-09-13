@@ -12,14 +12,14 @@
     "setup": "python setup.py",
     "test": "python tests/test_engine.py && python tests/test_guard.py && python tests/test_ui.py",
     "설치": "scripts\\setup.bat",
-    "창 띄우기": "scripts\run.bat",
-    "exe 짓기": "scripts\build_exe.bat"
+    "창 띄우기": "scripts\\run.bat",
+    "exe 짓기": "scripts\\build_exe.bat"
   },
   "default": "run",
-  "run_cwd": "apps/talkaid",
+  "run_cwd": ".",
   "install": {
     "requirements": "requirements.txt — 다섯 줄. torch 도 transformers 도 안 쓴다",
-    "note": "scripts\\setup.bat 이 venv 를 만들고 다 한다 (193MB). 파이썬이 없는 PC 에는 scripts\build_exe.bat 으로 dist\talkaid\\ 를 지어 준다 (141MB). 모델은 어느 쪽이든 처음 실행 때 받는다. GPU 는 필요 없다"
+    "note": "scripts\\setup.bat 이 venv 를 만들고 다 한다 (193MB). 파이썬이 없는 PC 에는 scripts\\build_exe.bat 으로 dist\\talkaid\\ 를 지어 준다 (141MB). 모델은 어느 쪽이든 처음 실행 때 받는다. GPU 는 필요 없다"
   },
   "preconditions": {
     "docker": false,
@@ -37,8 +37,16 @@
     }
   ],
   "config_files": [
-    "terms.json",
-    "snippets.json"
+    {
+      "path": "terms.json",
+      "example": null,
+      "note": "용어 스물여덟과 의문 어미 스물. 레포에 들어 있어 복사할 것이 없습니다"
+    },
+    {
+      "path": "snippets.json",
+      "example": null,
+      "note": "상용구 스물여섯. 사이드바에서 골라 씁니다"
+    }
   ],
   "packages": [],
   "network": "없음. 모델을 처음 받을 때만 huggingface.co 에 붙습니다. 번역은 이 PC 안에서 돕니다",
