@@ -62,19 +62,29 @@ const 레포 = "MukSilver/darkchoco";
  * `track.py` 의 나머지 둘(사람 관측 넣기 · 보고서)은 로컬에만 있습니다. 앞엣것은
  * 사람이 Tor 로 보고 적는 것이고 뒤엣것은 로컬 표를 읽어 md 를 냅니다.
  *
- * `노션` 은 **이 일감이 끝났을 때 노션이 달라져 있는가**입니다. 미리보기 둘만
+ * **2026-09-13 에 여섯을 넷으로 줄였습니다.** 게시 상태 추적이 수집에 붙었습니다.
+ * 단추가 따로 있을 때는 「긁고 나서 추적을 또 눌러야 한다」 를 사람이 외워야 했고,
+ * 실제로 추적이 나흘 밤을 안 돌았습니다. `collect.yml` 이 `track.yml` 을
+ * `workflow_call` 로 부르므로 워크플로 파일은 둘 다 그대로 있고 각자 혼자서도
+ * 돕니다. 화면에서만 하나로 보입니다.
+ *
+ * `do_track` 은 **누를 때만 켭니다.** 스케줄로 도는 수집에는 안 붙입니다. 추적은
+ * 집계처에 요청 한 번이라 하루 한 번이면 충분하고 그것은 track.yml 자기 스케줄이
+ * 합니다. 여섯 시간마다 같이 돌면 같은 일을 네 배로 합니다.
+ *
+ * `노션` 은 **이 일감이 끝났을 때 노션이 달라져 있는가**입니다. 미리보기만
  * false 입니다. 화면은 이 값이 참일 때만 끝나고 나서 다시 읽고, 이 파일에서는
  * 이 값이 참일 때만 캐시를 버립니다. 안 바뀐 것을 다시 읽으면 같은 화면을
  * 받으려고 노션 요청만 한 번 더 나가고, 그 사이에 로그가 지워집니다.
  */
 const 일감표 = {
   수집: {
-    이름: "수집 한 바퀴 (텔레그램 + 랜섬)",
-    설명: "채널을 훑고 랜섬 집계처를 한 번 봅니다. 몇 분 걸립니다",
+    이름: "수집 한 바퀴 (텔레그램 + 랜섬 + 게시 상태)",
+    설명: "채널과 랜섬 집계처를 훑고, 이어서 게시물이 아직 살아 있는지까지 봅니다",
     밖: true,
     노션: true,
     파일: "collect.yml",
-    입력: { do_ransom: "true", do_telegram: "true", push_to_notion: "true" },
+    입력: { do_ransom: "true", do_telegram: "true", push_to_notion: "true", do_track: "true" },
   },
   랜섬: {
     이름: "랜섬웨어만",
@@ -82,7 +92,7 @@ const 일감표 = {
     밖: true,
     노션: true,
     파일: "collect.yml",
-    입력: { do_ransom: "true", do_telegram: "false", push_to_notion: "true" },
+    입력: { do_ransom: "true", do_telegram: "false", push_to_notion: "true", do_track: "false" },
   },
   텔레그램: {
     이름: "텔레그램만",
@@ -90,31 +100,15 @@ const 일감표 = {
     밖: true,
     노션: true,
     파일: "collect.yml",
-    입력: { do_ransom: "false", do_telegram: "true", push_to_notion: "true" },
+    입력: { do_ransom: "false", do_telegram: "true", push_to_notion: "true", do_track: "false" },
   },
   미리보기: {
-    이름: "긁기만 하고 노션에 안 올리기",
-    설명: "무엇이 올라갈지만 봅니다. 노션에 안 씁니다",
+    이름: "미리보기 — 아무것도 안 씁니다",
+    설명: "무엇이 올라가고 무엇이 바뀔지를 함께 봅니다. 노션에 안 씁니다",
     밖: true,
     노션: false,
     파일: "collect.yml",
-    입력: { do_ransom: "true", do_telegram: "true", push_to_notion: "false" },
-  },
-  추적: {
-    이름: "게시 상태 추적",
-    설명: "랜섬 게시물이 아직 살아 있는지 보고 노션 관측 칸에 적습니다",
-    밖: true,
-    노션: true,
-    파일: "track.yml",
-    입력: { write_to_notion: "true" },
-  },
-  추적미리: {
-    이름: "게시 상태 추적 — 미리보기",
-    설명: "무엇이 바뀔지만 봅니다. 노션에 안 씁니다",
-    밖: true,
-    노션: false,
-    파일: "track.yml",
-    입력: { write_to_notion: "false" },
+    입력: { do_ransom: "true", do_telegram: "true", push_to_notion: "false", do_track: "true" },
   },
 };
 
@@ -429,7 +423,7 @@ function 실행을상태로(열쇠, run) {
     `무엇 ${run.display_title || run.name || ""}`,
     `자세히 ${run.html_url || ""}`,
   ];
-  if (도나) 줄.push("도는 중입니다. GitHub 쪽이라 화면에 로그는 안 옵니다");
+  if (도나) 줄.push("도는 중입니다. 끝나면 요약이 여기 붙습니다");
   return {
     열쇠,
     돌고있나: 도나,
@@ -456,6 +450,92 @@ async function 최근실행(env, 파일) {
   }
   const d = await r.json();
   return (d.workflow_runs || [])[0] || null;
+}
+
+/** 로그에서 **요약에 해당하는 줄만** 골라 냅니다.
+ *
+ *  GitHub 로그는 줄마다 앞에 시각이 붙고, 실행할 명령이 그대로 한 번 에코됩니다.
+ *  그 에코를 안 거르면 **스크립트에 적힌 글이 실제로 일어난 일처럼 보입니다.**
+ *  2026-09-12 에 로그에 찍힌 「NOTION_TOKEN 이 없습니다」 를 그 분기를 탄 것으로
+ *  읽고 한참 헤맸는데, 실제로는 if 문 본문이 에코된 것이었습니다.
+ *
+ *  에코된 줄은 GitHub 가 청록 굵게([36;1m)로 칠합니다. 그것으로 가릅니다.
+ */
+const 요약무늬 = [
+  /── 텔레그램 채널 \d+개 ──/,
+  // 채널별 줄은 열일곱이라 다 내면 깁니다. **건진 채널만 냅니다.**
+  // 「기타」 뿐인 줄은 포럼 공지라 사건이 안 됩니다 (2026-09-13 확인).
+  /글 \d+ · 새 것 \d+.*(유출 알림|랜섬 피해자)/,
+  // 이것이 뜨면 그 채널은 수동 조사 목록으로 옮겨야 합니다. 이름은 시크릿이라
+  // 가려져 나오므로 몇 개인지만 보이고, 어느 것인지는 GitHub 로그를 봅니다.
+  /못 봄 — 미리보기가 꺼져 있다/,
+  /못 본 채널 \d+개/,
+  /요청\s+\d+ · 간격/,
+  /긁은 줄 \d+/,
+  /items 표 \d+줄 중 \d+줄을 골랐습니다/,
+  /\d+줄은 뺐습니다/,
+  /노션에 \d+줄이 있습니다/,
+  /올릴 것은 \d+줄입니다/,
+  /\d+줄을 올렸습니다/,
+  /미리보기만 합니다/,
+  // 게시 상태 추적 쪽
+  /수집 DB 의 랜섬 줄 \d+/,
+  /집계처가 보인 uid \d+/,
+  /^판정\s/,
+  /^건너뜀\s/,
+  /바뀐 줄(이 없습니다| \d+)/,
+  // **막힌 것을 놓치지 않습니다.** 이 줄들이 없으면 「0줄 올림」 이 「새 것이
+  // 없었다」 인지 「못 읽어서 아무것도 안 했다」 인지 화면에서 구분이 안 됩니다.
+  /^::(warning|error)::/,
+  /집계처를 못 읽었습니다/,
+  /^못 받았다/,
+  /^줄 0개\./,
+  /없어 건너뜁니다/,
+  /올릴 표가 없습니다/,
+  /표가 안 만들어졌다/,
+];
+
+function 로그에서요약(글) {
+  const 밖 = [];
+  for (const 날것 of 글.split("\n")) {
+    if (날것.includes("[36;1m")) continue;      // 명령 에코. 일어난 일이 아니다
+    const x = 날것
+      .replace(/^\S+Z\s/, "")                         // 줄머리 시각
+      .replace(/\[[0-9;]*m/g, "")               // 남은 색 코드
+      .trim();
+    if (!x) continue;
+    if (요약무늬.some((p) => p.test(x))) 밖.push(x);
+  }
+  return 밖;
+}
+
+/** 실행 하나의 요약. **끝난 뒤에 한 번만 부릅니다.**
+ *
+ *  화면에는 지금까지 「실행 #7 · success」 만 떴습니다. 정작 알고 싶은 「몇 건
+ *  긁어서 몇 줄 올렸나」 는 GitHub 을 열어야 보였습니다.
+ *
+ *  로그가 수백 KB 라 조회마다 받으면 낭비입니다. 도는 중에는 안 부릅니다.
+ *  잡이 여럿이면(수집 + 게시 상태 추적) 차례로 붙입니다.
+ */
+async function 실행요약(env, run_id) {
+  const r = await fetch(
+    `https://api.github.com/repos/${레포}/actions/runs/${run_id}/jobs`,
+    { headers: gh머리(env.GH_TOKEN) },
+  );
+  if (!r.ok) return [];
+  const d = await r.json();
+  const 밖 = [];
+  for (const j of d.jobs || []) {
+    if (j.conclusion === "skipped") continue;
+    const lr = await fetch(
+      `https://api.github.com/repos/${레포}/actions/jobs/${j.id}/logs`,
+      { headers: gh머리(env.GH_TOKEN) },
+    );
+    if (!lr.ok) continue;
+    const 줄 = 로그에서요약(await lr.text());
+    if (줄.length) 밖.push("", `── ${j.name} ──`, ...줄);
+  }
+  return 밖;
 }
 
 async function 돌리기(request, env) {
@@ -539,9 +619,20 @@ async function 상태보기(request, env) {
     // 열쇠를 모르면 바꿨다고 칩니다. 낡은 것을 보이는 쪽이 더 나쁩니다.
     s.노션 = 일감 ? !!일감.노션 : true;
     // 일감이 끝났으면 다음 조회에서 바뀐 것이 보이게 캐시를 버립니다. 수집은 줄이
-    // 늘고 게시 상태 추적은 관측 칸이 바뀝니다. 미리보기 둘은 아무것도 안 바꿔
+    // 늘고 게시 상태 추적은 관측 칸이 바뀝니다. 미리보기는 아무것도 안 바꿔
     // 버릴 것이 없습니다. 그때 버리면 같은 화면을 받으려고 노션만 한 번 더 읽습니다.
     if (!s.돌고있나 && s.노션) 캐시 = { 언제: 0, 몸: null };
+
+    // **끝났을 때 한 번만 로그를 받아 요약을 붙입니다.** 도는 중에는 안 받습니다.
+    // 요약을 못 받아도 상태는 그대로 보여 줍니다. 로그는 GitHub 에 남아 있습니다.
+    if (!s.돌고있나 && run) {
+      try {
+        const 요약 = await 실행요약(env, run.id);
+        if (요약.length) s.줄 = s.줄.concat(요약);
+      } catch (e) {
+        s.줄 = s.줄.concat("", `요약을 못 읽었습니다: ${String((e && e.message) || e).slice(0, 120)}`);
+      }
+    }
     return json(200, s);
   } catch (e) {
     return json(502, { 오류: String((e && e.message) || e), 돌고있나: false, 줄: [] });
