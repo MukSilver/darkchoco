@@ -1,0 +1,20 @@
+# talkaid — 다섯 개가 전부다. torch 도 transformers 도 안 쓴다.
+#
+# 미리 변환된 모델이 tokenizer.json 을 싣고 있어서 tokenizers 로 바로 읽힌다.
+# 그 덕에 torch 2.5GB 가 팀원 설치에서 통째로 빠졌다 (2026-09-13 확인).
+
+# 번역 엔진. **4.8.2 이상이어야 Qwen3 를 돌린다.** 4.7.1 은 Gemma 3 직전 판이다
+ctranslate2>=4.8.2
+
+# 기계번역 모델(OPUS-MT)의 토크나이저. source.spm · target.spm 을 읽는다
+sentencepiece>=0.2
+
+# LLM 모델의 토크나이저. tokenizer.json 을 읽는다
+tokenizers>=0.15
+
+# 모델 받기. 처음 한 번만 밖에 나간다
+huggingface_hub>=0.20
+
+# 창 테마. **83KB 짜리 tcl 파일이고 딸려 오는 것이 없다.**
+# 이것 하나로 tkinter 가 낡아 보이지 않는다
+sv-ttk>=2.6

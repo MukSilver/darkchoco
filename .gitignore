@@ -68,3 +68,9 @@ corpus/
 말뭉치/
 inbox/
 *.corpus.jsonl
+
+# PyInstaller 가 짓는 것. **dist 하나가 141MB 다.**
+# `git add -A` 한 번에 통째로 들어간다. talkaid.spec 은 소스라 커밋한다
+build/
+dist/
+*.manifest

@@ -48,6 +48,7 @@ class 창:
         self.큐: queue.Queue = queue.Queue()
         self.도는중 = False
         self.사이드바열림 = False
+        self._다음 = None
         self.준비줄: list[tuple[str, str]] = []
 
         self.dpi = W.dpi_켜기()
@@ -165,7 +166,9 @@ class 창:
                 getattr(self, "_받_" + 무엇, lambda v: None)(값)
         except queue.Empty:
             pass
-        self.root.after(50, self._큐꺼내기)
+        # **표를 들고 있어야 닫을 때 끊는다.** 안 끊으면 창이 죽은 뒤에도
+        # 걸려 있던 것이 한 번 더 돌아 Tcl 이 「invalid command name」 을 낸다
+        self._다음 = self.root.after(50, self._큐꺼내기)
 
     def _받_단축키(self, hid: int) -> None:
         if hid == 1:
@@ -340,6 +343,9 @@ class 창:
     def _닫기(self) -> None:
         if self.키:
             self.키.끄기()
+        if self._다음:
+            self.root.after_cancel(self._다음)
+            self._다음 = None
         self.root.destroy()
 
     def 돌린다(self) -> None:

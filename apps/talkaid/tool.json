@@ -10,13 +10,16 @@
     "기계번역으로": "python talkaid.py --기계번역",
     "once": "python talkaid.py --once ko-en",
     "setup": "python setup.py",
-    "test": "python tests/test_engine.py && python tests/test_guard.py && python tests/test_ui.py"
+    "test": "python tests/test_engine.py && python tests/test_guard.py && python tests/test_ui.py",
+    "설치": "scripts\\setup.bat",
+    "창 띄우기": "scripts\run.bat",
+    "exe 짓기": "scripts\build_exe.bat"
   },
   "default": "run",
   "run_cwd": "apps/talkaid",
   "install": {
-    "requirements": "ctranslate2>=4.8.2 · sentencepiece · huggingface_hub · sv-ttk",
-    "note": "sv-ttk 는 83KB 짜리 tcl 테마이고 딸려 오는 것이 없다. GPU 는 필요 없다. 모델은 처음 실행 때 받는다 — LLM 1.7GB 또는 기계번역만 쓰면 1.2GB"
+    "requirements": "requirements.txt — 다섯 줄. torch 도 transformers 도 안 쓴다",
+    "note": "scripts\\setup.bat 이 venv 를 만들고 다 한다 (193MB). 파이썬이 없는 PC 에는 scripts\build_exe.bat 으로 dist\talkaid\\ 를 지어 준다 (141MB). 모델은 어느 쪽이든 처음 실행 때 받는다. GPU 는 필요 없다"
   },
   "preconditions": {
     "docker": false,

@@ -85,11 +85,20 @@ LLM 이 기계번역을 이기는 자리는 문장 구조와 빠뜨림이다. �
 
 ---
 
-## 처음 한 번
+## 처음 한 번 — 파이썬이 있으면 (팀원 대부분)
 
-    python -m pip install "ctranslate2>=4.8.2" sentencepiece huggingface_hub sv-ttk
-    cd apps/talkaid
-    python setup.py
+**`scripts\setup.bat` 을 더블클릭한다.** 그게 전부다.
+venv 를 만들고 필요한 것을 깔고 모델을 받고 실제로 한 문장 옮겨 본다.
+
+그다음부터는 **`scripts\run.bat`** 이다. `--기계번역` 을 붙이면 빠른 쪽으로 돈다.
+
+손으로 하려면 이렇게 한다.
+
+    python -m venv .venv
+    .venv\Scripts\python.exe -m pip install -r requirements.txt
+    .venv\Scripts\python.exe setup.py
+
+깔리는 것은 **스물한 개, 193MB** 다. `torch` 도 `transformers` 도 안 딸려 온다.
 
 `sv-ttk` 는 **83KB 짜리 tcl 테마 파일**이고 딸려 오는 것이 없다. 이것 하나로 창이
 낡아 보이지 않는다. 나머지는 표준 라이브러리다 — `transformers` 도 `torch` 도 안 쓴다.
@@ -98,6 +107,20 @@ LLM 이 기계번역을 이기는 자리는 문장 구조와 빠뜨림이다. �
 
     기계번역만    약 1.2GB.  문장 하나에 50~90 ms
     LLM 까지     1.7GB 더.  문장 하나에 1.4~2.2초
+
+## 파이썬이 없는 PC 에 줄 때
+
+**`scripts\build_exe.bat`** 을 돌리면 `dist	alkaid\` 가 나온다. 폴더째 주면 된다.
+
+    크기      141 MB.  venv 보다 오히려 작다
+    파이썬     필요 없다.  PATH 에 python 이 없어도 도는 것을 확인했다
+    모델      **안 들어 있다.** 받는 쪽에서 처음 실행할 때 받는다
+
+**팀원 대부분은 이게 필요 없다.** 이미 파이썬을 쓰고 있으면 `setup.bat` 쪽이 가볍고
+탈이 없다. exe 는 **백신 오탐이 알려진 문제**다 (PyInstaller Issue #6754 외 다수).
+
+`onefile` 을 안 쓴다. 실행할 때마다 임시 폴더에 압축을 풀어서 느리고 오탐도 더 심하다.
+`UPX` 도 안 쓴다. 오탐을 악화시킨다.
 
 ### 윈도우에서 걸리는 것
 
