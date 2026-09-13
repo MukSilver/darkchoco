@@ -91,11 +91,48 @@ def split_sentences(text: str) -> list[str]:
     return out or ([text.strip()] if text.strip() else [])
 
 
-def load_terms(p: Path | None = None) -> list[dict]:
+def _rules(p: Path | None = None) -> dict:
     p = p or HERE / "terms.json"
     if not p.exists():
-        return []
-    return json.loads(p.read_text(encoding="utf-8")).get("용어", [])
+        return {}
+    return json.loads(p.read_text(encoding="utf-8"))
+
+
+def load_terms(p: Path | None = None) -> list[dict]:
+    return _rules(p).get("용어", [])
+
+
+def load_endings(p: Path | None = None) -> list[dict]:
+    return _rules(p).get("의문 어미", [])
+
+
+# 문장 끝의 마침표·물음표. 이것이 있으면 어미를 안 건드린다
+END_MARK = re.compile(r"[.!?。！？…]\s*$")
+
+
+def fix_question(text: str, endings: list[dict]) -> tuple[str, str | None]:
+    """반말 의문형을 존댓말 의문형으로 바꾼다. 0 ms 다.
+
+    **모델이 「~있나」를 의문문으로 못 읽는다.** 「I don't know if there's a rule…」
+    이라는 엉뚱한 진술이 되거나 평서문이 된다. 어미 하나만 바꾸면 그 실패가 사라진다.
+    2026-09-13 실측에서 다섯 중 다섯이 고쳐졌다.
+
+        협상과 유출 사이트는 누가 운영하나      →  Negotiate and leak site.
+        협상과 유출 사이트는 누가 운영하나요?   →  Who runs negotiations and leak site.
+
+    **문장부호가 있으면 안 건드린다.** 물음표든 마침표든 사람이 찍었으면 그 뜻대로 둔다.
+    「하나」는 숫자와 겹치므로 바꾼 것을 화면에 보여 사람이 오탐을 알아보게 한다.
+    """
+    t = text.rstrip()
+    if not t or END_MARK.search(t):
+        return text, None
+    for e in sorted(endings, key=lambda x: -len(x.get("반말", ""))):
+        반말, 존대 = e.get("반말"), e.get("존대")
+        if not 반말 or not 존대 or not t.endswith(반말):
+            continue
+        새것 = t[: -len(반말)] + 존대 + "?"
+        return 새것, "%s → %s?" % (반말, 존대)
+    return text, None
 
 
 def protect(text: str, terms: list[dict]) -> tuple[str, dict[str, str]]:
@@ -150,6 +187,7 @@ class Result:
     sentences: list[str] = field(default_factory=list)
     swapped: list[str] = field(default_factory=list)
     terms: dict[str, str] = field(default_factory=dict)
+    endings: list[str] = field(default_factory=list)   # 고친 반말 의문 어미
     ms: float = 0.0
     pair: str = ""
 
@@ -158,11 +196,13 @@ class Engine:
     """모델을 물고 있는다. **단축키마다 새로 올리면 안 된다** — 올리는 데 0.4~1.1초다."""
 
     def __init__(self, compute_type: str = "int8", threads: int = 8,
-                 terms: list[dict] | None = None, swaps: list[dict] | None = None):
+                 terms: list[dict] | None = None, swaps: list[dict] | None = None,
+                 endings: list[dict] | None = None):
         self.compute_type = compute_type
         self.threads = threads
         self.terms = terms if terms is not None else load_terms()
         self.swaps = swaps if swaps is not None else []
+        self.endings = endings if endings is not None else load_endings()
         self._loaded: dict = {}
 
     # ── 모델 ──────────────────────────────────────
@@ -207,6 +247,11 @@ class Engine:
 
         조각 = []
         for s in r.sentences:
+            # 어미를 먼저 고친다. 자리표보다 앞이다 — 자리표가 끝에 오면 어미를 못 본다
+            if self.endings and pair.startswith("ko-"):
+                s, 고침 = fix_question(s, self.endings)
+                if 고침:
+                    r.endings.append(고침)
             보호, 짝 = protect(s, self.terms)
             r.terms.update(짝)
             조각.append(restore(self.raw(보호, pair), 짝))
