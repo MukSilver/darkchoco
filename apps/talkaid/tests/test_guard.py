@@ -114,10 +114,29 @@ for 새면안됨 in ["darkchoco", "nobody@example.invalid", "ZZSECRET"]:
 막힌다("제로폭이 끼어 있어도", "dark\u200bchoco team")
 막힌다("전각으로 써도", "ｄａｒｋｃｈｏｃｏ")
 
+# ── BOM 이 붙어도 첫 줄이 걸리나 ─────────────────
+# **여기가 특히 중요하다.** 실명 목록은 사람이 손으로 만드는 파일이고 메모장으로
+# 저장하면 BOM 이 붙는다. utf-8 로 읽으면 첫 줄이 "﻿홍길동" 이 되어
+# **그 이름만 조용히 안 걸린다.** 막아야 할 것이 새는 자리다
+with tempfile.TemporaryDirectory() as td:
+    bom목록 = Path(td) / "talkaid_block"
+    bom목록.write_text("﻿ZZFIRST\nZZSECOND\n", encoding="utf-8")
+    if bom목록.read_bytes()[:3] != b"\xef\xbb\xbf":
+        fails.append("시험이 BOM 을 못 만들었다. 이 시험이 무의미하다")
+    읽은것 = G.load_block(bom목록)
+    if 읽은것 != ["ZZFIRST", "ZZSECOND"]:
+        fails.append("BOM 이 붙은 목록을 잘못 읽었다: %r" % 읽은것)
+    if 읽은것 and 읽은것[0].startswith("﻿"):
+        fails.append("첫 이름에 BOM 이 묻었다. **그 이름만 조용히 안 걸린다**")
+    # 실제로 막히는지까지 본다. 목록만 맞고 안 막히면 뜻이 없다
+    v = G.check("contact ZZFIRST now", block=읽은것)
+    if not v.막힘:
+        fails.append("BOM 이 붙었던 첫 이름이 안 막힌다")
+
 # ── 결과 ─────────────────────────────────────────
 if fails:
     print("실패 %d" % len(fails))
     for f in fails:
         print("  - %s" % f)
     sys.exit(1)
-print("통과. 시험 7 묶음")
+print("통과. 시험 8 묶음")

@@ -34,11 +34,25 @@ if errorlevel 1 goto :fail
 rem Intermediate only.  No reason to keep 25 MB around.
 if exist "build" rmdir /s /q "build"
 
+rem Zip it for handing over.  138 MB folder -> about 52 MB, which fits
+rem KakaoTalk.  Too big for a Gmail attachment - use a Drive link there.
+echo   [*] zipping for handoff
+if exist "dist\talkaid.zip" del /q "dist\talkaid.zip"
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "Compress-Archive -Path 'dist\talkaid' -DestinationPath 'dist\talkaid.zip' -CompressionLevel Optimal"
+if errorlevel 1 goto :fail
+
 echo.
-echo   [*] done.  Hand over the whole  "dist\talkaid"  folder  ^(about 141 MB^).
+echo   [*] done.  Send  "dist\talkaid.zip"  ^(about 52 MB^).
+echo       The receiver unzips it and double-clicks talkaid.exe.
 echo.
 echo   Models are NOT bundled.  The receiving PC downloads them on
-echo   first run  ^(1.2 GB for MT only, 1.7 GB more for the LLM^).
+echo   first run  ^(1.2 GB for MT, 1.7 GB more for the LLM^).
+echo   Progress shows in the window's log panel.
+echo.
+echo   To update the rules later, send just  en_style.json  ^(12 KB^)
+echo   and have them drop it NEXT TO talkaid.exe.  It wins over the
+echo   copy baked into the exe.
 echo.
 echo   Antivirus may block it.  False positives on PyInstaller exes
 echo   are a known problem.  If blocked, use scripts\setup.bat instead.

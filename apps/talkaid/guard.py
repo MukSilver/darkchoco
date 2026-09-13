@@ -96,7 +96,10 @@ def load_block(p: Path | None = None) -> list[str]:
     if not p.exists():
         return []
     out = []
-    for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
+    # **utf-8-sig 다.** 사람이 손으로 만드는 파일이라 메모장으로 저장하면 BOM 이
+    # 붙는데, utf-8 로 읽으면 첫 줄이 "﻿홍길동" 이 되어 **그 이름만 안 걸린다.**
+    # 막아야 할 것이 조용히 새는 자리라 여기가 특히 중요하다
+    for line in p.read_text(encoding="utf-8-sig", errors="replace").splitlines():
         line = line.strip()
         if line and not line.startswith("#"):
             out.append(line)

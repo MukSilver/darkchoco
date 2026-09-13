@@ -208,10 +208,61 @@ for 이름 in ("_자물쇠_기계", "_자물쇠_llm"):
     if not hasattr(이미, 이름):
         fails.append("%s 가 없다. 딴 실이 같이 올리면 두 벌이 뜬다" % 이름)
 
+# ── 자료를 갱신할 자리 ───────────────────────────
+# 규칙은 계속 는다. exe 를 다시 지어 141MB 를 다시 보내는 대신
+# **12KB 짜리 파일 하나를 exe 옆에 놓으면 그것이 이겨야 한다**
+import tempfile  # noqa: E402
+
+자리 = E.자료자리("terms.json")
+check("소스로 돌면 앱 폴더 하나뿐이다", len(자리), 1)
+check("그 하나는 앱 폴더다", 자리[0].parent, E.HERE)
+
+# 얼린 상태를 흉내낸다
+가짜exe = Path(tempfile.mkdtemp()) / "talkaid.exe"
+원래exe = sys.executable
+try:
+    sys.frozen = True
+    sys.executable = str(가짜exe)
+    자리2 = E.자료자리("terms.json")
+    check("얼리면 자리가 둘", len(자리2), 2)
+    check("exe 옆이 맨 앞이다", 자리2[0], 가짜exe.parent / "terms.json")
+    check("구워 넣은 것이 그다음", 자리2[1], E.HERE / "terms.json")
+    # 옆에 없으면 구워 넣은 것으로 물러선다
+    check("옆에 없으면 안쪽 것을 쓴다", E.자료찾기("terms.json"), E.HERE / "terms.json")
+    # 옆에 두면 그것이 이긴다
+    (가짜exe.parent / "terms.json").write_text("{}", encoding="utf-8")
+    check("옆에 두면 그것이 이긴다",
+          E.자료찾기("terms.json"), 가짜exe.parent / "terms.json")
+finally:
+    sys.executable = 원래exe
+    if hasattr(sys, "frozen"):
+        del sys.frozen
+
+check("없는 이름은 None", E.자료찾기("있을리없는파일.json"), None)
+
+# ── BOM 이 붙어도 읽나 ───────────────────────────
+# 갱신하라고 만든 길이다. 사람이 메모장이나 PowerShell 로 저장하면 BOM 이 붙는데
+# utf-8 로 읽으면 거기서 죽는다. 2026-09-13 에 실제로 걸렸다
+임시 = Path(tempfile.mkdtemp())
+붙은것 = 임시 / "bom.json"
+붙은것.write_text('﻿{"용어": [{"한국어": "가", "영어": "a"}]}', encoding="utf-8")
+check("파일 앞에 BOM 이 있다", 붙은것.read_bytes()[:3], b"\xef\xbb\xbf")
+check("그래도 읽는다", E.자료읽기(붙은것), {"용어": [{"한국어": "가", "영어": "a"}]})
+check("용어도 나온다", E.load_terms(붙은것), [{"한국어": "가", "영어": "a"}])
+
+안붙은것 = 임시 / "nobom.json"
+안붙은것.write_text('{"용어": []}', encoding="utf-8")
+check("BOM 이 없어도 그대로 읽는다", E.자료읽기(안붙은것), {"용어": []})
+
+# 갱신본이 깨졌다고 도구가 안 뜨면 안 된다. 빈 것으로 물러선다
+깨진것 = 임시 / "broken.json"
+깨진것.write_text("{이건 JSON 이 아니다", encoding="utf-8")
+check("깨졌으면 물러선다", E.load_terms(깨진것), [])
+
 # ── 결과 ─────────────────────────────────────────
 if fails:
     print("실패 %d" % len(fails))
     for f in fails:
         print("  - %s" % f)
     sys.exit(1)
-print("통과. 시험 10 묶음")
+print("통과. 시험 11 묶음")

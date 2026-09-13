@@ -394,7 +394,9 @@ class 창:
         p = filedialog.askopenfilename(
             title="한국어 문안 파일", filetypes=[("텍스트", "*.txt *.md"), ("전부", "*.*")])
         if p:
-            with open(p, encoding="utf-8", errors="replace") as f:
+            # utf-8-sig 다. 남이 준 txt 는 BOM 이 붙어 있기 쉽고, 그러면 첫 줄이
+            # "﻿질문" 이 되어 그 한 줄만 엉뚱하게 번역된다
+            with open(p, encoding="utf-8-sig", errors="replace") as f:
                 self._준비시작(f.read())
 
     def _붙여넣기(self) -> None:

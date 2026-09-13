@@ -80,24 +80,38 @@ def 규칙() -> tuple[list, dict, str]:
     셋째로 **알림**을 낸다. 못 찾으면 규칙 없이 도는데 죽지도 않아서
     쓰는 사람이 모른다. 창 로그에 적으려고 글로 돌려준다.
     """
-    자리들 = (HERE / "en_style.json",
-            HERE.parents[1] / "skills" / "skills" / "darkweb-verify-ko"
-            / "tools" / "en_style.json")
-    swaps, 알림 = [], ""
+    # exe 옆 → exe 안(또는 앱 폴더) → 레포의 스킬 자리 차례다.
+    # **exe 옆이 맨 앞인 것이 핵심이다.** 규칙이 늘 때마다 141MB 를 다시 보내는
+    # 대신 12KB 짜리 이 파일 하나만 보내면 갱신된다
+    자리들 = E.자료자리("en_style.json") + [
+        HERE.parents[1] / "skills" / "skills" / "darkweb-verify-ko"
+        / "tools" / "en_style.json"]
+    swaps, 알림, 탈 = [], "", []
     for p in 자리들:
-        if p.exists():
-            swaps = json.loads(p.read_text(encoding="utf-8")).get("바꿔 쓰기", [])
-            알림 = "[규칙] 바꿔 쓰기 %d 짝 · %s" % (len(swaps), p)
-            break
+        if not p.exists():
+            continue
+        try:
+            swaps = E.자료읽기(p).get("바꿔 쓰기", [])
+        except Exception as e:
+            # 갱신본이 깨졌으면 다음 자리로 물러선다. **통째로 안 뜨면 안 된다.**
+            탈.append("[규칙] %s 를 못 읽었다 (%s). 다음 자리를 본다." % (p, e))
+            continue
+        알림 = "[규칙] 바꿔 쓰기 %d 짝 · %s" % (len(swaps), p)
+        break
     else:
         알림 = ("[규칙] **en_style.json 을 못 찾았다. 바꿔 쓰기 없이 돈다.**\n"
               "       찾아본 자리: " + " · ".join(str(p) for p in 자리들) + "\n"
               "       앱 폴더만 떼어 온 것이라면 레포 안에서 돌려야 한다.")
+    if 탈:
+        알림 = "\n".join(탈) + "\n" + 알림
 
     상용구 = {}
-    p = HERE / "snippets.json"
-    if p.exists():
-        상용구 = json.loads(p.read_text(encoding="utf-8")).get("상용구", {})
+    p = E.자료찾기("snippets.json")
+    if p is not None:
+        try:
+            상용구 = E.자료읽기(p).get("상용구", {})
+        except Exception as e:
+            알림 += "\n[규칙] snippets.json 을 못 읽었다 (%s). 상용구 없이 돈다." % e
     return swaps, 상용구, 알림
 
 

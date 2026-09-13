@@ -34,6 +34,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -106,11 +107,53 @@ def split_sentences(text: str) -> list[str]:
     return out or ([text.strip()] if text.strip() else [])
 
 
+def 자료자리(이름: str) -> list[Path]:
+    """자료 파일을 찾을 자리를 앞에서부터 낸다.
+
+    **exe 옆이 맨 앞이다.** 얼려서 지으면 자료가 exe 안에 굳는데 용어·상용구·
+    바꿔 쓰기는 계속 는다. 규칙 한 줄 고칠 때마다 141MB 를 다시 지어 다시 보낼
+    수는 없다. **파일 하나만 exe 옆에 놓으면 그것이 이긴다.** 12KB 면 메일로 간다.
+
+    소스로 돌 때는 앱 폴더 하나뿐이라 예전과 같다.
+    """
+    자리 = []
+    if getattr(sys, "frozen", False):
+        자리.append(Path(sys.executable).resolve().parent / 이름)
+    자리.append(HERE / 이름)
+    return 자리
+
+
+def 자료찾기(이름: str) -> Path | None:
+    """자료자리 를 차례로 보고 처음 있는 것을 낸다. 없으면 None."""
+    for p in 자료자리(이름):
+        if p.exists():
+            return p
+    return None
+
+
+def 자료읽기(p: Path) -> dict:
+    """자료 JSON 을 읽는다. **utf-8-sig 로 읽는다.**
+
+    사람이 메모장이나 PowerShell 로 고쳐 저장하면 앞에 BOM(EF BB BF)이 붙는다.
+    utf-8 로 읽으면 거기서 `Unexpected UTF-8 BOM` 으로 죽는다. **갱신하라고
+    만든 길에 그 함정을 두지 않는다.** utf-8-sig 는 BOM 이 없어도 그냥 읽는다.
+    2026-09-13 에 exe 옆에 갱신본을 놓아 보다가 실제로 걸렸다.
+    """
+    return json.loads(p.read_text(encoding="utf-8-sig"))
+
+
 def _rules(p: Path | None = None) -> dict:
-    p = p or HERE / "terms.json"
-    if not p.exists():
-        return {}
-    return json.loads(p.read_text(encoding="utf-8"))
+    후보들 = [p] if p is not None else 자료자리("terms.json")
+    for 후보 in 후보들:
+        if 후보 is None or not 후보.exists():
+            continue
+        try:
+            return 자료읽기(후보)
+        except Exception as e:
+            # 갱신본이 깨졌으면 다음 자리로 물러선다. 통째로 죽는 것보다 낫다
+            print("[자료] %s 를 못 읽었다 (%s: %s). 다음 자리를 본다."
+                  % (후보, type(e).__name__, e))
+    return {}
 
 
 def load_terms(p: Path | None = None) -> list[dict]:
