@@ -71,22 +71,34 @@ def 출력자리_만들기() -> None:
         sys.stderr = f
 
 
-def 규칙() -> tuple[list, dict]:
+def 규칙() -> tuple[list, dict, str]:
     """바꿔 쓰기는 **사본을 두지 않는다.** 스킬과 같은 파일을 본다.
     2026-09-02 에 같은 도구가 세 벌이라 24개 중 13개가 갈렸던 일이 있다.
+
+    exe 로 지을 때는 spec 이 정본을 읽어 옆에 넣어 준다. 그래서 첫 자리에서 걸린다.
+
+    셋째로 **알림**을 낸다. 못 찾으면 규칙 없이 도는데 죽지도 않아서
+    쓰는 사람이 모른다. 창 로그에 적으려고 글로 돌려준다.
     """
-    swaps = []
-    for p in (HERE / "en_style.json",
-              HERE.parents[1] / "skills" / "skills" / "darkweb-verify-ko"
-              / "tools" / "en_style.json"):
+    자리들 = (HERE / "en_style.json",
+            HERE.parents[1] / "skills" / "skills" / "darkweb-verify-ko"
+            / "tools" / "en_style.json")
+    swaps, 알림 = [], ""
+    for p in 자리들:
         if p.exists():
             swaps = json.loads(p.read_text(encoding="utf-8")).get("바꿔 쓰기", [])
+            알림 = "[규칙] 바꿔 쓰기 %d 짝 · %s" % (len(swaps), p)
             break
+    else:
+        알림 = ("[규칙] **en_style.json 을 못 찾았다. 바꿔 쓰기 없이 돈다.**\n"
+              "       찾아본 자리: " + " · ".join(str(p) for p in 자리들) + "\n"
+              "       앱 폴더만 떼어 온 것이라면 레포 안에서 돌려야 한다.")
+
     상용구 = {}
     p = HERE / "snippets.json"
     if p.exists():
         상용구 = json.loads(p.read_text(encoding="utf-8")).get("상용구", {})
-    return swaps, 상용구
+    return swaps, 상용구, 알림
 
 
 def 한번(eng: E.Engine, pair: str) -> int:
@@ -128,18 +140,20 @@ def main() -> int:
     if sys.platform != "win32":
         raise SystemExit("윈도우 전용이다. 클립보드와 단축키가 Win32 API 다.")
 
-    swaps, 상용구 = 규칙()
+    swaps, 상용구, 규칙알림 = 규칙()
     eng = E.Engine(threads=a.threads, swaps=swaps,
                    llm=None if getattr(a, "기계번역") else LLM)
 
     if a.once:
+        print(규칙알림)
         return 한번(eng, a.once)
 
     import ui
     # 시작 줄은 창이 출력을 가로챈 뒤에 찍어야 창 안 로그에도 남는다
     ui.창(eng, 상용구).돌린다(
-        시작말="[시작] talkaid · %s · 로그도 %s 에 쌓인다"
-               % ("기계번역" if getattr(a, "기계번역") else "LLM", 로그파일))
+        시작말="[시작] talkaid · %s · 로그도 %s 에 쌓인다\n%s"
+               % ("기계번역" if getattr(a, "기계번역") else "LLM",
+                  로그파일, 규칙알림))
     return 0
 
 

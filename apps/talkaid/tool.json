@@ -10,7 +10,7 @@
     "기계번역으로": "python talkaid.py --기계번역",
     "once": "python talkaid.py --once ko-en",
     "setup": "python setup.py",
-    "test": "python tests/test_engine.py && python tests/test_guard.py && python tests/test_ui.py",
+    "test": "python tests/test_engine.py && python tests/test_guard.py && python tests/test_talkaid.py && python tests/test_ui.py",
     "창 띄우기": "scripts\\run.bat",
     "미리 받아 두기": "scripts\\setup.bat",
     "exe 짓기": "scripts\\build_exe.bat"

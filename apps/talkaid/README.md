@@ -269,11 +269,23 @@ PowerToys 를 이미 쓰고 있으면 Text Extractor(`Win+Shift+T`)가 한 단�
     판정세트.md      번역이 나아졌는지 재는 자. 문장 예순넷
     판정.py         돌리고 세고 견준다. **판정은 사람이 한다**
     판정결과/        판별 기록. 지우지 않는다 — 옛것과 견줘야 한다
-    tests/          test_engine · test_guard · test_ui
+    tests/          test_engine · test_guard · test_talkaid · test_ui
 
-바꿔 쓰기 규칙은 **여기 사본을 두지 않는다.** 스킬의
-`skills/skills/darkweb-verify-ko/tools/en_style.json` 을 그대로 본다.
-2026-09-02 에 같은 도구가 세 벌이라 24개 중 13개가 갈렸던 일이 있다.
+### 바꿔 쓰기 규칙은 정본이 하나다
+
+`skills/skills/darkweb-verify-ko/tools/en_style.json` 이 정본이고 **여기 사본을
+두지 않는다.** 2026-09-02 에 같은 도구가 세 벌이라 24개 중 13개가 갈렸던 일이 있다.
+
+그런데 떼어 줄 때 문제가 생긴다. 앱 폴더만 압축해 주거나 exe 로 지으면 그 파일이
+따라가지 않아 **규칙 스물다섯 짝이 통째로 빠진다.** 죽지도 경고하지도 않는다.
+2026-09-13 에 지어 둔 exe 가 실제로 그 상태였다.
+
+**사본을 만드는 대신 지을 때 정본에서 가져간다.** 갱신은 정본 한 곳만 하면 되고,
+빠지면 세 군데서 걸린다.
+
+    talkaid.spec       정본을 못 찾으면 **빌드가 멈춘다.** 빠진 exe 가 안 나온다
+    talkaid.py 규칙()   못 찾으면 창 로그 첫 줄에 적는다
+    tests/test_talkaid  spec 이 싣는지, 앱 폴더에 사본이 생겼는지 본다
 
 ---
 

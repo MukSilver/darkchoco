@@ -27,6 +27,8 @@ UPX 압축은 오탐을 **악화시킨다** (upx Issue #711). 크기 이득보�
 `ctranslate2.dll` 과 Intel MKL·oneDNN 이 딸려 있는데 자동으로는 안 잡힌다.
 **지은 뒤 깨끗한 PC 에서 반드시 돌려 봐야 한다.**
 """
+import os
+
 from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
 
 binaries = []
@@ -37,6 +39,23 @@ datas = [
     ("terms.json", "."),
     ("snippets.json", "."),
 ]
+
+# **바꿔 쓰기 규칙은 스킬 쪽이 정본이다.** 레포에 사본을 두지 않는다 —
+# 2026-09-02 에 같은 도구가 세 벌이라 24개 중 13개가 갈렸던 일이 있다.
+# 그래서 여기서 정본을 읽어 넣는다. 고칠 때는 정본 한 곳만 고치고 다시 지으면 된다.
+#
+# 이것을 안 넣으면 exe 로 받은 사람은 규칙 25짝이 통째로 빠진 채 돈다.
+# 죽지도 경고하지도 않아서 쓰는 사람이 모른다 (2026-09-13 에 그 상태였다).
+정본 = os.path.join("..", "..", "skills", "skills", "darkweb-verify-ko",
+                   "tools", "en_style.json")
+if os.path.exists(정본):
+    datas.append((정본, "."))
+else:
+    raise SystemExit(
+        "en_style.json 을 못 찾았다: %s\n"
+        "레포 안에서 지어야 한다. 이것 없이 지으면 바꿔 쓰기가 빠진 exe 가 나온다."
+        % os.path.abspath(정본))
+
 # sv_ttk 는 .tcl 파일이 알맹이다. 코드가 아니라 자료라 따로 모아야 한다
 datas += collect_data_files("sv_ttk")
 
