@@ -17,6 +17,11 @@ rem  same bug.  kr-leak-alarm/scripts/*.bat avoid it by staying
 rem  ASCII.  Korean instructions live in README.md instead.
 rem ============================================================
 
+rem run.bat calls this with /auto when .venv is missing.  In that case do not
+rem pause at the end - the window is about to open on its own.
+set "AUTO="
+if /I "%~1"=="/auto" set "AUTO=1"
+
 echo.
 echo   talkaid - first-time setup
 echo   ==========================================
@@ -47,6 +52,11 @@ set HF_HUB_DISABLE_SYMLINKS=1
 if errorlevel 1 goto :fail
 
 echo.
+if defined AUTO (
+  echo   [*] setup done.  opening the window...
+  echo.
+  exit /b 0
+)
 echo   [*] done.  Now double-click  scripts\run.bat
 echo.
 pause

@@ -11,15 +11,15 @@
     "once": "python talkaid.py --once ko-en",
     "setup": "python setup.py",
     "test": "python tests/test_engine.py && python tests/test_guard.py && python tests/test_ui.py",
-    "설치": "scripts\\setup.bat",
     "창 띄우기": "scripts\\run.bat",
+    "미리 받아 두기": "scripts\\setup.bat",
     "exe 짓기": "scripts\\build_exe.bat"
   },
   "default": "run",
   "run_cwd": ".",
   "install": {
     "requirements": "requirements.txt — 다섯 줄. torch 도 transformers 도 안 쓴다",
-    "note": "scripts\\setup.bat 이 venv 를 만들고 다 한다 (193MB). 파이썬이 없는 PC 에는 scripts\\build_exe.bat 으로 dist\\talkaid\\ 를 지어 준다 (141MB). 모델은 어느 쪽이든 처음 실행 때 받는다. GPU 는 필요 없다"
+    "note": "scripts\\run.bat 하나만 누르면 된다. 처음이면 스스로 venv 를 만들고 (193MB) 모델까지 받은 뒤 (2.9GB) 창을 띄운다. scripts\\setup.bat 은 미리 받아 두고 싶을 때만 따로 쓴다. 파이썬이 없는 PC 에는 scripts\\build_exe.bat 으로 dist\\talkaid\\ 를 지어 준다 (141MB). GPU 는 필요 없다"
   },
   "preconditions": {
     "docker": false,

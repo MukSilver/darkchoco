@@ -13,12 +13,21 @@ rem exists goes to %TEMP%\talkaid.log instead.
 rem
 rem --once and --help print to a console, so those keep one.
 
+rem First run sets itself up.  One file to double-click, not two.
+rem This console stays visible while setup runs, then closes when the
+rem window opens.  Downloading the models takes a while the first time.
 if not exist ".venv\Scripts\python.exe" (
   echo.
-  echo   [!] not set up yet.  Double-click  scripts\setup.bat  first.
+  echo   [*] first run - setting up.  this takes a while ^(models are ~2.9 GB^).
   echo.
-  pause
-  exit /b 1
+  call "%~dp0setup.bat" /auto
+  if errorlevel 1 (
+    echo.
+    echo   [!] setup failed.  See the messages above.
+    echo.
+    pause
+    exit /b 1
+  )
 )
 
 set PYTHONIOENCODING=utf-8
