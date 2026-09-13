@@ -60,6 +60,9 @@ LLM_MODELS = {
     "qwen1.7b": "jncraton/Qwen3-1.7B-ct2-int8",
 }
 
+# 엔진을 기계번역으로 띄워도 사이드바는 LLM 을 쓴다. 그때 무엇을 올릴지가 이것이다.
+기본LLM = "qwen1.7b"
+
 # 되돌리는 짝. 역번역에 쓴다.
 # **역번역은 LLM 을 안 쓴다.** 90ms 짜리 기계번역이면 된다 — 뜻이 흘렀는지
 # 사람에게 보이는 것이 일이지 잘 쓰는 것이 일이 아니다
@@ -215,6 +218,9 @@ class Engine:
         self.swaps = swaps if swaps is not None else []
         self.endings = endings if endings is not None else load_endings()
         self.llm = llm            # None 이면 기계번역만. LLM_MODELS 의 열쇠를 주면 그것으로
+        # llm=None 으로 띄워도 사이드바는 LLM 을 부른다 (run 의 llm=True).
+        # 그때 어느 모델을 올릴지는 따로 들고 있어야 한다
+        self.llm_model = llm or 기본LLM
         self._loaded: dict = {}
         self._gen = None
 
@@ -227,7 +233,7 @@ class Engine:
         from huggingface_hub import snapshot_download
         from tokenizers import Tokenizer
 
-        d = Path(snapshot_download(LLM_MODELS[self.llm]))
+        d = Path(snapshot_download(LLM_MODELS[self.llm_model]))
         self._gen = (
             ctranslate2.Generator(str(d), device="cpu",
                                   compute_type=self.compute_type,
@@ -324,16 +330,20 @@ class Engine:
         return " ".join(self._one(s, pair) for s in split_sentences(text))
 
     # ── 본체 ──────────────────────────────────────
-    def run(self, text: str, pair: str, back: bool = True) -> Result:
+    def run(self, text: str, pair: str, back: bool = True,
+            llm: bool | None = None) -> Result:
+        # llm 을 안 주면 엔진을 띄울 때 정한 대로 간다. True 를 주면 기계번역으로
+        # 띄운 엔진에서도 LLM 을 태운다 — 사이드바가 그렇게 부른다
         import time
         t0 = time.perf_counter()
         r = Result(pair=pair)
         r.sentences = split_sentences(text)
+        LLM쓴다 = bool(self.llm) if llm is None else llm
 
         # LLM 은 자리표도 어미 고치기도 안 쓴다. 둘 다 이 경로에서는 오히려 해롭다.
         #   자리표   낱말의 맥락을 지워 문장이 뻣뻣해진다 (사전이 넷 중 넷으로 이겼다)
         #   어미     **LLM 은 반말 의문형을 스스로 알아듣는다.** 고쳐 주면 되레 나빠진 것이 있다
-        if self.llm and pair == "ko-en":
+        if LLM쓴다 and pair == "ko-en":
             r.text = " ".join(self._llm_one(s) for s in r.sentences)
         else:
             조각 = []

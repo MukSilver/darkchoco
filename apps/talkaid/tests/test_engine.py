@@ -157,10 +157,50 @@ for pair, (a, b) in E.CHAINS.items():
     if a not in E.MODELS or b not in E.MODELS:
         fails.append("사슬 %s 가 없는 모델을 가리킨다" % pair)
 
+# ── run 의 llm 인자가 경로를 가르나 ──────────────
+# 모델을 안 올린다. 두 경로를 가짜로 바꿔 놓고 어느 쪽으로 갔는지만 본다
+
+
+class 길본다(E.Engine):
+    def __init__(self, llm):
+        super().__init__(terms=[], swaps=[], endings=[], llm=llm)
+        self.간길 = []
+
+    def _llm_one(self, text):
+        self.간길.append("llm")
+        return "LLM"
+
+    def raw(self, text, pair):
+        self.간길.append("mt")
+        return "MT"
+
+
+꺼둠 = 길본다(llm=None)
+꺼둠.run("규칙이 있나", "ko-en", back=False)
+check("기계번역으로 띄우면 기계번역이다", 꺼둠.간길, ["mt"])
+
+꺼둠.간길 = []
+꺼둠.run("규칙이 있나", "ko-en", back=False, llm=True)
+check("llm=True 면 기계번역 엔진도 LLM 을 탄다", 꺼둠.간길, ["llm"])
+
+켜둠 = 길본다(llm="qwen1.7b")
+켜둠.run("규칙이 있나", "ko-en", back=False)
+check("LLM 으로 띄우면 LLM 이다", 켜둠.간길, ["llm"])
+
+켜둠.간길 = []
+켜둠.run("규칙이 있나", "ko-en", back=False, llm=False)
+check("llm=False 면 LLM 엔진도 기계번역으로 간다", 켜둠.간길, ["mt"])
+
+# 기계번역으로 띄워도 어느 모델을 올릴지는 알고 있어야 한다. 모르면 사이드바가 죽는다
+check("llm 없이 띄워도 올릴 모델을 안다", E.Engine(llm=None).llm_model, E.기본LLM)
+check("llm 을 주면 그것을 올린다", E.Engine(llm="qwen1.7b").llm_model, "qwen1.7b")
+if E.기본LLM not in E.LLM_MODELS:
+    fails.append("기본LLM %r 이 LLM_MODELS 에 없다" % E.기본LLM)
+
 # ── 결과 ─────────────────────────────────────────
 if fails:
     print("실패 %d" % len(fails))
     for f in fails:
         print("  - %s" % f)
     sys.exit(1)
-print("통과. 시험 7 묶음")
+print("통과. 시험 9 묶음")

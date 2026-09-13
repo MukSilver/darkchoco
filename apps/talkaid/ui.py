@@ -218,6 +218,11 @@ class 창:
             self.준비줄.append(짝)
             self._준비그리기(len(self.준비줄), 짝)
 
+    def _받_물러섬(self, 말: str) -> None:
+        # 사이드바가 LLM 을 못 써서 기계번역으로 내려갔다. 조용히 넘기지 않는다 —
+        # 품질이 달라진 것을 모르고 쓰면 그대로 상대에게 나간다
+        self.관문.configure(text=말, foreground="#a33")
+
     # ── 옮기기 ───────────────────────────────────
     def 옮기기(self, 읽기: bool = False) -> None:
         글 = self.입력.get("1.0", "end").strip()
@@ -311,15 +316,32 @@ class 창:
         if not self.사이드바열림:
             self.사이드바()
         self._준비비우기()
+        # 첫 줄이 나오기까지 모델 올리는 시간이 얹힌다. 아무 표시가 없으면 멈춘 줄 안다
+        self.준비상태.configure(text="0 / %d  (LLM 을 올린다)" % len(줄들))
         threading.Thread(target=self._준비일, args=(줄들,), daemon=True).start()
 
     def _준비일(self, 줄들: list[str]) -> None:
+        # **사이드바는 늘 LLM 이다.** 대화 전에 미리 옮겨 두는 자리라 느려도 되고,
+        # 창을 --기계번역 으로 띄웠어도 여기만은 품질을 고른다
+        LLM으로 = True
         for i, s in enumerate(줄들, 1):
             try:
-                r = self.eng.run(s, "ko-en", back=False)
+                r = self.eng.run(s, "ko-en", back=False, llm=LLM으로)
                 self.큐.put(("준비", (i, len(줄들), (s, r.text))))
+                continue
             except Exception as e:
-                self.큐.put(("준비", (i, len(줄들), (s, "**못 옮겼다** %s" % e))))
+                탈 = e
+            # 모델을 못 올렸으면 남은 줄은 기계번역으로 잇는다. 통째로 멈추는 것보다 낫다
+            if LLM으로:
+                LLM으로 = False
+                self.큐.put(("물러섬", "LLM 을 못 썼다 (%s) — 남은 줄은 기계번역이다" % 탈))
+                try:
+                    r = self.eng.run(s, "ko-en", back=False, llm=False)
+                    self.큐.put(("준비", (i, len(줄들), (s, r.text))))
+                    continue
+                except Exception as e2:
+                    탈 = e2
+            self.큐.put(("준비", (i, len(줄들), (s, "**못 옮겼다** %s" % 탈))))
 
     def _준비그리기(self, n: int, 짝: tuple[str, str]) -> None:
         ko, en = 짝

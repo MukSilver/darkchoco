@@ -38,14 +38,21 @@ def check(name, got, want):
 
 
 class 가짜엔진:
-    """모델을 안 올린다. 넣은 대로 돌려준다."""
-    def __init__(self):
-        self.부른것 = []
+    """모델을 안 올린다. 넣은 대로 돌려준다.
 
-    def run(self, text, pair, back=True):
-        self.부른것.append((text, pair, back))
+    `LLM터짐` 을 켜면 llm=True 로 부를 때만 예외를 던진다. 사이드바가
+    기계번역으로 물러서는지 보는 데 쓴다.
+    """
+    def __init__(self, LLM터짐: bool = False):
+        self.부른것 = []
+        self.LLM터짐 = LLM터짐
+
+    def run(self, text, pair, back=True, llm=None):
+        self.부른것.append((text, pair, back, llm))
+        if llm and self.LLM터짐:
+            raise RuntimeError("모델을 못 올렸다")
         r = E.Result(pair=pair)
-        r.text = "EN(%s)" % text
+        r.text = "%s(%s)" % ("LLM" if llm else "EN", text)
         r.back = "KO(%s)" % text if back else ""
         r.ms = 12.0
         r.sentences = [text]
@@ -151,6 +158,48 @@ check("탈이 나면 다시 누를 수 있다", str(w.옮김단추.cget("state")
 if "못 옮겼다" not in w.관문.cget("text"):
     fails.append("탈이 화면에 안 나온다: %r" % w.관문.cget("text"))
 
+# ── 사이드바는 늘 LLM 이다 ───────────────────────
+# 창을 --기계번역 으로 띄웠어도 여기만은 LLM 을 고른다. 대화 전에 미리 옮겨
+# 두는 자리라 느려도 되고 품질이 전부다
+
+
+def 큐비우기(창):
+    꺼냄 = []
+    while not 창.큐.empty():
+        꺼냄.append(창.큐.get_nowait())
+    return 꺼냄
+
+
+큐비우기(w)
+w.eng = 가짜엔진()
+w._준비일(["첫 줄인가", "둘째 줄인가"])
+check("사이드바는 LLM 으로 부른다", [c[3] for c in w.eng.부른것], [True, True])
+check("사이드바는 역번역을 안 시킨다", [c[2] for c in w.eng.부른것], [False, False])
+check("옮긴 것이 LLM 경로다",
+      [값[2][1] for 무엇, 값 in 큐비우기(w) if 무엇 == "준비"],
+      ["LLM(첫 줄인가)", "LLM(둘째 줄인가)"])
+
+# ── LLM 을 못 올려도 멈추지 않나 ─────────────────
+# 모델이 아직 안 받아졌을 수 있다. 그때 통째로 죽는 대신 기계번역으로 잇되
+# **조용히 넘기지 않는다.** 품질이 달라진 줄 모르고 쓰면 그대로 상대에게 나간다
+w.eng = 가짜엔진(LLM터짐=True)
+w._준비일(["첫 줄인가", "둘째 줄인가"])
+check("한 번 터지면 그 줄부터 기계번역이다",
+      [c[3] for c in w.eng.부른것], [True, False, False])
+꺼냄 = 큐비우기(w)
+물러섬 = [값 for 무엇, 값 in 꺼냄 if 무엇 == "물러섬"]
+check("물러섰다고 한 번만 알린다", len(물러섬), 1)
+check("터진 줄도 버리지 않는다",
+      [값[2][1] for 무엇, 값 in 꺼냄 if 무엇 == "준비"],
+      ["EN(첫 줄인가)", "EN(둘째 줄인가)"])
+if 물러섬 and "기계번역" not in 물러섬[0]:
+    fails.append("물러섬 안내에 무엇으로 갔는지가 없다: %r" % 물러섬[0])
+if 물러섬:
+    w._받_물러섬(물러섬[0])
+    w.root.update()
+    if "기계번역" not in w.관문.cget("text"):
+        fails.append("물러섬이 화면에 안 나온다: %r" % w.관문.cget("text"))
+
 w._닫기()
 
 # ── 결과 ─────────────────────────────────────────
@@ -159,4 +208,4 @@ if fails:
     for f in fails:
         print("  - %s" % f)
     sys.exit(1)
-print("통과. 시험 7 묶음")
+print("통과. 시험 9 묶음")
