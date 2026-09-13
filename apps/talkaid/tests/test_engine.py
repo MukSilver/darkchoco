@@ -197,10 +197,21 @@ check("llm 을 주면 그것을 올린다", E.Engine(llm="qwen1.7b").llm_model, 
 if E.기본LLM not in E.LLM_MODELS:
     fails.append("기본LLM %r 이 LLM_MODELS 에 없다" % E.기본LLM)
 
+# ── 같은 모델을 두 번 올리지 않나 ────────────────
+# 창이 뜨면 딴 실이 미리 올린다. 그 사이 사람이 눌러도 1.7B 가 두 벌 올라가면 안 된다
+이미 = E.Engine()
+이미._gen = ("올려둔", "것")
+check("LLM 을 이미 올렸으면 그대로 쓴다", 이미.load_llm(), ("올려둔", "것"))
+이미._loaded["ko-en"] = ("올려둔", "것", "셋")
+check("기계번역도 그대로 쓴다", 이미.load("ko-en"), ("올려둔", "것", "셋"))
+for 이름 in ("_자물쇠_기계", "_자물쇠_llm"):
+    if not hasattr(이미, 이름):
+        fails.append("%s 가 없다. 딴 실이 같이 올리면 두 벌이 뜬다" % 이름)
+
 # ── 결과 ─────────────────────────────────────────
 if fails:
     print("실패 %d" % len(fails))
     for f in fails:
         print("  - %s" % f)
     sys.exit(1)
-print("통과. 시험 9 묶음")
+print("통과. 시험 10 묶음")

@@ -36,6 +36,8 @@ def 있나(이름: str) -> bool:
 def main() -> int:
     ap = argparse.ArgumentParser(description="모델을 받고 도는지 본다")
     ap.add_argument("--check", action="store_true", help="받지 않고 무엇이 없는지만 본다")
+    ap.add_argument("--기계번역만", action="store_true",
+                    help="LLM 1.7GB 를 건너뛴다. 그 대신 사이드바를 처음 쓸 때 받는다")
     a = ap.parse_args()
 
     print("\n  talkaid 처음 설정\n")
@@ -81,9 +83,41 @@ def main() -> int:
         print("\n  **용어 치환이 안 먹었다.** terms.json 을 확인한다.")
         return 1
 
+    # **여기까지가 기계번역이다.** 예전에는 이 줄에서 끝났는데, 기본 실행도
+    # 사이드바도 LLM 을 쓰므로 「다 됐다」는 말을 듣고 쓰기 시작한 사람이
+    # 첫 문장에서 1.7GB 내려받기를 만났다. 설치할 때 한 번에 끝낸다
+    if getattr(a, "기계번역만"):
+        print("\n  --기계번역만 이라 LLM 을 건너뛴다.")
+        print("  **사이드바를 처음 쓸 때 1.7GB 를 받는다.** 그때 오래 걸린다.\n")
+        return 0
+
+    print("\n  LLM 을 받는다. **1.7GB 라 처음에는 30분을 넘길 수 있다**")
+    print("  건너뛰려면 Ctrl+C 를 누르고 --기계번역만 으로 다시 돌린다\n")
+    print("  %-8s %-44s " % ("llm", E.LLM_MODELS[eng.llm_model]), end="", flush=True)
+    t0 = time.perf_counter()
+    try:
+        eng.load_llm()
+        print("됐다 (%.1f초)" % (time.perf_counter() - t0))
+    except KeyboardInterrupt:
+        print("\n\n  그만뒀다. 사이드바를 처음 쓸 때 받는다.\n")
+        return 0
+    except Exception as e:
+        print("**실패** %s: %s" % (type(e).__name__, str(e)[:60]))
+        print("\n  기계번역은 되니 --기계번역 으로 쓸 수 있다.")
+        print("  다만 사이드바는 LLM 이라 그때 다시 받으려 든다.\n")
+        return 1
+
+    print("\n  LLM 으로도 옮겨 본다\n")
+    t0 = time.perf_counter()
+    r2 = eng.run("지금도 신규 어피실리에이트를 받고 있나요?", "ko-en",
+                 back=False, llm=True)
+    print("     영어    %s" % r2.text)
+    print("     %.0f ms  (두 번째부터는 이만큼이다)" % r2.ms)
+
     print("\n  됐다. 이제 `python talkaid.py` 로 띄워 두면 된다.")
     print("  나가면 안 되는 말 목록을 두려면 ~/.config/darkchoco/talkaid_block 을 만든다.")
-    print("  화면 글자를 옮기려면 PowerToys 의 Text Extractor (Win+Shift+T) 를 켠다.\n")
+    print("  화면 글자는 Win+Shift+S 로 캡처하고 「텍스트 작업」으로 복사한다.")
+    print("  깔 것이 없다. 윈도우 캡처 도구에 들어 있다.\n")
     return 0
 
 

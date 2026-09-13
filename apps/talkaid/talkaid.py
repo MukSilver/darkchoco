@@ -11,7 +11,7 @@
 
 쓰는 법은 어디서나 같다. **글을 고르고 Ctrl+C · 단축키 · Ctrl+V.**
 텔레그램·메일·Tox·Tor 브라우저가 다 시스템 클립보드를 쓰므로 넷 다 그대로 된다.
-화면 글자는 PowerToys 의 Win+Shift+T 로 클립보드에 넣고 Ctrl+Alt+2 를 누르면 된다.
+화면 글자는 Win+Shift+S 로 캡처해 「텍스트 작업」으로 복사한 뒤 Ctrl+Alt+2 를 누른다.
 
 ## 안 하는 것
 
@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -43,6 +44,31 @@ import engine as E  # noqa: E402
 import guard as G  # noqa: E402
 
 LLM = "qwen1.7b"
+
+# **TEMP 에 두지 않는다.** 이 PC 에서 tempfile.gettempdir() 이
+# C:\Users\Public\Documents\ESTsoft\CreatorTemp 였다 — 압축 프로그램이 TMP 를
+# 바꿔 놓은 것인데 거기는 **다른 사용자도 읽는 자리**다. 로그에는 옮긴 말이 남는다.
+# guard 가 쓰는 설정 자리와 같은 곳에 둔다. 홈 밑이라 남이 못 본다
+로그파일 = G.CONF / "talkaid.log"
+
+
+def 출력자리_만들기() -> None:
+    """pythonw 로 띄우면 stdout·stderr 가 None 이다. 그대로 두면 `print` 한 줄에
+    프로그램이 죽고 **창이 뜨기 전에 난 탈은 아무 데도 안 남는다.**
+
+    파일로 돌려 둔다. 창이 뜨면 ui 가 이것을 감싸서 화면 로그에도 같이 보낸다.
+    """
+    if sys.stdout is not None and sys.stderr is not None:
+        return
+    try:
+        로그파일.parent.mkdir(parents=True, exist_ok=True)
+        f = open(로그파일, "a", encoding="utf-8", buffering=1)
+    except Exception:
+        f = open(os.devnull, "w", encoding="utf-8")
+    if sys.stdout is None:
+        sys.stdout = f
+    if sys.stderr is None:
+        sys.stderr = f
 
 
 def 규칙() -> tuple[list, dict]:
@@ -90,6 +116,7 @@ def 한번(eng: E.Engine, pair: str) -> int:
 
 
 def main() -> int:
+    출력자리_만들기()
     ap = argparse.ArgumentParser(description="클립보드를 옮긴다. 밖으로 요청을 안 보낸다")
     ap.add_argument("--기계번역", action="store_true",
                     help="LLM 대신 OPUS-MT. 빠르지만 뜻이 덜 정확하다")
@@ -109,7 +136,10 @@ def main() -> int:
         return 한번(eng, a.once)
 
     import ui
-    ui.창(eng, 상용구).돌린다()
+    # 시작 줄은 창이 출력을 가로챈 뒤에 찍어야 창 안 로그에도 남는다
+    ui.창(eng, 상용구).돌린다(
+        시작말="[시작] talkaid · %s · 로그도 %s 에 쌓인다"
+               % ("기계번역" if getattr(a, "기계번역") else "LLM", 로그파일))
     return 0
 
 

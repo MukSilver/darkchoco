@@ -6,7 +6,12 @@ setlocal
 cd /d "%~dp0.."
 
 rem ASCII only - see the note at the top of setup.bat.
-rem Opens the window.  The console stays behind it: errors land here.
+rem
+rem Opens the window WITHOUT a console.  The log lives inside the window now
+rem (the "log" toggle at the bottom).  Anything printed before the window
+rem exists goes to %TEMP%\talkaid.log instead.
+rem
+rem --once and --help print to a console, so those keep one.
 
 if not exist ".venv\Scripts\python.exe" (
   echo.
@@ -20,7 +25,14 @@ set PYTHONIOENCODING=utf-8
 set PYTHONUTF8=1
 set HF_HUB_DISABLE_SYMLINKS=1
 
-rem Arguments pass through.  Pass the MT flag to use the fast engine.
+echo %* | findstr /I /C:"--once" /C:"--help" /C:"-h" >nul
+if not errorlevel 1 goto :console
+
+rem start returns immediately, so this console closes right away.
+start "" ".venv\Scripts\pythonw.exe" talkaid.py %*
+exit /b 0
+
+:console
 ".venv\Scripts\python.exe" talkaid.py %*
 set "RC=%ERRORLEVEL%"
 

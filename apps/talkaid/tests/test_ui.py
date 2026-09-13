@@ -13,6 +13,7 @@
 """
 from __future__ import annotations
 
+import queue
 import sys
 from pathlib import Path
 
@@ -200,6 +201,89 @@ if 물러섬:
     if "기계번역" not in w.관문.cget("text"):
         fails.append("물러섬이 화면에 안 나온다: %r" % w.관문.cget("text"))
 
+# ── 항상 위를 끌 수 있나 ─────────────────────────
+# 텔레그램 위에 겹쳐 두는 것이 원래 쓰임새라 기본은 켜 두되, 가릴 때가 있어 끈다
+check("처음엔 켜져 있다", bool(w.항상위.get()), True)
+check("창에도 걸려 있다", bool(w.root.attributes("-topmost")), True)
+w.항상위.set(False)
+w._항상위바꾸기()
+w.root.update()
+check("끄면 창에서도 내려간다", bool(w.root.attributes("-topmost")), False)
+w.항상위.set(True)
+w._항상위바꾸기()
+w.root.update()
+check("다시 켤 수 있다", bool(w.root.attributes("-topmost")), True)
+
+# ── 로그가 창 안에 뜨나 ──────────────────────────
+# 콘솔을 안 띄우는 대신 여기로 온다. 접혀 있다가 화살표로 펴진다
+check("처음엔 접혀 있다", w.로그열림, False)
+check("접힌 동안 화면에 없다", w.로그.winfo_ismapped(), 0)
+w.로그보기()
+w.root.update()
+check("펴면 열린 것으로 안다", w.로그열림, True)
+if "▾" not in w.로그단추.cget("text"):
+    fails.append("펴도 화살표가 안 바뀐다: %r" % w.로그단추.cget("text"))
+
+w._받_로그("첫 줄이다\n")
+w._받_로그("받는 중 10%\r받는 중 90%\r받는 중 100%\n")
+w.root.update()
+글 = w.로그.get("1.0", "end")
+if "첫 줄이다" not in 글:
+    fails.append("로그에 안 들어갔다: %r" % 글)
+# tqdm 이 \r 로 같은 줄을 덮어쓴다. 그대로 쌓으면 진행률이 수백 줄이 된다
+if "10%" in 글:
+    fails.append("\\r 로 덮어쓴 것이 지워지지 않았다: %r" % 글)
+if "100%" not in 글:
+    fails.append("마지막 진행률이 없다: %r" % 글)
+check("로그는 사람이 못 고친다", str(w.로그.cget("state")), "disabled")
+w.로그보기()
+w.root.update()
+check("다시 접힌다", w.로그열림, False)
+
+# 로그로 는 큐에만 넣는다. 그리는 것은 UI 실이 한다
+큐 = queue.Queue()
+U.로그로(큐, None).write("남길 말")
+check("로그로 가 큐로 보낸다", 큐.get_nowait(), ("로그", "남길 말"))
+check("콘솔이 없어도 안 죽는다", U.로그로(큐, None).write(""), 0)
+
+# ── 창을 띄우면 모델을 미리 올리나 ───────────────
+# 첫 번역이 1.7GB 내려받기를 떠안으면 창이 멈춘 것처럼 보인다
+
+
+class 데움엔진(가짜엔진):
+    def __init__(self, 터짐=""):
+        super().__init__()
+        self.올린것 = []
+        self.터짐 = 터짐
+
+    def load(self, pair):
+        if self.터짐 == "기계번역":
+            raise RuntimeError("일부러 낸 탈")
+        self.올린것.append(pair)
+
+    def load_llm(self):
+        if self.터짐 == "LLM":
+            raise RuntimeError("일부러 낸 탈")
+        self.올린것.append("llm")
+
+
+큐비우기(w)
+w.eng = 데움엔진()
+w._데우기()
+check("기계번역과 LLM 을 다 올린다", w.eng.올린것, ["ko-en", "llm"])
+말들 = [값 for 무엇, 값 in 큐비우기(w) if 무엇 == "예열"]
+check("끝나면 표시를 지운다", 말들[-1], "")
+
+w.eng = 데움엔진(터짐="LLM")
+w._데우기()
+말들 = [값 for 무엇, 값 in 큐비우기(w) if 무엇 == "예열"]
+if not 말들 or "못 올렸다" not in 말들[-1]:
+    fails.append("못 올렸는데 조용하다: %r" % (말들[-1] if 말들 else None))
+w._받_예열(말들[-1])
+w.root.update()
+if "못 올렸다" not in w.예열.cget("text"):
+    fails.append("예열 탈이 화면에 안 나온다: %r" % w.예열.cget("text"))
+
 w._닫기()
 
 # ── 결과 ─────────────────────────────────────────
@@ -208,4 +292,4 @@ if fails:
     for f in fails:
         print("  - %s" % f)
     sys.exit(1)
-print("통과. 시험 9 묶음")
+print("통과. 시험 12 묶음")

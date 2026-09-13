@@ -25,7 +25,9 @@ UI 는 `after()` 로 큐를 꺼내 그린다. 같은 실에서 돌리면 창이 
 """
 from __future__ import annotations
 
+import io
 import queue
+import sys
 import threading
 import tkinter as tk
 from tkinter import filedialog, ttk
@@ -36,6 +38,39 @@ import win as W
 
 글꼴 = "Malgun Gothic"      # 윈도우 한국어 UI 글꼴
 좁게, 넓게 = 560, 980
+로그높이 = 170              # 로그를 펼 때 창이 이만큼 커진다
+로그줄상한 = 500            # 넘으면 위에서 지운다. 안 그러면 하루 켜 두면 쌓인다
+
+
+class 로그로(io.TextIOBase):
+    """`print` 와 남의 라이브러리 출력을 창 안 로그로 보낸다.
+
+    **콘솔을 안 띄우려면 이것이 있어야 한다.** pythonw 로 띄우면 콘솔이 없고
+    `sys.stdout` 이 None 이라 어디에도 안 남는다. 모델 받는 진행률도 여기로 온다.
+
+    큐에 넣기만 한다. 그리는 것은 UI 실이 한다 — tkinter 는 실 안전하지 않다.
+    """
+
+    def __init__(self, 큐: queue.Queue, 원래=None):
+        self.큐 = 큐
+        self.원래 = 원래        # 콘솔이 있으면 거기에도 그대로 쓴다
+
+    def write(self, s: str) -> int:
+        if s:
+            self.큐.put(("로그", s))
+            if self.원래 is not None:
+                try:
+                    self.원래.write(s)
+                except Exception:
+                    pass        # 콘솔이 사라져도 창은 살아야 한다
+        return len(s)
+
+    def flush(self) -> None:
+        if self.원래 is not None:
+            try:
+                self.원래.flush()
+            except Exception:
+                pass
 
 
 class 창:
@@ -48,7 +83,9 @@ class 창:
         self.큐: queue.Queue = queue.Queue()
         self.도는중 = False
         self.사이드바열림 = False
+        self.로그열림 = False
         self._다음 = None
+        self._되돌릴출력 = None
         self.준비줄: list[tuple[str, str]] = []
 
         self.dpi = W.dpi_켜기()
@@ -56,6 +93,9 @@ class 창:
         self.root.title("talkaid — 밖으로 아무것도 안 보낸다")
         self.root.geometry("%dx420" % 좁게)
         self.root.minsize(480, 360)
+        # 기본은 켜 둔다. 텔레그램 위에 겹쳐 놓고 쓰는 것이 원래 쓰임새다.
+        # 다만 가리는 것이 거슬릴 때가 있어 아래 설정 줄에서 끌 수 있다
+        self.항상위 = tk.BooleanVar(value=True)
         self.root.attributes("-topmost", True)
         try:
             import sv_ttk
@@ -113,6 +153,25 @@ class 창:
 
         self.관문 = ttk.Label(바깥, text="", wraplength=좁게 - 40, justify="left")
         self.관문.grid(row=7, column=0, sticky="ew")
+
+        # ── 설정 줄 ──
+        # 왼쪽에 로그 여닫기, 가운데에 모델 데우는 상태, 오른쪽에 항상 위
+        설정 = ttk.Frame(바깥)
+        설정.grid(row=8, column=0, sticky="ew", pady=(8, 0))
+        self.로그단추 = ttk.Button(설정, text="▸ 로그", width=8, command=self.로그보기)
+        self.로그단추.pack(side="left")
+        self.예열 = ttk.Label(설정, text="", foreground="#666")
+        self.예열.pack(side="left", padx=8)
+        ttk.Checkbutton(설정, text="항상 위", variable=self.항상위,
+                        command=self._항상위바꾸기).pack(side="right")
+
+        # 로그는 접어 둔다. **콘솔을 안 띄우는 대신 여기로 온다.**
+        # 모델 받는 진행률과 탈이 다 여기에 쌓인다
+        self.로그 = tk.Text(바깥, height=8, wrap="none", font=("Consolas", 9),
+                          relief="solid", borderwidth=1, background="#fbfbfb",
+                          foreground="#444", state="disabled")
+        self.로그.grid(row=9, column=0, sticky="nsew", pady=(4, 0))
+        self.로그.grid_remove()
 
         self._사이드바짜기()
 
@@ -254,6 +313,68 @@ class 창:
         self.관문.configure(text="")
         self.상태.configure(text="")
 
+    # ── 설정 줄 ──────────────────────────────────
+    def _항상위바꾸기(self) -> None:
+        self.root.attributes("-topmost", bool(self.항상위.get()))
+
+    def 로그보기(self) -> None:
+        """로그를 접었다 편다. 창 높이를 같이 늘린다."""
+        높이 = self.root.winfo_height()
+        if self.로그열림:
+            self.로그.grid_remove()
+            self.root.geometry("%dx%d" % (self.root.winfo_width(),
+                                          max(360, 높이 - 로그높이)))
+            self.로그단추.configure(text="▸ 로그")
+        else:
+            self.로그.grid()
+            self.root.geometry("%dx%d" % (self.root.winfo_width(), 높이 + 로그높이))
+            self.로그단추.configure(text="▾ 로그")
+            self.로그.see("end")
+        self.로그열림 = not self.로그열림
+
+    def _받_로그(self, s: str) -> None:
+        self.로그.configure(state="normal")
+        # tqdm 이 \r 로 같은 줄을 덮어쓰며 진행률을 낸다. 그대로 넣으면 모델 하나
+        # 받는 데 수백 줄이 쌓인다. **\r 로 갈린 조각은 마지막 것만 남긴다.**
+        s = s.replace("\r\n", "\n")     # 이건 그냥 줄바꿈이다. 덮어쓰기가 아니다
+        줄들 = s.split("\n")
+        for i, 줄 in enumerate(줄들):
+            if "\r" in 줄:
+                줄 = 줄.rpartition("\r")[2]
+                self.로그.delete("end-1c linestart", "end-1c")   # 쓰던 줄을 지운다
+            if 줄:
+                self.로그.insert("end", 줄)
+            if i < len(줄들) - 1:
+                self.로그.insert("end", "\n")
+        넘침 = int(self.로그.index("end-1c").split(".")[0]) - 로그줄상한
+        if 넘침 > 0:
+            self.로그.delete("1.0", "%d.0" % (넘침 + 1))
+        self.로그.see("end")
+        self.로그.configure(state="disabled")
+
+    # ── 모델 데우기 ──────────────────────────────
+    def _데우기(self) -> None:
+        """창을 띄우자마자 딴 실에서 모델을 올린다.
+
+        **첫 번역이 모델 받기까지 떠안으면 안 된다.** LLM 은 1.7GB 라 처음에는
+        내려받기가 붙어 30분을 넘길 수 있다. 그동안 창이 멈춘 것처럼 보이던 것을
+        여기서 미리 하고 진행을 화면에 적는다.
+        """
+        for 이름, 일 in (("기계번역", lambda: self.eng.load("ko-en")),
+                       ("LLM", self.eng.load_llm)):
+            self.큐.put(("예열", "%s 준비 중…" % 이름))
+            try:
+                일()
+            except Exception as e:
+                self.큐.put(("예열", "%s 를 못 올렸다 — 로그를 본다" % 이름))
+                print("[예열] %s 실패: %s: %s" % (이름, type(e).__name__, e))
+                return
+        self.큐.put(("예열", ""))
+        print("[예열] 모델을 다 올렸다. 이제 기다림 없이 돈다.")
+
+    def _받_예열(self, 말: str) -> None:
+        self.예열.configure(text=말)
+
     # ── 사이드바 ─────────────────────────────────
     def 사이드바(self) -> None:
         if self.사이드바열림:
@@ -365,13 +486,38 @@ class 창:
         self.관문.configure(text="클립보드에 넣었다", foreground="#2a7")
 
     # ── 돌리기 ───────────────────────────────────
+    def _출력가로채기(self) -> None:
+        """print 와 남의 라이브러리 출력을 창 안 로그로 돌린다.
+
+        **`돌린다()` 에서만 한다.** 시험은 창을 만들고 `mainloop` 을 안 도니
+        시험 출력까지 삼키면 안 된다.
+        """
+        self._되돌릴출력 = (sys.stdout, sys.stderr)
+        sys.stdout = 로그로(self.큐, sys.stdout)
+        sys.stderr = 로그로(self.큐, sys.stderr)
+
+    def _출력되돌리기(self) -> None:
+        if self._되돌릴출력:
+            sys.stdout, sys.stderr = self._되돌릴출력
+            self._되돌릴출력 = None
+
     def _닫기(self) -> None:
         if self.키:
             self.키.끄기()
         if self._다음:
             self.root.after_cancel(self._다음)
             self._다음 = None
+        self._출력되돌리기()
         self.root.destroy()
 
-    def 돌린다(self) -> None:
-        self.root.mainloop()
+    def 돌린다(self, 시작말: str = "") -> None:
+        self._출력가로채기()
+        if 시작말:
+            print(시작말)      # 가로챈 뒤라야 창 안 로그에도 남는다
+        # 창을 먼저 그리고 데운다. 안 그러면 모델 받는 동안 빈 창이 뜬다
+        self.root.after(120, lambda: threading.Thread(
+            target=self._데우기, daemon=True).start())
+        try:
+            self.root.mainloop()
+        finally:
+            self._출력되돌리기()

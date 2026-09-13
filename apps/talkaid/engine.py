@@ -34,6 +34,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -223,6 +224,11 @@ class Engine:
         self.llm_model = llm or 기본LLM
         self._loaded: dict = {}
         self._gen = None
+        # 창이 뜨자마자 딴 실에서 미리 올린다. 그 사이 사람이 눌러도 같은 모델을
+        # 두 벌 올리면 안 된다 — 1.7B 를 두 번 올리면 메모리가 곱절이다.
+        # 기계번역과 LLM 을 따로 잠근다. LLM 을 받는 동안 기계번역은 쓸 수 있어야 한다
+        self._자물쇠_기계 = threading.Lock()
+        self._자물쇠_llm = threading.Lock()
 
     # ── 로컬 LLM ──────────────────────────────────
     def load_llm(self):
@@ -233,13 +239,17 @@ class Engine:
         from huggingface_hub import snapshot_download
         from tokenizers import Tokenizer
 
-        d = Path(snapshot_download(LLM_MODELS[self.llm_model]))
-        self._gen = (
-            ctranslate2.Generator(str(d), device="cpu",
-                                  compute_type=self.compute_type,
-                                  intra_threads=self.threads),
-            Tokenizer.from_file(str(d / "tokenizer.json")),
-        )
+        with self._자물쇠_llm:
+            # 기다리는 동안 딴 실이 올렸을 수 있다. 잠그고 다시 본다
+            if self._gen is not None:
+                return self._gen
+            d = Path(snapshot_download(LLM_MODELS[self.llm_model]))
+            self._gen = (
+                ctranslate2.Generator(str(d), device="cpu",
+                                      compute_type=self.compute_type,
+                                      intra_threads=self.threads),
+                Tokenizer.from_file(str(d / "tokenizer.json")),
+            )
         return self._gen
 
     def llm_prompt(self, text: str) -> str:
@@ -305,15 +315,19 @@ class Engine:
         import sentencepiece as spm
         from huggingface_hub import snapshot_download
 
-        d = Path(snapshot_download(MODELS[pair]))
-        tr = ctranslate2.Translator(str(d), device="cpu",
-                                    compute_type=self.compute_type,
-                                    intra_threads=self.threads)
-        self._loaded[pair] = (
-            tr,
-            spm.SentencePieceProcessor(model_file=str(d / "source.spm")),
-            spm.SentencePieceProcessor(model_file=str(d / "target.spm")),
-        )
+        with self._자물쇠_기계:
+            # 기다리는 동안 딴 실이 올렸을 수 있다. 잠그고 다시 본다
+            if pair in self._loaded:
+                return self._loaded[pair]
+            d = Path(snapshot_download(MODELS[pair]))
+            tr = ctranslate2.Translator(str(d), device="cpu",
+                                        compute_type=self.compute_type,
+                                        intra_threads=self.threads)
+            self._loaded[pair] = (
+                tr,
+                spm.SentencePieceProcessor(model_file=str(d / "source.spm")),
+                spm.SentencePieceProcessor(model_file=str(d / "target.spm")),
+            )
         return self._loaded[pair]
 
     def _one(self, text: str, pair: str) -> str:
