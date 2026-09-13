@@ -1,0 +1,36 @@
+{
+  "_설명": "번역기가 깨뜨리는 도메인 용어. 번역 전에 자리표로 빼고 뒤에 되돌려 넣는다. 2026-09-13 초판.",
+  "_왜": "「어피실리에이트」는 efisilite · Apisiliite · Aphissylite 로 매번 다르게 깨진다. 「affiliate」로 미리 바꿔 넣어도 affliate 가 된다. 자리표 XQ1 만이 온전히 통과한다 (실측).",
+  "_고칠 때": "쓰다가 깨지는 말을 보면 여기에 한 줄 더한다. 코드는 안 고친다. 긴 것부터 바뀌므로 순서는 상관없다.",
+
+  "용어": [
+    {"한국어": "어피실리에이트", "영어": "affiliates", "왜": "efisilite 로 깨진다"},
+    {"한국어": "제휴자", "영어": "affiliate"},
+    {"한국어": "피해사", "영어": "victim organization", "왜": "「she」로 읽혀 뜻이 통째로 바뀐다"},
+    {"한국어": "피해 조직", "영어": "victim organization"},
+    {"한국어": "피해 회사", "영어": "victim organization"},
+    {"한국어": "업종", "영어": "industry sector", "왜": "「karma」가 된다"},
+    {"한국어": "지불 기한", "영어": "payment deadline", "왜": "「catch the deadline」이 된다"},
+    {"한국어": "유출 사이트", "영어": "leak site"},
+    {"한국어": "랜섬웨어", "영어": "ransomware"},
+    {"한국어": "복호화 도구", "영어": "decryptor"},
+    {"한국어": "이중 갈취", "영어": "double extortion"},
+    {"한국어": "초기 접근 브로커", "영어": "initial access broker"},
+    {"한국어": "초기 접근", "영어": "initial access"},
+    {"한국어": "방탄호스팅", "영어": "bulletproof hosting"},
+    {"한국어": "재브랜딩", "영어": "rebranding"},
+    {"한국어": "수익 배분", "영어": "revenue split"},
+    {"한국어": "가입비", "영어": "entry fee"},
+    {"한국어": "보증금", "영어": "deposit"},
+    {"한국어": "추천인", "영어": "referral"},
+    {"한국어": "자산운용사", "영어": "asset management firm"},
+    {"한국어": "전산업체", "영어": "IT service provider"},
+    {"한국어": "협상 채널", "영어": "negotiation channel"},
+    {"한국어": "게시글", "영어": "post"},
+    {"한국어": "덤프", "영어": "dump"},
+    {"한국어": "평문", "영어": "plaintext"},
+    {"한국어": "자격증명", "영어": "credentials"},
+    {"한국어": "표본", "영어": "sample"},
+    {"한국어": "재게시", "영어": "repost"}
+  ]
+}

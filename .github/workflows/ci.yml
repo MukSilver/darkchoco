@@ -71,6 +71,18 @@ jobs:
         env:
           PYTHONIOENCODING: utf-8
 
+      # **아무것도 깔지 않습니다.** talkaid 의 시험은 모델을 안 올립니다.
+      # ctranslate2 는 engine.load() 안에서만 import 하므로 없어도 돕니다.
+      # 모델을 받게 하면 CI 가 1.2GB 를 내려받고 밖으로 나갑니다.
+      # 번역 품질은 기계가 못 보는 것이라 사람이 눈으로 봅니다.
+      - name: talkaid
+        working-directory: apps/talkaid
+        run: |
+          python tests/test_engine.py
+          python tests/test_guard.py
+        env:
+          PYTHONIOENCODING: utf-8
+
   skills:
     name: skills 검사
     runs-on: ubuntu-latest

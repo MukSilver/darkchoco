@@ -1,0 +1,51 @@
+{
+  "_설명": "대화 중에 자주 쓰는 말. **번역을 거치지 않는다.** 그래서 0 ms 다. 2026-09-13 초판.",
+  "_왜": "즉석 반응은 종류가 적다. 맞장구·되묻기·시간 벌기·마무리 서른 개면 대화의 상당 부분이 덮인다. 통역사가 실제로 하는 일이 이것이다.",
+  "_말씨": "팀밖. 구어체이되 슬랭 없이 담백하게. 자세한 것은 스킬의 references/talk-en.md",
+  "_고칠 때": "쓰다 보면 늘어난다. 여기에 한 줄 더한다. 코드는 안 고친다.",
+
+  "상용구": {
+    "여는 말": [
+      {"영어": "hey — got a minute?", "한국어": "잠깐 시간 되나요?"},
+      {"영어": "saw your post. a few questions if you're up for it", "한국어": "글 봤습니다. 몇 가지 물어봐도 될까요"},
+      {"영어": "thanks for getting back to me", "한국어": "답 주셔서 고맙습니다"}
+    ],
+    "맞장구": [
+      {"영어": "got it", "한국어": "알겠습니다"},
+      {"영어": "makes sense", "한국어": "이해했습니다"},
+      {"영어": "fair enough", "한국어": "그럴 만하네요"},
+      {"영어": "right, that tracks", "한국어": "네, 말이 되네요"}
+    ],
+    "되묻기": [
+      {"영어": "can you walk me through that?", "한국어": "그 부분을 좀 더 설명해 주실 수 있나요?"},
+      {"영어": "just so I'm clear — you're saying ...?", "한국어": "제가 이해한 게 맞는지 — ...라는 말씀인가요?"},
+      {"영어": "what do you mean by that exactly?", "한국어": "정확히 어떤 뜻인가요?"},
+      {"영어": "where did that come from?", "한국어": "그건 어디서 나온 건가요?"},
+      {"영어": "how do you know that?", "한국어": "그건 어떻게 아시나요?"},
+      {"영어": "can you say that again? the wording got garbled", "한국어": "다시 말씀해 주시겠어요? 문장이 깨졌습니다"}
+    ],
+    "시간 벌기": [
+      {"영어": "one sec", "한국어": "잠시만요"},
+      {"영어": "hold on, let me check", "한국어": "잠깐만요, 확인해 볼게요"},
+      {"영어": "let me look into that and get back to you", "한국어": "알아보고 다시 말씀드리겠습니다"},
+      {"영어": "sorry, slow typing", "한국어": "죄송합니다, 타자가 느립니다"},
+      {"영어": "give me a few minutes", "한국어": "몇 분만 주세요"}
+    ],
+    "밀지 않고 물러서기": [
+      {"영어": "no worries if you'd rather not say", "한국어": "말씀하기 어려우면 괜찮습니다"},
+      {"영어": "understood, we can skip that one", "한국어": "알겠습니다, 그건 넘어가죠"},
+      {"영어": "that's fair", "한국어": "그럴 수 있죠"}
+    ],
+    "선을 긋기": [
+      {"영어": "I'm not looking to buy anything", "한국어": "사려는 게 아닙니다"},
+      {"영어": "I can't offer anything in return", "한국어": "대가로 드릴 수 있는 것이 없습니다"},
+      {"영어": "I'm not able to share that", "한국어": "그건 말씀드릴 수 없습니다"},
+      {"영어": "I'd rather not go into that", "한국어": "그 부분은 이야기하지 않겠습니다"}
+    ],
+    "마무리": [
+      {"영어": "that's all I had — thanks for your time", "한국어": "여기까지입니다. 시간 내 주셔서 고맙습니다"},
+      {"영어": "I'll follow up if anything else comes up", "한국어": "더 있으면 다시 연락드리겠습니다"},
+      {"영어": "appreciate it", "한국어": "고맙습니다"}
+    ]
+  }
+}

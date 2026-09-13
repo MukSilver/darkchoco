@@ -1,0 +1,44 @@
+{
+  "name": "talkaid",
+  "owner": "최현서",
+  "github": "@grute02",
+  "summary": "전역 단축키로 클립보드를 옮깁니다. 번역이 이 PC 안에서만 돕니다",
+  "kind": "app",
+  "runs_in": "host",
+  "commands": {
+    "run": "python talkaid.py",
+    "once": "python talkaid.py --once ko-en",
+    "setup": "python setup.py",
+    "test": "python tests/test_engine.py && python tests/test_guard.py"
+  },
+  "default": "run",
+  "run_cwd": "apps/talkaid",
+  "install": {
+    "requirements": "ctranslate2 · sentencepiece · huggingface_hub",
+    "note": "모델 약 1.2GB 를 한 번 받습니다. setup.py 가 받습니다. GPU 는 필요 없습니다"
+  },
+  "preconditions": {
+    "docker": false,
+    "tor": false,
+    "interactive_login": false,
+    "windows_only": true,
+    "resident": true
+  },
+  "secrets": [
+    {
+      "key": "나가면 안 되는 말 목록",
+      "where": "~/.config/darkchoco/talkaid_block",
+      "optional": true,
+      "note": "목록 자체가 개인정보라 레포에 두지 않습니다. 없으면 그 검사를 「못 봄」으로 적습니다"
+    }
+  ],
+  "config_files": [
+    "terms.json",
+    "snippets.json"
+  ],
+  "packages": [],
+  "network": "없음. 모델을 처음 받을 때만 huggingface.co 에 붙습니다. 번역은 이 PC 안에서 돕니다",
+  "output": "클립보드",
+  "docs": "README.md",
+  "note": "**보내지 않습니다.** 클립보드에 놓기만 하고 붙여넣는 것도 보내는 것도 사람이 합니다"
+}
