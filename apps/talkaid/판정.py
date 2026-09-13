@@ -39,7 +39,8 @@ sys.path.insert(0, str(HERE))
 
 # 엔진을 늘릴 때 여기 한 줄만 더한다. 코드를 안 고친다
 ENGINES = {
-    "opus": "지금 쓰는 OPUS-MT 기계번역 (CPU int8)",
+    "opus": "OPUS-MT 기계번역 (CPU int8) + 자리표 + 어미 고치기",
+    "qwen1.7b": "로컬 LLM Qwen3-1.7B (CPU int8) + 프롬프트 사전",
 }
 
 줄 = re.compile(r"^-\s+(.+?)\s*$", re.M)
@@ -78,7 +79,8 @@ def 엔진만들기(이름: str):
         if p.exists():
             swaps = json.loads(p.read_text(encoding="utf-8")).get("바꿔 쓰기", [])
             break
-    return E.Engine(swaps=swaps)
+    llm = 이름 if 이름 in getattr(E, "LLM_MODELS", {}) else None
+    return E.Engine(swaps=swaps, llm=llm)
 
 
 def 돌리기(이름: str, 엔진: str, 역번역: bool) -> int:

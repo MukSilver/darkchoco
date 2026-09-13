@@ -51,7 +51,18 @@ MODELS = {
     "zh-en": "gaudi/opus-mt-zh-en-ctranslate2",
 }
 
-# 되돌리는 짝. 역번역에 쓴다
+# 로컬 LLM. **기계번역보다 낫다** — 문장 구조와 빠뜨림에서 이긴다 (2026-09-13 실측).
+# 대신 느리다. 문장당 1.5~2.0초. 3초 예산 안이라 대화에 쓸 수 있다.
+#
+#   4B 는 안 쓴다     받는 데 80분이고 CPU 에서 4초를 넘길 것으로 잡힌다
+#   0.6B 도 안 쓴다   빠르지만 못 쓴다. 「백만」을 100으로 읽고 문장이 안 되는 것이 나온다
+LLM_MODELS = {
+    "qwen1.7b": "jncraton/Qwen3-1.7B-ct2-int8",
+}
+
+# 되돌리는 짝. 역번역에 쓴다.
+# **역번역은 LLM 을 안 쓴다.** 90ms 짜리 기계번역이면 된다 — 뜻이 흘렀는지
+# 사람에게 보이는 것이 일이지 잘 쓰는 것이 일이 아니다
 BACK = {"ko-en": "en-ko", "zh-en": "en-ko", "en-ko": "ko-en"}
 
 # 중국어에서 한국어로 곧장 가는 OPUS-MT 모델이 없다. 영어를 거친다
@@ -197,13 +208,87 @@ class Engine:
 
     def __init__(self, compute_type: str = "int8", threads: int = 8,
                  terms: list[dict] | None = None, swaps: list[dict] | None = None,
-                 endings: list[dict] | None = None):
+                 endings: list[dict] | None = None, llm: str | None = None):
         self.compute_type = compute_type
         self.threads = threads
         self.terms = terms if terms is not None else load_terms()
         self.swaps = swaps if swaps is not None else []
         self.endings = endings if endings is not None else load_endings()
+        self.llm = llm            # None 이면 기계번역만. LLM_MODELS 의 열쇠를 주면 그것으로
         self._loaded: dict = {}
+        self._gen = None
+
+    # ── 로컬 LLM ──────────────────────────────────
+    def load_llm(self):
+        """처음 부를 때만 올린다. 1.7B 는 2.8초 걸린다."""
+        if self._gen is not None:
+            return self._gen
+        import ctranslate2
+        from huggingface_hub import snapshot_download
+        from tokenizers import Tokenizer
+
+        d = Path(snapshot_download(LLM_MODELS[self.llm]))
+        self._gen = (
+            ctranslate2.Generator(str(d), device="cpu",
+                                  compute_type=self.compute_type,
+                                  intra_threads=self.threads),
+            Tokenizer.from_file(str(d / "tokenizer.json")),
+        )
+        return self._gen
+
+    def llm_prompt(self, text: str) -> str:
+        """걸린 용어만 사전으로 붙인다.
+
+        **자리표보다 낫다** (2026-09-13 실측, 넷 중 넷). 자리표는 그 낱말의 맥락을
+        지워 문장이 뻣뻣해지는데, 사전은 뜻을 알려 주므로 유창함이 안 죽는다.
+
+            자리표   double extortion besides any other pressure tactics is used?
+            사전     Double extortion aside, are there any other pressure tactics being used?
+
+        걸린 것만 넣는다. 용어집 스물여덟을 다 넣으면 프롬프트가 길어져 느려진다.
+        """
+        # 이 지시문은 판정 세트로 세 판을 돌려 다듬은 것이다. 한 줄씩 이유가 있다.
+        #
+        #   translator, not an assistant      LLM 이 질문을 **대답해 버린다.** 여섯 건 났다.
+        #                                     「몇 가지 물어봐도 될까요?」 에 "Sure, I can answer
+        #                                     that. What do you want to know?" 라고 답했다
+        #   Keep the sentence type            앞 판에서 「대답하지 마라」만 넣었더니 평서문까지
+        #                                     질문으로 바꿨다. 「사려는 게 아닙니다」 가
+        #                                     "Is it not something you want to do?" 가 됐다
+        #   Keep the speaker                  같은 이유로 주어가 뒤집혔다. 나와 상대가 바뀐다
+        #   Do not think out loud             빈 <think></think> 를 넣어도 짧은 입력에서 샌다.
+        #                                     434자짜리 「Okay, let's see. The user said…」 가 나왔다
+        지시 = ("You are a translator, not an assistant.\n"
+              "The Korean below is a message the user is about to SEND to someone else.\n"
+              "**Never answer it. Never reply to it. Never continue the conversation.**\n"
+              "Keep the sentence type: a question stays a question, "
+              "a statement stays a statement.\n"
+              "Keep the speaker: the user is 'I'. Do not swap 'I' and 'you'.\n"
+              "Translate it into natural, spoken English for a live chat.\n"
+              "Keep the meaning exactly. Do not add or remove anything.\n"
+              "Plain conversational English. No slang, no formal letter style.\n"
+              "Do not explain. Do not think out loud.\n"
+              "Output exactly one line: the English translation. Nothing else.")
+        걸린것 = [(t["한국어"], t["영어"]) for t in self.terms
+                if t.get("한국어") and t.get("영어") and t["한국어"] in text]
+        if 걸린것:
+            지시 += "\nUse these exact terms:\n" + "\n".join(
+                "  %s = %s" % (k, v) for k, v in 걸린것)
+        # Qwen3 는 생각 모드가 기본이라 토큰을 전부 <think> 에 쓴다.
+        # 빈 <think></think> 를 미리 넣는 것이 공식 틀의 enable_thinking=False 다
+        return ("<|im_start|>system\n%s<|im_end|>\n"
+                "<|im_start|>user\n%s<|im_end|>\n"
+                "<|im_start|>assistant\n<think>\n\n</think>\n\n" % (지시, text))
+
+    def _llm_one(self, text: str) -> str:
+        gen, tok = self.load_llm()
+        ids = tok.encode(self.llm_prompt(text), add_special_tokens=False).tokens
+        # **정지 토큰을 반드시 준다.** 안 주면 max_length 까지 끝까지 만들어
+        # 문장당 5.9초가 된다 (2026-09-13 에 실제로 그랬다)
+        out = gen.generate_batch([ids], max_length=256, sampling_temperature=0.2,
+                                 include_prompt_in_result=False,
+                                 end_token="<|im_end|>")
+        return tok.decode(out[0].sequences_ids[0], skip_special_tokens=True).strip()
 
     # ── 모델 ──────────────────────────────────────
     def load(self, pair: str):
@@ -245,17 +330,23 @@ class Engine:
         r = Result(pair=pair)
         r.sentences = split_sentences(text)
 
-        조각 = []
-        for s in r.sentences:
-            # 어미를 먼저 고친다. 자리표보다 앞이다 — 자리표가 끝에 오면 어미를 못 본다
-            if self.endings and pair.startswith("ko-"):
-                s, 고침 = fix_question(s, self.endings)
-                if 고침:
-                    r.endings.append(고침)
-            보호, 짝 = protect(s, self.terms)
-            r.terms.update(짝)
-            조각.append(restore(self.raw(보호, pair), 짝))
-        r.text = " ".join(조각)
+        # LLM 은 자리표도 어미 고치기도 안 쓴다. 둘 다 이 경로에서는 오히려 해롭다.
+        #   자리표   낱말의 맥락을 지워 문장이 뻣뻣해진다 (사전이 넷 중 넷으로 이겼다)
+        #   어미     **LLM 은 반말 의문형을 스스로 알아듣는다.** 고쳐 주면 되레 나빠진 것이 있다
+        if self.llm and pair == "ko-en":
+            r.text = " ".join(self._llm_one(s) for s in r.sentences)
+        else:
+            조각 = []
+            for s in r.sentences:
+                # 어미를 먼저 고친다. 자리표보다 앞이다 — 자리표가 끝에 오면 어미를 못 본다
+                if self.endings and pair.startswith("ko-"):
+                    s, 고침 = fix_question(s, self.endings)
+                    if 고침:
+                        r.endings.append(고침)
+                보호, 짝 = protect(s, self.terms)
+                r.terms.update(짝)
+                조각.append(restore(self.raw(보호, pair), 짝))
+            r.text = " ".join(조각)
 
         if self.swaps:
             r.text, r.swapped = apply_swaps(r.text, self.swaps)
