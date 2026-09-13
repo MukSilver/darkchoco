@@ -53,7 +53,7 @@ hub/
   sched.py           실행 주기
 packages/            dc_notion · dc_telegram · dc_ransomfeed
                      dc_safety · dc_store · dc_console
-apps/                kr-leak-alarm · tg-korea-alert
+apps/                dash · kr-leak-alarm · talkaid · tg-korea-alert
 skills/              collect · darkweb-verify-ko
 scripts/             VM 구성 · 배포 · 실행
 docs/                운영 문서 4종 · 기록 2종
@@ -75,6 +75,7 @@ docs/                운영 문서 4종 · 기록 2종
 | [crawler](hub) | 김무근 | 없음 | 2곳 | VM | 포럼·텔레그램·랜섬 명부를 한 명령으로 조사해 노션에 반영합니다 |
 | [darkweb-verify-ko](skills/skills/darkweb-verify-ko) | 최현서 | 없음 | 0곳 | 내 PC | 유출 주장 하나를 아홉 단계로 검증합니다 (AI 스킬) |
 | [kr-leak-alarm](apps/kr-leak-alarm) | 안유빈 | 필요 | 0곳 | 내 PC | 랜섬 피드 세 곳에서 한국 피해를 골라 대시보드로 냅니다 |
+| [talkaid](apps/talkaid) | 최현서 | 필요 | 0곳 | 내 PC | 창을 띄워 클립보드를 옮긴다. 번역이 이 PC 안에서만 돈다 |
 | [tg-korea-alert](apps/tg-korea-alert) | 성민서 | 필요 | 5곳 | 내 PC | 텔레그램에서 한국 관련 글을 골라 디스코드로 알립니다 |
 <!-- 도구표 끝 -->
 
