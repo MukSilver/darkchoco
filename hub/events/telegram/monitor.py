@@ -9,13 +9,29 @@ from pathlib import Path
 
 
 BASE_DIR = Path(__file__).resolve().parent
-DEFAULT_CHANNELS_FILE = BASE_DIR / "telegram_channels.txt"
 DEFAULT_LOG_DIR = BASE_DIR / "output" / "logs"
+
+# 목록 파일을 찾는 차례. **저장소 밖이 기본입니다.** 무엇을 보고 있는지가
+# 드러나기 때문입니다. `tg_preview.py` 의 `_채널들` 과 같은 규칙입니다.
+#
+# 전에는 `BASE_DIR / "telegram_channels.txt"` 가 기본값이었는데 그 파일은
+# 한 번도 만들어진 적이 없어서, 인자 없이 부르면 늘 FileNotFoundError 였습니다.
+CHANNELS_ENV = "DARKCHOCO_MANUAL_CHANNELS"
+FALLBACK_CHANNELS_FILE = Path.home() / ".config" / "darkchoco" / "수동조사채널"
+
+
+def 기본_채널파일() -> Path:
+    """환경변수가 가리키는 파일이 먼저이고, 없으면 집 설정 폴더를 봅니다."""
+    env = (os.environ.get(CHANNELS_ENV) or "").strip()
+    return Path(env) if env else FALLBACK_CHANNELS_FILE
+
+
+DEFAULT_CHANNELS_FILE = 기본_채널파일()
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Telegram 채널 목록 일괄 모니터링")
-    parser.add_argument("--channels-file", type=Path, default=DEFAULT_CHANNELS_FILE)
+    parser.add_argument("--channels-file", type=Path, default=기본_채널파일())
     parser.add_argument("--limit", type=int, default=1000)
     parser.add_argument("--log-dir", type=Path, default=DEFAULT_LOG_DIR)
     parser.add_argument(
@@ -34,7 +50,11 @@ def parse_args():
 def load_channels(path: Path):
     resolved = path.expanduser().resolve()
     if not resolved.exists():
-        raise FileNotFoundError(f"채널 목록 파일이 없습니다: {resolved}")
+        raise FileNotFoundError(
+            f"채널 목록 파일이 없습니다: {resolved}\n"
+            f"  한 줄에 하나씩 적으십시오. 저장소 밖에 둡니다.\n"
+            f"  기본 자리는 {FALLBACK_CHANNELS_FILE} 이고,\n"
+            f"  {CHANNELS_ENV} 환경변수나 --channels-file 로 다른 자리를 줄 수 있습니다.")
     channels = []
     seen = set()
     for line_number, raw in enumerate(resolved.read_text(encoding="utf-8-sig").splitlines(), 1):
@@ -49,7 +69,8 @@ def load_channels(path: Path):
         seen.add(key)
         channels.append(value)
     if not channels:
-        raise ValueError("채널 목록이 비어 있습니다. telegram_channels.txt에 주소를 추가하세요.")
+        raise ValueError(f"채널 목록이 비어 있습니다: {resolved}\n"
+                         f"  주석(#)과 빈 줄만 있습니다. 채널 이름을 한 줄에 하나씩 적으십시오.")
     return resolved, channels
 
 
