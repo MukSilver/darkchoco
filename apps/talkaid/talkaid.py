@@ -5,7 +5,7 @@
     python talkaid.py --기계번역           LLM 대신 빠른 기계번역으로 (52ms)
     python talkaid.py --once ko-en        창 없이 클립보드를 한 번만 옮긴다 (시험용)
 
-    Ctrl+Alt+1   고른 한국어 → 영어.  보낼 말. 역번역과 관문이 같이 돈다
+    Ctrl+Alt+1   고른 한국어 → 영어.  보낼 말. 역번역도 같이 돈다
     Ctrl+Alt+2   고른 외국어 → 한국어.  읽을 말
     Ctrl+Alt+3   준비해 둔 것 (사이드바) 열고 닫기
 
@@ -41,15 +41,17 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 import engine as E  # noqa: E402
-import guard as G  # noqa: E402
 
 LLM = "qwen1.7b"
+
+# 팀의 다른 도구와 같은 설정 자리다 (notion_token 이 있는 곳).
+CONF = Path(os.environ.get("DARKCHOCO_CONFIG_DIR",
+                           Path.home() / ".config" / "darkchoco"))
 
 # **TEMP 에 두지 않는다.** 이 PC 에서 tempfile.gettempdir() 이
 # C:\Users\Public\Documents\ESTsoft\CreatorTemp 였다 — 압축 프로그램이 TMP 를
 # 바꿔 놓은 것인데 거기는 **다른 사용자도 읽는 자리**다. 로그에는 옮긴 말이 남는다.
-# guard 가 쓰는 설정 자리와 같은 곳에 둔다. 홈 밑이라 남이 못 본다
-로그파일 = G.CONF / "talkaid.log"
+로그파일 = CONF / "talkaid.log"
 
 
 def 출력자리_만들기() -> None:
@@ -130,13 +132,6 @@ def 한번(eng: E.Engine, pair: str) -> int:
     if r.back:
         print("\n  역번역  %s" % r.back)
     print("  %.1f초" % (r.ms / 1000))
-    if 보낼말:
-        v = G.check(r.text)
-        if v.막힘:
-            print("\n  **클립보드에 안 넣었다** — %s" % v.말.replace("\n", " / "))
-            return 1
-        if v.경고 or v.못봄:
-            print("  %s" % v.말.replace("\n", " / "))
     print("  클립보드에 넣었다." if W.클립보드_쓰기(r.text) else "  클립보드에 못 넣었다.")
     return 0
 

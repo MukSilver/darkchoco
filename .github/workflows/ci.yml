@@ -79,7 +79,6 @@ jobs:
         working-directory: apps/talkaid
         run: |
           python tests/test_engine.py
-          python tests/test_guard.py
           python tests/test_talkaid.py
           python tests/test_ui.py
         env:

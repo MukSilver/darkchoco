@@ -64,7 +64,7 @@ a = Analysis(
     pathex=["."],
     binaries=binaries,
     datas=datas,
-    hiddenimports=["ui", "win", "engine", "guard"],
+    hiddenimports=["ui", "win", "engine"],
     hookspath=[],
     excludes=[
         # 안 쓰는데 딸려 오면 수십 MB 다

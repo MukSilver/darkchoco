@@ -33,7 +33,6 @@ import tkinter as tk
 from tkinter import filedialog, ttk
 
 import engine as E
-import guard as G
 import win as W
 
 글꼴 = "Malgun Gothic"      # 윈도우 한국어 UI 글꼴
@@ -151,8 +150,9 @@ class 창:
                              justify="left", foreground="#444")
         self.역번역.grid(row=6, column=0, sticky="ew", pady=(2, 4))
 
-        self.관문 = ttk.Label(바깥, text="", wraplength=좁게 - 40, justify="left")
-        self.관문.grid(row=7, column=0, sticky="ew")
+        # 알림 줄. 클립보드에 넣었다 · 못 옮겼다 · 규칙이 낡았다 같은 것이 여기 뜬다
+        self.알림 = ttk.Label(바깥, text="", wraplength=좁게 - 40, justify="left")
+        self.알림.grid(row=7, column=0, sticky="ew")
 
         # ── 설정 줄 ──
         # 왼쪽에 로그 여닫기, 가운데에 모델 데우는 상태, 오른쪽에 항상 위
@@ -212,7 +212,7 @@ class 창:
                         3: ("ctrl+alt", ord("3"))})
         못잡음 = self.키.켜기(lambda hid: self.큐.put(("단축키", hid)))
         if 못잡음:
-            self.관문.configure(
+            self.알림.configure(
                 text="단축키 %s 을 못 잡았다. 다른 프로그램이 이미 쓰고 있다."
                      % " · ".join("Ctrl+Alt+%d" % h for h in 못잡음),
                 foreground="#a33")
@@ -244,7 +244,7 @@ class 창:
         self.root.lift()
 
     def _받_결과(self, 값) -> None:
-        r, v, 읽기 = 값
+        r, 읽기 = 값
         self.도는중 = False
         self.옮김단추.configure(state="normal")
         self.결과.delete("1.0", "end")
@@ -252,23 +252,13 @@ class 창:
         self.역번역.configure(text=r.back or "(역번역 없음)")
         self.상태.configure(text="%.1f초" % (r.ms / 1000))
 
-        if v is None:
-            self.관문.configure(text="", foreground="#444")
-            W.클립보드_쓰기(r.text)
-            return
-        if v.막힘:
-            self.관문.configure(text="클립보드에 안 넣었다 — " + v.말.replace("\n", " / "),
-                              foreground="#a33")
-            return
-        self.관문.configure(text=(v.말.replace("\n", " / ") if (v.경고 or v.못봄)
-                                else "클립보드에 넣었다"),
-                          foreground="#b8860b" if v.경고 else "#2a7")
         W.클립보드_쓰기(r.text)
+        self.알림.configure(text="클립보드에 넣었다", foreground="#2a7")
 
     def _받_탈(self, e) -> None:
         self.도는중 = False
         self.옮김단추.configure(state="normal")
-        self.관문.configure(text="못 옮겼다 — %s" % e, foreground="#a33")
+        self.알림.configure(text="못 옮겼다 — %s" % e, foreground="#a33")
 
     def _받_준비(self, 값) -> None:
         했다, 다, 짝 = 값
@@ -280,7 +270,7 @@ class 창:
     def _받_물러섬(self, 말: str) -> None:
         # 사이드바가 LLM 을 못 써서 기계번역으로 내려갔다. 조용히 넘기지 않는다 —
         # 품질이 달라진 것을 모르고 쓰면 그대로 상대에게 나간다
-        self.관문.configure(text=말, foreground="#a33")
+        self.알림.configure(text=말, foreground="#a33")
 
     # ── 옮기기 ───────────────────────────────────
     def 옮기기(self, 읽기: bool = False) -> None:
@@ -290,7 +280,7 @@ class 창:
         self.도는중 = True
         self.옮김단추.configure(state="disabled")
         self.상태.configure(text="옮기는 중…")
-        self.관문.configure(text="")
+        self.알림.configure(text="")
         threading.Thread(target=self._일, args=(글, 읽기), daemon=True).start()
 
     def _일(self, 글: str, 읽기: bool) -> None:
@@ -299,10 +289,10 @@ class 창:
                 말 = E.detect_lang(글)
                 pair = {"zh": "zh-ko", "en": "en-ko"}.get(말, "ko-en")
                 r = self.eng.run(글, pair, back=False)
-                self.큐.put(("결과", (r, None, True)))
+                self.큐.put(("결과", (r, True)))
             else:
                 r = self.eng.run(글, "ko-en", back=True)
-                self.큐.put(("결과", (r, G.check(r.text), False)))
+                self.큐.put(("결과", (r, False)))
         except Exception as e:
             self.큐.put(("탈", "%s: %s" % (type(e).__name__, e)))
 
@@ -310,7 +300,7 @@ class 창:
         self.입력.delete("1.0", "end")
         self.결과.delete("1.0", "end")
         self.역번역.configure(text="")
-        self.관문.configure(text="")
+        self.알림.configure(text="")
         self.상태.configure(text="")
 
     # ── 설정 줄 ──────────────────────────────────
@@ -479,13 +469,8 @@ class 창:
         ttk.Separator(self.속, orient="horizontal").pack(fill="x")
 
     def _줄복사(self, t: str) -> None:
-        v = G.check(t)
-        if v.막힘:
-            self.관문.configure(text="그 줄은 클립보드에 안 넣었다 — "
-                                  + v.말.replace("\n", " / "), foreground="#a33")
-            return
         W.클립보드_쓰기(t)
-        self.관문.configure(text="클립보드에 넣었다", foreground="#2a7")
+        self.알림.configure(text="클립보드에 넣었다", foreground="#2a7")
 
     # ── 돌리기 ───────────────────────────────────
     def _출력가로채기(self) -> None:

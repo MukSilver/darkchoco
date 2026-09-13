@@ -10,7 +10,7 @@
     "기계번역으로": "python talkaid.py --기계번역",
     "once": "python talkaid.py --once ko-en",
     "setup": "python setup.py",
-    "test": "python tests/test_engine.py && python tests/test_guard.py && python tests/test_talkaid.py && python tests/test_ui.py",
+    "test": "python tests/test_engine.py && python tests/test_talkaid.py && python tests/test_ui.py",
     "창 띄우기": "scripts\\run.bat",
     "미리 받아 두기": "scripts\\setup.bat",
     "exe 짓기": "scripts\\build_exe.bat"
@@ -28,14 +28,7 @@
     "windows_only": true,
     "resident": true
   },
-  "secrets": [
-    {
-      "key": "나가면 안 되는 말 목록",
-      "where": "~/.config/darkchoco/talkaid_block",
-      "optional": true,
-      "note": "목록 자체가 개인정보라 레포에 두지 않습니다. 없으면 그 검사를 「못 봄」으로 적습니다"
-    }
-  ],
+  "secrets": [],
   "config_files": [
     {
       "path": "terms.json",

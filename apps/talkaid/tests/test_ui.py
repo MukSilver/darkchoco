@@ -23,7 +23,6 @@ if sys.platform != "win32":
     print("건너뜀 — 윈도우 전용이다 (win.py 가 Win32 API 다)")
     raise SystemExit(0)
 import engine as E  # noqa: E402
-import guard as G  # noqa: E402
 import ui as U  # noqa: E402
 import win as W  # noqa: E402
 
@@ -73,7 +72,7 @@ except Exception as e:
     raise SystemExit(0)
 
 check("단축키를 안 잡았다", w.키, None)
-for 이름 in ("입력", "결과", "역번역", "관문", "상태", "옆", "속", "준비단추"):
+for 이름 in ("입력", "결과", "역번역", "알림", "상태", "옆", "속", "준비단추"):
     if not hasattr(w, 이름):
         fails.append("위젯 %s 가 없다" % 이름)
 
@@ -89,31 +88,22 @@ check("다시 누르면 닫힌다", w.사이드바열림, False)
 # ── 결과를 받으면 그리나 ─────────────────────────
 r = E.Result(pair="ko-en"); r.text = "Are you still taking new affiliates?"
 r.back = "아직도 새 제휴자를 받고 있나요?"; r.ms = 1500.0
-w._받_결과((r, G.check(r.text), False)); w.root.update()
+w._받_결과((r, False)); w.root.update()
 check("영어가 결과칸에 들어간다", w.결과.get("1.0", "end").strip(), r.text)
 check("역번역이 보인다", w.역번역.cget("text"), r.back)
 if "1.5" not in w.상태.cget("text"):
     fails.append("걸린 시간이 안 보인다: %r" % w.상태.cget("text"))
 
-# ── 막히면 클립보드를 안 건드리나 ────────────────
-# **이것이 이 화면에서 가장 중요한 시험이다.** 팀 이름이 나가면 되돌릴 수 없다
+# ── 옮긴 것이 클립보드에 들어가나 ────────────────
+# 도구는 클립보드에 놓기만 한다. 붙여넣는 것도 보내는 것도 사람이 한다
 표식 = "ZZ클립보드표식ZZ"
 W.클립보드_쓰기(표식)
-막힐것 = E.Result(pair="ko-en")
-막힐것.text = "we are from darkchoco at Whitehat School"
-막힐것.back = "우리는 …"; 막힐것.ms = 900.0
-v = G.check(막힐것.text)
-check("이 글은 막혀야 한다", v.막힘, True)
-w._받_결과((막힐것, v, False)); w.root.update()
-check("**막히면 클립보드가 안 바뀐다**", W.클립보드_읽기(), 표식)
-if "안 넣었다" not in w.관문.cget("text"):
-    fails.append("막혔는데 그 말이 화면에 안 나온다: %r" % w.관문.cget("text"))
-
-# 깨끗한 것은 들어가야 한다
 깨끗 = E.Result(pair="ko-en"); 깨끗.text = "Are you still taking new affiliates?"
 깨끗.ms = 800.0
-w._받_결과((깨끗, G.check(깨끗.text), False)); w.root.update()
-check("안 막히면 클립보드에 들어간다", W.클립보드_읽기(), 깨끗.text)
+w._받_결과((깨끗, False)); w.root.update()
+check("클립보드에 들어간다", W.클립보드_읽기(), 깨끗.text)
+if "넣었다" not in w.알림.cget("text"):
+    fails.append("넣었다는 말이 화면에 안 나온다: %r" % w.알림.cget("text"))
 W.클립보드_쓰기(표식)   # 되돌린다
 
 # ── 사이드바 줄 그리기 ───────────────────────────
@@ -156,8 +146,8 @@ w.도는중 = True
 w._받_탈("RuntimeError: 일부러 낸 탈")
 w.root.update()
 check("탈이 나면 다시 누를 수 있다", str(w.옮김단추.cget("state")), "normal")
-if "못 옮겼다" not in w.관문.cget("text"):
-    fails.append("탈이 화면에 안 나온다: %r" % w.관문.cget("text"))
+if "못 옮겼다" not in w.알림.cget("text"):
+    fails.append("탈이 화면에 안 나온다: %r" % w.알림.cget("text"))
 
 # ── 사이드바는 늘 LLM 이다 ───────────────────────
 # 창을 --기계번역 으로 띄웠어도 여기만은 LLM 을 고른다. 대화 전에 미리 옮겨
@@ -198,8 +188,8 @@ if 물러섬 and "기계번역" not in 물러섬[0]:
 if 물러섬:
     w._받_물러섬(물러섬[0])
     w.root.update()
-    if "기계번역" not in w.관문.cget("text"):
-        fails.append("물러섬이 화면에 안 나온다: %r" % w.관문.cget("text"))
+    if "기계번역" not in w.알림.cget("text"):
+        fails.append("물러섬이 화면에 안 나온다: %r" % w.알림.cget("text"))
 
 # ── 항상 위를 끌 수 있나 ─────────────────────────
 # 텔레그램 위에 겹쳐 두는 것이 원래 쓰임새라 기본은 켜 두되, 가릴 때가 있어 끈다
