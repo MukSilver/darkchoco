@@ -574,17 +574,35 @@ async function 돌리기(request, env) {
     });
   }
 
-  const r = await fetch(
-    `https://api.github.com/repos/${레포}/actions/workflows/${일감.파일}/dispatches`,
-    {
-      method: "POST",
-      headers: { ...gh머리(env.GH_TOKEN), "Content-Type": "application/json" },
-      body: JSON.stringify({ ref: "main", inputs: 일감.입력 }),
-    },
-  );
-  if (!r.ok) {
-    const 몸 = await r.text();
-    return json(502, { 오류: `GitHub ${r.status}: ${몸.slice(0, 200)}` });
+  // **GitHub 이 이 자리에서 간헐적으로 500 을 냅니다.** 2026-09-13 에 똑같은
+  // 요청을 네 번 보내 셋이 500, 넷째가 204 였습니다. 본문이 비어 있어 이유를
+  // 알 수 없고, 워크플로 파일을 아침에 성공했던 판으로 되돌려도 같았습니다.
+  // 사람이 단추를 서너 번 누르게 두지 않고 여기서 다시 걸어 봅니다.
+  //
+  // **4xx 는 다시 걸지 않습니다.** 입력이 틀렸거나 권한이 없는 것이라 같은
+  // 요청을 몇 번 보내도 같습니다. 5xx 만 다시 겁니다.
+  let r = null;
+  let 몸 = "";
+  for (let 판 = 0; 판 < 4; 판 += 1) {
+    r = await fetch(
+      `https://api.github.com/repos/${레포}/actions/workflows/${일감.파일}/dispatches`,
+      {
+        method: "POST",
+        headers: { ...gh머리(env.GH_TOKEN), "Content-Type": "application/json" },
+        body: JSON.stringify({ ref: "main", inputs: 일감.입력 }),
+      },
+    );
+    if (r.ok) break;
+    몸 = await r.text();
+    if (r.status < 500) break;
+    if (판 < 3) await new Promise((풀기) => setTimeout(풀기, 800 * (판 + 1)));
+  }
+  if (!r || !r.ok) {
+    const 상태 = r ? r.status : 0;
+    const 꼬리 = 상태 >= 500
+      ? " — GitHub 쪽 일시 오류입니다. 네 번 다시 걸어 봤습니다. 잠시 뒤 다시 누르십시오"
+      : "";
+    return json(502, { 오류: `GitHub ${상태}: ${몸.slice(0, 200)}${꼬리}` });
   }
   return json(200, {
     열쇠,
