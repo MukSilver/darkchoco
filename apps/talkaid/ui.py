@@ -256,7 +256,10 @@ class 창:
             self.root.geometry("%dx%d" % (좁게, self.root.winfo_height()))
             self.준비단추.configure(text="준비해 둔 것 ▸")
         else:
-            self.옆.pack(side="right", fill="both")
+            # **before= 가 있어야 한다.** pack 은 선언한 차례대로 공간을 나눠 주는데
+            # 왼쪽이 expand=True 로 먼저 자리를 잡아 창을 다 먹는다. 그러면 사이드바가
+            # 오른쪽 아래로 밀려 단추가 잘린다. 먼저 끼워 제 폭부터 확보한다
+            self.옆.pack(side="right", fill="both", before=self.왼쪽)
             self.root.geometry("%dx%d" % (넓게, self.root.winfo_height()))
             self.준비단추.configure(text="◂ 접기")
         self.사이드바열림 = not self.사이드바열림
