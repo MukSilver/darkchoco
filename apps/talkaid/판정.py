@@ -179,6 +179,129 @@ def 세기(이름: str) -> int:
     return 0
 
 
+블록 = re.compile(r"^##\s+(\d+)\s+\[.\]\s*\n((?:^ {4}.*\n)*)", re.M)
+칸 = re.compile(r"^ {4}(한국어|영어|역번역|용어)\s+(.*)$", re.M)
+맞대표시 = re.compile(r"^##\s+(\d+)\s*$|^ {4}([AB])\s+\[(.)\]", re.M)
+
+
+def 판읽기(이름: str) -> dict[int, dict[str, str]]:
+    """돌리기가 낸 결과 파일에서 줄마다 한국어·영어·역번역을 뽑는다."""
+    p = 결과 / ("%s.md" % 이름)
+    if not p.exists():
+        raise SystemExit("그 결과가 없다: %s" % p)
+    out = {}
+    for num, 몸 in 블록.findall(p.read_text(encoding="utf-8")):
+        out[int(num)] = dict(칸.findall(몸))
+    return out
+
+
+def 맞대기(a: str, b: str) -> int:
+    """두 판을 한 파일에 나란히 놓는다.
+
+    **같은 한국어를 두 번 읽지 않게 하려는 것이다.** 따로 매기면 문장을 128번
+    읽어야 하는데 나란히 놓으면 64번이고, 무엇보다 **어느 쪽이 나은지가 눈에
+    바로 보인다.** 그것이 우리가 알고 싶은 것이다.
+    """
+    표a, 표b = 판읽기(a), 판읽기(b)
+    문장들, 지문 = 읽기()
+    out = 결과 / ("맞대기.md")
+    if out.exists():
+        print("  이미 있다: %s" % out)
+        print("  덮으면 적어 둔 판정이 날아간다. 그 파일을 옮기고 다시 부른다.")
+        return 1
+
+    쪽 = ["# 맞대기 — %s(A) vs %s(B)" % (a, b), "",
+         "    A   %s" % a,
+         "    B   %s" % b,
+         "    세트 %s · %d줄" % (지문, len(문장들)),
+         "",
+         "**A 와 B 의 `[ ]` 에 각각 O · X · ~ 를 적는다.**",
+         "",
+         "    O   뜻이 맞다. 보내도 된다",
+         "    X   뜻이 틀렸다. 보내면 조사가 망가진다",
+         "    ~   뜻은 맞는데 어색하다",
+         "",
+         "같은 한국어를 두 번 안 읽게 나란히 놓았다. 둘이 똑같으면 한쪽만 읽고",
+         "같은 표시를 둘 다에 적으면 된다.",
+         "",
+         "다 적었으면 `python 판정.py 세기 맞대기`", "", "---", ""]
+
+    앞갈래 = None
+    같은것 = 0
+    for i, (g, s) in enumerate(문장들, 1):
+        if g != 앞갈래:
+            쪽 += ["", "### %s" % g, ""]
+            앞갈래 = g
+        A, B = 표a.get(i, {}), 표b.get(i, {})
+        같다 = A.get("영어", "") == B.get("영어", "") and A.get("영어")
+        if 같다:
+            같은것 += 1
+        쪽 += ["## %d%s" % (i, "   (A 와 B 가 같다)" if 같다 else ""),
+              "    한국어  %s" % s,
+              "",
+              "    A  [ ]  %s" % A.get("영어", "(없다)")]
+        if A.get("역번역"):
+            쪽.append("           ↩ %s" % A["역번역"])
+        쪽.append("    B  [ ]  %s" % B.get("영어", "(없다)"))
+        if B.get("역번역"):
+            쪽.append("           ↩ %s" % B["역번역"])
+        쪽.append("")
+
+    out.write_text("\n".join(쪽) + "\n", encoding="utf-8")
+    print("  %s  %d줄" % (out, len(문장들)))
+    print("  둘이 똑같은 줄이 %d 개다. 거기는 한 번만 읽으면 된다." % 같은것)
+    return 0
+
+
+def 맞대세기(이름: str = "맞대기") -> int:
+    """맞대기 파일을 A·B 로 갈라 세고 바로 견준다."""
+    p = 결과 / ("%s.md" % 이름)
+    t = p.read_text(encoding="utf-8")
+    문장들, _ = 읽기()
+    표 = {"A": {}, "B": {}}
+    지금 = None
+    for num, ab, mark in 맞대표시.findall(t):
+        if num:
+            지금 = int(num)
+        elif 지금 is not None and mark.strip():
+            표[ab][지금] = mark.strip().upper()
+
+    for 쪽이름 in ("A", "B"):
+        칸수 = 표[쪽이름]
+        온전 = [v for v in 칸수.values() if v in "OX~"]
+        n = len(문장들)
+        print("\n  %s  적은 것 %d / %d" % (쪽이름, len(온전), n))
+        if not 온전:
+            continue
+        for 표시글, 이름표 in (("O", "맞다"), ("~", "어색"), ("X", "틀림")):
+            수 = 온전.count(표시글)
+            print("    %s %-4s %3d  (%4.1f%%)"
+                  % (표시글, 이름표, 수, 100 * 수 / len(온전)))
+
+    둘다 = [i for i in 표["A"] if i in 표["B"]
+            and 표["A"][i] in "OX~" and 표["B"][i] in "OX~"]
+    if not 둘다:
+        print("\n  둘 다 적힌 줄이 없다. 더 적어야 견줄 수 있다.")
+        return 0
+
+    순위 = {"O": 2, "~": 1, "X": 0}
+    A승 = [i for i in 둘다 if 순위[표["A"][i]] > 순위[표["B"][i]]]
+    B승 = [i for i in 둘다 if 순위[표["B"][i]] > 순위[표["A"][i]]]
+    print("\n  둘 다 적힌 %d 줄에서" % len(둘다))
+    print("    A 가 나은 줄  %d" % len(A승))
+    print("    B 가 나은 줄  %d" % len(B승))
+    print("    같은 줄       %d" % (len(둘다) - len(A승) - len(B승)))
+    for 제목, 목록 in (("A 가 나은 줄", A승), ("B 가 나은 줄", B승)):
+        if 목록:
+            print("\n  %s" % 제목)
+            for i in 목록[:12]:
+                s = 문장들[i - 1][1][:44] if i <= len(문장들) else ""
+                print("    %2d  A=%s B=%s   %s" % (i, 표["A"][i], 표["B"][i], s))
+            if len(목록) > 12:
+                print("    … 그리고 %d 줄 더" % (len(목록) - 12))
+    return 0
+
+
 def 견주기(a: str, b: str) -> int:
     표a, 지문a, na = 표시읽기(a)
     표b, 지문b, nb = 표시읽기(b)
@@ -227,7 +350,11 @@ def main() -> int:
     q = sub.add_parser("세기", help="사람이 적은 판정을 센다")
     q.add_argument("이름")
 
-    c = sub.add_parser("견주기", help="두 판을 나란히. 뒤집힌 줄만")
+    m = sub.add_parser("맞대기", help="두 판을 한 파일에 나란히. 매기는 품이 절반이다")
+    m.add_argument("이름1")
+    m.add_argument("이름2")
+
+    c = sub.add_parser("견주기", help="따로 매긴 두 판에서 뒤집힌 줄만")
     c.add_argument("이름1")
     c.add_argument("이름2")
 
@@ -236,7 +363,14 @@ def main() -> int:
         return 돌리기(getattr(a, "이름"), getattr(a, "엔진"),
                       not getattr(a, "역번역없이"))
     if a.cmd == "세기":
-        return 세기(getattr(a, "이름"))
+        이름 = getattr(a, "이름")
+        # 맞대기 파일은 한 줄에 표시가 둘이라 세는 법이 다르다. 알아서 가른다
+        p = 결과 / ("%s.md" % 이름)
+        if p.exists() and "\n    A  [" in p.read_text(encoding="utf-8"):
+            return 맞대세기(이름)
+        return 세기(이름)
+    if a.cmd == "맞대기":
+        return 맞대기(getattr(a, "이름1"), getattr(a, "이름2"))
     return 견주기(getattr(a, "이름1"), getattr(a, "이름2"))
 
 
