@@ -48,8 +48,10 @@ class 가짜엔진:
         self.부른것 = []
         self.LLM터짐 = LLM터짐
 
-    def run(self, text, pair, back=True, llm=None):
+    def run(self, text, pair, back=True, llm=None, 채팅=False):
         self.부른것.append((text, pair, back, llm))
+        self.채팅으로부른것 = getattr(self, "채팅으로부른것", [])
+        self.채팅으로부른것.append(채팅)
         if llm and self.LLM터짐:
             raise RuntimeError("모델을 못 올렸다")
         r = E.Result(pair=pair)
@@ -372,6 +374,33 @@ W.클립보드_쓰기(표식2)
 check("번역 결과가 올라가 있으면 안 건드린다", len(ㅍ.준비줄), 전)
 check("모드도 그대로", ㅍ.준비모드, "번역")
 
+# ── u · ur 체크박스가 엔진까지 닿나 ──────────────
+# 단추만 달고 값을 안 넘기면 눌러도 아무 일이 없는데 화면으로는 켜져 보인다.
+# 그 상태가 제일 나쁘다 — 켠 줄 알고 보냈는데 안 켜진 것이다.
+#
+# 딴 실을 안 띄우고 _일 과 _준비일 을 바로 부른다. 넘긴 값이 엔진에 닿는지만 본다
+check("기본은 꺼져 있다", bool(ㅍ.채팅축약.get()), False)
+
+eng2 = 가짜엔진()
+ㅍ2 = U.창(eng2, 상용구, 단축키켜기=False,
+         말주머니=BAG.주머니들(난수=random.Random(7), 경로=임시자루))
+ㅍ2._일("보낼 말", 읽기=False, 채팅=True)
+check("번역칸이 채팅 축약을 넘긴다", eng2.채팅으로부른것, [True])
+
+eng2.채팅으로부른것 = []
+ㅍ2._준비일(["한 줄"], 채팅=True)
+check("사이드바도 넘긴다", eng2.채팅으로부른것, [True])
+
+eng2.채팅으로부른것 = []
+ㅍ2._일("보낼 말", 읽기=False)
+check("안 켜면 안 넘어간다", eng2.채팅으로부른것, [False])
+
+# 읽을 말에는 안 건다. 내가 읽는 것이라 말씨를 줄일 이유가 없다
+eng2.채팅으로부른것 = []
+ㅍ2._일("Are you still selling", 읽기=True, 채팅=True)
+check("읽을 말에는 안 건다", eng2.채팅으로부른것, [False])
+ㅍ2._닫기()
+
 ㅍ._닫기()
 check("자루는 준 경로에만 쓴다", 임시자루.exists(), True)
 check("진짜 설정 파일을 안 건드렸다",
@@ -383,4 +412,4 @@ if fails:
     for f in fails:
         print("  - %s" % f)
     sys.exit(1)
-print("통과. 시험 16 묶음")
+print("통과. 시험 17 묶음")

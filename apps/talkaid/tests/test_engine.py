@@ -259,10 +259,72 @@ check("BOM 이 없어도 그대로 읽는다", E.자료읽기(안붙은것), {"�
 깨진것.write_text("{이건 JSON 이 아니다", encoding="utf-8")
 check("깨졌으면 물러선다", E.load_terms(깨진것), [])
 
+# ── 말씨 다듬기 ──────────────────────────────────
+# 번역기는 문어체를 낸다. 실측은 반대다 (우리 발화 157개, 2026-09-16).
+#
+#     끝 마침표    9.6% 만 찍었다
+#     줄여 쓴 것   71 번   I'm 29 · I'd 7 · I'll 6 · don't 6 · that's 5
+#     풀어 쓴 것    0 번   I am · do not · it is 를 한 번도 안 썼다
+#
+# 여기서 중요한 것은 **무엇을 안 건드리는가**다. 줄이면 안 되는 자리를 줄이면
+# 구어체가 되는 것이 아니라 그냥 틀린 영어가 된다. 아래 함정 넷을 못 박는다.
+for 준, 볼 in [
+    ("I am interested.", "I'm interested"),
+    ("We are looking for Korean data.", "We're looking for Korean data"),
+    ("I do not have the samples yet.", "I don't have the samples yet"),
+    ("That is not what I meant.", "That's not what I meant"),
+    ("Cannot confirm that.", "Can't confirm that"),      # 첫 글자를 살린다
+    ("Will not be online tomorrow.", "Won't be online tomorrow"),
+    ("He said he would send it. I will wait.",
+     "He said he'd send it. I'll wait"),                 # 중간 마침표는 둔다
+    ("What is the price?", "What's the price?"),         # 물음표는 그대로다
+    # ── 건드리면 안 되는 것 넷 ──
+    ("I have two samples.", "I have two samples"),       # 본동사 have 다
+    ("Let us know when you are ready.",
+     "Let us know when you're ready"),                   # let's know 는 뜻이 다르다
+    ("This is the one I want.", "This is the one I want"),   # this's 는 없는 꼴이다
+    ("Korea is the target market.", "Korea is the target market"),
+]:
+    check("말씨 — %s" % 준, E.말씨다듬기(준)[0], 볼)
+
+check("안 바꿨으면 적을 것도 없다", E.말씨다듬기("hey")[1], [])
+if "줄여" not in " ".join(E.말씨다듬기("I am here.")[1]):
+    fails.append("줄여 쓰고도 무엇을 했는지 안 적는다")
+
+# ── 채팅 축약 (u · ur) ───────────────────────────
+# 이쪽은 실측이 ur 6 · your 8 로 반반이라 **사람이 켤 때만** 돈다.
+# 방마다 갈린다 — REDX 38% · 애슐리 40% · Ferriea 8% · hasanbroker 0%.
+#
+# **문장 첫 낱말은 안 건드린다.** 이 낱말들이 실측에서 늘 소문자여서
+# (lemme · thx · wanna · gotta · kinda · ur 모두 대문자 0 번) 첫머리까지 바꾸면
+# 거기만 소문자가 되는데, 슬랭을 쓰면서도 대문자로 시작하는 방이 있다 (Triped).
+for 준, 볼 in [
+    ("Where did you get this?", "Where did u get this?"),
+    ("Can you show me the sample?", "Can u show me the sample?"),
+    ("I want to check it first", "I wanna check it first"),
+    ("Is your post still up? I saw your data",
+     "Is ur post still up? I saw ur data"),        # 둘째 문장도 줄인다
+    ("If you're not a scammer, show me",
+     "If ur not a scammer, show me"),              # u're 이 아니라 ur 이다
+    # ── 문장 첫 낱말은 그대로 둔다 ──
+    ("Let me know when he is ready", "Let me know when he is ready"),
+    ("Thanks, kind of busy", "Thanks, kinda busy"),
+    ("You are the one selling it?", "You are the one selling it?"),
+]:
+    check("채팅 축약 — %s" % 준, E.채팅말로(준)[0], 볼)
+
+check("켜도 바꿀 것이 없으면 조용하다", E.채팅말로("I'm here")[1], [])
+
+# 둘을 잇대어도 어긋나지 않나. 실제 파이프라인이 이 차례로 부른다
+이은것, _ = E.말씨다듬기("I told you that it is ready.")
+check("먼저 줄여 쓴다", 이은것, "I told you that it's ready")
+이은것, _ = E.채팅말로(이은것)
+check("그다음 채팅 축약이다", 이은것, "I told u that it's ready")
+
 # ── 결과 ─────────────────────────────────────────
 if fails:
     print("실패 %d" % len(fails))
     for f in fails:
         print("  - %s" % f)
     sys.exit(1)
-print("통과. 시험 11 묶음")
+print("통과. 시험 13 묶음")

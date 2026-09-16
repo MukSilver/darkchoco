@@ -238,6 +238,129 @@ def apply_swaps(text: str, swaps: list[dict]) -> tuple[str, list[str]]:
     return text, 바꾼것
 
 
+# 풀어 쓴 것을 줄여 쓴다. **뜻이 안 바뀌는 것만 넣는다.**
+#
+# 일부러 뺀 것 넷이 있다.
+#   this is   →  this's 라는 꼴이 영어에 없다
+#   let us    →  let us know 를 let's know 로 만들면 뜻이 뒤집힌다
+#   have/had  →  I have been 은 I've been 이 맞지만 I have two samples 는 아니다.
+#                본동사인지 조동사인지 여기서 가릴 수 없으므로 안 건드린다
+#   going to  →  뜻은 같아도 격식이 크게 내려간다. 딱딱해야 할 자리까지 풀어진다
+줄임꼴 = [
+    (r"\b([Ii]) am\b", r"\1'm"),
+    (r"\b([Yy]ou|[Ww]e|[Tt]hey) are\b", r"\1're"),
+    (r"\b([Ii]t|[Tt]hat|[Tt]here|[Hh]e|[Ss]he|[Ww]hat|[Ww]ho) is\b", r"\1's"),
+    (r"\b([Ii]|[Yy]ou|[Ww]e|[Tt]hey|[Hh]e|[Ss]he|[Ii]t) will\b", r"\1'll"),
+    (r"\b([Ii]|[Yy]ou|[Ww]e|[Tt]hey|[Hh]e|[Ss]he) would\b", r"\1'd"),
+    (r"\b([Dd]o|[Dd]oes|[Dd]id|[Ii]s|[Aa]re|[Ww]as|[Ww]ere|[Hh]ave|[Hh]as"
+     r"|[Hh]ad|[Ww]ould|[Cc]ould|[Ss]hould) not\b", r"\1n't"),
+    # 첫 글자를 살린다. Cannot 이 문장 첫머리면 can't 가 아니라 Can't 다
+    (r"\bCan ?not\b", "Can't"), (r"\bcan ?not\b", "can't"),
+    (r"\bWill not\b", "Won't"), (r"\bwill not\b", "won't"),
+]
+
+# 채팅 축약. **기본으로 끈다.** 실측이 반반이기 때문이다.
+#
+#     ur 6 번  ·  your 8 번        방마다 갈린다 — REDX 38% · Ferriea 0%
+#
+# 번역기는 u 나 wanna 를 절대 안 낸다. 상용구와 번역칸의 말씨가 벌어지는 곳이
+# 바로 여기다. 그런데 늘 켜 두면 격식을 차리던 방에서 갑자기 말투가 바뀌므로,
+# **상대에 맞춰 사람이 켠다.**
+#
+# 실측에서 실제로 쓴 것만 넣었다. going to → gonna 는 뺐다 —
+# I'm going to Seoul 이 I'm gonna Seoul 이 되어 뜻이 깨진다.
+# you're 가 you 보다 먼저 와야 한다. 순서가 뒤집히면 u're 이 되는데
+# 그 꼴은 실측 0 건이다. 실제로 쓴 것은 ur 이다 (if ur not a scammer)
+채팅축약 = [
+    (r"\b[Yy]ou['’]re\b", "ur"),
+    (r"\b[Yy]our\b", "ur"), (r"\b[Yy]ou\b", "u"),
+    (r"\b([Ww])ant to\b", r"\1anna"), (r"\b[Gg]ot to\b", "gotta"),
+    (r"\b[Ll]et me\b", "lemme"), (r"\b[Kk]ind of\b", "kinda"),
+    (r"\b[Tt]hanks\b", "thx"),
+]
+
+
+def 채팅말로(text: str) -> tuple[str, list[str]]:
+    """you 를 u 로 줄인다. **사람이 켤 때만 부른다.**
+
+    `말씨다듬기` 와 갈라 둔 이유가 있다. 저쪽은 실측이 71 대 0 이라 늘 맞지만,
+    이쪽은 6 대 8 이라 **어느 쪽도 늘 맞지 않는다.** 상대에 따라 갈린다.
+
+        ur 6 번 · your 8 번        방마다 — REDX 38% · 애슐리 40% · Ferriea 8%
+
+    **문장 첫 낱말은 안 건드린다.** 이 낱말들은 실측에서 늘 소문자여서
+    (lemme · thx · wanna · gotta · kinda · ur 모두 대문자 0 번) 문장 첫머리를
+    바꾸면 거기만 소문자가 된다. 슬랭을 쓰는 방은 문장 전체가 소문자인 경우가
+    많지만 (애슐리 88% · REDX 59%) 그렇지 않은 방도 있어서 (Triped 는 슬랭 33%
+    인데 소문자 7%) 문체 전체를 내릴 근거는 안 된다. 그래서 첫 낱말은 번역기가
+    낸 대로 두고 뒤만 줄인다.
+    """
+    센것 = 0
+    # 구분자를 남기고 쪼갠다. 홀수 자리가 구분자다
+    조각들 = re.split(r"([.!?]\s+)", text)
+    새것 = []
+    for i, 조각 in enumerate(조각들):
+        if i % 2 == 1:
+            새것.append(조각)
+            continue
+        m = re.match(r"\s*\S+", 조각)
+        머리 = m.group(0) if m else ""
+        몸 = 조각[len(머리):]
+        for pat, 짧게 in 채팅축약:
+            몸, n = re.subn(pat, 짧게, 몸)
+            센것 += n
+        새것.append(머리 + 몸)
+    return "".join(새것), (["채팅 축약 (%d 군데)" % 센것] if 센것 else [])
+
+
+def 말씨다듬기(text: str) -> tuple[str, list[str]]:
+    """번역기가 낸 글을 실제 채팅 말씨로 다듬는다. 0 ms 다. 모델을 안 거친다.
+
+    **실측을 따른다** (우리 발화 157개, 2026-09-16).
+
+        마침표로 끝    9.6%    ← 번역기는 늘 찍는다. 뗀다
+        물음표로 끝   29.3%    ← 그대로 둔다
+        아무것도 없음  59.2%    ← 이것이 보통이다
+
+        줄여 쓴 것     71 번    ← I'm 29 · I'd 7 · I'll 6 · don't 6 · that's 5
+        풀어 쓴 것      0 번    ← I am · do not · it is 를 한 번도 안 썼다
+
+    하는 일이 둘이다.
+
+    **하나. 문장 끝의 마침표 하나를 뗀다.** 여러 문장이면 중간 것은 그대로 둔다 —
+    거기까지 떼면 문장 경계가 사라져 읽기 어려워진다. 줄임표(…)와 약어의 마침표도
+    안 건드린다.
+
+    **두울. 풀어 쓴 것을 줄여 쓴다.** 실측이 71 대 0 이라 망설일 것이 없다.
+    **뜻이 안 바뀌는 것만 넣었다.** `I have been` 을 `I've been` 으로 줄이는 것은
+    맞지만 `I have two samples` 를 `I've two samples` 로 줄이면 어색해지므로,
+    본동사인지 조동사인지 가릴 수 없는 `have` 와 `had` 는 아예 안 건드린다.
+    `going to` → `gonna` 도 뺐다. 뜻은 같아도 격식이 크게 내려가서, 딱딱하게
+    가야 할 자리까지 풀어져 버린다.
+
+    첫 글자는 **안 건드린다.** 실측이 대문자 69% 라 번역기가 내는 대로가 맞다.
+    상대에 따라 소문자로 쓰기도 하는데(애슐리 88%) 그것은 사람이 고를 일이지
+    도구가 정할 일이 아니다.
+
+    주어도 **안 건드린다.** `I` 가 50줄이고 `we` 가 3줄뿐이라 `We're looking for`
+    같은 것이 실측과 어긋나 보이지만, 한국어 원문이 「저희」였으면 `we` 가 맞다.
+    원문을 모르는 자리에서 주어를 갈면 뜻이 틀린다. 그것은 사람이 볼 일이다.
+    """
+    바꾼것 = []
+    s = text.rstrip()
+    # 한 글자짜리 약어(U.S.)나 줄임표는 빼고, 낱말 뒤에 온 마침표 하나만
+    if re.search(r"(?<![.A-Z])\.\s*$", s) and not s.endswith(".."):
+        s = s[:-1].rstrip()
+        바꾼것.append("끝 마침표를 뗐다")
+    줄인수 = 0
+    for pat, 짧게 in 줄임꼴:
+        s, n = re.subn(pat, 짧게, s)
+        줄인수 += n
+    if 줄인수:
+        바꾼것.append("줄여 썼다 (%d 군데)" % 줄인수)
+    return s, 바꾼것
+
+
 @dataclass
 class Result:
     text: str = ""                       # 옮긴 것
@@ -388,7 +511,7 @@ class Engine:
 
     # ── 본체 ──────────────────────────────────────
     def run(self, text: str, pair: str, back: bool = True,
-            llm: bool | None = None) -> Result:
+            llm: bool | None = None, 채팅: bool = False) -> Result:
         # llm 을 안 주면 엔진을 띄울 때 정한 대로 간다. True 를 주면 기계번역으로
         # 띄운 엔진에서도 LLM 을 태운다 — 사이드바가 그렇게 부른다
         import time
@@ -418,6 +541,17 @@ class Engine:
         if self.swaps:
             r.text, r.swapped = apply_swaps(r.text, self.swaps)
 
+        # **보낼 말에만 건다.** 읽을 말(en-ko·zh-ko)은 내가 읽는 것이라
+        # 말씨를 다듬을 이유가 없고, 역번역은 뜻을 보는 것이라 더욱 아니다
+        if pair == "ko-en":
+            r.text, 다듬은것 = 말씨다듬기(r.text)
+            r.swapped += 다듬은것
+            if 채팅:                       # 사람이 켰을 때만 you 를 u 로 줄인다
+                r.text, 줄인것 = 채팅말로(r.text)
+                r.swapped += 줄인것
+
+        # 역번역은 **줄인 뒤의 글**을 되돌린다. 실제로 보낼 것이 그것이라
+        # u 나 wanna 때문에 뜻이 흔들리면 여기서 보여야 한다
         if back and BACK.get(pair):
             r.back = self.raw(r.text, BACK[pair])
 

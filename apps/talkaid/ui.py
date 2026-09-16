@@ -105,6 +105,11 @@ class 창:
         # 다만 가리는 것이 거슬릴 때가 있어 아래 설정 줄에서 끌 수 있다
         self.항상위 = tk.BooleanVar(value=True)
         self.root.attributes("-topmost", True)
+        # 번역 결과의 you 를 u 로 줄인다. **기본은 꺼 둔다.**
+        # 마침표 떼기와 줄여 쓰기는 실측이 71 대 0 이라 늘 걸지만, 이것은 6 대 8
+        # 이라 어느 쪽도 늘 맞지 않는다. 격식을 차리던 방에서 갑자기 켜지면
+        # 말투가 튀므로 상대를 보고 사람이 켠다
+        self.채팅축약 = tk.BooleanVar(value=False)
         try:
             import sv_ttk
             sv_ttk.set_theme("light")
@@ -173,6 +178,10 @@ class 창:
         self.예열.pack(side="left", padx=8)
         ttk.Checkbutton(설정, text="항상 위", variable=self.항상위,
                         command=self._항상위바꾸기).pack(side="right")
+        # 상대에 따라 켠다. 실측이 ur 6 · your 8 로 반반이고 방마다 갈려서
+        # (REDX 38% · Ferriea 0%) 어느 한쪽을 늘 맞다고 둘 수 없다
+        ttk.Checkbutton(설정, text="u · ur", variable=self.채팅축약,
+                        ).pack(side="right", padx=(0, 10))
 
         # 로그는 접어 둔다. **콘솔을 안 띄우는 대신 여기로 온다.**
         # 모델 받는 진행률과 탈이 다 여기에 쌓인다
@@ -321,9 +330,13 @@ class 창:
         self.옮김단추.configure(state="disabled")
         self.상태.configure(text="옮기는 중…")
         self.알림.configure(text="")
-        threading.Thread(target=self._일, args=(글, 읽기), daemon=True).start()
+        # **여기서 읽어 넘긴다.** _일 은 딴 실에서 도는데 tk 변수는 그쪽에서
+        # 읽으면 안 된다
+        threading.Thread(target=self._일,
+                         args=(글, 읽기, bool(self.채팅축약.get())),
+                         daemon=True).start()
 
-    def _일(self, 글: str, 읽기: bool) -> None:
+    def _일(self, 글: str, 읽기: bool, 채팅: bool = False) -> None:
         try:
             if 읽기:
                 말 = E.detect_lang(글)
@@ -331,7 +344,7 @@ class 창:
                 r = self.eng.run(글, pair, back=False)
                 self.큐.put(("결과", (r, True)))
             else:
-                r = self.eng.run(글, "ko-en", back=True)
+                r = self.eng.run(글, "ko-en", back=True, 채팅=채팅)
                 self.큐.put(("결과", (r, False)))
         except Exception as e:
             self.큐.put(("탈", "%s: %s" % (type(e).__name__, e)))
@@ -542,15 +555,17 @@ class 창:
         self.준비모드 = "번역"
         # 첫 줄이 나오기까지 모델 올리는 시간이 얹힌다. 아무 표시가 없으면 멈춘 줄 안다
         self.준비상태.configure(text="0 / %d  (LLM 을 올린다)" % len(줄들))
-        threading.Thread(target=self._준비일, args=(줄들,), daemon=True).start()
+        threading.Thread(target=self._준비일,
+                         args=(줄들, bool(self.채팅축약.get())),
+                         daemon=True).start()
 
-    def _준비일(self, 줄들: list[str]) -> None:
+    def _준비일(self, 줄들: list[str], 채팅: bool = False) -> None:
         # **사이드바는 늘 LLM 이다.** 대화 전에 미리 옮겨 두는 자리라 느려도 되고,
         # 창을 --기계번역 으로 띄웠어도 여기만은 품질을 고른다
         LLM으로 = True
         for i, s in enumerate(줄들, 1):
             try:
-                r = self.eng.run(s, "ko-en", back=False, llm=LLM으로)
+                r = self.eng.run(s, "ko-en", back=False, llm=LLM으로, 채팅=채팅)
                 self.큐.put(("준비", (i, len(줄들), (s, r.text))))
                 continue
             except Exception as e:
@@ -560,7 +575,7 @@ class 창:
                 LLM으로 = False
                 self.큐.put(("물러섬", "LLM 을 못 썼다 (%s) — 남은 줄은 기계번역이다" % 탈))
                 try:
-                    r = self.eng.run(s, "ko-en", back=False, llm=False)
+                    r = self.eng.run(s, "ko-en", back=False, llm=False, 채팅=채팅)
                     self.큐.put(("준비", (i, len(줄들), (s, r.text))))
                     continue
                 except Exception as e2:

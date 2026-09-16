@@ -75,10 +75,61 @@ if "Public" in str(T.로그파일):
     fails.append("로그가 공용 폴더로 간다: %s" % T.로그파일)
 check("로그는 설정 자리에 둔다", T.로그파일.parent.name, "darkchoco")
 
+# ── 상용구 말씨 ──────────────────────────────────
+# 2026-09-16 에 여기서 두 번 틀렸다. 전체 비율만 재고 낱말을 안 봐서, 상용구
+# 134개를 소문자로 갈았다가 다시 대문자로 갈았고 그때마다 없던 오류가 생겼다.
+# 실측을 낱말 단위로 다시 내어 여기 못 박는다. 근거는 우리 발화 157개다.
+#
+#   축약에서 아포스트로피를 뺀 적이 0 건이다
+#     I'm 29 · I'd 7 · I'll 6 · don't 6 · that's 5 · it's 4 · can't 3 ·
+#     you're 3 · what's 1 · let's 1 · there's 1 · didn't 1
+#     그리고 im · id · ill · dont · thats · its · cant · youre 는 모두 0
+#   u 와 ur 은 소문자 19 · 대문자 0. 문장 첫머리도 소문자다 (u go first)
+#   Korea 와 Korean 은 대문자 6 · 소문자 0
+#   슬랭 축약은 u · ur · wanna · gonna · kinda · lemme · thx · gotta 만 썼다
+#
+# 0 번인 것을 둘로 가른다. **슬랭 축약이 0 번이면 막고, 평범한 영어가 0 번이면
+# 막지 않는다.** yep 이나 fair enough 가 157개에 없는 것은 이상한 일이 아니지만,
+# 어느 슬랭 축약을 쓰느냐는 사람마다 갈리는 지문이라 안 쓰던 것을 넣으면 티가 난다.
+import re  # noqa: E402
+
+#
+# **아포스트로피와 슬랭은 대소문자를 무시하고 잡는다.** Ill 이나 Nvm 처럼 첫 글자만
+# 대문자인 꼴이 실제로 나왔는데, 소문자 패턴만 두면 그것을 놓친다.
+# 반대로 U 와 korean 은 대소문자 자체가 잣대이므로 플래그를 안 건다.
+말씨금지 = [
+    (r"\b(im|ive|id|ill|dont|cant|didnt|wont|thats|whats|lets|theres|youre)\b",
+     re.I, "축약에서 아포스트로피를 뺐다. 실측 0 건이다"),
+    (r"\b(np|nvm|rn|atm|tmr|gimme|ppl|plz|thnx)\b",
+     re.I, "한 번도 안 쓴 슬랭 축약이다. 풀어 쓴다"),
+    # 슬랭 축약은 문장 첫머리에서도 소문자였다 — 실측에 「thx」 와
+    # 「lemme talk to my boss」 가 그대로 있다. 대문자로 쓴 적이 한 번도 없다
+    (r"\b(U|Ur|Thx|Lemme|Wanna|Gotta|Kinda|Gonna)\b", 0,
+     "이 축약은 늘 소문자다. 대문자는 실측 0 건이다"),
+    (r"\b(korea|korean)\b", 0, "Korea 와 Korean 은 늘 대문자다"),
+    ("—", 0, "em dash 는 실측 0 건이다"),
+    (r"[\U0001F300-\U0001FAFF☀-➿]", 0, "이모지는 실측 0 건이다"),
+]
+후보수 = 0
+for 페르소나, 갈래들 in 상용구.items():
+    for 갈래, 목록 in 갈래들.items():
+        for 항목 in 목록:
+            for 글 in [항목.get("영어", "")] + list(항목.get("영어들", [])):
+                후보수 += 1
+                for pat, 플래그, 왜 in 말씨금지:
+                    m = re.search(pat, 글, 플래그)
+                    if m:
+                        fails.append("상용구 말씨 — %s / %s / %s\n"
+                                     "     %r 안의 %r\n     %s"
+                                     % (페르소나, 갈래, 항목.get("한국어", ""),
+                                        글, m.group(0), 왜))
+if 후보수 < 100:
+    fails.append("상용구 후보가 %d 개뿐이다. 통째로 안 읽힌 것 같다" % 후보수)
+
 # ── 결과 ─────────────────────────────────────────
 if fails:
     print("실패 %d" % len(fails))
     for f in fails:
         print("  - %s" % f)
     sys.exit(1)
-print("통과. 시험 4 묶음")
+print("통과. 시험 5 묶음 (상용구 후보 %d 개의 말씨를 봤다)" % 후보수)
