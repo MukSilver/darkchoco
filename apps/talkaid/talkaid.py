@@ -109,9 +109,16 @@ def 규칙() -> tuple[list, dict, str]:
 
     상용구 = {}
     p = E.자료찾기("snippets.json")
-    if p is not None:
+    if p is None:
+        # en_style 은 못 찾으면 찾아본 자리까지 적는데 여기는 조용했다. 맞춘다
+        알림 += ("\n[규칙] **snippets.json 을 못 찾았다. 상용구 없이 돈다.**"
+               "\n       찾아본 자리: "
+               + " · ".join(str(x) for x in E.자료자리("snippets.json")))
+    else:
         try:
-            상용구 = E.자료읽기(p).get("상용구", {})
+            d = E.자료읽기(p).get("상용구", {})
+            상용구 = d if isinstance(d, dict) else {}
+            알림 += "\n[규칙] 상용구 %d 갈래 · %s" % (len(상용구), p)
         except Exception as e:
             알림 += "\n[규칙] snippets.json 을 못 읽었다 (%s). 상용구 없이 돈다." % e
     return swaps, 상용구, 알림
@@ -136,6 +143,57 @@ def 한번(eng: E.Engine, pair: str) -> int:
     return 0
 
 
+def 상용구보기(상용구: dict) -> int:
+    """창 없이 상용구를 한 화면에 세로로 찍는다.
+
+    **말씨가 자루 안에서 흔들리는 것은 코드가 못 막는다.** 사람이 봐야 한다.
+    축약형·슬랭·em dash 가 한 자루에 섞였으면 표시한다.
+    """
+    import re
+
+    import bag as BAG
+
+    if not 상용구:
+        print("  상용구가 없다.")
+        return 1
+
+    잣대 = [("축약", r"\b(u|r|ur|thx|pls|plz|gonna|wanna|kinda|rn|atm|np|nvm|tmr)\b"),
+          ("슬랭", r"\b(bro|yo|man|mate|dude)\b"),
+          ("대시", r"—"),
+          ("마침표", r"\.\s*$")]
+    총, 흔들린것 = 0, 0
+    for 위, 값 in 상용구.items():
+        갈래들 = 값 if isinstance(값, dict) else {위: 값}
+        print("\n%s" % ("=" * 64))
+        print("  [%s]" % 위)
+        print("%s" % ("=" * 64))
+        for 갈래, 목록 in 갈래들.items():
+            if not isinstance(목록, list):
+                continue
+            print("\n  ── %s" % 갈래)
+            for x in 목록:
+                if not isinstance(x, dict):
+                    continue
+                후보 = BAG.후보뽑기(x)
+                if not 후보:
+                    continue
+                총 += 1
+                print("     %s" % (x.get("한국어") or "(한국어 없음)"))
+                섞임 = set()
+                for s in 후보:
+                    표 = [이름 for 이름, pat in 잣대 if re.search(pat, s, re.I)]
+                    섞임.update(표)
+                    print("        %-52s %s" % (s, " ".join(표)))
+                if len(섞임) > 1:
+                    흔들린것 += 1
+                    print("        ** 한 자루에 %s 가 섞였다 **" % " · ".join(sorted(섞임)))
+
+    print("\n%s" % ("=" * 64))
+    print("  항목 %d · 말씨가 섞인 자루 %d" % (총, 흔들린것))
+    print("  기준 (실측): 소문자로 시작 · 마침표 없이 끝 · 슬랭 0% · em dash 0%")
+    return 0
+
+
 def main() -> int:
     출력자리_만들기()
     ap = argparse.ArgumentParser(description="클립보드를 옮긴다. 밖으로 요청을 안 보낸다")
@@ -144,12 +202,20 @@ def main() -> int:
     ap.add_argument("--once", choices=["ko-en", "en-ko", "zh-ko", "auto"],
                     help="창 없이 클립보드를 한 번만 옮긴다")
     ap.add_argument("--threads", type=int, default=8)
+    ap.add_argument("--상용구보기", action="store_true",
+                    help="창 없이 상용구를 세로로 찍는다. 말씨가 흔들리는지 본다")
     a = ap.parse_args()
+
+    swaps, 상용구, 규칙알림 = 규칙()
+
+    # 창도 클립보드도 안 쓴다. 어느 판에서나 돈다
+    if getattr(a, "상용구보기"):
+        print(규칙알림)
+        return 상용구보기(상용구)
 
     if sys.platform != "win32":
         raise SystemExit("윈도우 전용이다. 클립보드와 단축키가 Win32 API 다.")
 
-    swaps, 상용구, 규칙알림 = 규칙()
     eng = E.Engine(threads=a.threads, swaps=swaps,
                    llm=None if getattr(a, "기계번역") else LLM)
 

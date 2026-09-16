@@ -10,7 +10,7 @@
     "기계번역으로": "python talkaid.py --기계번역",
     "once": "python talkaid.py --once ko-en",
     "setup": "python setup.py",
-    "test": "python tests/test_engine.py && python tests/test_talkaid.py && python tests/test_ui.py",
+    "test": "python tests/test_bag.py && python tests/test_engine.py && python tests/test_talkaid.py && python tests/test_ui.py",
     "창 띄우기": "scripts\\run.bat",
     "미리 받아 두기": "scripts\\setup.bat",
     "exe 짓기": "scripts\\build_exe.bat"
@@ -38,7 +38,7 @@
     {
       "path": "snippets.json",
       "example": null,
-      "note": "상용구 스물여섯. 사이드바에서 골라 씁니다"
+      "note": "상용구 마흔다섯. 사이드바에서 골라 씁니다"
     }
   ],
   "packages": [],

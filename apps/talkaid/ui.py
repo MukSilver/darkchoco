@@ -29,9 +29,11 @@ import io
 import queue
 import sys
 import threading
+import time
 import tkinter as tk
 from tkinter import filedialog, ttk
 
+import bag as BAG
 import engine as E
 import win as W
 
@@ -74,7 +76,7 @@ class 로그로(io.TextIOBase):
 
 class 창:
     def __init__(self, eng: E.Engine, 상용구: dict | None = None,
-                 단축키켜기: bool = True):
+                 단축키켜기: bool = True, 말주머니=None):
         # 시험에서는 끈다. 전역 단축키는 온 시스템이 나눠 쓰는 것이라
         # 시험이 잠깐이라도 채가면 사람이 쓰던 것이 그 사이에 안 먹는다
         self.eng = eng
@@ -86,6 +88,13 @@ class 창:
         self._다음 = None
         self._되돌릴출력 = None
         self.준비줄: list[tuple[str, str]] = []
+        # 사이드바에 지금 무엇이 올라가 있나. 상대를 바꿀 때 번역 결과를
+        # 날리지 않으려고 본다 — 2분 들여 옮겨 둔 질문지가 드롭다운 한 번에
+        # 사라지면 대화 중 제일 아픈 사고다
+        self.준비모드 = ""
+        self._마지막복사 = [0.0, ""]      # 두 번 누름 막기 (0.8초)
+        # 시험에서는 씨앗을 고정한 것을 넣는다
+        self.말주머니 = 말주머니 if 말주머니 is not None else BAG.주머니들.읽기()
 
         self.dpi = W.dpi_켜기()
         self.root = tk.Tk()
@@ -183,6 +192,31 @@ class 창:
         self.준비상태 = ttk.Label(머리, text="", foreground="#666")
         self.준비상태.pack(side="right")
 
+        # ── 상대와 페르소나 ──
+        # **대화 하나에 한 번만 고른다.** 메시지마다 고르는 것이 아니다.
+        # 상대를 가르는 이유는 「한 사람이 우리에게서 같은 말을 두 번 듣는 것」을
+        # 막으려는 것이다. 404muse 에게 다 쓴 말이 REDX 에게는 새것이다.
+        #
+        # **핸들을 적지 않는다.** 창이 늘 위에 떠 있어 캡처마다 따라 들어가고,
+        # 팀 규칙이 계정명을 반드시 가리라고 못박았다. 번호와 상대의 짝은
+        # 사람이 자기 수첩에 적는다
+        고르개 = ttk.Frame(self.옆)
+        고르개.pack(fill="x", pady=(4, 0))
+        ttk.Label(고르개, text="상대", foreground="#666").pack(side="left")
+        self.상대 = tk.StringVar(value="")
+        self.상대고르개 = ttk.Combobox(고르개, textvariable=self.상대, width=6,
+                                   state="readonly",
+                                   values=[""] + list(self.말주머니.별칭))
+        self.상대고르개.pack(side="left", padx=(4, 10))
+        self.상대고르개.bind("<<ComboboxSelected>>", lambda e: self._상대바뀜())
+
+        ttk.Label(고르개, text="페르소나", foreground="#666").pack(side="left")
+        self.페르소나 = tk.StringVar(value=self._페르소나들()[0])
+        self.페르소나고르개 = ttk.Combobox(고르개, textvariable=self.페르소나, width=9,
+                                     state="readonly", values=self._페르소나들())
+        self.페르소나고르개.pack(side="left", padx=4)
+        self.페르소나고르개.bind("<<ComboboxSelected>>", lambda e: self._상대바뀜())
+
         줄 = ttk.Frame(self.옆)
         줄.pack(fill="x", pady=6)
         ttk.Button(줄, text="txt 열기", command=self._파일열기).pack(side="left")
@@ -252,8 +286,14 @@ class 창:
         self.역번역.configure(text=r.back or "(역번역 없음)")
         self.상태.configure(text="%.1f초" % (r.ms / 1000))
 
-        W.클립보드_쓰기(r.text)
-        self.알림.configure(text="클립보드에 넣었다", foreground="#2a7")
+        # **반환값을 본다.** 다른 프로그램이 클립보드를 잡고 있으면 실패하는데
+        # 여태 그래도 초록 「넣었다」가 떴다
+        if W.클립보드_쓰기(r.text):
+            self.알림.configure(text="클립보드에 넣었다", foreground="#2a7")
+        else:
+            self.알림.configure(
+                text="**클립보드에 못 넣었다.** 결과칸에서 직접 복사한다",
+                foreground="#a33")
 
     def _받_탈(self, e) -> None:
         self.도는중 = False
@@ -392,32 +432,102 @@ class 창:
     def _붙여넣기(self) -> None:
         self._준비시작(W.클립보드_읽기())
 
-    def _상용구넣기(self) -> None:
-        """상용구는 **번역을 안 거친다.** 그래서 0 ms 다.
+    def _페르소나들(self) -> list[str]:
+        """고를 수 있는 페르소나.
 
-        맞장구·되묻기·시간 벌기·마무리는 종류가 적어 미리 손으로 써 둘 수 있다.
-        대화의 상당 부분이 이것으로 덮인다. 통역사가 실제로 하는 일이 그렇다.
+        **「공통」은 여기 안 넣는다.** 그것은 고르는 것이 아니라 어느 페르소나에서나
+        늘 나오는 것이다. 목록에 넣으면 기본값이 「공통」이 되어 정작 거래 문구가
+        하나도 안 뜬다. 옛 꼴(갈래→목록)이면 고를 것이 없다.
+        """
+        갈래들 = [k for k, v in self.상용구.items()
+                if isinstance(v, dict) and k != "공통"]
+        return 갈래들 or ["(없음)"]
+
+    def _펼치기(self) -> list[tuple[str, str, dict]]:
+        """(페르소나, 갈래, 항목) 로 펼친다. **옛 꼴도 읽는다.**
+
+        값이 dict 면 새 꼴(페르소나→갈래→목록)이고 list 면 옛 꼴(갈래→목록)이다.
+        exe 옆에 옛 파일을 놓아도 안 깨지게 하려는 것이다.
+
+        「공통」 은 어느 페르소나에서나 나오고, 나머지는 고른 것만 나온다.
+        """
+        고른것 = self.페르소나.get() if hasattr(self, "페르소나") else ""
+        out = []
+        for 위, 값 in self.상용구.items():
+            if isinstance(값, list):            # 옛 꼴 — 위가 곧 갈래다
+                out += [("", 위, x) for x in 값 if isinstance(x, dict)]
+                continue
+            if not isinstance(값, dict):
+                continue
+            if 위 != "공통" and 고른것 and 위 != 고른것:
+                continue
+            for 갈래, 목록 in 값.items():
+                if isinstance(목록, list):
+                    out += [(위, 갈래, x) for x in 목록 if isinstance(x, dict)]
+        return out
+
+    def _상용구넣기(self) -> None:
+        """상용구는 **번역을 안 거친다.** 그래서 0 ms 이고 틀릴 수 없다.
+
+        항목에 `영어들` 이 있으면 누를 때마다 다른 변형이 나가고, 한 바퀴 안에는
+        안 겹친다. **상대를 안 고르면 자루를 안 돌리고 첫 변형만 낸다** —
+        틀린 초록불이 빨간불보다 나쁘다.
         """
         if not self.상용구:
+            if not self.사이드바열림:
+                self.사이드바()
             self.준비상태.configure(text="snippets.json 이 없다")
             return
         if not self.사이드바열림:
             self.사이드바()
         self._준비비우기()
-        for 갈래, 목록 in self.상용구.items():
-            for s in 목록:
-                ko, en = s.get("한국어", ""), s.get("영어", "")
-                if not en:
-                    continue
-                self.준비줄.append((ko, en))
-                self._준비그리기(len(self.준비줄), (ko, en))
-        self.준비상태.configure(text="상용구 %d" % len(self.준비줄))
+        self.준비모드 = "상용구"
+
+        상대 = (self.상대.get() or "").strip()
+        앞갈래, 버린것 = None, 0
+        for 페르소나, 갈래, 항목 in self._펼치기():
+            후보 = BAG.후보뽑기(항목)
+            ko = (항목.get("한국어") or "").strip()
+            if not 후보 or not ko:
+                버린것 += 1
+                continue
+            if 갈래 != 앞갈래:
+                self._갈래머리(갈래)
+                앞갈래 = 갈래
+            보임 = (self.말주머니.지금(상대, 페르소나, 갈래, ko, 후보)
+                  if 상대 else 후보[0])
+            self.준비줄.append((ko, 보임))
+            self._준비그리기(len(self.준비줄), (ko, 보임),
+                         후보=후보, 자리=(페르소나, 갈래, ko))
+
+        말 = "상용구 %d" % len(self.준비줄)
+        if 버린것:
+            말 += " · 이상 %d" % 버린것
+        if not 상대:
+            말 += " · 상대 미선택"
+        self.준비상태.configure(text=말)
+        if not 상대:
+            self.알림.configure(
+                text="상대를 안 골라 자루를 안 돌린다. 같은 말이 또 나갈 수 있다.",
+                foreground="#a33")
+
+    def _갈래머리(self, 갈래: str) -> None:
+        """갈래 머리글. 스물여덟 줄을 통째로 쌓으면 대화 중에 못 찾는다."""
+        ttk.Label(self.속, text="── %s" % 갈래, foreground="#999",
+                  font=(글꼴, 9)).pack(anchor="w", pady=(8, 2))
 
     def _준비비우기(self) -> None:
         self.준비줄.clear()
         for w in self.속.winfo_children():
             w.destroy()
         self.준비상태.configure(text="")
+        self.준비모드 = ""
+
+    def _상대바뀜(self) -> None:
+        """상대나 페르소나를 바꿨다. **번역 결과가 올라가 있으면 안 건드린다.**"""
+        if self.준비모드 != "상용구":
+            return
+        self._상용구넣기()
 
     def _준비시작(self, 글: str) -> None:
         줄들 = [s.strip() for s in 글.splitlines() if s.strip()]
@@ -429,6 +539,7 @@ class 창:
         if not self.사이드바열림:
             self.사이드바()
         self._준비비우기()
+        self.준비모드 = "번역"
         # 첫 줄이 나오기까지 모델 올리는 시간이 얹힌다. 아무 표시가 없으면 멈춘 줄 안다
         self.준비상태.configure(text="0 / %d  (LLM 을 올린다)" % len(줄들))
         threading.Thread(target=self._준비일, args=(줄들,), daemon=True).start()
@@ -456,21 +567,81 @@ class 창:
                     탈 = e2
             self.큐.put(("준비", (i, len(줄들), (s, "**못 옮겼다** %s" % 탈))))
 
-    def _준비그리기(self, n: int, 짝: tuple[str, str]) -> None:
+    def _준비그리기(self, n: int, 짝: tuple[str, str],
+                 후보: list[str] | None = None,
+                 자리: tuple[str, str, str] | None = None) -> None:
+        """한 줄. 후보가 둘 이상이면 [↻] 와 변형 개수가 붙는다.
+
+        번역 경로는 후보·자리를 안 주므로 옛날과 똑같이 그려진다.
+        """
         ko, en = 짝
         칸 = ttk.Frame(self.속, padding=(0, 4, 0, 6))
         칸.pack(fill="x", anchor="w")
         ttk.Label(칸, text="%d.  %s" % (n, ko), wraplength=340,
                   justify="left", foreground="#777", font=(글꼴, 9)).pack(anchor="w")
-        ttk.Label(칸, text=en, wraplength=340, justify="left",
+        # **라벨은 늘 「지금 누르면 나갈 말」이다.** 화면과 클립보드가 어긋나면
+        # 안 읽은 문장이 상대에게 간다
+        보임 = tk.StringVar(value=en)
+        ttk.Label(칸, textvariable=보임, wraplength=340, justify="left",
                   font=(글꼴, 10)).pack(anchor="w")
-        ttk.Button(칸, text="복사", width=6,
-                   command=lambda t=en: self._줄복사(t)).pack(anchor="e", pady=(2, 0))
+
+        아래 = ttk.Frame(칸)
+        아래.pack(fill="x", pady=(2, 0))
+        여럿 = 후보 and len(후보) > 1 and 자리
+        if 여럿:
+            ttk.Label(아래, text="변형 %d" % len(후보),
+                      foreground="#999", font=(글꼴, 8)).pack(side="left")
+            ttk.Button(아래, text="↻", width=3,
+                       command=lambda: self._넘기기(보임, 후보, 자리)
+                       ).pack(side="right", padx=(4, 0))
+        ttk.Button(아래, text="복사", width=6,
+                   command=(lambda: self._돌려복사(보임, 후보, 자리)) if 여럿
+                   else (lambda t=en: self._줄복사(t))).pack(side="right")
         ttk.Separator(self.속, orient="horizontal").pack(fill="x")
 
-    def _줄복사(self, t: str) -> None:
-        W.클립보드_쓰기(t)
-        self.알림.configure(text="클립보드에 넣었다", foreground="#2a7")
+    def _돌려복사(self, 보임, 후보: list[str], 자리) -> None:
+        """보이는 것을 넣고 다음을 건다. **한 바퀴 안에는 안 겹친다.**"""
+        상대 = (self.상대.get() or "").strip()
+        나간것 = 보임.get()
+        if not self._줄복사(나간것):
+            return                      # 디바운스에 걸렸으면 안 돌린다
+        if not 상대:
+            return                      # 상대를 안 골랐으면 자루를 안 쓴다
+        페르소나, 갈래, ko = 자리
+        self.말주머니.뽑기(상대, 페르소나, 갈래, ko, 후보)
+        보임.set(self.말주머니.지금(상대, 페르소나, 갈래, ko, 후보))
+
+    def _넘기기(self, 보임, 후보: list[str], 자리) -> None:
+        """안 닳게 다음으로. 되돌려 넣으므로 한 바퀴가 안 줄어든다."""
+        상대 = (self.상대.get() or "").strip()
+        if not 상대:
+            # 자루를 안 쓰므로 목록 안에서 그냥 다음으로 민다
+            보임.set(후보[(후보.index(보임.get()) + 1) % len(후보)]
+                   if 보임.get() in 후보 else 후보[0])
+            return
+        페르소나, 갈래, ko = 자리
+        보임.set(self.말주머니.넘기기(상대, 페르소나, 갈래, ko, 후보))
+
+    def _줄복사(self, t: str) -> bool:
+        """클립보드에 넣는다. 넣었으면 True.
+
+        **0.8초 안의 같은 글 두 번째 누름은 무시한다.** 예전에는 두 번 눌러도
+        같은 글이었는데 돌림이 붙으면서 두 번째가 다른 문장을 덮어쓰게 됐다.
+        붙여넣기는 텔레그램에서 하므로 무엇이 들어갔는지 볼 기회가 없다.
+        """
+        이제 = time.monotonic()
+        앞시각, 앞글 = self._마지막복사
+        if 앞글 == t and 이제 - 앞시각 < 0.8:
+            return False
+        self._마지막복사 = [이제, t]
+        # **반환값을 본다.** 다른 프로그램이 클립보드를 잡고 있으면 실패하는데
+        # 여태 그래도 초록 「넣었다」가 떴다
+        if W.클립보드_쓰기(t):
+            self.알림.configure(text='넣었다 — "%s"' % t, foreground="#2a7")
+            return True
+        self.알림.configure(text="**클립보드에 못 넣었다.** 다른 프로그램이 잡고 있다",
+                          foreground="#a33")
+        return False
 
     # ── 돌리기 ───────────────────────────────────
     def _출력가로채기(self) -> None:
@@ -494,6 +665,10 @@ class 창:
         if self._다음:
             self.root.after_cancel(self._다음)
             self._다음 = None
+        # 자루를 남긴다. 창을 다시 띄워도 한 바퀴가 이어져 안 겹친다.
+        # **번호만 적는다** — 영어 문장도 핸들도 시각도 안 적는다
+        if self.말주머니.자루:
+            self.말주머니.쓰기()
         self._출력되돌리기()
         self.root.destroy()
 

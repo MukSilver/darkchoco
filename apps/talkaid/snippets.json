@@ -1,51 +1,285 @@
 {
-  "_설명": "대화 중에 자주 쓰는 말. **번역을 거치지 않는다.** 그래서 0 ms 다. 2026-09-13 초판.",
-  "_왜": "즉석 반응은 종류가 적다. 맞장구·되묻기·시간 벌기·마무리 서른 개면 대화의 상당 부분이 덮인다. 통역사가 실제로 하는 일이 이것이다.",
-  "_말씨": "팀밖. 구어체이되 슬랭 없이 담백하게. 자세한 것은 스킬의 references/talk-en.md",
-  "_고칠 때": "쓰다 보면 늘어난다. 여기에 한 줄 더한다. 코드는 안 고친다.",
+  "_설명": "대화 상용구. **번역을 안 거친다.** 그래서 0ms 이고 틀릴 수 없다. 2026-09-16 에 실제 대화 157발화에서 다시 뽑았다",
+
+  "_말씨": "실측이다 (우리 발화 157개). 소문자로 시작 100% · 마침표 없이 끝 67% · 슬랭(bro·yo·man) 0% · em dash 0% · 이모지 0% · 낱말 수 중앙 7. **이 기준을 벗어나는 변형을 넣지 않는다.**",
+
+  "_페르소나": "공통은 누구로 접근하든 쓴다. 사는 쪽과 파는 쪽은 그 페르소나일 때만 쓴다. 실제 대화에서 사는 쪽이 116발화 · 파는 쪽이 15발화였다. **도구가 페르소나를 추론하지 않는다. 사람이 고른다.**",
+
+  "_여럿": "영어들 에 변형을 두면 누를 때마다 다른 것이 나가고 한 바퀴 안에는 안 겹친다. 영어 는 스칼라로 두고 영어들 을 덧붙인다 — 같은 글을 두 군데 적지 않는다. 섞기 를 고정 으로 두면 변형이 있어도 첫 것만 낸다",
+
+  "_억지로": "**억지 변형은 반복보다 더 티가 난다.** 다섯 칸을 채우려고 어색한 영어를 넣으면 원어민이 아닌 것이 드러난다. 셋이 다섯보다 낫다. 변형이 안 떠오르면 안 붙인다",
+
+  "_고칠 때": "쓰다 보면 는다. 여기에 줄을 더하고 코드는 안 고친다. **회사명·포럼명·상대 핸들·실제 보낸 문장 그대로를 넣지 않는다** — 이 파일은 레포에 커밋되고 exe 안에 굳어서, 상대가 레포를 찾으면 자기 대화 기록과 글자 대조로 우리 계정을 특정한다. 그대로 쓰고 싶은 것은 ~/.config/darkchoco/snippets_local.json 에 둔다",
 
   "상용구": {
-    "여는 말": [
-      {"영어": "hey — got a minute?", "한국어": "잠깐 시간 되나요?"},
-      {"영어": "saw your post. a few questions if you're up for it", "한국어": "글 봤습니다. 몇 가지 물어봐도 될까요"},
-      {"영어": "thanks for getting back to me", "한국어": "답 주셔서 고맙습니다"}
-    ],
-    "맞장구": [
-      {"영어": "got it", "한국어": "알겠습니다"},
-      {"영어": "makes sense", "한국어": "이해했습니다"},
-      {"영어": "fair enough", "한국어": "그럴 만하네요"},
-      {"영어": "right, that tracks", "한국어": "네, 말이 되네요"}
-    ],
-    "되묻기": [
-      {"영어": "can you walk me through that?", "한국어": "그 부분을 좀 더 설명해 주실 수 있나요?"},
-      {"영어": "just so I'm clear — you're saying ...?", "한국어": "제가 이해한 게 맞는지 — ...라는 말씀인가요?"},
-      {"영어": "what do you mean by that exactly?", "한국어": "정확히 어떤 뜻인가요?"},
-      {"영어": "where did that come from?", "한국어": "그건 어디서 나온 건가요?"},
-      {"영어": "how do you know that?", "한국어": "그건 어떻게 아시나요?"},
-      {"영어": "can you say that again? the wording got garbled", "한국어": "다시 말씀해 주시겠어요? 문장이 깨졌습니다"}
-    ],
-    "시간 벌기": [
-      {"영어": "one sec", "한국어": "잠시만요"},
-      {"영어": "hold on, let me check", "한국어": "잠깐만요, 확인해 볼게요"},
-      {"영어": "let me look into that and get back to you", "한국어": "알아보고 다시 말씀드리겠습니다"},
-      {"영어": "sorry, slow typing", "한국어": "죄송합니다, 타자가 느립니다"},
-      {"영어": "give me a few minutes", "한국어": "몇 분만 주세요"}
-    ],
-    "밀지 않고 물러서기": [
-      {"영어": "no worries if you'd rather not say", "한국어": "말씀하기 어려우면 괜찮습니다"},
-      {"영어": "understood, we can skip that one", "한국어": "알겠습니다, 그건 넘어가죠"},
-      {"영어": "that's fair", "한국어": "그럴 수 있죠"}
-    ],
-    "선을 긋기": [
-      {"영어": "I'm not looking to buy anything", "한국어": "사려는 게 아닙니다"},
-      {"영어": "I can't offer anything in return", "한국어": "대가로 드릴 수 있는 것이 없습니다"},
-      {"영어": "I'm not able to share that", "한국어": "그건 말씀드릴 수 없습니다"},
-      {"영어": "I'd rather not go into that", "한국어": "그 부분은 이야기하지 않겠습니다"}
-    ],
-    "마무리": [
-      {"영어": "that's all I had — thanks for your time", "한국어": "여기까지입니다. 시간 내 주셔서 고맙습니다"},
-      {"영어": "I'll follow up if anything else comes up", "한국어": "더 있으면 다시 연락드리겠습니다"},
-      {"영어": "appreciate it", "한국어": "고맙습니다"}
-    ]
+    "공통": {
+      "여는 말": [
+        {
+          "한국어": "인사",
+          "영어": "hey",
+          "영어들": ["hi", "hey there"]
+        },
+        {
+          "한국어": "글 봤습니다",
+          "영어": "i saw ur post",
+          "영어들": ["came across ur post", "ur post caught my eye"]
+        },
+        {
+          "한국어": "잠깐 시간 되나요",
+          "영어": "u around?",
+          "영어들": ["got a minute?", "u free to talk?"]
+        },
+        {
+          "한국어": "몇 가지 물어봐도 될까요",
+          "영어": "mind if i ask a few things",
+          "영어들": ["can i ask u a couple things", "few questions if thats ok"]
+        }
+      ],
+
+      "맞장구": [
+        {
+          "한국어": "네",
+          "영어": "yeah",
+          "영어들": ["yep", "right", "sure"]
+        },
+        {
+          "한국어": "알겠습니다",
+          "영어": "got it",
+          "영어들": ["ok got it", "understood", "makes sense"]
+        },
+        {
+          "한국어": "좋네요",
+          "영어": "nice",
+          "영어들": ["oh nice", "thats good"]
+        },
+        {
+          "한국어": "그럴 만하네요",
+          "영어": "fair enough",
+          "영어들": ["that tracks", "yeah that adds up"]
+        },
+        {
+          "한국어": "고맙습니다",
+          "영어": "thx",
+          "영어들": ["thanks", "appreciate it"]
+        }
+      ],
+
+      "되묻기": [
+        {
+          "한국어": "어느 회사요",
+          "영어": "which company?",
+          "영어들": ["which one is it", "what company are we talking about"]
+        },
+        {
+          "한국어": "무슨 뜻인가요",
+          "영어": "what do u mean",
+          "영어들": ["not sure i follow", "how do u mean"]
+        },
+        {
+          "한국어": "예를 들면요",
+          "영어": "like what for example?",
+          "영어들": ["such as?", "got an example"]
+        },
+        {
+          "한국어": "어디에 올라온 건가요",
+          "영어": "where was this posted",
+          "영어들": ["where did u post it", "which board was that on"]
+        },
+        {
+          "한국어": "좀 더 설명해 주실 수 있나요",
+          "영어": "can u walk me through that",
+          "영어들": ["can u explain that a bit more", "not following, can u expand"]
+        },
+        {
+          "한국어": "다시 말씀해 주시겠어요",
+          "영어": "can u say that again",
+          "영어들": ["sorry, didnt catch that", "came through garbled, again?"]
+        }
+      ],
+
+      "시간 벌기": [
+        {
+          "한국어": "잠시만요",
+          "영어": "one sec",
+          "영어들": ["hold on", "gimme a sec"]
+        },
+        {
+          "한국어": "확인해 볼게요",
+          "영어": "lemme check",
+          "영어들": ["gonna look into it", "let me go check that"]
+        },
+        {
+          "한국어": "내일 다시 연락드릴게요",
+          "영어": "ill message u tomorrow",
+          "영어들": ["ill get back to u tmr", "can i hit u up tomorrow"]
+        },
+        {
+          "한국어": "일이 있어서 좀 바쁩니다",
+          "영어": "got work, kinda busy rn",
+          "영어들": ["im tied up with work atm", "day job keeps me busy"]
+        },
+        {
+          "한국어": "타자가 느립니다",
+          "영어": "sorry, slow typer",
+          "영어들": ["typing slow today", "bear with me, slow typing"]
+        }
+      ],
+
+      "물러서기": [
+        {
+          "한국어": "말씀하기 어려우면 괜찮습니다",
+          "영어": "no worries if u cant say",
+          "영어들": ["all good if thats off limits", "np if u'd rather not"]
+        },
+        {
+          "한국어": "그건 넘어가죠",
+          "영어": "lets skip that one",
+          "영어들": ["forget that one", "nvm that"]
+        }
+      ],
+
+      "마무리": [
+        {
+          "한국어": "일단 여기까지요",
+          "영어": "thats it for now",
+          "영어들": ["thats all i had", "good for now"]
+        },
+        {
+          "한국어": "또 연락드릴게요",
+          "영어": "ill hit u up again",
+          "영어들": ["ill reach out if anything comes up", "talk soon"]
+        }
+      ]
+    },
+
+    "사는 쪽": {
+      "관심 보이기": [
+        {
+          "한국어": "한국 데이터를 찾고 있습니다",
+          "영어": "im looking for korean data",
+          "영어들": ["im after korean stuff", "korean data is what im after"]
+        },
+        {
+          "한국어": "관심 있습니다",
+          "영어": "im interested",
+          "영어들": ["that works for me", "im down"]
+        },
+        {
+          "한국어": "둘 다 사고 싶습니다",
+          "영어": "id take both",
+          "영어들": ["ill go for both", "both of them if possible"]
+        },
+        {
+          "한국어": "한 번에 같이 거래하고 싶습니다",
+          "영어": "rather do it in one deal",
+          "영어들": ["can we bundle it", "one deal not separate ones"]
+        }
+      ],
+
+      "값 묻기": [
+        {
+          "한국어": "얼마에 파나요",
+          "영어": "how much for it",
+          "영어들": ["whats ur price", "how much were u thinking"]
+        },
+        {
+          "한국어": "얼마나 필요한가요",
+          "영어": "how much would i need",
+          "영어들": ["whats the total gonna be", "how much am i looking at"]
+        },
+        {
+          "한국어": "좀 깎아 주실 수 있나요",
+          "영어": "any room on the price",
+          "영어들": ["can u do better on price", "whats the best u can do"]
+        }
+      ],
+
+      "표본 요청": [
+        {
+          "한국어": "표본 좀 볼 수 있나요",
+          "영어": "can u show me a sample",
+          "영어들": ["got a sample i can look at", "any sample data to check"]
+        },
+        {
+          "한국어": "표본이 몇 개나 있나요",
+          "영어": "how many samples u got",
+          "영어들": ["how much sample data is there"]
+        },
+        {
+          "한국어": "다른 회사 것도 있나요",
+          "영어": "got anything from other companies",
+          "영어들": ["what else do u have", "any other company data"]
+        }
+      ],
+
+      "떠보기": [
+        {
+          "한국어": "진짜인지 어떻게 아나요",
+          "영어": "how do i know its real",
+          "영어들": ["how am i supposed to verify that", "whats the proof"]
+        },
+        {
+          "한국어": "먼저 좀 확인하고 싶습니다",
+          "영어": "wanna verify a bit before i go ahead",
+          "영어들": ["id like to check it first", "gotta make sure before i pay"]
+        },
+        {
+          "한국어": "이거 수요가 많나요",
+          "영어": "is there much demand for it",
+          "영어들": ["do people actually buy this", "is this stuff moving"]
+        }
+      ],
+
+      "미루기": [
+        {
+          "한국어": "윗사람과 얘기해 볼게요",
+          "영어": "lemme run it by my boss",
+          "영어들": ["gotta check with someone first", "need to clear it with my side"]
+        }
+      ]
+    },
+
+    "파는 쪽": {
+      "자기소개": [
+        {
+          "한국어": "저도 한국 데이터를 팔려고 합니다",
+          "영어": "im trying to sell korean data too",
+          "영어들": ["im on the selling side as well"]
+        },
+        {
+          "한국어": "저도 데이터 모으는 쪽입니다",
+          "영어": "i collect data too",
+          "영어들": ["im in the same line", "i do collection as well"]
+        },
+        {
+          "한국어": "저는 한국 사람이 아닙니다",
+          "영어": "im not korean",
+          "영어들": ["not from korea myself"]
+        }
+      ],
+
+      "물어보기": [
+        {
+          "한국어": "뭘 추천하시나요",
+          "영어": "what would u recommend",
+          "영어들": ["where would u start", "whats worth going after"]
+        },
+        {
+          "한국어": "돈이 좀 되나요",
+          "영어": "is there good money in it",
+          "영어들": ["does it pay well", "is it worth the effort"]
+        },
+        {
+          "한국어": "이쪽은 어떻게 시작하셨나요",
+          "영어": "how did u get into this",
+          "영어들": ["how did u start out", "what got u into it"]
+        },
+        {
+          "한국어": "이 바닥을 잘 몰라서요",
+          "영어": "im still new to this",
+          "영어들": ["dont know much about this yet", "still figuring it out"]
+        }
+      ]
+    }
   }
 }
