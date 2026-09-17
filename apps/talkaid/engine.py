@@ -157,11 +157,36 @@ def _rules(p: Path | None = None) -> dict:
 
 
 def load_terms(p: Path | None = None) -> list[dict]:
-    return _rules(p).get("용어", [])
+    # 밑줄로 시작하는 키만 든 줄은 사람이 읽는 메모다. 용어가 아니다.
+    # 왜 넣었는지와 왜 뺐는지를 목록 곁에 적어 두려고 이렇게 쓴다
+    return [t for t in _rules(p).get("용어", []) if t.get("한국어")]
 
 
 def load_endings(p: Path | None = None) -> list[dict]:
     return _rules(p).get("의문 어미", [])
+
+
+def _걸리나(열쇠: str, 뒤에오면빼기: str | None, text: str) -> bool:
+    """용어가 이 글에 걸리나. 열쇠말 뒤에 오면 안 되는 글자를 가릴 수 있다.
+
+    열쇠말이 부분일치라 한국어 어미에 걸리는 자리가 있다. 「시세」가
+    「보내 주시세요」의 -시세요에 걸려 사전이 붙었고, 보내는 쪽이 상대에서
+    나로 뒤집혔다 (2026-09-17 실측).
+
+    전역 규칙으로 두지 않고 용어 줄의 선택 항목으로 둔다. 어미마다 사정이
+    달라서 한 벌로 묶으면 애먼 용어까지 안 붙는다.
+
+    **한 자리만 피하면 붙인다.** 「요즘 시세가 어떤가요」처럼 걸려야 할
+    자리와 「주시세요」가 한 문장에 같이 있으면 붙이는 쪽이 맞다.
+    """
+    if not 뒤에오면빼기:
+        return 열쇠 in text
+    i = text.find(열쇠)
+    while i >= 0:
+        if not text.startswith(뒤에오면빼기, i + len(열쇠)):
+            return True
+        i = text.find(열쇠, i + 1)
+    return False
 
 
 # 문장 끝의 마침표·물음표. 이것이 있으면 어미를 안 건드린다
@@ -452,7 +477,24 @@ class Engine:
               "Do not explain. Do not think out loud.\n"
               "Output exactly one line: the English translation. Nothing else.")
         걸린것 = [(t["한국어"], t["영어"]) for t in self.terms
-                if t.get("한국어") and t.get("영어") and t["한국어"] in text]
+                if t.get("한국어") and t.get("영어")
+                and _걸리나(t["한국어"], t.get("뒤에오면빼기"), text)]
+        # **긴 것이 이긴다.** 열쇠말이 부분일치라 「압수수색」 문장에는 「압수」도
+        # 같이 걸려서 사전이 두 줄 나가고, 1.7B 가 둘을 다 끼워 넣으려다 흔들린다.
+        # 2026-09-17 에 실측했다.
+        #
+        #     둘 다   Last year was a seizure search, is that true?
+        #     긴 것만  Last year was a police raid, right?
+        #
+        #     둘 다   Are you being suspected of a sting operation by the police
+        #             ← 저를 의심하느냐고 물었는데 상대가 의심받는 쪽이 됐다
+        #     긴 것만  Are you thinking of suspecting me in a sting operation
+        #
+        # `protect` 쪽은 처음부터 긴 것을 먼저 바꿨는데(「피해」가 「피해사」를
+        # 먹는 것을 막으려고) 여기만 빠져 있었다. 용어집에 이미 있는
+        # 「초기 접근」과 「초기 접근 브로커」가 지금도 이 상태다
+        걸린것 = [(k, v) for k, v in 걸린것
+                if not any(k != k2 and k in k2 for k2, _ in 걸린것)]
         if 걸린것:
             지시 += "\nUse these exact terms:\n" + "\n".join(
                 "  %s = %s" % (k, v) for k, v in 걸린것)

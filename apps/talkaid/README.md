@@ -342,12 +342,51 @@ PowerToys 를 이미 쓰고 있으면 Text Extractor(`Win+Shift+T`)가 한 단�
     나눠서   I want to make sure that what I understand is right.
              You're saying there are more than one million files?
 
-**둘. 도메인 용어를 자리표로 뺀다.** `terms.json` 에 있다.
+**둘. 도메인 용어를 사전으로 붙인다.** `terms.json` 에 있다. 마흔여섯 줄이다.
 
     어피실리에이트   efisilite  →  affiliates
     업종            karma      →  industry sector
 
+**2026-09-17 에 열여덟 줄을 더했다. 깨지는 까닭이 하나로 모였다 — 한자 동음이의어다.**
+1.7B 는 한자를 못 보니 뜻을 고르지 못한다.
+
+    압수 押收   →  After cooling            seizure 를 알려 주면 고쳐진다
+    타자 打字   →  다른 사람이 피곤하다        他者 로 읽었다
+    대가 代價   →  bail (보석)              大家 로 읽었다
+    사고        →  want to think about it   思考 로 읽었다. 거래의 핵심어다
+
+**후보 서른다섯을 사전 없이 한 번 · 넣고 한 번 돌려 견주고 열여덟만 남겼다.**
+절반이 넣어서 **더 나빠졌다** — 1.7B 가 사전의 영어를 억지로 끼워 넣다가
+주체와 문법을 망친다. 뺀 열여덟은 그 까닭을 `terms.json` 안에 적어 두었다.
+
+    먹튀    Here, if I get scammed…  →  여기서 먹튀 당하면 누가 책임지나요?
+                                        번역을 포기하고 한국어를 그대로 냈다
+    쪽지    send the message…       →  Don't send it via DM. Send it via email
+                                        정반대 지시가 됐다
+
+### 열쇠말을 정할 때 지킬 것 셋
+
+**하나. 긴 것이 이긴다.** 열쇠말은 부분일치라 「압수수색」 문장에는 「압수」도
+같이 걸린다. 사전이 두 줄 나가면 1.7B 가 둘을 다 끼워 넣으려다 흔들린다.
+코드가 짧은 쪽을 뺀다.
+
+    둘 다    Last year was a seizure search      긴 것만   Last year was a police raid
+
+**두울. 그렇다고 짧은 쪽을 안 넣으면 안 되는 자리가 있다.** 「압수」와
+「압수수색」은 쌍이다. 압수만 넣으면 압수수색 문장이 더 나빠진다.
+
+    사전 없음   Last year was searched by the authorities, right?
+    압수만      Last year was seized by the seizure?        ← 혼자 두면 이렇게 된다
+    쌍으로      Last year was a police raid, right?
+
+**세엣. 조사와 어미가 낄 자리를 열쇠말에 두지 않는다.** 「돈이 되」로 잡았더니
+「돈이 **좀** 되나요」에 안 걸렸다. 반대로 어미에 걸려 버리는 것도 있다 —
+「시세」가 「보내 주**시세**요」에 걸려 보내는 쪽이 뒤집혔다. 그럴 때는 줄에
+`"뒤에오면빼기": "요"` 를 붙인다. 전역 규칙으로 두면 애먼 용어까지 안 붙는다.
+
 쓰다가 깨지는 말을 보면 `terms.json` 에 한 줄 더한다. 코드는 안 고친다.
+**다만 넣기 전에 사전 없이 한 번 · 넣고 한 번 돌려 견주어라.** 넣어서
+나빠지는 자리가 절반이었다.
 
 **셋. 역번역을 같이 낸다. 이것이 핵심이다.**
 
