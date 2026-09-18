@@ -58,7 +58,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "packages"))
 sys.path.insert(0, str(ROOT))
 
-from dc_kr import KrClassifier  # noqa: E402
+from dc_kr import KrClassifier, normalize_country  # noqa: E402
 from dc_notion import Notion  # noqa: E402
 
 _clf: KrClassifier | None = None
@@ -78,8 +78,10 @@ def _분류기() -> KrClassifier:
 수집DB = "5160ce53-7ce2-4271-879e-06f3ad9957cf"
 기본표 = ROOT / "hub" / "data" / "darkchoco.db"
 
-# **items 의 country 는 ISO 두 글자입니다.** 노션 선택지는 한글 이름이라
-# 그대로 보내면 3번 관문에서 버려집니다. 선택지에 있는 것만 옮깁니다.
+# **items 의 country 가 ISO 두 글자라고 가정하면 안 됩니다.** 랜섬웨어 집계처는
+# 두 글자로 주지만 CTI 텔레그램 채널은 `Korea` 처럼 이름으로 줍니다. 그래서 찾기
+# 전에 `normalize_country` 로 맞춥니다. 노션 선택지는 한글 이름이라 그대로 보내면
+# 3번 관문에서 버려집니다. 선택지에 있는 것만 옮깁니다.
 나라 = {
     "KR": "한국", "US": "미국", "JP": "일본", "CN": "중국", "RU": "러시아",
     "TR": "터키", "IN": "인도", "BR": "브라질", "GB": "영국", "DE": "독일",
@@ -248,9 +250,26 @@ def 외국인가(줄) -> bool:
     전에는 country=='KR' 인 줄만 통과시켰습니다. 그러면 국가를 모르는 텔레그램·포럼은
     영원히 0줄입니다. 놓친 것은 눈에 안 보이고 섞인 것은 검토에서 걸러지므로,
     모르는 것은 올리고 사람이 사건 O / X 로 가릅니다.
+
+    **한국인가를 두 번 묻습니다. 국가 칸과 판정기입니다.**
+
+        국가 칸    `Korea` 도 `KR` 로 맞춰서 봅니다. 아는 이름만 바꾸므로
+                   `Turkey` 같은 것은 그대로 외국입니다
+        판정기     국가 칸이 틀려도 `.kr` 도메인이나 한국 기업명이 잡히면 남깁니다
+
+    둘을 같이 보는 이유는 서로 다른 실패를 막기 때문입니다. 2026-09-18 에 CTI 채널
+    유출 알림 12줄이 전부 이 자리에서 빠졌는데, 그중 한 줄은 국가 칸이 `Korea` 인
+    한국 건이었고 판정기는 그것을 `한국 도메인(.kr)` 으로 이미 맞히고 있었습니다.
+    맞히는 쪽이 있는데 못 맞히는 쪽이 앞에 서 있었습니다.
+
+    **판정기가 「직접」 이라고 한 것만 남깁니다.** 「미확인」 까지 남기면 설명문에
+    `korea` 가 한 번 나온 외국 건이 전부 들어옵니다. 같은 날 아르헨티나 건이
+    그랬습니다.
     """
-    c = _값(줄, "country").strip().upper()
-    return bool(c) and c not in ("KR", "UNKNOWN", "N/A", "-")
+    c = normalize_country(_값(줄, "country"))
+    if not c or c in ("KR", "UNKNOWN", "N/A", "-"):
+        return False
+    return _한국관련(줄)[0] != "직접"
 
 
 def 만들기(줄) -> dict:
@@ -281,7 +300,7 @@ def 만들기(줄) -> dict:
     if d:
         p["수집일"] = d
 
-    이름 = 나라.get((줄["country"] or "").upper())
+    이름 = 나라.get(normalize_country(줄["country"]))
     if 이름:
         p["국가"] = {"select": {"name": 이름}}
 
