@@ -207,12 +207,70 @@ def test_포럼은_판정이_없어도_근거를_남긴다():
     assert "사람이 고른 글" in _글(p, "한국 관련 근거")
 
 
+def _외국줄(**바꿈):
+    """한국 신호가 하나도 없는 줄. 국가 칸만 보고 싶을 때 쓴다.
+
+    `_기본` 은 도메인이 `.co.kr` 이고 피해자명이 한글이라 판정기가 「직접」 으로
+    본다. 2026-09-18 에 외국인가() 가 판정기를 같이 보게 되면서, 그 줄로는 국가
+    칸만 따로 시험할 수 없게 됐다.
+    """
+    r = _기본(target_org="Some Corp", target_domain="example.com",
+              title="Some Corp", body="nothing korean here")
+    r.update(바꿈)
+    return r
+
+
 def test_명백한_외국만_뺀다():
     """--kr 의 뜻. 국가를 아는데 한국이 아닌 것만 뺀다. 모르는 것은 올린다."""
-    assert push.외국인가(_기본(country="US")) is True
-    assert push.외국인가(_기본(country="KR")) is False
-    assert push.외국인가(_기본(country="")) is False          # 모른다
-    assert push.외국인가(_기본(country="Unknown")) is False    # 모른다는 표시다
+    assert push.외국인가(_외국줄(country="US")) is True
+    assert push.외국인가(_외국줄(country="KR")) is False
+    assert push.외국인가(_외국줄(country="")) is False          # 모른다
+    assert push.외국인가(_외국줄(country="Unknown")) is False    # 모른다는 표시다
+
+
+def test_국가_칸이_이름이어도_한국으로_본다():
+    """CTI 텔레그램 채널은 `KR` 이 아니라 `Korea` 로 적어 보낸다.
+
+    2026-09-18 실측. 이 줄이 「국가가 한국이 아니다」 로 빠지면서 그날 CTI 채널
+    유출 알림 12줄이 전부 노션에 못 올라갔다.
+    """
+    for 값 in ("Korea", "korea", " South Korea ", "KOR", "Republic of Korea", "한국"):
+        assert push.외국인가(_외국줄(country=값)) is False, 값
+
+
+def test_모르는_나라_이름은_그대로_외국이다():
+    """아는 이름만 바꾼다. 못 알아본 이름까지 「모른다」 로 접으면 관문이 헐거워진다."""
+    for 값 in ("Turkey", "Argentina", "Kingdom", "USA"):
+        assert push.외국인가(_외국줄(country=값)) is True, 값
+
+
+def test_국가_칸이_틀려도_한국_신호가_있으면_남긴다():
+    """국가 칸과 판정기를 같이 본다. 서로 다른 실패를 막는다.
+
+    채널이 국가를 엉뚱하게 적어 보내도 `.kr` 도메인이면 사람이 볼 목록에 올린다.
+    """
+    assert push.외국인가(_외국줄(country="US", target_domain="lookpin.co.kr")) is False
+    assert push.외국인가(_외국줄(country="US", target_org="lookpin.co.kr",
+                              target_domain="")) is False
+
+
+def test_설명문에_korea_만_있으면_그대로_외국이다():
+    """판정기가 「미확인」 이라고 한 것은 안 남긴다.
+
+    2026-09-18 에 아르헨티나 건이 그랬다. 「미확인」 까지 남기면 글에 `korea` 가
+    한 번 나온 외국 건이 전부 들어온다.
+    """
+    줄 = _외국줄(country="Argentina", target_org="azuldigital.gob.ar",
+               target_domain="azuldigital.gob.ar",
+               body="leak also affects korea customers")
+    assert push.외국인가(줄) is True
+
+
+def test_국가_칸이_이름이어도_노션_국가가_채워진다():
+    """`나라` 대응표도 두 글자로 맞춘 뒤에 찾는다."""
+    assert _select(push.만들기(_기본(country="Korea")), "국가") == "한국"
+    assert _select(push.만들기(_기본(country="KR")), "국가") == "한국"
+    assert "국가" not in push.만들기(_기본(country="Turkey"))
 
 
 def test_게시_성격은_kind_가_선택지에_있으면_그것이다():

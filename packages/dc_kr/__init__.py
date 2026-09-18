@@ -27,7 +27,7 @@
 
 from .kr_filter import TIER_ORDER as KR_TIER_ORDER
 from .kr_filter import TIER_SCORE as KR_TIER_SCORE
-from .kr_filter import KrClassifier
+from .kr_filter import KrClassifier, normalize_country
 from .supply_filter import TIER_LABEL as SUPPLY_TIER_LABEL
 from .supply_filter import TIER_ORDER as SUPPLY_TIER_ORDER
 from .supply_filter import TIER_SCORE as SUPPLY_TIER_SCORE
@@ -37,6 +37,7 @@ __all__ = [
     "KrClassifier",
     "KR_TIER_ORDER",
     "KR_TIER_SCORE",
+    "normalize_country",
     "SupplyClassifier",
     "SUPPLY_TIER_ORDER",
     "SUPPLY_TIER_SCORE",
