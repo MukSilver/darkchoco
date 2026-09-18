@@ -75,6 +75,16 @@ def as_text(prop: dict) -> str:
     if t == "date":
         d = prop.get("date") or {}
         return d.get("start") or ""
+    # 아래 넷은 전에 없어서 전부 빈칸으로 떨어졌습니다. 덤프로 감사하면
+    # 「검증DB 반영」·「같은 사건」이 빈 줄처럼 보였는데 안 뽑힌 것이었습니다.
+    if t == "checkbox":
+        # 빈 문자열로 내면 「꺼짐」과 「안 뽑힘」이 구분되지 않습니다.
+        return "예" if prop.get("checkbox") else "아니오"
+    if t == "relation":
+        # 이름은 응답에 없습니다. 이어졌는지와 몇 개인지까지가 여기서 나옵니다.
+        return ", ".join(x.get("id", "") for x in prop.get("relation", []))
+    if t in ("created_time", "last_edited_time"):
+        return prop.get(t) or ""
     return ""
 
 
