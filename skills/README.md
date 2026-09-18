@@ -245,6 +245,33 @@ python tools/tree_scan.py <트리파일> --md 출력.md
 
 규칙은 `tools/tree_rules.json` 에 있다. 코드와 분리돼 있어 패턴만 더하면 된다.
 
+### en_style.py
+
+한국어로 쓴 문안을 영어 구어체로 옮길 **프롬프트 한 덩어리**를 조립한다.
+**번역은 이 도구가 안 한다.** 나온 덩어리를 사람이 AI 에 붙여넣는다.
+
+```bash
+python tools/en_style.py prompt 질문지.md
+python tools/en_style.py prompt 질문지.md --tone 팀안
+python tools/en_style.py prompt 질문지.md --part A --out A.txt
+python tools/en_style.py parts 질문지.md
+```
+
+말씨가 둘이다. 기본은 **`팀밖`** — 실수했을 때 덜 위험한 쪽이다.
+
+    팀밖    팀 밖으로 나가는 것.  구어체이되 슬랭 없이 담백하게
+    팀안    팀원끼리 주고받는 것.  줄임말과 감탄사가 들어간다
+
+`--part` 는 `A.` 부터 `E.` 까지의 묶음 하나만 뽑는다. 질문지를 통째로 넣으면
+뒤쪽 묶음의 말씨가 흐트러지므로 나눠 넣는 것이 낫다.
+
+밖으로 요청을 보내지 않는다. 표준 라이브러리만 쓴다.
+「번역은 조사 환경 안에서. 외부 서버로 안 나가게」가 팀 규칙이라 번역 API 를 안 부른다.
+
+용어와 말씨 규칙은 `tools/en_style.json`, 프롬프트 뼈대의 정본은
+`skills/darkweb-verify-ko/references/talk-en.md` 다. 둘 다 코드 밖이라 늘릴 때
+코드를 안 고친다.
+
 ### notion.py
 
 노션 읽기 전용 래퍼.
@@ -340,7 +367,7 @@ python tools/verify_cfg.py --기본값
 ```
 skills/darkweb-verify-ko/
   SKILL.md              Claude Code 진입점
-  references/           단계별 프롬프트 9개, 파일 트리, 발행처 목록
+  references/           단계별 프롬프트 9개, 파일 트리, 발행처 목록, 영어 대화 문안
   tools/                스킬 안에 같이 설치되는 사본
 AGENTS.md               Codex 진입점
 docs/                   개정 경위
