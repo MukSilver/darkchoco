@@ -26,6 +26,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from .kr_filter import normalize_country
+
 log = logging.getLogger(__name__)
 
 TIER_ORDER = ["none", "sector", "korea_ops", "critical", "direct"]
@@ -161,7 +163,10 @@ class SupplyClassifier:
         website = (record.website or "").lower()
         sector = (record.sector or "").lower()
         desc = (record.description or "").lower()
-        country = (record.country or "").upper()
+        # `.upper()` 만 하면 `Korea` 가 `KOREA` 로 남아 아래 3번 갈래의
+        # `country != "KR"` 을 통과한다. 한국 기업이 「해외(KOREA) 기업이지만
+        # 사명에 Korea 포함」 으로 적히던 자리다 (2026-09-18).
+        country = normalize_country(record.country)
 
         # ★ 그룹명(record.group)은 의도적으로 제외한다.
         name_blob = f"{victim} {website}"

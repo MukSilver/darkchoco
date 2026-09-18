@@ -39,6 +39,64 @@ _NK_TERM_RE = re.compile(
 )
 
 
+# ── 국가 표기 맞추기 ────────────────────────────────────────────────────
+#
+# **소스마다 국가를 다르게 적어 보낸다.** 랜섬웨어 집계처는 ISO 두 글자(`KR`)로
+# 주는데 CTI 텔레그램 채널은 제 나름의 이름(`Korea` · `USA` · `Turkey`)으로 준다.
+# 받는 쪽이 `KR` 하나만 알고 있으면 같은 한국 건이 소스에 따라 갈린다.
+# 2026-09-18 실측으로 CTI 채널 유출 알림 12줄이 전부 「외국」으로 빠졌고
+# 그중 한 줄이 `.kr` 도메인을 가진 한국 건이었다.
+#
+# 한국과 북한만 넣는다. 이 모듈이 가르는 물음이 그 둘이기 때문이다. 다른 나라
+# 이름은 필요해지는 쪽에서 표를 따로 들고 가는 편이 낫다.
+_COUNTRY_ALIAS = {
+    "kr": "KR",
+    "kor": "KR",
+    "korea": "KR",
+    "korea, south": "KR",
+    "korea (south)": "KR",
+    "south korea": "KR",
+    "republic of korea": "KR",
+    "the republic of korea": "KR",
+    "한국": "KR",
+    "대한민국": "KR",
+    "kp": "KP",
+    "prk": "KP",
+    "dprk": "KP",
+    "korea, north": "KP",
+    "korea (north)": "KP",
+    "north korea": "KP",
+    "democratic people's republic of korea": "KP",
+    "북한": "KP",
+    "조선민주주의인민공화국": "KP",
+}
+
+
+def normalize_country(value: Any) -> str:
+    """국가 표기를 ISO 두 글자로 맞춘다. **아는 이름만 바꾼다.**
+
+    모르는 이름은 앞뒤 공백만 떼고 대문자로 돌려준다. 빈 문자열로 만들면 부르는
+    쪽이 「국가를 안 적어 보냈다」 와 「이름을 못 알아봤다」 를 구분하지 못한다.
+    앞엣것은 「모르니까 일단 본다」 이고 뒤엣것은 외국일 수 있어서, 둘을 섞으면
+    거르는 쪽이 조용히 헐거워진다.
+
+        normalize_country("Korea")   →  "KR"
+        normalize_country(" kr ")    →  "KR"
+        normalize_country("Turkey")  →  "TURKEY"   아는 이름이 아니다
+        normalize_country(None)      →  ""
+
+    **`Korea` 하나는 남한이다.** 북한은 `North Korea` 처럼 따로 적힌 것만 `KP` 로
+    본다. 부분 문자열로 찾지 않고 통째로 맞는 것만 바꾸기 때문에, `North Korea`
+    가 `Korea` 규칙에 먼저 걸리는 일이 없다.
+    """
+    if value is None:
+        return ""
+    s = " ".join(str(value).split()).strip(" .")
+    if not s:
+        return ""
+    return _COUNTRY_ALIAS.get(s.lower(), s.upper())
+
+
 def _load_keywords() -> dict[str, list[str]]:
     try:
         with _KEYWORD_PATH.open("r", encoding="utf-8") as fh:
@@ -109,7 +167,9 @@ class KrClassifier:
         victim = (record.victim or "").lower()
         website = (record.website or "").lower()
         desc = (record.description or "").lower()
-        country = (record.country or "").upper()
+        # 전에는 `.upper()` 만 했다. 그러면 `Korea` 가 `KOREA` 가 되어 아래
+        # `country == "KR"` 에 안 걸렸다. 같은 한국 건이 소스에 따라 갈렸다.
+        country = normalize_country(record.country)
         sector = (record.sector or "").lower()
 
         name_blob = f"{victim} {website} {sector}"
