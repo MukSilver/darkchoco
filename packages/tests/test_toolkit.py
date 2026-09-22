@@ -86,9 +86,44 @@ def test_info_가_돈다():
 
 
 def test_doctor_가_돈다():
+    """터지지 않고 정보를 낸다.
+
+    **종료코드는 밖으로 나가는 길이 섰나입니다** (2026-09-22). 전에는
+    늘 0 이라 Tor 가 죽어 있어도 초록불이었고, 그래서 관문으로 못
+    썼습니다. 그렇게 쓰는 것을 막을 것이 없었는데도 그랬습니다.
+
+    Tor 가 있으면 0, 없으면 1 입니다. CI 러너에는 Tor 가 없으니
+    여기서는 1 이 정상입니다. 무엇이 걸렸는지는 아래에서 봅니다.
+    """
     code, out = _dc("doctor", "crawler")
-    assert code == 0, out
+    assert code in (0, 1), "터졌습니다 (종료코드 %s)\n%s" % (code, out)
     assert "파이썬" in out, out[:300]
+    # 0/1 이 어느 쪽이든, 왜 그런지가 화면에 적혀 있어야 합니다
+    assert "밖으로 나가는 길" in out, out[:300]
+    if code == 1:
+        assert ("Tor 가 없습니다" in out
+                or "Tor 가 아닙니다" in out
+                or "못 열었습니다" in out), out[:400]
+
+
+def test_doctor_가_tor_없음을_종료코드로_알린다():
+    """`places.yml` 같은 워크플로가 이것을 관문으로 쓸 수 있어야 합니다.
+
+    `_나가는길()` 이 0/1 을 내는데 `cmd_doctor` 가 그 값을 버리던 것을
+    고쳤습니다. 되돌아가면 여기서 걸립니다.
+    """
+    # 돌리는 사람 기계에 Tor 가 떠 있을 수 있습니다. 그 둘을 빼고 봅니다
+    이전 = {k: os.environ.pop(k, None)
+          for k in ("TOR_SOCKS_PROXY", "DARKCHOCO_ALLOW_DIRECT")}
+    try:
+        code, out = _dc("doctor")
+    finally:
+        for k, v in 이전.items():
+            if v is not None:
+                os.environ[k] = v
+    assert code == 1, (
+        "Tor 없이 doctor 가 %s 를 냈습니다. 관문으로 못 씁니다\n%s"
+        % (code, out[-500:]))
 
 
 def test_readme_표가_최신이다():

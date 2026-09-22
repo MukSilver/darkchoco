@@ -335,8 +335,12 @@ def cmd_doctor(args) -> int:
     else:
         print()
     # 밖으로 나가는 길은 도구 하나의 사정이 아니라 크롤러 전체의 조건입니다.
-    _나가는길(args.net)
-    return 0
+    #
+    # **종료코드를 돌려줍니다.** 전에는 이 값을 버리고 늘 0 을 냈습니다.
+    # 그러면 Tor 가 죽어 있어도 초록불이라 관문으로 못 씁니다. 실제로
+    # 「doctor 로 먼저 확인하고 돌린다」 는 쓰임을 막을 것이 없었습니다.
+    # 2026-09-22.
+    return _나가는길(args.net)
 
 def _나가는길(자세히: bool = False) -> int:
     """밖으로 나갈 때 어떤 주소가 남는지 봅니다.
@@ -413,7 +417,7 @@ def cmd_crawl(args) -> int:
                      tor=os.environ.get("TOR_SOCKS_PROXY"),
                      때된것만=args.due)
     print()
-    print(크롤.표로(결과, apply=args.apply))
+    print(크롤.표로(결과, apply=args.apply, 요약만=args.요약만))
     print()
     return 1 if any(r.오류 for r in 결과) else 0
 
@@ -746,6 +750,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--limit", type=int, default=0, help="갈래마다 최대 몇 줄까지")
     p.add_argument("--due", action="store_true",
                    help="주기가 찬 갈래만. 스케줄러가 이것을 씁니다")
+    p.add_argument("--요약만", action="store_true",
+                   help="이름과 호스트를 안 찍습니다. 공개된 로그에 쓸 때 켭니다")
     p.set_defaults(fn=cmd_crawl)
 
     p = sub.add_parser("auto", help="수집과 명부 조사를 한 번에 (스케줄러용)")
