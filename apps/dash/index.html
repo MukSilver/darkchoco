@@ -80,6 +80,9 @@
   /* 짧은 값이 한 글자씩 세로로 깨지던 것을 막는다. 넓으면 감싼 칸이 가로로 밀린다 */
   td.짧음,th.짧음{white-space:nowrap}
   td.제목{min-width:210px} td.근거{min-width:150px;max-width:330px}
+  /* 유출 항목은 분류 이름 여럿이 「·」로 이어진다. 한 줄로 두면 표가 가로로
+     너무 밀려서 감싸게 두되 너비를 묶는다 */
+  td.항목,th.항목{min-width:120px;max-width:200px}
   tr:hover td{background:var(--짚음)}
   .수{font-variant-numeric:tabular-nums;text-align:right}
   .흐림{color:var(--흐린글)} .더흐림{color:var(--더흐린);font-size:12px}
@@ -369,7 +372,11 @@
       }
       if (소스거르개!=="전부" && (x.소스||"") !== 소스거르개) return false;
       if (q){
-        const 다 = [x.제목,x.대상,x.자리,x.핸들,x.근거,x.번호].join(" ").toLowerCase();
+        /* 2026-09-22. 「근거」를 뺐다. 그 칸이 데이터에서 사라졌다.
+           대신 업종과 유출 항목을 넣었다 — 둘 다 열로 그려지므로
+           「보이는 것으로 찾는다」가 지켜진다 */
+        const 다 = [x.제목,x.대상,x.자리,x.핸들,x.번호,x.업종,(x.항목||[]).join(" ")]
+          .join(" ").toLowerCase();
         if (!다.includes(q)) return false;
       }
       return true;
@@ -384,7 +391,7 @@
             : 사건.filter(x=>(x.검토||"사건 O")===v).length) +'</span></button>').join("")
       + '<span style="width:10px"></span>'
       + 소스값.map(v=>'<button data-소스="'+v+'" class="'+(v===소스거르개?"켬":"")+'">'+v+'</button>').join("")
-      + '<input id="찾기" placeholder="대상 조직 · 자리 · 근거로 찾기" value="'+안전(찾기)+'">'
+      + '<input id="찾기" placeholder="제목 · 대상 조직 · 플랫폼 · 업종 · 유출 항목으로 찾기" value="'+안전(찾기)+'">'
       + '</div>';
 
     if (!사건.length){
@@ -392,16 +399,25 @@
     } else if (!목록.length){
       s += '<div class="빔">고른 조건에 맞는 줄이 없습니다.</div>';
     } else {
+      /* 2026-09-22 에 열을 최현서가 고른 열셋으로 바꿨다 (+ 고르기와 노션 링크).
+         **이 화면은 모든 데이터를 보는 곳이 아니라 사건 요약이다.**
+         전에는 21칸을 실어 보내고 아홉만 그렸다. 「뽑되 안 그린다」가 가장 나쁘다.
+         빠진 것 중 「근거」는 사람이 쓴 27줄 가운데 여덟 줄에 이메일 꼴이
+         들어 있던 칸이고, 그것이 여기 그대로 그려지고 있었다 */
       s += '<div class="감쌈"><table><thead><tr>'
-        + '<th class="짧음">검토</th><th class="짧음">고르기</th><th>대상 조직</th>'
-        + '<th class="짧음">자리</th><th class="짧음">소스</th><th class="짧음">한국</th>'
-        + '<th>근거</th><th class="짧음">게시</th><th class="짧음">규모</th>'
+        + '<th class="짧음">검토</th><th class="짧음">고르기</th>'
+        + '<th>자료 제목</th><th class="짧음">사건 ID</th><th class="짧음">상태</th>'
+        + '<th>대상 조직</th><th class="짧음">업종</th><th class="짧음">국가</th>'
+        + '<th class="항목">유출 항목</th><th class="짧음">게시 플랫폼</th>'
+        + '<th class="짧음">게시자</th><th class="짧음">게시</th>'
+        + '<th class="짧음">수집일</th><th class="짧음">수집자</th>'
         + '<th class="짧음"></th></tr></thead><tbody>'
         + 목록.map(x=>{
             const 검토 = x.검토 || "사건 O";
             const 검토꼴 = 검토==="미검토"?"미검토":(검토==="사건 X"?"사건X":"사건O");
-            const 한국꼴 = x.한국==="직접"?"직접":"미확인";
-            const 이름 = x.대상 || x.제목 || "(이름 없음)";
+            /* 수집자는 굽는 쪽에서 이미 사람/자동/미기입 으로 접혀 온다.
+               팀원 실명은 여기까지 오지 않는다 (build.py 의 _누가) */
+            const 누가 = x.수집자 || "미기입";
             return '<tr>'
               + '<td class="짧음"><span class="표 '+검토꼴+'" id="표'+안전(x.id)+'">'
                 + 안전(검토)+'</span></td>'
@@ -410,13 +426,18 @@
                 + '<button data-값="사건 X" class="'+(검토==="사건 X"?"지금X":"")+'">X</button>'
                 + '<button data-값="미검토" class="'+(검토==="미검토"?"지금":"")+'" title="미검토로 되돌린다">↺</button>'
               + '</div></td>'
-              + '<td class="제목">'+안전(이름)+ (x.번호?' <span class="더흐림">'+안전(x.번호)+'</span>':'') +'</td>'
+              + '<td class="제목">'+안전(x.제목||"(제목 없음)")+'</td>'
+              + '<td class="더흐림 짧음">'+안전(x.번호||"")+'</td>'
+              + '<td class="흐림 짧음">'+안전(x.상태||"-")+'</td>'
+              + '<td class="제목">'+안전(x.대상||"-")+'</td>'
+              + '<td class="흐림 짧음">'+안전(x.업종||"-")+'</td>'
+              + '<td class="흐림 짧음">'+안전(x.국가||"-")+'</td>'
+              + '<td class="더흐림 항목">'+안전((x.항목||[]).join(" · "))+'</td>'
               + '<td class="흐림 짧음">'+안전(x.자리||"-")+'</td>'
-              + '<td class="흐림 짧음">'+안전(x.소스||"-")+'</td>'
-              + '<td class="짧음">'+(x.한국?'<span class="표 '+한국꼴+'">'+안전(x.한국)+'</span>':'')+'</td>'
-              + '<td class="더흐림 근거">'+안전(x.근거||"")+'</td>'
+              + '<td class="흐림 짧음">'+안전(x.핸들||"-")+'</td>'
               + '<td class="흐림 짧음">'+안전(x.게시||"")+'</td>'
-              + '<td class="흐림 짧음">'+안전(x.규모||"")+'</td>'
+              + '<td class="흐림 짧음">'+안전(x.수집일||"")+'</td>'
+              + '<td class="더흐림 짧음">'+안전(누가)+'</td>'
               + '<td>'+(x.id?'<a href="https://www.notion.so/'+안전(x.id.replace(/-/g,""))
                   +'" target="_blank" rel="noopener">노션</a>':'')+'</td>'
               + '</tr>';
