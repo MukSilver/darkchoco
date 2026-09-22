@@ -30,7 +30,9 @@ jobs:
       - name: 고친 파일을 모은다
         run: |
           # 셸 변수 이름에 한글을 쓰지 않습니다. bash 가 못 읽습니다.
-          git fetch origin "${{ github.base_ref }}" --depth=0 --quiet
+          # checkout 의 fetch-depth: 0 이 이미 전체를 받으므로 --depth 를 주지
+          # 않습니다. --depth=0 은 「깊이 없음」이 아니라 오류입니다.
+          git fetch origin "${{ github.base_ref }}" --quiet
           base=$(git merge-base "origin/${{ github.base_ref }}" HEAD)
           git diff --name-only "$base"..HEAD > /tmp/changed.txt
           git diff "$base"..HEAD -- dc.py > /tmp/diff.txt || true
