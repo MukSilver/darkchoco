@@ -53,6 +53,12 @@ TITLE = re.compile(r"^#\s+(.+)$", re.M)
 # 킷이 붙이는 단서 이름들. 그대로 기타에 옮긴다
 CLUE = re.compile(r"^-\s*([^:]+?)\s*:\s*(.+)$", re.M)
 
+# 스레드 꼴의 글 머리. 뒤에 글쓴이와 날짜가 붙으므로 줄 끝까지 받는다
+#   `### 원문  홍길동  2026-08-26`  ·  `### 답글 3  …`  ·  `### 글 2  …`
+# 이어 받기로 받은 판은 절대 번호를 몰라 「글 N」 으로 적힌다 (forum_kit.js 869줄)
+POST_HEAD = re.compile(r"^###\s+(?:원문|답글\s+\d+|글\s+\d+)\b.*$", re.M)
+FENCE = re.compile(r"```\n(.*?)\n```", re.S)
+
 
 def is_sample(line: str) -> bool:
     t = line.strip()
@@ -71,9 +77,33 @@ def section(text: str, name: str) -> str:
 
 
 def bodies(text: str) -> list[str]:
-    """본문 절 안의 코드 울타리들을 꺼낸다. 킷이 블록마다 울타리로 감싼다."""
+    """본문의 코드 울타리들을 꺼낸다. **킷이 두 꼴로 낸다.**
+
+        블록 꼴    `## 본문` 절 아래에 울타리. 글 구조가 없는 공지·안내 장이다
+        스레드 꼴   `### 원문` · `### 답글 N` · `### 글 N` 아래에 울타리
+
+    **2026-09-08 에 킷이 스레드 꼴을 쓰기 시작했는데 여기는 `## 본문` 만 보고 있었다.**
+    그래서 킷이 글을 제대로 읽은 경우가 오히려 빈손으로 떨어져 `본문 절을 못 찾았다` 로
+    죽었다. 블록 꼴은 킷이 글 구조를 **못 읽었을 때 타는 예비 경로**라, 잘 되는 쪽이
+    막히고 안 되는 쪽만 지나는 상태였다 (2026-09-22 확인).
+
+    스레드 꼴에서 `## 추출된 단서` · `## 못 받은 쪽` 은 울타리를 안 쓰지만, 나중에 쓰게
+    되더라도 섞이지 않도록 글 머리 다음의 `##` 에서 끊는다.
+    """
     sec = section(text, "본문")
-    return [b.strip("\n") for b in re.findall(r"```\n(.*?)\n```", sec, re.S)]
+    if sec:
+        return [b.strip("\n") for b in FENCE.findall(sec)]
+
+    out: list[str] = []
+    heads = list(POST_HEAD.finditer(text))
+    for i, m in enumerate(heads):
+        끝 = heads[i + 1].start() if i + 1 < len(heads) else len(text)
+        덩이 = text[m.end():끝]
+        다음절 = re.search(r"^##\s", 덩이, re.M)
+        if 다음절:
+            덩이 = 덩이[:다음절.start()]
+        out += [b.strip("\n") for b in FENCE.findall(덩이)]
+    return out
 
 
 def parse(text: str) -> dict:
