@@ -65,6 +65,32 @@ jobs:
             exit 1
           fi
 
+      # 레포가 공개라 Actions 로그도 90일 동안 누구나 봅니다. 명부 이름은
+      # 노션에서 오므로 깃허브가 가려 주지 않습니다. --요약만 이 그것을 막습니다.
+      # 빼면 우리가 어디를 보고 있는지가 목록으로 나갑니다.
+      # 이 파일 자신은 뺍니다. 검사 문구가 찾는 낱말을 그대로 담고 있습니다
+      - name: 워크플로가 명부를 요약 없이 찍나
+        run: |
+          if grep -rn 'dc\.py crawl' .github/workflows/ \
+              | grep -v '^\.github/workflows/security\.yml:' \
+              | grep -v -e '--요약만' -e '^[^:]*:[0-9]*: *#'; then
+            echo "::error::워크플로에서 dc.py crawl 을 부를 때는 --요약만 을 붙입니다"
+            echo "::error::로그가 공개라 명부 이름이 그대로 나갑니다"
+            exit 1
+          fi
+
+      # Tor 가 자꾸 실패할 때 「일단 나가게 하자」 로 손이 가는 자리입니다.
+      # 그러면 러너 주소로 다크웹에 붙습니다. 워크플로에서는 막습니다.
+      - name: 워크플로가 맨 연결을 허락하나
+        run: |
+          if grep -rn 'DARKCHOCO_ALLOW_DIRECT' .github/workflows/ \
+              | grep -v '^\.github/workflows/security\.yml:' \
+              | grep -v -E '^[^:]*:[0-9]*: *#'; then
+            echo "::error::워크플로에서 DARKCHOCO_ALLOW_DIRECT 를 쓰지 않습니다"
+            echo "::error::Tor 없이 나가는 것은 로컬에서 사람이 알고 하는 일입니다"
+            exit 1
+          fi
+
       # 비밀값은 저장소 밖 ~/.config/darkchoco 에 둡니다. 코드에 박으면 안 됩니다.
       - name: 비밀값이 코드에 박혀 있나
         run: |
