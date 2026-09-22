@@ -201,12 +201,21 @@ def title_of(text: str, fields: dict, shape: str) -> str:
     그 꼴에서는 한 줄 요약 칸(`Content`)이 제목 자리에 맞다.
 
     **`JSON(깨짐)` 도 같이 본다.** 꼴 이름으로 정확히 견주면 새 꼴이 늘 때마다
-    이 자리를 잊고 제목이 다시 중괄호가 된다."""
+    이 자리를 잊고 제목이 다시 중괄호가 된다.
+
+    **라벨 꼴은 첫 줄이 채널 머리말이다.** 「🔒 New Ransomware Victim」 처럼
+    채널이 글마다 똑같이 붙이는 문구라 제목으로 쓰면 줄이 서로 구분되지 않는다.
+    2026-09-22 에 노션에 들어간 텔레그램 19줄이 전부 머리말 셋 중 하나였고,
+    그 중 17줄이 같은 문구였다. 칸에 대상 조직이 있으면 그것을 제목으로 쓴다.
+    랜섬 소스가 이미 조직명만 제목으로 써서 꼴도 맞는다."""
     if shape.startswith("JSON"):
         for n in ("content", "title", "brief summary", "description"):
             v = fields.get(n)
             if v:
                 return refang(clean(v))[:120]
+    org = first(fields, PICK["org"])
+    if org:
+        return org[:120]
     return (text.split("\n")[0] if text else "")[:120]
 
 
