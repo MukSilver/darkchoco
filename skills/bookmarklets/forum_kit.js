@@ -74,9 +74,16 @@
 /* announcements.php?fid=39&aid=7 처럼 aid가 뒤에 오는 경우도 잡는다 */
   const T_HIT = /\/Thread-|thread-\d+|[?&]tid=\d+|\/threads\/|\/Announcement-|announcements\.php\?[^#]*[?&]?aid=\d+/i;
   const T_SKIP = /action=(lastpost|newpost|thread_|nextnewest|nextoldest|whoposted)|[?&]page=|#pid|\/post-\d+|\/unread|\/latest|\/misc\.php|\/printthread/i;
+/* 누르면 서버에 무언가 남는 링크. **요청도 안 보내고 목록에도 안 낸다.**
+   이 게시판은 평점·구독·모더레이션이 링크 한 번(GET)으로 돈다. 메서드가 GET 이라고
+   읽기만 하는 것이 아니다. 그리고 그런 주소에는 my_post_key 가 박혀 나가는데,
+   수집 주소는 쿼리를 통째로 보존하므로 그것까지 같이 실려 나간다.
+   전에는 이 목록이 modPageBlocks 안에만 있어 결과 문서에서 빼는 데만 쓰였고,
+   정작 요청이 나가는 isThread 에는 안 걸려 있었다 (2026-09-22 고침) */
+  const 위험링크 = /logout|logoutkey|usercp|modcp|\/alerts|my_post_key|markread|action=(?:getdaily|add_subscription|removesubscription|emailthread|rate)|\/credits\.php|private\.php(?!\?action=send)|(?:newreply|editpost|ratethread|subscription|moderation|report)\.php/i;
   const SUBSEL = '.forum-subforums, .node-subNodeFlatList, .subforums, .subforum_list, .forums__subforum, .subforum';
   const isForum = a => F_PAT.test(A(a)) && !F_SKIP.test(A(a)) && !!C(a.textContent);
-  const isThread = a => T_HIT.test(A(a)) && !T_SKIP.test(A(a));
+  const isThread = a => T_HIT.test(A(a)) && !T_SKIP.test(A(a)) && !위험링크.test(A(a));
   const inSub = a => !!a.closest(SUBSEL);
   const key = u => u.split('#')[0].split('?')[0].replace(/\/$/, '');
 
@@ -899,13 +906,14 @@
                     bot: '텔레그램 봇', session: 'Session ID', tox: 'Tox ID', matrix: 'Matrix', jabber: 'Jabber/XMPP',
                     shop: '자동판매 상점', host: '파일 호스팅', ip: 'IP', pct: '퍼센트(수수료 후보)', money: '금액' };
 
-/* 내 계정·세션이 드러나는 링크는 뽑지 않는다. 공유 계정이라 하나 노출되면 셋이 다 걸린다 */
-    const ALWAYS = /logout|logoutkey|usercp|\/alerts|my_post_key|markread|action=getdaily|\/credits\.php|private\.php(?!\?action=send)/i;
+/* 내 계정·세션이 드러나는 링크는 뽑지 않는다. 공유 계정이라 하나 노출되면 셋이 다 걸린다.
+   목록은 위의 `위험링크` 를 그대로 쓴다. **한 규칙이어야 한다** — 목록에서 빼면서
+   요청은 보내는 일이 실제로 있었다 */
     const myUid = (document.body.innerHTML.match(/finduserthreads&(?:amp;)?uid=(\d+)/i) || [])[1] || null;
     const mine = h => myUid && new RegExp('uid=' + myUid + '\\b').test(h);
     let cut = 0;
     const ls = [...new Set(links.filter(a => { const h = a.getAttribute('href') || '';
-        const bad = ALWAYS.test(h) || mine(h); if (bad) cut++; return !bad; })
+        const bad = 위험링크.test(h) || mine(h); if (bad) cut++; return !bad; })
       .map(a => `${C(a.textContent).slice(0, 40)} → ${a.getAttribute('href')}`)
       .filter(s => s && !/^\s*→/.test(s)))].slice(0, 40);
 

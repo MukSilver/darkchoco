@@ -899,9 +899,46 @@
     /* ── 원본 주소 확인. 썸네일을 한 번 눌러 본다 ── */
     const probe = async () => {
       const before = new Set(pick().map(f => f.url));
-      const btn = document.querySelector('button img, a img, [role="button"] img');
-      if (!btn) return { md: '누를 만한 썸네일을 못 찾았다', status: '실패' };
-      (btn.closest('button, a, [role="button"]') || btn).click();
+  /* **아무 단추나 누르지 않는다.** pick() 이 증거 사진으로 고른 것 안에서만 찾는다.
+
+     전에는 `document.querySelector('button img, a img, [role="button"] img')` 로
+     문서에서 처음 걸리는 것을 확인 없이 눌렀다. 게시판이면 머리글 로고나 도구줄
+     아이콘이 먼저 걸린다. 그것이 링크면 누르는 순간 그 주소로 나가고, 구독이나
+     읽음 표시처럼 누르면 서버에 남는 링크일 수도 있다 (2026-09-22 고침).
+
+     그래서 셋을 본다 — ① 사진으로 고른 것인가 ② 감싼 것이 다른 쪽으로 나가는
+     링크는 아닌가 ③ 사람이 좋다고 했는가. */
+      let 찍을것 = null, 감싼것 = null;
+      for (const im of document.querySelectorAll('img[src]')) {
+        let u;
+        try { u = new URL(im.getAttribute('src') || '', location.href).href; }
+        catch (e) { continue; }
+        if (!before.has(u)) continue;                 /* ① 사진으로 안 고른 것 */
+        const w = im.closest('button, a, [role="button"]');
+        if (!w) continue;
+        if (w.tagName === 'A') {                      /* ② 나가는 링크인가 */
+          const h = w.getAttribute('href') || '';
+          const 제자리 = !h || /^#/.test(h)
+            || /\.(jpe?g|png|gif|webp|bmp)(\?|$)/i.test(h);
+          if (!제자리) {
+            let 같은쪽 = false;
+            try { 같은쪽 = new URL(h, location.href).pathname === location.pathname; }
+            catch (e) { 같은쪽 = false; }
+            if (!같은쪽) continue;
+          }
+        }
+        찍을것 = im; 감싼것 = w; break;
+      }
+      if (!찍을것) return { md: '누를 만한 썸네일을 못 찾았다. **사진을 먼저 찾아 본다.**\n'
+                            + '찾은 사진 안에 눌러서 열리는 것이 없으면 이 단추는 쓸 일이 없다',
+                           status: '실패' };
+      const 어디 = 감싼것.getAttribute('href') || 감싼것.getAttribute('aria-label')
+                 || ('<' + 감싼것.tagName.toLowerCase() + '>');
+      if (!confirm('아래를 한 번 누른다. 눌러야 원본 주소가 뜨는지 알 수 있다.\n\n'
+                   + '사진   ' + 찍을것.src.slice(0, 110) + '\n'
+                   + '감싼 것 ' + String(어디).slice(0, 110) + '\n\n괜찮은가?'))
+        return { md: '사람이 그만두었다. 아무것도 누르지 않았다', status: '멈춤' };
+      감싼것.click();
       await sleep(1200);
       const after = pick();
       const fresh = after.filter(f => !before.has(f.url));
