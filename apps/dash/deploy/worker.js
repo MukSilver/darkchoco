@@ -213,16 +213,24 @@ function _누가(p) {
   return v === "자동" ? "자동" : "사람";
 }
 
+/** 한 번에 읽을 판 수. 100줄씩이라 2000줄입니다. */
+const 판상한 = 20;
+
 /**
  * 노션 수집 DB 를 줄 목록으로. **본문과 개인정보 값은 안 담습니다.**
  * `apps/dash/build.py` 의 `사건()` 과 같은 칸을 같은 이름으로 뽑습니다.
  * 한쪽을 고치면 다른 쪽도 같이 고쳐야 화면이 안 깨집니다.
+ *
+ * `{줄들, 잘림}` 을 냅니다. **잘렸는지를 같이 내는 이유가 있습니다.**
+ * 전에는 상한에 닿으면 그냥 멈췄고 화면에 아무 표시가 없었습니다. 로컬은
+ * `query_all` 이 끝까지 읽어서 상한이 없으므로, 2000줄을 넘는 날 로컬과
+ * 배포가 말없이 다른 화면이 됩니다. 모자란 것을 모르는 쪽이 더 나쁩니다.
  */
 async function 사건읽기(token) {
   const out = [];
   let cursor = null;
-  // **끝없이 돌지 않게 상한을 둡니다.** 100줄씩 스무 번이면 2000줄입니다.
-  for (let i = 0; i < 20; i++) {
+  let 잘림 = false;
+  for (let i = 0; i < 판상한; i++) {
     const body = { page_size: 100 };
     if (cursor) body.start_cursor = cursor;
     const r = await fetch(`https://api.notion.com/v1/data_sources/${수집DS}/query`, {
@@ -272,8 +280,10 @@ async function 사건읽기(token) {
     }
     if (!res.has_more) break;
     cursor = res.next_cursor;
+    // 마지막 판을 다 읽었는데 노션이 아직 더 있다고 합니다. 여기서 멈춥니다
+    if (i === 판상한 - 1) 잘림 = true;
   }
-  return out;
+  return { 줄들: out, 잘림 };
 }
 
 /**
@@ -289,11 +299,13 @@ function 이제(now) {
 }
 
 async function 데이터만들기(env, now) {
-  const 사건 = await 사건읽기(env.NOTION_TOKEN);
+  const { 줄들: 사건, 잘림 } = await 사건읽기(env.NOTION_TOKEN);
   const 검토별 = {};
   for (const e of 사건) 검토별[e.검토 || "미검토"] = (검토별[e.검토 || "미검토"] || 0) + 1;
   return {
     구운때: 이제(now) + " (노션에서 방금 읽음)",
+    // 상한에 걸려 뒷줄을 못 읽었습니다. 화면이 이것을 보고 경고를 냅니다
+    잘림: 잘림 ? 사건.length : 0,
     제어판: {
       서버: true,
       표: "GitHub Actions (여섯 시간마다)",
