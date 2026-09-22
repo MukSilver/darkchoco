@@ -132,9 +132,15 @@
                 border-radius:var(--둥2);padding:var(--틈1) var(--틈4);font:inherit;
                 font-size:13px;min-width:190px}
   .일감줄{display:flex;gap:var(--틈3);align-items:center;margin:var(--틈1) 0;flex-wrap:wrap}
+  /* 무리 이름. 아홉이 늘어서면 사건과 명부가 구분이 안 된다 */
+  .무리{margin:var(--틈4) 0 var(--틈2);font-size:12px;font-weight:600;
+        letter-spacing:.06em;color:var(--흐림)}
+  .무리:first-child{margin-top:0}
+  /* **너비를 고정한다.** 이름 길이가 제각각이라 설명 시작점이 들쭉날쭉했다.
+     좁은 화면에서는 아래 미디어 쿼리가 설명을 다음 줄로 내린다 */
   .일감줄 .돌리기{background:var(--판2);border:1px solid var(--줄);color:var(--글);
                   border-radius:var(--둥2);padding:var(--틈2) var(--틈4);font:inherit;font-size:13px;
-                  cursor:pointer;min-width:190px;text-align:left}
+                  cursor:pointer;min-width:190px;width:270px;text-align:left}
   .일감줄 .돌리기:hover:not(:disabled){border-color:var(--점)}
   .일감줄 .돌리기:disabled{opacity:.45;cursor:not-allowed}
   .일감줄 .돌리기.도는중{border-color:var(--기다림);color:var(--기다림)}
@@ -165,6 +171,10 @@
     .틀{padding-left:var(--틈4);padding-right:var(--틈4)}
     .명령 .이름{min-width:0;flex-basis:100%}
     .일감줄 .더흐림{flex-basis:100%}
+    /* 넓은 화면에서 설명 시작점을 맞추려고 준 고정 너비를 여기서는 푼다.
+       좁은 화면에서는 설명이 어차피 다음 줄로 내려가 맞출 것이 없고,
+       270px 을 그대로 두면 단추가 화면 밖으로 나간다 */
+    .일감줄 .돌리기{width:auto;max-width:100%}
   }
   @media (max-width:560px){
     /* 로컬은 여섯 칸, 서버는 세 칸이라 그냥 두면 판마다 다른 모양으로 삐죽 남는다 */
@@ -329,15 +339,31 @@
   const 일감들 = ev.일감 || [];
   const 다밖 = 일감들.length > 0 && 일감들.every(j => j.밖);
 
+  // **무리로 묶어 냅니다.** 단추가 넷일 때는 한 덩이가 읽혔는데 아홉이 되면서
+  // 사건과 명부가 구분 없이 늘어섰습니다. 수집은 [포럼 · 텔레그램 · 랜섬] 에
+  // [명부 · 사건] 을 곱한 여섯 칸이고, 그 구조가 화면에 보여야 어느 것을 누를지
+  // 정할 수 있습니다. `무리` 가 없는 일감은 묶지 않고 그대로 냅니다 — 로컬
+  // 제어판(`run_jobs.py`)은 이 칸을 안 쓰므로 거기서는 전과 같이 보입니다.
+  const 무리차례 = [];
+  for (const j of 일감들) {
+    const g = j.무리 || "";
+    let 칸 = 무리차례.find(x => x.이름 === g);
+    if (!칸) { 칸 = { 이름: g, 것들: [] }; 무리차례.push(칸); }
+    칸.것들.push(j);
+  }
+  const 일감줄 = j =>
+    '<div class="일감줄"><button class="돌리기" data-일감="'+안전(j.열쇠)+'">'+안전(j.이름)+'</button>'
+    + '<span class="더흐림">'+안전(j.설명)
+    + (!다밖 && j.밖 ? ' · <b>밖으로 요청을 보냅니다</b>' : '')+'</span></div>';
+
   h += '<h2>돌리기 <span class="더흐림">— '
     + (서버 ? '눌러서 GitHub Actions 에 맡깁니다. 끝나면 요약이 아래에 뜹니다'
             : '눌러서 실행합니다. 한 번에 하나만 돕니다')
     + (다밖 ? ' · <b>모두 밖으로 요청을 보냅니다</b>' : '')
     + '</span></h2>'
-    + '<div id="일감">' + 일감들.map(j=>
-        '<div class="일감줄"><button class="돌리기" data-일감="'+안전(j.열쇠)+'">'+안전(j.이름)+'</button>'
-        + '<span class="더흐림">'+안전(j.설명)
-        + (!다밖 && j.밖 ? ' · <b>밖으로 요청을 보냅니다</b>' : '')+'</span></div>'
+    + '<div id="일감">' + 무리차례.map(칸 =>
+        (칸.이름 ? '<div class="무리">'+안전(칸.이름)+'</div>' : '')
+        + 칸.것들.map(일감줄).join("")
       ).join("") + '</div>'
     + '<pre id="로그" hidden></pre>';
 
