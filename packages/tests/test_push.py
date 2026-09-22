@@ -326,6 +326,34 @@ def test_노션_줄에서_uid_와_열쇠를_읽는다():
     assert push._노션줄의_열쇠(페이지) == ("", "t|v")
 
 
+def test_뺀_줄의_자취는_uid_와_글번호다():
+    r = _기본(uid="u-1", src_id="somechan/1270060")
+    assert push._자취(r) == "u-1 somechan/1270060"
+    # 글 번호가 없으면 UID 만
+    assert push._자취(_기본(uid="u-1", src_id="")) == "u-1"
+    # UID 가 없던 옛 줄도 자리를 비우지 않는다
+    assert push._자취(_기본(uid="", src_id="")) == "uid없음"
+
+
+def test_뺀_줄_로그에_제목도_본문도_안_나간다():
+    import contextlib
+    import io
+
+    뺀 = [push._자취(_기본(uid="u-%d" % i, src_id="somechan/%d" % i,
+                          title="피해자 이름이 든 제목", body="본문"))
+          for i in range(7)]
+    버퍼 = io.StringIO()
+    with contextlib.redirect_stdout(버퍼):
+        push._뺀줄찍기(뺀)
+    글 = 버퍼.getvalue()
+    # 일곱 개를 셋씩 끊어 세 줄. 로그가 옆으로 안 흐른다
+    assert len(글.strip().split("\n")) == 3
+    for i in range(7):
+        assert "u-%d somechan/%d" % (i, i) in 글
+    # **값이 아니라 표시만 나갑니다**
+    assert "제목" not in 글 and "본문" not in 글
+
+
 if __name__ == "__main__":
     시험 = [(k, v) for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     실패 = 0
