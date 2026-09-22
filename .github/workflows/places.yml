@@ -1,0 +1,274 @@
+name: 명부 조사
+
+# 명부 셋(포럼 · 텔레그램 · 랜섬)을 훑어 노션 다크웹 DB 로 반영합니다.
+#
+# 전에는 VM 안에서만 돌았습니다. VM 을 안 켜면 명부가 안 돌고, 명부가 안 돌면
+# 어느 포럼이 살아 있는지를 모른 채 사건만 쌓입니다. 실제로 명부 셋이 전부
+# 비어 있었습니다.
+#
+# ## 사건 수집(collect.yml)과 왜 파일을 가르나
+#
+#   나가는 길   사건은 맨 연결, 명부는 Tor 필수. 한 잡에서 TOR_SOCKS_PROXY 를
+#               켜면 t.me 도 Tor 출구로 나가 캡차를 만납니다
+#   주기        사건은 6시간, 명부는 6~12시간입니다
+#   실패 격리   명부가 죽어도 사건 수집은 돌아야 합니다
+#   길이        여기에 Tor 단계 다섯이 더 붙습니다
+#
+# ## 여기서 못 하는 것 — 깊은 판
+#
+# 포럼과 랜섬에는 브라우저로 더 깊이 보는 판이 있습니다. playwright 가 필요하고
+# **사람이 챌린지를 푸는 경우가 있어** CI 자리가 아닙니다. 러너에 playwright 를
+# 안 깔면 `run.py` 가 스스로 건너뛰고 그렇게 적습니다. 깊은 판은 VM 에서
+# `python dc.py crawl` 로 합니다.
+#
+# ## 로그에 이름을 안 찍습니다
+#
+# **레포가 공개라 Actions 로그도 90일 동안 누구나 봅니다.** 명부 이름은 노션에서
+# 오므로 깃허브가 가려 주지 않습니다. `--요약만` 이 그것을 막습니다. 이 옵션 없이
+# 돌리면 우리가 어디를 보고 있는지가 목록으로 나갑니다. **빼지 마십시오.**
+#
+# ## 표를 안 남깁니다
+#
+# 실행마다 새 컨테이너라 `hub/data/places.db` 가 안 남습니다. 잃는 것 둘입니다.
+#
+#   차례표     `--due` 가 못 돕니다. 그래서 안 쓰고 cron 과 `only` 로 정합니다
+#   백오프     죽은 주소를 매 판 다시 기다립니다. 한 판이 길어집니다
+#
+# **그렇다고 캐시나 아티팩트로 남기면 안 됩니다.** 그 표의 `규모` 칸이
+# (갈래, 이름, 본때) 라서 명부 이름이 깃허브에 파일로 남습니다. 위와 같은 문제입니다.
+#
+# ## 넣어야 하는 비밀값 하나
+#
+#   NOTION_TOKEN   노션 통합 토큰
+#
+# 채널 목록은 안 씁니다. 명부가 노션에서 읽습니다.
+
+on:
+  schedule:
+    # 포럼·랜섬은 12시간 주기(run.py 의 주기표)입니다. UTC 03·15 = KST 12·24시
+    - cron: "0 3,15 * * *"
+    # 텔레그램은 6시간 주기라 사이를 메웁니다. UTC 09·21 = KST 18·06시
+    - cron: "0 9,21 * * *"
+  workflow_dispatch:
+    # **입력 이름도 잡 ID 와 같이 영문·숫자·-·_ 만 됩니다.** 한글로 두었더니
+    # 워크플로 파일 자체가 거부되어 잡이 시작도 못 했습니다 (2026-09-08).
+    inputs:
+      only:
+        description: "어느 갈래를 볼지"
+        type: choice
+        default: all
+        options: [all, forum, ransom, telegram]
+      write_to_notion:
+        description: "노션에 실제로 쓸지. 끄면 미리보기만"
+        type: boolean
+        default: true
+      limit:
+        description: "갈래마다 최대 몇 줄까지. 0 은 전부"
+        type: string
+        default: "0"
+
+concurrency:
+  group: places
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  # 스케줄이면 씁니다. 손으로 돌릴 때는 고른 대로입니다
+  WRITE: ${{ github.event_name == 'schedule' && 'yes' || (inputs.write_to_notion && 'yes' || 'no') }}
+
+jobs:
+  # ── 포럼 · 랜섬 ─────────────────────────────────────────────
+  # 이 둘은 Tor 가 반드시 있어야 나갑니다. egress.py 가 그렇게 정합니다
+  crawl-tor:
+    name: 포럼·랜섬 (Tor)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    # UTC 09·21 은 텔레그램 차례라 여기서는 안 돕니다
+    if: >-
+      github.event_name != 'schedule' && (inputs.only == 'all' || inputs.only == 'forum' || inputs.only == 'ransom')
+      || github.event.schedule == '0 3,15 * * *'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 부품 설치
+        # playwright 를 일부러 안 깝니다. 깊은 판이 저절로 빠집니다
+        run: pip install -e packages
+
+      - name: 비밀값을 파일로
+        # **환경변수 대신 파일로 둡니다.** 환경변수는 하위 프로세스 목록과
+        # 셸 이력에 남습니다. dc_notion 이 NOTION_TOKEN_FILE 을 먼저 봅니다.
+        env:
+          TOKEN_VALUE: ${{ secrets.NOTION_TOKEN }}
+        run: |
+          set -e
+          mkdir -p "$RUNNER_TEMP/cfg"
+          if [ -z "$TOKEN_VALUE" ]; then
+            echo "::error::NOTION_TOKEN 이 없습니다. 레포 Settings → Secrets 에 넣으십시오"
+            exit 1
+          fi
+          printf '%s' "$TOKEN_VALUE" > "$RUNNER_TEMP/cfg/notion_token"
+          chmod 600 "$RUNNER_TEMP/cfg/notion_token"
+
+      - name: tor 설치
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq tor
+
+      - name: torrc 쓰고 되읽어 확인
+        # **ExcludeExitNodes 가 빠지면 한국 출구를 씁니다.** 그러면 우리 IP 는
+        # 아니어도 한국 주소가 저쪽 로그에 남습니다. 출구확인() 은 출구가
+        # 어느 나라인지 못 가리므로 (egress.py 주석) 막는 것이 이 두 줄뿐입니다.
+        # 써 놓고 되읽어 봅니다. 이 레포의 사고 셋이 전부 「한 줄이 빠졌는데
+        # 조용히 돌았다」 였습니다.
+        run: |
+          set -e
+          mkdir -p "$RUNNER_TEMP/tor/data"
+          chmod 700 "$RUNNER_TEMP/tor/data"
+          cat > "$RUNNER_TEMP/tor/torrc" <<TORRC
+          DataDirectory $RUNNER_TEMP/tor/data
+          Log notice file $RUNNER_TEMP/tor/notices.log
+          HTTPTunnelPort 9080
+          SocksPort 0
+          ExcludeExitNodes {kr}
+          StrictNodes 1
+          TORRC
+          grep -q 'ExcludeExitNodes {kr}' "$RUNNER_TEMP/tor/torrc" || {
+            echo "::error::torrc 에 ExcludeExitNodes 가 없습니다"; exit 1; }
+          grep -q 'StrictNodes 1' "$RUNNER_TEMP/tor/torrc" || {
+            echo "::error::torrc 에 StrictNodes 가 없습니다"; exit 1; }
+          grep -q 'HTTPTunnelPort 9080' "$RUNNER_TEMP/tor/torrc" || {
+            echo "::error::torrc 에 HTTPTunnelPort 가 없습니다"; exit 1; }
+          echo "torrc 세 줄 확인"
+
+      - name: tor 띄우기
+        # 로그로 기다립니다. 여기서는 밖으로 한 번도 안 나갑니다.
+        # ExcludeExitNodes 때문에 회로를 고르는 데 시간이 더 걸릴 수 있어 5분을 줍니다
+        run: |
+          set -e
+          nohup tor -f "$RUNNER_TEMP/tor/torrc" > "$RUNNER_TEMP/tor/stdout.log" 2>&1 &
+          for i in $(seq 1 60); do
+            if grep -q 'Bootstrapped 100%' "$RUNNER_TEMP/tor/notices.log" 2>/dev/null; then
+              echo "tor 준비됨 (${i}0초)"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::tor 가 5분 안에 안 떴습니다"
+          tail -20 "$RUNNER_TEMP/tor/notices.log" 2>/dev/null || true
+          exit 1
+
+      - name: 관문 — Tor 로 나가는지 확인
+        # **밖으로 나가는 요청은 여기가 처음입니다.** 실패하면 다음 단계가
+        # 안 돕니다(기본 if: success()). run.py 가 안에서 한 번 더 막으므로
+        # 관문이 둘입니다. 겹쳐 두는 것이 맞습니다
+        env:
+          TOR_SOCKS_PROXY: http://127.0.0.1:9080
+        run: |
+          python - <<'PY'
+          import sys, time
+          sys.path[:0] = ["packages", "."]
+          from hub.places import egress
+          for 판 in range(3):
+              r = egress.출구확인(timeout=20)
+              print(r["말"])
+              if r["된다"]:
+                  raise SystemExit(0)
+              if 판 < 2:
+                  time.sleep(20)
+          print("::error::Tor 로 안 나갑니다. 요청을 하나도 안 보내고 멈춥니다")
+          raise SystemExit(1)
+          PY
+
+      - name: 명부 조사
+        env:
+          NOTION_TOKEN_FILE: ${{ runner.temp }}/cfg/notion_token
+          TOR_SOCKS_PROXY: http://127.0.0.1:9080
+          ONLY_INPUT: ${{ inputs.only }}
+          LIMIT_INPUT: ${{ inputs.limit }}
+        run: |
+          set -e
+          # 문자열로 들어오므로 숫자가 아니면 버립니다. argparse 가 죽습니다
+          LIMIT="${LIMIT_INPUT:-0}"
+          case "$LIMIT" in ''|*[!0-9]*) LIMIT=0;; esac
+
+          case "${ONLY_INPUT:-all}" in
+            forum)  ONLY=forum ;;
+            ransom) ONLY=ransom ;;
+            *)      ONLY=forum,ransom ;;
+          esac
+
+          # **--요약만 을 빼지 마십시오.** 머리말에 이유가 있습니다
+          if [ "$WRITE" = "yes" ]; then
+            python dc.py crawl --only "$ONLY" --요약만 --limit "$LIMIT" --apply
+          else
+            echo "미리보기입니다. 노션에 안 씁니다"
+            python dc.py crawl --only "$ONLY" --요약만 --limit "$LIMIT"
+          fi
+
+      - name: 뒷정리
+        if: always()
+        run: |
+          pkill -x tor || true
+          rm -rf "$RUNNER_TEMP/tor"
+          rm -f "$RUNNER_TEMP/cfg/notion_token"
+
+  # ── 텔레그램 ────────────────────────────────────────────────
+  # t.me 는 텔레그램 서버라 다크웹이 아닙니다. Tor 출구는 거기서 캡차와 차단을
+  # 자주 만나므로 안 태웁니다. egress.py 가 그 용도로 DARKCHOCO_TOR_SKIP 을 둡니다.
+  # **러너 주소(Azure)로 나갑니다.** collect.yml 이 이미 같은 자리에서 t.me
+  # 미리보기를 읽고 있어 새로 생기는 노출은 아닙니다.
+  crawl-telegram:
+    name: 텔레그램 (Tor 없이)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: >-
+      github.event_name != 'schedule' && (inputs.only == 'all' || inputs.only == 'telegram')
+      || github.event.schedule == '0 9,21 * * *'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 부품 설치
+        run: pip install -e packages
+
+      - name: 비밀값을 파일로
+        env:
+          TOKEN_VALUE: ${{ secrets.NOTION_TOKEN }}
+        run: |
+          set -e
+          mkdir -p "$RUNNER_TEMP/cfg"
+          if [ -z "$TOKEN_VALUE" ]; then
+            echo "::error::NOTION_TOKEN 이 없습니다"
+            exit 1
+          fi
+          printf '%s' "$TOKEN_VALUE" > "$RUNNER_TEMP/cfg/notion_token"
+          chmod 600 "$RUNNER_TEMP/cfg/notion_token"
+
+      - name: 명부 조사
+        env:
+          NOTION_TOKEN_FILE: ${{ runner.temp }}/cfg/notion_token
+          # 프록시를 아예 안 둡니다. 오프너() 는 프록시가 있으면 뺀갈래를
+          # 무시하고 그대로 Tor 를 태웁니다
+          DARKCHOCO_TOR_SKIP: telegram
+          LIMIT_INPUT: ${{ inputs.limit }}
+        run: |
+          set -e
+          LIMIT="${LIMIT_INPUT:-0}"
+          case "$LIMIT" in ''|*[!0-9]*) LIMIT=0;; esac
+          if [ "$WRITE" = "yes" ]; then
+            python dc.py crawl --only telegram --요약만 --limit "$LIMIT" --apply
+          else
+            echo "미리보기입니다. 노션에 안 씁니다"
+            python dc.py crawl --only telegram --요약만 --limit "$LIMIT"
+          fi
+
+      - name: 뒷정리
+        if: always()
+        run: rm -f "$RUNNER_TEMP/cfg/notion_token"
