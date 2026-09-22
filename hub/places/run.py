@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+import re
 import sqlite3
 import sys
 import time
@@ -330,6 +331,11 @@ def 깊게(갈래: str, 열린것, ctx: dict):
     try:
         세션열기 = 브라우저세션(프록시)
     except 브라우저없음:
+        # 바로 앞에서 「깊게 N줄 (브라우저)」 을 찍어 놓고 여기서 조용히
+        # 돌아가면, 깊은 판이 돈 줄 알게 됩니다. 안 돌았으면 안 돌았다고
+        # 적습니다. 깃허브 러너에는 playwright 가 없어 늘 이 길입니다
+        print("    브라우저가 없어 깊은 판을 건너뜁니다 (playwright 미설치)",
+              flush=True)
         return
     try:
         with 세션열기 as 세션:
@@ -675,7 +681,34 @@ def 여러갈래(대상: list[str] | None = None, *, apply: bool = False,
     return out
 
 
-def 표로(결과: list[갈래결과], *, apply: bool) -> str:
+_주소꼴 = re.compile(
+    r"\b(?:[\w-]+\.)+(?:onion|com|net|org|io|st|to|cc|ru|su|ws|is|me|kr|xyz|top)\b",
+    re.I)
+
+
+def _주소가리기(s: str) -> str:
+    """까닭 문자열에서 주소처럼 보이는 조각을 지웁니다.
+
+    까닭은 못본이유의 앞머리 38자라 보통 「타임아웃」 「403」 같은 것인데,
+    「xxx.onion 을 못 열었습니다」 꼴이 섞이면 호스트가 그대로 찍힙니다.
+    까닭을 미리 다 알 수 없으니 나가는 자리에서 거릅니다.
+    """
+    return _주소꼴.sub("<주소>", s)
+
+
+def 표로(결과: list[갈래결과], *, apply: bool, 요약만: bool = False) -> str:
+    """돌린 결과를 사람이 읽을 표로.
+
+    `요약만` 은 **공개된 자리에 찍을 때** 씁니다. 깃허브 Actions 로그가
+    그 자리입니다. 레포가 공개라 로그도 90일 동안 누구나 봅니다.
+
+    무엇이 새나 — 「살펴볼 것」 줄이 `{res.이름}: …` 꼴이라 포럼 이름과
+    랜섬 그룹 이름을 그대로 찍고, 「명부에 없는 이웃」 은 호스트를 통째로
+    찍습니다. 둘을 합치면 **우리가 어디를 보고 있는지가 목록으로 나갑니다.**
+
+    켜면 그 둘을 건수로만 냅니다. 숫자 줄은 그대로 둡니다 — 이름이 안
+    들어 있고, 대시보드가 읽는 것이 그 줄입니다.
+    """
     if not 결과:
         return "  돌린 갈래가 없습니다."
     줄 = []
@@ -705,9 +738,16 @@ def 표로(결과: list[갈래결과], *, apply: bool) -> str:
         # 뭉쳐 놓으면 보입니다 — 절반이 같은 이유로 막혔다든가.
         if r.이유셈:
             for 까닭, c in sorted(r.이유셈.items(), key=lambda kv: -kv[1])[:5]:
-                줄.append(f"  {'':<12} {c:>4}줄  {까닭}")
-        for m in r.문제[:5]:
-            줄.append(f"  {'':<12} !! {m}")
+                줄.append(f"  {'':<12} {c:>4}줄  {_주소가리기(까닭) if 요약만 else 까닭}")
+        if 요약만:
+            # 메시지가 `{이름}: …` 꼴이라 통째로 뺍니다. 앞을 잘라 내는 식으로
+            # 가리면 새 메시지 꼴이 생길 때마다 뚫립니다
+            if r.문제:
+                줄.append(f"  {'':<12} !! 살펴볼 것 {len(r.문제)}줄 "
+                          f"(자세한 것은 로컬에서)")
+        else:
+            for m in r.문제[:5]:
+                줄.append(f"  {'':<12} !! {m}")
     # 명부에 없는 이웃들. 노션에 안 씁니다. 새 곳을 찾는 실마리입니다.
     처음본것: dict = {}
     for r in 결과:
@@ -717,14 +757,17 @@ def 표로(결과: list[갈래결과], *, apply: bool) -> str:
     if 처음본것:
         줄.append("")
         줄.append(f"  명부에 없는 이웃 {len(처음본것)}곳 (노션에 안 씁니다)")
-        # 여러 곳이 같이 걸어 둔 것부터 보여 줍니다. 그것이 실마리입니다.
-        차례 = sorted(처음본것.items(), key=lambda kv: (-len(kv[1]), kv[0]))
-        for h, 어디들 in 차례[:12]:
-            딱지 = sorted(어디들)[0]
-            더 = f" 외 {len(어디들) - 1}곳" if len(어디들) > 1 else ""
-            줄.append(f"    {h:<48} ← {딱지}{더}")
-        if len(처음본것) > 12:
-            줄.append(f"    … {len(처음본것) - 12}곳 더")
+        if 요약만:
+            줄.append("    호스트는 안 찍습니다. 로컬에서 보십시오")
+        else:
+            # 여러 곳이 같이 걸어 둔 것부터 보여 줍니다. 그것이 실마리입니다.
+            차례 = sorted(처음본것.items(), key=lambda kv: (-len(kv[1]), kv[0]))
+            for h, 어디들 in 차례[:12]:
+                딱지 = sorted(어디들)[0]
+                더 = f" 외 {len(어디들) - 1}곳" if len(어디들) > 1 else ""
+                줄.append(f"    {h:<48} ← {딱지}{더}")
+            if len(처음본것) > 12:
+                줄.append(f"    … {len(처음본것) - 12}곳 더")
 
     줄.append("")
     총바뀜 = sum(r.바뀐줄 for r in 결과)
