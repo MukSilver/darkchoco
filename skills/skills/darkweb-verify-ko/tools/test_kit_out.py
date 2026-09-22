@@ -174,10 +174,84 @@ check("샘플 없음", st4["샘플 있음"], False)
 if "못 봄" not in st4["다음"]:
     fails.append("샘플이 없는데 못 봄 안내가 없다: %r" % st4["다음"])
 
+# ── 7. 스레드 꼴도 읽는다 ───────────────────────
+# 2026-09-08 에 킷의 「이 글 본문」이 `### 원문 / ### 답글 N` 꼴로 바뀌었다.
+# 그때부터 `## 본문` 이 안 나오는데 여기는 그것만 보고 있었다.
+# **킷이 글을 제대로 읽은 경우가 오히려 빈손으로 떨어졌다** (2026-09-22 확인).
+THREAD = """# [SELLING] Example Corp Database 500K
+
+- URL : http://abcdef1234.onion/Thread-Example-Corp-500K
+- 도구 : forum_kit v2.7
+- 엔진 : mybb
+- 확인 : 2026-09-22 03:10
+- 답글 쪽 : 2쪽까지 받음
+
+### 원문  seller01  2026-08-26 14:02
+
+```
+We have all customer data of Example Corp. 500,000 rows.
+1001,hong@example.com,010-0000-0001,19900101
+```
+
+### 답글 1  buyer02  2026-08-26 15:30
+
+```
+Proof please.
+1002,kim@example.com,010-0000-0002,19910202
+```
+
+### 답글 2  seller01  2026-08-26 16:00
+
+```
+1003,lee@example.com,010-0000-0003,19920303
+```
+
+## 추출된 단서
+
+- 텔레그램 : t.me/examplehandle
+- 금액 : 1200 USD
+
+## 못 받은 쪽 (1)
+
+- 3쪽 · 403
+"""
+
+t = K.parse(THREAD)
+check("스레드 블록 셋", t["블록"], 3)
+check("스레드 제목", t["제목"], "[SELLING] Example Corp Database 500K")
+check("스레드 URL", t["URL"], "http://abcdef1234.onion/Thread-Example-Corp-500K")
+check("스레드 샘플 셋", len(t["샘플 줄"]), 3)
+check("스레드 단서 둘", sorted(t["단서"]), ["금액", "텔레그램"])
+
+# 단서와 못 받은 쪽 절이 본문으로 새어 들어오면 안 된다
+for b in K.bodies(THREAD):
+    if "t.me/" in b or "403" in b:
+        fails.append("본문 밖 절이 섞였다: %r" % b[:60])
+
+# 이어 받기 판은 「글 N」 으로 적힌다
+글N = THREAD.replace("### 원문  seller01", "### 글 1  seller01") \
+            .replace("### 답글 1  buyer02", "### 글 2  buyer02") \
+            .replace("### 답글 2  seller01", "### 글 3  seller01")
+check("글 N 꼴도 읽는다", K.parse(글N)["블록"], 3)
+
+# 블록 꼴은 그대로 돌아야 한다 (예비 경로)
+check("블록 꼴 그대로", K.parse(KIT)["블록"], 1)
+
+# 스레드 꼴로도 파일이 써진다
+c5 = new_case(tmp, "스레드", "못 봄(시험)")
+sys.argv = ["kit_out.py", str(c5), "-"]
+sys.stdin = io.StringIO(THREAD)
+old, sys.stdout = sys.stdout, io.StringIO()
+K.main()
+sys.stdout = old
+check("스레드도 본문 저장", (c5 / "②본문.md").exists(), True)
+check("스레드 샘플 세 줄",
+      len((c5 / "②샘플.txt").read_text(encoding="utf-8").strip().splitlines()), 3)
+
 # ── 결과 ────────────────────────────────────────
 if fails:
     print("실패 %d" % len(fails))
     for f in fails:
         print("  - %s" % f)
     sys.exit(1)
-print("통과. 시험 6 묶음")
+print("통과. 시험 7 묶음")

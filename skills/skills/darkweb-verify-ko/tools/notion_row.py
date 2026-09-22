@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import sys
 from pathlib import Path
 
 from notion import _call, search, title_of
@@ -51,7 +52,81 @@ BODY_KEYS = [("캡처", "paragraph"), ("연락처", "paragraph"),
 
 # 이 칸이 비면 미리보기에서 알린다. 사람만 아는 값이라 물어봐야 채워진다.
 # 여기 있는 DB 만 페이지 본문도 본다. 행위자·포럼 DB 는 칸만 쓴다.
-ASK_IF_EMPTY = {"수집": ["원문 URL", "게시 플랫폼"]}
+#
+# **`수집자` 를 2026-09-22 에 더했다.** 손 조사 결과를 올리는 길이 이 도구뿐인데,
+# 팀원마다 쓰는 AI 가 달라 `--set "수집자=이름"` 을 빠뜨리면 그냥 빈칸으로 들어갔다.
+# 실측으로 197줄 중 1줄이 이미 그렇게 비어 있었다. 여러 사람이 올리기 시작하면
+# 그 비율이 커진다.
+ASK_IF_EMPTY = {"수집": ["원문 URL", "게시 플랫폼", "수집자"]}
+
+
+def _겹침규칙():
+    """`push.py` 의 겹침 열쇠 두 함수를 빌려 온다. 못 찾으면 None.
+
+    **여기서 규칙을 새로 쓰지 않는다.** 기계가 올리는 쪽(`push.py`)과 사람이
+    올리는 쪽(이 도구)이 겹침을 다르게 보면, 같은 글이 두 줄로 들어온다.
+    열쇠는 `UID` → `원문 URL` → `제목|게시 플랫폼` 차례다.
+
+    이 스킬은 `cp -R` 한 번으로 떼어 갈 수 있어야 해서 `hub/` 가 없을 수도 있다.
+    그때는 겹침 검사를 건너뛰고 미리보기에 그렇게 적는다. `_dcpath` 와 같은 태도다.
+    """
+    here = Path(__file__).resolve().parent
+    for parent in [here, *here.parents]:
+        if (parent / "hub" / "events" / "push.py").is_file():
+            if str(parent) not in sys.path:
+                sys.path.insert(0, str(parent))
+            try:
+                from hub.events.push import _노션줄의_열쇠, _열쇠  # noqa: E402
+                return _열쇠, _노션줄의_열쇠
+            except Exception:
+                return None
+    return None
+
+
+def 겹치는가(ds_id: str, body: dict) -> tuple[bool, str]:
+    """이미 있는 줄인지 본다. (겹치나, 사람에게 할 말).
+
+    `body` 는 노션에 보낼 꼴이라 값을 도로 꺼내 열쇠를 만든다.
+    """
+    규칙 = _겹침규칙()
+    if 규칙 is None:
+        return False, "겹침 검사를 건너뛴다. `hub/events/push.py` 를 못 찾았다"
+    _열쇠, _노션줄의_열쇠 = 규칙
+
+    def 글(칸: str) -> str:
+        v = body.get(칸) or {}
+        if "rich_text" in v:
+            return "".join(x.get("text", {}).get("content", "") for x in v["rich_text"])
+        if "title" in v:
+            return "".join(x.get("text", {}).get("content", "") for x in v["title"])
+        return ""
+
+    내uid = 글("UID").strip()
+    내열쇠 = _열쇠(글("원문 URL"), 글("자료 제목"), 글("게시 플랫폼"))
+
+    for r in _모든줄(ds_id):
+        uid, k = _노션줄의_열쇠(r)
+        if 내uid and uid and 내uid == uid:
+            return True, "UID 가 같은 줄이 이미 있다: %s" % (r.get("url") or r["id"])
+        if 내열쇠 and k == 내열쇠:
+            return True, "열쇠가 같은 줄이 이미 있다 (%s): %s" % (
+                "원문 URL" if 글("원문 URL").strip() else "제목|게시 플랫폼",
+                r.get("url") or r["id"])
+    return False, ""
+
+
+def _모든줄(ds_id: str) -> list[dict]:
+    """DB 전체를 읽는다. 100줄씩 끊어 온다."""
+    out, cursor = [], None
+    while True:
+        body = {"page_size": 100}
+        if cursor:
+            body["start_cursor"] = cursor
+        r = _call(f"/data_sources/{ds_id}/query", "POST", body)
+        out += r.get("results", [])
+        if not r.get("has_more"):
+            return out
+        cursor = r.get("next_cursor")
 
 
 def parse_body(text: str) -> list[tuple[str, str, str]]:
@@ -357,7 +432,22 @@ def main() -> None:
     if not blocks and args.db.strip() in ASK_IF_EMPTY:
         warn.append("페이지 본문이 없다. 캡처·연락처·참고사항을 안 냈는지 확인한다")
 
+    # 겹침을 본다. 수집 DB 만이다 — 열쇠 규칙이 그 DB 를 전제로 만들어졌다.
+    겹침, 겹침말 = (False, "")
+    if args.db.strip() == "수집":
+        겹침, 겹침말 = 겹치는가(ds_id, body)
+        if 겹침:
+            warn.append("**이미 있는 줄이다.** " + 겹침말)
+        elif 겹침말:
+            warn.append(겹침말)
+
     show(dbname, props, body, skipped, warn, excluded, blocks)
+
+    if 겹침:
+        print("\n겹치는 줄이 있어 멈춘다. " + 겹침말)
+        print("**같은 글을 두 줄로 만들지 않는다.** 고칠 것이 있으면 노션에서 그 줄을 고친다.")
+        print("정말 새 줄이 맞으면 원문 URL 을 채워 열쇠를 다르게 한다.")
+        raise SystemExit(1)
 
     if not args.commit:
         print("\n미리보기다. 실제로 쓰지 않았다.")

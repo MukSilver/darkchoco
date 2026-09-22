@@ -4,12 +4,22 @@
 문법 검사를 통과해야만 파일을 쓴다. 실패하면 옛 txt를 그대로 둔다.
 손으로 만들다가 js만 고치고 txt를 안 고치는 일을 막으려는 것이다.
 
-    python bookmarklets/build_bookmarklet.py                       같은 폴더의 .js 전부
-    python bookmarklets/build_bookmarklet.py bookmarklets/qilin_kit.js   하나만
+    python bookmarklets/build_bookmarklet.py                       킷 둘
+    python bookmarklets/build_bookmarklet.py bookmarklets/qilin_kit.js   소스 하나만
     python bookmarklets/build_bookmarklet.py --no-check             node 없을 때
     python bookmarklets/build_bookmarklet.py --raw                  최소화 없이
 
 foo.js  ->  foo.bookmarklet.txt
+
+**인자를 안 주면 `build_kit.py` 가 만든 킷 둘만 만든다.** 전에는 폴더 안
+`.js` 전부를 훑어서 소스 다섯의 `.txt` 도 같이 났다. 쓰지도 않는 낱개
+파일이 일곱 개 쌓였고, 지워도 다음 빌드에서 되살아났다.
+
+소스 하나를 낱개로 만들 일이 있으면 경로를 직접 준다. 그 길은 살아 있다.
+
+**순서가 있다.** 소스를 고쳤으면 `build_kit.py` 를 먼저 돌린다. 안 그러면
+이 도구가 옛 킷을 다시 감쌀 뿐인데 화면에는 「만듦」 이라고 찍힌다.
+성공처럼 보이는 실패라서, 그럴 때 경고를 찍는다.
 
 **terser 가 있으면 최소화한다.** 변수명까지 줄여 절반이 된다.
 없으면 줄만 합친다. 없다고 멈추지 않는다.
@@ -30,6 +40,10 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 LIMIT = 60_000          # 이보다 길면 브라우저 주소 칸에서 잘릴 수 있다
 NODE_TIMEOUT = 30
+
+# 킷 목록은 build_kit.py 가 들고 있다. 여기서 또 적지 않는다
+sys.path.insert(0, str(HERE))
+from build_kit import KITS, MODS, 킷파일       # noqa: E402
 
 
 def to_one_line(src: str) -> str:
@@ -180,15 +194,36 @@ def build(js: Path, do_check: bool, raw: bool = False) -> bool:
     return True
 
 
+def _낡았나(킷들: list[Path]) -> None:
+    """소스가 킷보다 새것이면 알린다. 멈추지는 않는다.
+
+    **이 경고가 없으면 조용히 물린다.** 소스를 고치고 이 도구만 돌리면
+    옛 킷을 다시 감쌀 뿐인데 화면에는 「만듦」 이라고 찍힌다. 무엇이
+    틀렸는지 알 길이 없어서, 브라우저에서 옛 동작을 보고서야 알게 된다.
+    """
+    소스들 = [HERE / src for _, _, src, _ in MODS] + [HERE / "kit_shell.js"]
+    새것 = max((p.stat().st_mtime for p in 소스들 if p.exists()), default=0)
+    낡은킷 = [k.name for k in 킷들
+              if k.exists() and k.stat().st_mtime < 새것]
+    if 낡은킷:
+        print("!! 소스가 킷보다 새것이다 — %s" % " · ".join(낡은킷))
+        print("   python bookmarklets/build_kit.py 를 먼저 돌려라.")
+        print("   안 그러면 옛 코드가 담긴 .txt 가 나온다.\n")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("files", nargs="*", help="비우면 같은 폴더의 .js 전부")
+    ap.add_argument("files", nargs="*",
+                    help="비우면 build_kit.py 가 만든 킷 둘")
     ap.add_argument("--no-check", action="store_true", help="문법 검사를 건너뛴다")
     ap.add_argument("--raw", action="store_true", help="최소화 없이 줄만 합친다")
     args = ap.parse_args()
 
-    targets = [Path(f) for f in args.files] if args.files else [
-        p for p in sorted(HERE.glob("*.js")) if p.name != SHELL_SRC.name]
+    if args.files:
+        targets = [Path(f) for f in args.files]
+    else:
+        targets = [HERE / 킷파일(k) for k in KITS]
+        _낡았나(targets)
     if not targets:
         raise SystemExit("만들 .js 가 없다")
 
