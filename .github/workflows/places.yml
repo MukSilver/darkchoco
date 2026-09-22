@@ -205,7 +205,8 @@ jobs:
           if [ "$WRITE" = "yes" ]; then
             python dc.py crawl --only "$ONLY" --요약만 --limit "$LIMIT" --apply
           else
-            echo "미리보기입니다. 노션에 안 씁니다"
+            # `cmd_crawl` 이 같은 말을 자기가 찍습니다. 여기서 또 찍으면
+            # 화면에 두 줄이 나란히 떠서 「두 번 도는 건가」 로 읽힙니다
             python dc.py crawl --only "$ONLY" --요약만 --limit "$LIMIT"
           fi
 
@@ -265,7 +266,8 @@ jobs:
           if [ "$WRITE" = "yes" ]; then
             python dc.py crawl --only telegram --요약만 --limit "$LIMIT" --apply
           else
-            echo "미리보기입니다. 노션에 안 씁니다"
+            # `cmd_crawl` 이 같은 말을 자기가 찍습니다. 여기서 또 찍으면
+            # 화면에 두 줄이 나란히 떠서 「두 번 도는 건가」 로 읽힙니다
             python dc.py crawl --only telegram --요약만 --limit "$LIMIT"
           fi
 

@@ -254,10 +254,20 @@ def _피해모으기(마지막: list[float], 개월수: int, op=None) -> tuple[d
     모음: dict = {}
     못본달: list[str] = []
     실패 = 0
-    for 년, 월 in _달들(개월수):
+    달들 = list(_달들(개월수))
+    # **진행을 찍습니다.** 62초 간격이라 여섯 달이면 6분 넘게 걸리는데, 그동안
+    # 화면에 아무것도 안 나와 멈춘 것으로 읽힙니다. 2026-09-22 첫 CI 판에서
+    # 「ransom: 508줄을 봅니다」 뒤가 7분 비어 사람이 실제로 그렇게 봤습니다.
+    # 간격은 저쪽 rate limit(1req/분)이라 줄이지 않습니다. 보이게만 합니다
+    print(f"    집계처에서 피해 {len(달들)}달치를 받습니다 "
+          f"(요청 사이 {간격:.0f}초라 {len(달들) * 간격 / 60:.0f}분쯤 걸립니다)",
+          flush=True)
+    for i, (년, 월) in enumerate(달들, 1):
         try:
             건들 = _받기(rl_victims(년, 월), 마지막, op)
             실패 = 0
+            print(f"      {i}/{len(달들)}  {년}-{월:02d}  {len(건들) if isinstance(건들, list) else 0}건",
+                  flush=True)
         except (urllib.error.URLError, OSError, ValueError) as e:
             못본달.append(f"{년}-{월:02d}({type(e).__name__})")
             실패 += 1
@@ -324,6 +334,7 @@ def 조사(*, dry: bool = False, limit: int = 0,
                     받은곳="ransomware.live/groups")
         return
 
+    print("    집계처에서 그룹 목록을 받습니다", flush=True)
     try:
         그룹들 = _받기(rl_groups(), 마지막, op)
     except (urllib.error.URLError, OSError, ValueError) as e:
