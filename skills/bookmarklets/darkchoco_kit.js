@@ -191,7 +191,7 @@
   /* ── forum_kit.js ── */
   function modForum() {
 
-    const VER = 'forum kit v2.5';
+    const VER = 'forum kit v2.7';
   /* 같은 페이지에서 다시 눌렀을 때. 버전이 같으면 있던 상자를 다시 보여주고, */
   /* 다르면 옛 상자를 걷어내고 새 코드로 다시 뜬다. 이게 없으면 북마크를 갱신해도 */
   /* 페이지를 새로 열기 전까지 옛 코드가 계속 돌아 갱신이 먹은 줄 모르게 된다 */
@@ -224,9 +224,16 @@
   /* announcements.php?fid=39&aid=7 처럼 aid가 뒤에 오는 경우도 잡는다 */
     const T_HIT = /\/Thread-|thread-\d+|[?&]tid=\d+|\/threads\/|\/Announcement-|announcements\.php\?[^#]*[?&]?aid=\d+/i;
     const T_SKIP = /action=(lastpost|newpost|thread_|nextnewest|nextoldest|whoposted)|[?&]page=|#pid|\/post-\d+|\/unread|\/latest|\/misc\.php|\/printthread/i;
+  /* 누르면 서버에 무언가 남는 링크. **요청도 안 보내고 목록에도 안 낸다.**
+     이 게시판은 평점·구독·모더레이션이 링크 한 번(GET)으로 돈다. 메서드가 GET 이라고
+     읽기만 하는 것이 아니다. 그리고 그런 주소에는 my_post_key 가 박혀 나가는데,
+     수집 주소는 쿼리를 통째로 보존하므로 그것까지 같이 실려 나간다.
+     전에는 이 목록이 modPageBlocks 안에만 있어 결과 문서에서 빼는 데만 쓰였고,
+     정작 요청이 나가는 isThread 에는 안 걸려 있었다 (2026-09-22 고침) */
+    const 위험링크 = /logout|logoutkey|usercp|modcp|\/alerts|my_post_key|markread|action=(?:getdaily|add_subscription|removesubscription|emailthread|rate)|\/credits\.php|private\.php(?!\?action=send)|(?:newreply|editpost|ratethread|subscription|moderation|report)\.php/i;
     const SUBSEL = '.forum-subforums, .node-subNodeFlatList, .subforums, .subforum_list, .forums__subforum, .subforum';
     const isForum = a => F_PAT.test(A(a)) && !F_SKIP.test(A(a)) && !!C(a.textContent);
-    const isThread = a => T_HIT.test(A(a)) && !T_SKIP.test(A(a));
+    const isThread = a => T_HIT.test(A(a)) && !T_SKIP.test(A(a)) && !위험링크.test(A(a));
     const inSub = a => !!a.closest(SUBSEL);
     const key = u => u.split('#')[0].split('?')[0].replace(/\/$/, '');
 
@@ -335,10 +342,16 @@
   /* 켜면 하위 게시판까지 들어가서 목록을 모아 온다. 요청이 늘어나니 기본은 꺼둔다.
      2026-08-27. 주석은 꺼둔다고 적었는데 코드가 true 였다. 코드를 주석에 맞췄다. */
     const cSubs = chk('하위 게시판도', false, '켜면 하위 게시판에 각각 들어가 목록을 모아 온다. 요청이 늘어난다');
+  /* 2026-09-08. 답글 쪽을 이어 받을지 고른다. 켜면 「이 글 본문」도 뒤쪽을 받으러 요청을 낸다.
+     끄면 보이는 쪽만 읽고 요청을 한 번도 안 낸다. 훑어보기만 할 때 쓴다 */
+    const cReplies = chk('답글까지', true,
+      '켜면 답글 뒤쪽까지 쪽을 넘겨 받는다. 끄면 보이는 쪽만 읽는다. '
+      + '끄면 「이 글 본문」은 요청을 한 번도 안 내고, 「본문 받기」도 글마다 한 번만 부른다');
     const WHO = () => C(iWho.__i.value);
     const stamp = () => TODAY + (WHO() ? ' ' + WHO() : '');
     const cfg = { get n() { return Math.max(1, N(iN.__i.value) || 60); },
                   get mask() { return cMask.__i.checked; },
+                  get replies() { return cReplies.__i.checked; },
                   get scoped() { return cScope.__i.checked; },
                   get subs() { return cSubs.__i.checked; },
                   get sort() { return iSort.__i.value; } };
@@ -412,7 +425,7 @@
     row1.append(grip, bTree, bList, bHarv, bPage, bDiag, st, bStop, bMin);
     if (window.__DKHOME) row1.append(bHome);
     row1.append(bClose);
-    row2.append(iN, iSort, iDelay, iWho, cMask, cScope, cSubs);
+    row2.append(iN, iSort, iDelay, iWho, cMask, cScope, cSubs, cReplies);
     box.append(row1, row2, ta);
 
     const run = async fn => {
@@ -595,6 +608,64 @@
     const engOf = d => d.querySelector('article.message, .message--post') ? 'xenforo'
                     : d.querySelector('div.post, [id^="post_"]') ? 'mybb' : null;
 
+  /* 스레드 안 답글 쪽 주소. 목록과 달리 글 주소다. XenForo 는 /page-N, MyBB 는 ?page=N.
+     showthread.php?tid=… 처럼 조건이 물음표 뒤에 있는 꼴이 있어 page 만 갈아 끼운다.
+     2026-09-08. 「본문 받기」 안에만 있던 것을 밖으로 뺐다. 「이 글 본문」도 같이 쓴다 */
+    const threadUrl = (base, pg) => {
+      const xf = /\/threads?\//.test(base);
+      const hash = base.indexOf('#');
+      const noHash = hash < 0 ? base : base.slice(0, hash);
+      const qmark = noHash.indexOf('?');
+      let u = (qmark < 0 ? noHash : noHash.slice(0, qmark)).replace(/\/$/, '');
+      const q = qmark < 0 ? [] : noHash.slice(qmark + 1).split('&')
+        .filter(s => s && !/^page=/i.test(s));
+      if (xf) u = u.replace(/\/page-\d+$/, '') + '/page-' + pg;
+      else q.push('page=' + pg);
+      return u + (q.length ? '?' + q.join('&') : '');
+    };
+  /* 2026-09-07. 늘 2쪽부터 다시 시작하고 있었다. 4쪽을 열어 두고 눌러도 4쪽 → 2쪽 → 3쪽으로 가서
+     뒤쪽을 못 이어 받았다. 21쪽짜리를 나눠 받으려면 이어가기가 있어야 한다.
+     이제 주소에 적힌 쪽 번호에서 시작한다. 없으면 1쪽이다 */
+    const 쪽번호 = u => {
+      const m = String(u).match(/[?&]page=(\d+)|\/page-(\d+)/i);
+      return m ? (parseInt(m[1] || m[2], 10) || 1) : 1;
+    };
+  /* 스레드 안 답글 쪽을 이어 받는다. 「본문 받기」와 「이 글 본문」이 같이 쓴다.
+     2026-09-08. 전에는 이 루프가 목록 수집 안에만 있어서, 글을 열어 놓고 「이 글 본문」을 누르면
+     보이는 쪽 하나만 나왔다. 7쪽짜리 글이 1쪽만 나오는데 화면에는 티가 안 났다.
+     시작 쪽은 주소에 적힌 번호다. 같은 글이 다시 오면 마지막 쪽으로 보고 멈춘다.
+     막힘·실패는 부르는 쪽이 자기 형식으로 적도록 돌려준다 */
+    const 답글이어받기 = async (url, eng, posts, 알림) => {
+      const 열쇠 = p => `${p.author}|${p.date}|${(p.body || '').slice(0, 80)}`;
+      const 본것 = new Set(posts.map(열쇠));
+      const 시작 = 쪽번호(url);
+      const fails = [];
+      let 쪽수 = 시작, 잘림 = '', 막힘 = null;
+      for (let pg = 시작 + 1; pg < 시작 + THREAD_PAGES_MAX && !ABORT; pg++) {
+        await wait();
+        let 더 = [];
+        const pu = threadUrl(url, pg);
+        try {
+          const r2 = await fetch(pu, { credentials: 'same-origin' });
+          const h2 = await r2.text();
+          const 막 = CHL.test(h2.slice(0, 6000)) ? 'Cloudflare 챌린지 페이지'
+                   : (r2.status === 429 || r2.status === 503) ? `HTTP ${r2.status} 레이트리밋 의심` : null;
+          if (막) { 막힘 = 막; fails.push(`${pu} : ${막}`); ABORT = true; break; }
+          if (!r2.ok) { fails.push(`${pu} : HTTP ${r2.status}`); break; }
+          const d2 = new DOMParser().parseFromString(h2, 'text/html');
+          더 = (EX[engOf(d2) || eng] || EX[eng])(d2).filter(p => p.body);
+        } catch (e) { fails.push(`${pu} : ${e && e.message || '요청 실패'}`); break; }
+        const 새것 = 더.filter(p => !본것.has(열쇠(p)));
+        if (!새것.length) break;      /* 같은 글만 다시 왔다. 마지막 쪽이다 */
+        새것.forEach(p => 본것.add(열쇠(p)));
+        posts = posts.concat(새것);
+        쪽수 = pg;
+        if (알림) 알림(pg, posts.length);
+        if (pg === 시작 + THREAD_PAGES_MAX - 1) 잘림 = ` · ${THREAD_PAGES_MAX}쪽에서 멈췄다. 더 있을 수 있다`;
+      }
+      return { posts, 쪽수, 시작, 잘림, 막힘, fails };
+    };
+
     const modList = async withBodies => {
       const t0 = Date.now();
       const seen = new Set(), targets = [];
@@ -653,27 +724,7 @@
         if (pg > 1) { if (xf) u += '/page-' + pg; else q.push('page=' + pg); }
         return u + (q.length ? '?' + q.join('&') : '');
       };
-  /* 스레드 안 답글 쪽 주소. 목록과 달리 글 주소다. XenForo 는 /page-N, MyBB 는 ?page=N.
-     showthread.php?tid=… 처럼 조건이 물음표 뒤에 있는 꼴이 있어 page 만 갈아 끼운다 */
-      const threadUrl = (base, pg) => {
-        const xf = /\/threads?\//.test(base);
-        const hash = base.indexOf('#');
-        const noHash = hash < 0 ? base : base.slice(0, hash);
-        const qmark = noHash.indexOf('?');
-        let u = (qmark < 0 ? noHash : noHash.slice(0, qmark)).replace(/\/$/, '');
-        const q = qmark < 0 ? [] : noHash.slice(qmark + 1).split('&')
-          .filter(s => s && !/^page=/i.test(s));
-        if (xf) u = u.replace(/\/page-\d+$/, '') + '/page-' + pg;
-        else q.push('page=' + pg);
-        return u + (q.length ? '?' + q.join('&') : '');
-      };
-  /* 2026-09-07. 늘 2쪽부터 다시 시작하고 있었다. 4쪽을 열어 두고 눌러도 4쪽 → 2쪽 → 3쪽으로 가서
-     뒤쪽을 못 이어 받았다. 21쪽짜리를 나눠 받으려면 이어가기가 있어야 한다.
-     이제 주소에 적힌 쪽 번호에서 시작한다. 없으면 1쪽이다 */
-      const 쪽번호 = u => {
-        const m = String(u).match(/[?&]page=(\d+)|\/page-(\d+)/i);
-        return m ? (parseInt(m[1] || m[2], 10) || 1) : 1;
-      };
+  /* threadUrl 과 쪽번호 는 밖으로 뺐다. 「이 글 본문」이 같이 쓴다 */
   /* 한 게시판에서 할당된 건수가 찰 때까지 쪽을 넘긴다. 새 글이 안 늘면 마지막 쪽으로 보고 멈춘다 */
       const crawl = async (base, tag, live, quota) => {
         const start = targets.length;
@@ -854,34 +905,16 @@
      퍼간 사람이 답글로 원 게시자를 밝히는 일이 흔해서, 뒤쪽을 놓치면 조사가 통째로 헛돈다.
      같은 글이 다시 오면 마지막 쪽으로 보고 멈춘다. 목록 쪽 넘김과 같은 방식이다 */
             let 쪽수 = 1, 잘림 = '';
-            if (posts.length) {
-              const 열쇠 = p => `${p.author}|${p.date}|${(p.body || '').slice(0, 80)}`;
-              const 본것 = new Set(posts.map(열쇠));
-              for (let pg = 2; pg <= THREAD_PAGES_MAX && !ABORT; pg++) {
-                await wait();
-                let 더 = [];
-                const pu = threadUrl(t.url, pg);
-                try {
-                  const r2 = await fetch(pu, { credentials: 'same-origin' });
-                  const h2 = await r2.text();
-                  const 막힘 = CHL.test(h2.slice(0, 6000)) ? 'Cloudflare 챌린지 페이지'
-                            : (r2.status === 429 || r2.status === 503) ? `HTTP ${r2.status} 레이트리밋 의심` : null;
-                  if (막힘) { out.push(`\n> 중단. ${막힘}. 이후 요청은 보내지 않았다.\n`);
-                            fails.push(`${pu} : ${막힘}`); ABORT = true; break; }
-                  if (!r2.ok) { fails.push(`${pu} : HTTP ${r2.status}`); break; }
-                  const d2 = new DOMParser().parseFromString(h2, 'text/html');
-                  더 = (EX[engOf(d2) || eng] || EX[eng])(d2).filter(p => p.body);
-                } catch (e) { fails.push(`${pu} : ${e && e.message || '요청 실패'}`); break; }
-                const 새것 = 더.filter(p => !본것.has(열쇠(p)));
-                if (!새것.length) break;      /* 같은 글만 다시 왔다. 마지막 쪽이다 */
-                새것.forEach(p => 본것.add(열쇠(p)));
-                posts = posts.concat(새것);
-                쪽수 = pg;
-                say(`본문 받는 중 ${n}/${total}건 · ${t.title.slice(0, 26)} · 답글 ${pg}쪽 · 누적 ${posts.length}건`);
-                if (pg === THREAD_PAGES_MAX) 잘림 = ` · ${THREAD_PAGES_MAX}쪽에서 멈췄다. 더 있을 수 있다`;
-              }
+  /* 답글 쪽 넘김. 「답글까지」를 끄면 보이는 쪽 하나로 끝낸다. 요청이 크게 준다 */
+            if (posts.length && cfg.replies) {
+              const r2 = await 답글이어받기(t.url, eng, posts,
+                (pg, cnt) => say(`본문 받는 중 ${n}/${total}건 · ${t.title.slice(0, 26)} · 답글 ${pg}쪽 · 누적 ${cnt}건`));
+              posts = r2.posts; 쪽수 = r2.쪽수; 잘림 = r2.잘림;
+              r2.fails.forEach(f => fails.push(f));
+              if (r2.막힘) out.push(`\n> 중단. ${r2.막힘}. 이후 요청은 보내지 않았다.\n`);
             }
             if (쪽수 > 1 || 잘림) out.push(`- 답글 쪽 : ${쪽수}쪽까지 받음${잘림}\n`);
+            else if (!cfg.replies) out.push(`- 답글 쪽 : 보이는 쪽만 받음 (「답글까지」가 꺼져 있다)\n`);
             posts.forEach((p, i) => {
               if (p.hrefs && p.hrefs.length) scan(p.hrefs.join('\n')); /* 잘리지 않은 주소로 단서를 보강한다 */
               out.push(`\n### ${i === 0 ? '원문' : '답글 ' + i}  ${p.author}  ${p.date}\n\n\`\`\`\n${proc(p.body)}\n\`\`\`\n`);
@@ -942,8 +975,67 @@
       } finally { undo.forEach(f => { try { f(); } catch (e) {} }); }
     };
 
-    /* ================= 3. 낱장 본문 ================= */
-    const modPage = () => withSymbols(nIcon => {
+    /* ================= 3. 낱장 본문 =================
+     2026-09-08. 스레드 글이면 원문·답글 꼴로 내고 답글 쪽을 이어 받는다.
+     전에는 보이는 쪽의 본문 덩어리만 내서, 답글이 일곱 쪽인 글을 열고 눌러도 첫 쪽만 나왔다.
+     화면에는 티가 안 나서 다 받은 줄 알기 쉬웠다.
+     공지처럼 스레드가 아닌 장은 예전 그대로 블록 꼴로 낸다 */
+    const modPage = async () => {
+      const eng = engOf(document);
+      if (!eng) return modPageBlocks();
+      const r = await modThread(eng);
+      return r || modPageBlocks();
+    };
+
+  /* 스레드 글. 수집 파일과 같은 「### 원문 / ### 답글 N」 꼴로 낸다. 훑는 도구가 그대로 읽는다 */
+    const modThread = async eng => {
+      const title = C(document.querySelector('.thread_head .subject, .p-title-value, h1, .thead strong')?.textContent) || document.title;
+      let posts = [];
+      try { posts = EX[eng](document).filter(p => p.body); }
+      catch (e) { posts = RAW(document); }
+      if (!posts.length) posts = RAW(document);
+      if (!posts.length) return null;      /* 못 읽었다. 블록 꼴로 넘긴다 */
+
+      const 시작 = 쪽번호(location.href);
+      let 쪽수 = 시작, 잘림 = '', 막힌말 = '';
+      const fails = [];
+      if (cfg.replies) {
+        say('답글 쪽을 이어 받는 중');
+        const r = await 답글이어받기(location.href, eng, posts,
+          (pg, cnt) => say(`답글 ${pg}쪽 · 누적 ${cnt}건`));
+        posts = r.posts; 쪽수 = r.쪽수; 잘림 = r.잘림;
+        r.fails.forEach(f => fails.push(f));
+        if (r.막힘) 막힌말 = `\n> 중단. ${r.막힘}. 이후 요청은 보내지 않았다.\n`;
+      }
+
+      const whole = posts.map(p => p.body).join('\n');
+      const clue = {};
+      for (const [k, re] of Object.entries(RE)) { const m = [...new Set(whole.match(re) || [])]; if (m.length) clue[k] = m; }
+      delete clue.email; delete clue.phoneKR; delete clue.phoneIntl; delete clue.rrn;
+      const LABEL = { btc: 'BTC 지갑', xmr: 'XMR 지갑', eth: 'ETH 지갑', onion: 'onion', tg: '텔레그램',
+                      bot: '텔레그램 봇', session: 'Session ID', tox: 'Tox ID', matrix: 'Matrix', jabber: 'Jabber/XMPP',
+                      shop: '자동판매 상점', host: '파일 호스팅', ip: 'IP', pct: '퍼센트(수수료 후보)', money: '금액' };
+
+      let md = `# ${title}\n\n- URL : ${location.href}\n- 도구 : ${VER}\n- 엔진 : ${eng}\n- 확인 : ${stamp()}\n`;
+      if (쪽수 > 시작 || 잘림) md += `- 답글 쪽 : ${쪽수}쪽까지 받음${잘림}\n`;
+      else if (!cfg.replies) md += `- 답글 쪽 : 보이는 쪽만 받음 (「답글까지」가 꺼져 있다)\n`;
+      if (시작 > 1) md += `- 이어 받기 : ${시작}쪽부터. **앞쪽은 이 파일에 없다**\n`;
+      md += 막힌말;
+      posts.forEach((p, i) => {
+  /* 이어 받기면 이 쪽의 첫 글이 원문이 아니다. 절대 번호를 모르니 「글 N」 으로 적는다 */
+        const 라벨 = 시작 > 1 ? `글 ${i + 1}` : (i === 0 ? '원문' : `답글 ${i}`);
+        md += `\n### ${라벨}  ${p.author}  ${p.date}\n\n\`\`\`\n${proc(p.body)}\n\`\`\`\n`;
+      });
+      if (Object.keys(clue).length) { md += `\n## 추출된 단서\n\n`;
+        for (const [k, v] of Object.entries(clue)) md += `- ${LABEL[k] || k} : ${v.join(' · ')}\n`; }
+      if (fails.length) md += `\n## 못 받은 쪽 (${fails.length})\n\n` + fails.map(f => '- ' + f).join('\n') + '\n';
+      window.__OUT = md;
+      return { md, status: `이 글 · 글 ${posts.length}건` + (쪽수 > 시작 ? ` · 답글 ${쪽수}쪽까지` : '')
+                           + ` · 단서 ${Object.keys(clue).length}종` + (잘림 ? ' · 뒤쪽 남음' : '') };
+    };
+
+  /* 스레드가 아닌 장. 공지·안내처럼 글 구조가 없는 페이지다. 예전 그대로 덩어리로 낸다 */
+    const modPageBlocks = () => withSymbols(nIcon => {
       const title = C(document.querySelector('.thread_head .subject, .p-title-value, h1, .thead strong')?.textContent) || document.title;
       const cands = [];
       const push = (sel, how) => document.querySelectorAll(sel).forEach(el => { const t = CL(el); if (t.length > 80) cands.push({ how, t, el }); });
@@ -964,13 +1056,14 @@
                       bot: '텔레그램 봇', session: 'Session ID', tox: 'Tox ID', matrix: 'Matrix', jabber: 'Jabber/XMPP',
                       shop: '자동판매 상점', host: '파일 호스팅', ip: 'IP', pct: '퍼센트(수수료 후보)', money: '금액' };
 
-  /* 내 계정·세션이 드러나는 링크는 뽑지 않는다. 공유 계정이라 하나 노출되면 셋이 다 걸린다 */
-      const ALWAYS = /logout|logoutkey|usercp|\/alerts|my_post_key|markread|action=getdaily|\/credits\.php|private\.php(?!\?action=send)/i;
+  /* 내 계정·세션이 드러나는 링크는 뽑지 않는다. 공유 계정이라 하나 노출되면 셋이 다 걸린다.
+     목록은 위의 `위험링크` 를 그대로 쓴다. **한 규칙이어야 한다** — 목록에서 빼면서
+     요청은 보내는 일이 실제로 있었다 */
       const myUid = (document.body.innerHTML.match(/finduserthreads&(?:amp;)?uid=(\d+)/i) || [])[1] || null;
       const mine = h => myUid && new RegExp('uid=' + myUid + '\\b').test(h);
       let cut = 0;
       const ls = [...new Set(links.filter(a => { const h = a.getAttribute('href') || '';
-          const bad = ALWAYS.test(h) || mine(h); if (bad) cut++; return !bad; })
+          const bad = 위험링크.test(h) || mine(h); if (bad) cut++; return !bad; })
         .map(a => `${C(a.textContent).slice(0, 40)} → ${a.getAttribute('href')}`)
         .filter(s => s && !/^\s*→/.test(s)))].slice(0, 40);
 
@@ -1063,7 +1156,8 @@
                                   page: '이 글 본문' }[KIND] || '구조 진단'),
                 '',
                 '「글 목록」과 「본문 받기」는 요청을 낸다. 간격을 확인하고 누를 것.',
-                '나머지는 열려 있는 문서만 읽는다.'].join('\n');
+                '「이 글 본문」은 「답글까지」가 켜져 있을 때만 요청을 낸다. 답글 뒤쪽을 받으러 간다.',
+                '끄면 보이는 쪽만 읽고 요청을 한 번도 안 낸다.'].join('\n');
 
   }
 
@@ -1778,9 +1872,46 @@
     /* ── 원본 주소 확인. 썸네일을 한 번 눌러 본다 ── */
     const probe = async () => {
       const before = new Set(pick().map(f => f.url));
-      const btn = document.querySelector('button img, a img, [role="button"] img');
-      if (!btn) return { md: '누를 만한 썸네일을 못 찾았다', status: '실패' };
-      (btn.closest('button, a, [role="button"]') || btn).click();
+  /* **아무 단추나 누르지 않는다.** pick() 이 증거 사진으로 고른 것 안에서만 찾는다.
+
+     전에는 `document.querySelector('button img, a img, [role="button"] img')` 로
+     문서에서 처음 걸리는 것을 확인 없이 눌렀다. 게시판이면 머리글 로고나 도구줄
+     아이콘이 먼저 걸린다. 그것이 링크면 누르는 순간 그 주소로 나가고, 구독이나
+     읽음 표시처럼 누르면 서버에 남는 링크일 수도 있다 (2026-09-22 고침).
+
+     그래서 셋을 본다 — ① 사진으로 고른 것인가 ② 감싼 것이 다른 쪽으로 나가는
+     링크는 아닌가 ③ 사람이 좋다고 했는가. */
+      let 찍을것 = null, 감싼것 = null;
+      for (const im of document.querySelectorAll('img[src]')) {
+        let u;
+        try { u = new URL(im.getAttribute('src') || '', location.href).href; }
+        catch (e) { continue; }
+        if (!before.has(u)) continue;                 /* ① 사진으로 안 고른 것 */
+        const w = im.closest('button, a, [role="button"]');
+        if (!w) continue;
+        if (w.tagName === 'A') {                      /* ② 나가는 링크인가 */
+          const h = w.getAttribute('href') || '';
+          const 제자리 = !h || /^#/.test(h)
+            || /\.(jpe?g|png|gif|webp|bmp)(\?|$)/i.test(h);
+          if (!제자리) {
+            let 같은쪽 = false;
+            try { 같은쪽 = new URL(h, location.href).pathname === location.pathname; }
+            catch (e) { 같은쪽 = false; }
+            if (!같은쪽) continue;
+          }
+        }
+        찍을것 = im; 감싼것 = w; break;
+      }
+      if (!찍을것) return { md: '누를 만한 썸네일을 못 찾았다. **사진을 먼저 찾아 본다.**\n'
+                            + '찾은 사진 안에 눌러서 열리는 것이 없으면 이 단추는 쓸 일이 없다',
+                           status: '실패' };
+      const 어디 = 감싼것.getAttribute('href') || 감싼것.getAttribute('aria-label')
+                 || ('<' + 감싼것.tagName.toLowerCase() + '>');
+      if (!confirm('아래를 한 번 누른다. 눌러야 원본 주소가 뜨는지 알 수 있다.\n\n'
+                   + '사진   ' + 찍을것.src.slice(0, 110) + '\n'
+                   + '감싼 것 ' + String(어디).slice(0, 110) + '\n\n괜찮은가?'))
+        return { md: '사람이 그만두었다. 아무것도 누르지 않았다', status: '멈춤' };
+      감싼것.click();
       await sleep(1200);
       const after = pick();
       const fresh = after.filter(f => !before.has(f.url));
