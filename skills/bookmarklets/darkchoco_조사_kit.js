@@ -7,8 +7,10 @@
  *     python bookmarklets/build_kit.py
  *     python bookmarklets/build_bookmarklet.py
  *
- * 킷 다섯을 하나로 합쳤다. 어느 페이지에서 눌러도 된다.
+ * 담긴 모듈 — 킬린 · 디렉터리 · 증거 사진 · 구조 진단
+ *
  * 페이지 종류를 판정해 맞는 것을 켜 두고, 아니면 직접 고르면 된다.
+ * 아래 다섯 중 담긴 것만 뜬다.
  *
  *   포럼        MyBB · XenForo 계열 게시판
  *   킬린        Qilin 유출 사이트
