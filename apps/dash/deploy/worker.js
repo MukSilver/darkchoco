@@ -40,11 +40,20 @@
  * 2026-09-08 에 실제로 그렇게 열려 있었습니다.
  */
 
+/**
+ * **어느 DB 의 어느 칸을 낼지는 여기가 아니라 `dbs.json` 이 정합니다.**
+ *
+ * 굽는 쪽(`build.py`)이 같은 파일을 읽습니다. 전에는 칸 목록이 두 코드에 따로
+ * 박혀 있어서, 한쪽을 고치고 다른 쪽을 잊으면 로컬과 배포가 다른 화면이 됐습니다.
+ * wrangler 가 번들할 때 이 JSON 을 같이 넣습니다.
+ */
+import 레지스트리 from "../dbs.json";
+
 const 검토값 = new Set(["미검토", "사건 O", "사건 X"]);
 const 노션판 = "2025-09-03";
 
-/** 노션 수집 DB 의 데이터 소스 id. `hub/events/push.py` 의 `수집DB` 와 같은 값입니다.
- *  이 값만으로는 아무것도 못 읽습니다 — 토큰이 있어야 합니다. */
+/** 노션 수집 DB 의 데이터 소스 id. `hub/events/push.py` 의 `수집DB` · `dbs.json` 과
+ *  같은 값입니다. 이 값만으로는 아무것도 못 읽습니다 — 토큰이 있어야 합니다. */
 const 수집DS = "5160ce53-7ce2-4271-879e-06f3ad9957cf";
 
 const 레포 = "MukSilver/darkchoco";
@@ -180,37 +189,102 @@ function 쓸만한id(s) {
 
 // ── 노션 읽기 ────────────────────────────────────────────────────────────
 
-function _rt(p, 칸) {
-  const v = ((p || {})[칸] || {}).rich_text || [];
-  return v.map((x) => x.plain_text || "").join("").trim();
-}
-
-function _sel(p, 칸) {
-  return ((((p || {})[칸] || {}).select) || {}).name || "";
-}
-
-function _date(p, 칸) {
-  return ((((p || {})[칸] || {}).date) || {}).start || "";
-}
-
-/** 다중 선택. **값이 아니라 분류 이름입니다.** 「유출 항목」이 여기 걸립니다. */
-function _ms(p, 칸) {
-  return ((((p || {})[칸] || {}).multi_select) || []).map((x) => x.name || "");
-}
-
 /**
- * 「수집자」를 **사람 이름 대신 갈래로** 접습니다 (2026-09-22, 최현서).
+ * 노션 속성 하나를 값으로. **칸 이름을 모릅니다. 종류만 봅니다.**
  *
- * 선택지 아홉 중 일곱이 팀원 실명입니다. 화면에서 쓸모 있는 것은 「누가」가
- * 아니라 「기계가 넣었나 사람이 넣었나」입니다.
+ * `apps/dash/reader.py` 의 `값()` 과 같은 규칙입니다. 언어가 달라 두 벌인데,
+ * **어느 칸을 낼지는 `dbs.json` 한 장을 같이 읽어서** 어긋날 자리가 여기뿐입니다.
+ * 전에는 칸 목록까지 두 벌이라 한쪽을 고치고 다른 쪽을 잊었습니다.
  *
- * 2026-09-13 에는 이 칸을 통째로 뺐습니다. 이제는 접어서 냅니다.
- * **build.py 의 `_누가` 와 같은 규칙이어야 합니다.**
+ * 둘은 따로 다룹니다. `relation` 은 **개수만** — page id 를 그대로 내면
+ * 레지스트리 밖 DB 의 줄을 짚는 열쇠가 나갑니다. `people` 은 **찼는지만** —
+ * 실명이 들어가는 자리입니다.
  */
-function _누가(p) {
-  const v = _sel(p, "수집자");
-  if (!v || v === "미기입") return "미기입";
-  return v === "자동" ? "자동" : "사람";
+function 값(속성) {
+  const v = 속성 || {};
+  const t = v.type || "";
+
+  if (t === "title") return (v.title || []).map((x) => x.plain_text || "").join("").trim();
+  if (t === "rich_text") return (v.rich_text || []).map((x) => x.plain_text || "").join("").trim();
+  if (t === "select" || t === "status") return (v[t] || {}).name || "";
+  if (t === "multi_select") return (v.multi_select || []).map((x) => x.name || "");
+  if (t === "date") return (v.date || {}).start || "";
+  if (t === "checkbox") return !!v.checkbox;
+  if (t === "number") return v.number;
+  if (t === "url") return v.url || "";
+  if (t === "unique_id") {
+    const u = v.unique_id || {};
+    return u.number != null ? `${u.prefix || ""}-${u.number}` : "";
+  }
+  if (t === "created_time" || t === "last_edited_time") return v[t] || "";
+
+  if (t === "relation") return (v.relation || []).length;
+  if (t === "files") return (v.files || []).length;
+
+  if (t === "people" || t === "created_by" || t === "last_edited_by") {
+    const 것 = v[t];
+    const 있나 = Array.isArray(것) ? 것.length > 0 : !!것;
+    return 있나 ? "기입됨" : "미기입";
+  }
+
+  // 한 겹 벗겨 다시 봅니다. 안에 든 것이 위의 종류 중 하나입니다
+  if (t === "formula") {
+    const f = v.formula || {};
+    return f.type ? (f[f.type] ?? "") : "";
+  }
+  if (t === "rollup") {
+    const r = v.rollup || {};
+    if (r.type === "array") return (r.array || []).map((x) => 값(x));
+    return r.type ? (r[r.type] ?? "") : "";
+  }
+
+  // **모르는 종류를 지어내지 않습니다.** 빈칸은 화면에 보이므로 사람이 알아챕니다
+  return "";
+}
+
+/** 실명 선택지를 사람 / 자동 / 미기입 셋으로 접습니다. */
+function _사람자동(v) {
+  const s = typeof v === "string" ? v.trim() : "";
+  if (!s || s === "미기입") return "미기입";
+  return s === "자동" ? "자동" : "사람";
+}
+
+/** 찼는지만 냅니다. 검증자·기록자·담당자처럼 **실명만 들어가는** 칸입니다. */
+function _있없(v) {
+  if (typeof v === "string") return v.trim() && v.trim() !== "미기입" ? "기입됨" : "미기입";
+  return v ? "기입됨" : "미기입";
+}
+
+/** 줄글의 첫 줄만. 검증 요약처럼 1,500자가 넘는 칸이 있습니다. */
+function _첫줄(v) {
+  return (typeof v === "string" ? v : "").split("\n")[0].slice(0, 120);
+}
+
+const 접개 = { 사람자동: _사람자동, 있없: _있없, 첫줄: _첫줄 };
+
+/** 노션 페이지 하나를 `dbs.json` 이 적은 대로 옮깁니다. */
+function 줄(페이지, 칸들) {
+  const p = 페이지.properties || {};
+  const out = { id: 페이지.id || "" };
+  for (const c of 칸들) {
+    let v = 값(p[c.노션]);
+    if (c.접기) {
+      const f = 접개[c.접기];
+      if (!f) throw new Error(`모르는 접기 갈래입니다: ${c.접기} (dbs.json)`);
+      v = f(v);
+    } else if (c.날짜만 && typeof v === "string") {
+      v = v.slice(0, 10);
+    }
+    out[c.낼] = v;
+  }
+  return out;
+}
+
+/** 레지스트리에서 DB 하나를 꺼냅니다. */
+function DB하나(열쇠) {
+  const d = (레지스트리.DB || []).find((x) => x.열쇠 === 열쇠);
+  if (!d) throw new Error(`dbs.json 에 ${열쇠} 가 없습니다`);
+  return d;
 }
 
 /** 한 번에 읽을 판 수. 100줄씩이라 2000줄입니다. */
@@ -227,6 +301,7 @@ const 판상한 = 20;
  * 배포가 말없이 다른 화면이 됩니다. 모자란 것을 모르는 쪽이 더 나쁩니다.
  */
 async function 사건읽기(token) {
+  const 칸들 = DB하나("수집").칸;
   const out = [];
   let cursor = null;
   let 잘림 = false;
@@ -247,37 +322,8 @@ async function 사건읽기(token) {
       throw new Error(`노션 ${r.status}: ${몸.slice(0, 200)}`);
     }
     const res = await r.json();
-    for (const row of res.results || []) {
-      const p = row.properties || {};
-      const 제목 = ((p["자료 제목"] || {}).title || [])
-        .map((x) => x.plain_text || "").join("").trim();
-      const 번호 = (p["사건 ID"] || {}).unique_id || {};
-      out.push({
-        id: row.id || "",
-        번호: 번호.number != null ? `${번호.prefix || ""}-${번호.number}` : "",
-        // 2026-09-22 에 칸을 열셋으로 좁혔습니다 (최현서).
-        // **build.py 의 사건() 과 같은 목록이어야 합니다.** 한쪽만 고치면
-        // 로컬과 배포가 다른 화면이 됩니다.
-        //
-        // 빠진 것 중 하나를 적어 둡니다. **「한국 관련 근거」를 뺐습니다.**
-        // 사람이 쓴 27줄 중 여덟 줄에 이메일 꼴이 들어 있었고, 그 칸이
-        // 화면에 그대로 그려지고 있었습니다.
-        제목: 제목,
-        검토: _sel(p, "검토 여부"),
-        상태: _sel(p, "상태"),
-        대상: _rt(p, "대상 조직"),
-        업종: _sel(p, "산업 분야"),
-        국가: _sel(p, "국가"),
-        항목: _ms(p, "유출 항목"),
-        자리: _rt(p, "게시 플랫폼"),
-        핸들: _rt(p, "게시자 핸들"),
-        게시: _date(p, "게시 시각").slice(0, 10),
-        수집일: _date(p, "수집일").slice(0, 10),
-        수집자: _누가(p),
-        // 열로는 안 그립니다. **거르개가 이 값을 씁니다.**
-        소스: _sel(p, "소스"),
-      });
-    }
+    // **칸 목록이 여기 없습니다.** `dbs.json` 이 적은 대로 옮깁니다
+    for (const row of res.results || []) out.push(줄(row, 칸들));
     if (!res.has_more) break;
     cursor = res.next_cursor;
     // 마지막 판을 다 읽었는데 노션이 아직 더 있다고 합니다. 여기서 멈춥니다

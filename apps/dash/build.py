@@ -35,10 +35,14 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "packages"))
 sys.path.insert(0, str(ROOT))
+# 이 폴더의 `reader.py` 를 부릅니다. 딴 데서 이 파일을 부를 때도 잡히게 넣습니다
+sys.path.insert(0, str(HERE))
 
-HERE = Path(__file__).resolve().parent
+import reader  # noqa: E402
+
 KST = timezone(timedelta(hours=9))
 
 # 화면이 읽을 파일. `.js` 인 이유는 머리 주석에 있습니다.
@@ -143,86 +147,21 @@ def 제어판(db: Path) -> dict:
     return d
 
 
-def _rt(p: dict, 칸: str) -> str:
-    v = (p.get(칸) or {}).get("rich_text") or []
-    return "".join(x.get("plain_text", "") for x in v).strip()
+def 사건(수집DB: str | None = None) -> list:
+    """노션 수집 DB 를 줄 목록으로. **본문과 개인정보 값은 안 담습니다.**
 
+    **무엇을 담을지는 여기가 아니라 `dbs.json` 이 정합니다** (2026-09-22).
+    전에는 칸 목록이 이 함수와 `deploy/worker.js` 두 곳에 글자로 박혀 있어서,
+    한쪽을 고치고 다른 쪽을 잊으면 로컬과 배포가 다른 화면이 됐습니다.
+    2026-09-13 에 배포판에서만 수집자를 빼고 로컬을 잊었던 것이 그 일입니다.
 
-def _sel(p: dict, 칸: str) -> str:
-    return ((p.get(칸) or {}).get("select") or {}).get("name", "")
-
-
-def _date(p: dict, 칸: str) -> str:
-    return ((p.get(칸) or {}).get("date") or {}).get("start", "") or ""
-
-
-def _ms(p: dict, 칸: str) -> list:
-    """다중 선택. **값이 아니라 분류 이름입니다.**
-
-    「유출 항목」이 여기 걸립니다. 이름·전화·이메일 같은 **항목 이름**이 들어가지
-    털린 값이 들어가는 것이 아닙니다. 그래서 그대로 내보내도 됩니다.
+    `수집DB` 를 넘기면 그것을 씁니다. 안 넘기면 레지스트리에 적힌 것을 씁니다.
     """
-    return [x.get("name", "") for x in ((p.get(칸) or {}).get("multi_select") or [])]
-
-
-def _누가(p: dict) -> str:
-    """「수집자」를 **사람 이름 대신 갈래로** 접습니다 (2026-09-22, 최현서).
-
-    이 칸의 선택지 아홉 중 일곱이 팀원 실명입니다. 화면에서 쓸모 있는 것은
-    「누가」가 아니라 **「기계가 넣었나 사람이 넣었나」**입니다. 그 비율은 그대로
-    읽히면서 실명은 브라우저에 아예 안 실립니다.
-
-    2026-09-13 에 배포판에서만 이 칸을 뺐고 로컬은 그대로 담고 있었습니다.
-    구운 파일 197줄 중 65줄에 실명이 있었습니다. **이제 양쪽이 같습니다.**
-    """
-    v = _sel(p, "수집자")
-    if not v or v == "미기입":
-        return "미기입"
-    return "자동" if v == "자동" else "사람"
-
-
-def 사건(수집DB: str) -> list:
-    """노션 수집 DB 를 줄 목록으로. **본문과 개인정보 값은 안 담습니다.**"""
     from dc_notion import Notion
 
+    db = reader.DB하나("수집")
     n = Notion(verbose=False, allow_env_token=False)
-    out = []
-    for r in n.query_all(수집DB):
-        p = r.get("properties") or {}
-        제목 = "".join(x.get("plain_text", "")
-                     for x in ((p.get("자료 제목") or {}).get("title") or []))
-        번호 = (p.get("사건 ID") or {}).get("unique_id") or {}
-        out.append({
-            "id": r.get("id", ""),
-            "번호": ("%s-%s" % (번호.get("prefix") or "", 번호.get("number"))
-                   if 번호.get("number") is not None else ""),
-            # 2026-09-22 에 칸을 열셋으로 좁혔습니다 (최현서).
-            #
-            # **이 화면은 모든 데이터를 보는 곳이 아니라 사건 요약입니다.**
-            # 전에는 21칸을 실어 보내고 아홉만 그렸습니다. 「뽑되 안 그린다」가
-            # 가장 나쁩니다 — 값은 브라우저까지 가는데 아무도 안 보니 무엇이
-            # 나가는지 알아차릴 사람이 없습니다. 2026-09-13 일이 그 모양이었습니다.
-            #
-            # 빠진 것 중 하나를 적어 둡니다. **「한국 관련 근거」를 뺐습니다.**
-            # 153줄 중 사람이 쓴 27줄이 있었고 그중 여덟 줄에 이메일 꼴이
-            # 들어 있었습니다. 그 칸이 화면에 그대로 그려지고 있었습니다.
-            "제목": 제목.strip(),
-            "검토": _sel(p, "검토 여부"),
-            "상태": _sel(p, "상태"),
-            "대상": _rt(p, "대상 조직"),
-            "업종": _sel(p, "산업 분야"),
-            "국가": _sel(p, "국가"),
-            "항목": _ms(p, "유출 항목"),
-            "자리": _rt(p, "게시 플랫폼"),
-            "핸들": _rt(p, "게시자 핸들"),
-            "게시": _date(p, "게시 시각")[:10],
-            "수집일": _date(p, "수집일")[:10],
-            "수집자": _누가(p),
-            # 열로는 안 그립니다. **거르개가 이 값을 씁니다.**
-            # 선택지 글자(랜섬웨어·텔레그램·포럼) 셋뿐이라 그대로 내도 됩니다.
-            "소스": _sel(p, "소스"),
-        })
-    return out
+    return [reader.줄(r, db["칸"]) for r in n.query_all(수집DB or db["id"])]
 
 
 def 요약(지도: Path) -> dict:
@@ -258,6 +197,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if not a.no_notion:
         try:
+            # **`push.py` 의 상수를 그대로 씁니다.** 그 자리는 세 트랙이 같이 쓰는
+            # 자리라 옮기지 않기로 했습니다 (DEV.md 0-0). `dbs.json` 에도 같은
+            # 값이 적혀 있고, 둘이 어긋나면 시험이 잡습니다.
             from hub.events.push import 수집DB
             d["사건"] = 사건(수집DB)
             d["노션읽음"] = True
