@@ -1,6 +1,6 @@
-# 킷 다섯을 하나로 합친다.
+# 모듈을 묶어 킷을 만든다. 킷은 둘이다 — 포럼 킷과 조사 킷.
 #
-# 각 킷의 본문은 한 글자도 안 바꾼다. 다섯 다 돌아가는 것이고 지금 고치면 위험하다.
+# 각 모듈의 본문은 한 글자도 안 바꾼다. 다섯 다 돌아가는 것이고 지금 고치면 위험하다.
 # 앞에 판정과 고르는 판만 붙인다. 한 번에 하나만 뜬다.
 #
 # 껍데기(CHAL·sleep·UI 상자)가 다섯에 겹쳐 있지만 그대로 둔다.
@@ -20,14 +20,37 @@ MODS = [
     ("probe",    "modProbe", "probe_generic.js", "받침. 판정이 안 될 때. 언제나 들어간다"),
 ]
 
-# 미리 묶어 둔 조합. 이름으로 부른다
-SETS = {
-    "검증": ["forum"],                       # 케이스 검증에 쓰는 것
-    "조사": ["qilin", "dirindex", "photo"],  # 포럼·사이트 조사에 쓰는 것
-    "전부": ["forum", "qilin", "dirindex", "photo"],
+# 킷 목록. **이것이 한 벌뿐인 정본이다.**
+#
+# `build_bookmarklet.py` 와 `build_install_page.py` 가 이것을 import 한다.
+# 전에는 셋이 각자 목록을 들고 있어서 킷을 늘리거나 줄일 때마다 세 곳을
+# 고쳐야 했고, 한 곳을 빠뜨리면 산출물과 설치 페이지가 어긋났다.
+#
+# 2026-09-22 에 셋에서 둘로 줄였다. 「전부」 조합이 73,767자라 주소 칸
+# 한계 60,000 을 넘는 유일한 파일이었다. 둘로 가르면 둘 다 한계 아래다.
+KITS = {
+    "포럼": {
+        "모듈": ["forum"],
+        "이름": "포럼 킷",
+        "핵심": True,
+        "설명": "포럼에서 글을 읽고 재료를 뽑는다. 케이스 검증에 쓰는 것은 이것이다",
+    },
+    "조사": {
+        "모듈": ["qilin", "dirindex", "photo"],
+        "이름": "조사 킷",
+        "핵심": False,
+        "설명": "유출 사이트 · 열린 디렉터리 · 증거 사진 · 구조 진단",
+    },
 }
 
+SETS = {k: v["모듈"] for k, v in KITS.items()}   # 옛 이름. 아래에서 쓴다
+
 ALWAYS = "probe"     # 판정이 안 될 때의 받침. 빼지 않는다
+
+
+def 킷파일(라벨: str) -> str:
+    """조합 이름에서 산출물 파일 이름으로. 부르는 쪽이 셋이라 여기 둔다."""
+    return "darkchoco_%s_kit.js" % 라벨
 
 
 def body_of(path: Path) -> str:
@@ -55,8 +78,10 @@ HEAD = '''/* 다크초코 통합 킷 v1
  *     python bookmarklets/build_kit.py
  *     python bookmarklets/build_bookmarklet.py
  *
- * 킷 다섯을 하나로 합쳤다. 어느 페이지에서 눌러도 된다.
+ * 담긴 모듈 — @@MODS@@
+ *
  * 페이지 종류를 판정해 맞는 것을 켜 두고, 아니면 직접 고르면 된다.
+ * 아래 다섯 중 담긴 것만 뜬다.
  *
  *   포럼        MyBB · XenForo 계열 게시판
  *   킬린        Qilin 유출 사이트
@@ -224,8 +249,11 @@ def build(keys: list[str], out: Path) -> None:
 
     # 고른 것만 판에 올린다. probe 는 TAIL 이 따로 붙이므로 여기서 뺀다
     order = [k for k, _, _, _ in picked if k != ALWAYS]
-    head = HEAD.replace("@@ORDER@@",
-                        "[" + ", ".join("'%s'" % k for k in order) + "]")
+    head = HEAD \
+        .replace("@@ORDER@@",
+                 "[" + ", ".join("'%s'" % k for k in order) + "]") \
+        .replace("@@MODS@@",
+                 " · ".join(KO[k] for k, _, _, _ in picked))
     tail = TAIL \
         .replace("@@NAME@@",
                  "{ " + ", ".join("%s: '%s'" % (k, KO[k]) for k, _, _, _ in picked) + " }") \
@@ -248,20 +276,26 @@ def build(keys: list[str], out: Path) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="킷을 골라 하나로 묶는다. 파이어폭스가 북마크를 길이에서 막는다")
-    ap.add_argument("--only", default="전부",
-                    help="묶을 것. 조합 이름(%s) 또는 쉼표로 나눈 모듈 키"
-                         % " · ".join(SETS))
+    ap.add_argument("--only", default=None,
+                    help="묶을 것. 조합 이름(%s) 또는 쉼표로 나눈 모듈 키. "
+                         "안 주면 킷 전부를 만든다" % " · ".join(KITS))
     ap.add_argument("--out", help="파일 이름. 안 주면 조합 이름으로")
     a = ap.parse_args()
+
+    if a.only is None:
+        # 평소의 길이다. 킷 둘을 한 번에 만든다. 하나만 만들고 다른 하나를
+        # 잊는 일이 없게 기본을 이렇게 둔다
+        assert not a.out, "--out 은 --only 와 같이 쓴다"
+        for 라벨 in KITS:
+            build(SETS[라벨], B / 킷파일(라벨))
+        return 0
 
     if a.only in SETS:
         keys, label = SETS[a.only], a.only
     else:
         keys = [s.strip() for s in a.only.split(",") if s.strip()]
         label = "-".join(keys)
-    name = a.out or ("darkchoco_kit.js" if a.only == "전부"
-                     else "darkchoco_%s_kit.js" % label)
-    build(keys, B / name)
+    build(keys, B / (a.out or 킷파일(label)))
     return 0
 
 
