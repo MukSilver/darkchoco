@@ -61,6 +61,17 @@ LABELED = ("⚠️ MEDIUM SEVERITY LEAK DETECTED ⚠️\n\n"
            "• Country: 📍 Testland\n"
            "• Detection Date: 📅 26 August 2026")
 
+# 랜섬 알림 꼴. **첫 줄이 채널 머리말이라 글마다 똑같다**
+RANSOM_LABEL = ("🔒 New Ransomware Victim\n\n"
+                "• Victim: TestCorp\n"
+                "• Group: TestGroup\n"
+                "• Country: 🇰🇷 South Korea")
+
+# 칸은 잡히는데 대상 조직만 없는 글
+NO_ORG = ("🛡 NEW HIGH SEVERITY CVE PUBLISHED\n\n"
+          "• CVE ID: CVE-2026-00000\n"
+          "• CVSS Score: 8.8")
+
 PLAIN = "그냥 문장이다. 칸이 하나도 없다."
 
 # 잘린 글 둘. 하나는 닫는 짝이 없고, 하나는 값이 망가졌다
@@ -156,10 +167,21 @@ check("그때는 venue 종류가 텔레그램", it_lab.venue_kind, "telegram")
 # ── 8. 제목이 `{` 가 아니다 ─────────────────────
 # JSON 꼴은 첫 줄이 여는 중괄호다. 실측 50건이 전부 그랬다
 check("JSON 제목", it.title, "Actor claims a database of a test company")
-check("라벨 제목은 첫 줄", it_lab.title, "⚠️ MEDIUM SEVERITY LEAK DETECTED ⚠️")
 for name, t_ in (("JSON 도메인", it), ("JSON 주소", it_url)):
     if t_.title.startswith("{"):
         fails.append("%s · 제목이 중괄호다: %r" % (name, t_.title))
+
+# ── 8-2. 라벨 꼴 제목이 채널 머리말이 아니다 ────
+# 2026-09-22 실측. 노션에 들어간 텔레그램 19줄이 전부 머리말 셋 중 하나였다.
+# 17줄이 「🔒 New Ransomware Victim」 이라 표에서 서로 구분이 안 됐다
+check("랜섬 제목은 피해 조직", item(RANSOM_LABEL).title, "TestCorp")
+check("라벨 제목도 대상", it_lab.title, "example-target.test")
+check("대상이 없으면 첫 줄로 물러난다",
+      item(NO_ORG).title, "🛡 NEW HIGH SEVERITY CVE PUBLISHED")
+check("칸이 아예 없어도 첫 줄", item(PLAIN).title, PLAIN)
+for name, t_ in (("랜섬", item(RANSOM_LABEL)), ("유출", it_lab)):
+    if t_.title == t_.body.split("\n")[0]:
+        fails.append("%s · 제목이 아직 머리말이다: %r" % (name, t_.title))
 
 # ── 9. 값 앞뒤의 군더더기를 뗀다 ────────────────
 check("괄호만 있는 것", tg_post.clean(" (TestHandle)"), "TestHandle")
