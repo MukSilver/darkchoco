@@ -126,10 +126,32 @@ for 페르소나, 갈래들 in 상용구.items():
 if 후보수 < 100:
     fails.append("상용구 후보가 %d 개뿐이다. 통째로 안 읽힌 것 같다" % 후보수)
 
+# ── requirements.txt 를 pip 가 읽을 수 있나 ───────
+#
+# pip 의 auto_decode 는 BOM → PEP263 coding 선언 → locale 순으로 본다.
+# 앞의 둘이 없으면 한국어 윈도우에서 cp949 로 떨어져 한글 주석에서 죽는다.
+# setup.bat 의 chcp 65001 은 콘솔 출력 코드페이지만 바꾸므로 이것을 못 막았다.
+# 2026-09-23 에 실제로 팀원 설치가 이것으로 멈추는 것을 확인했다.
+req = (여기 / "requirements.txt").read_bytes()
+BOM들 = (b"\xef\xbb\xbf", b"\xff\xfe", b"\xfe\xff")
+coding선언 = re.compile(rb"coding[:=]\s*([-\w.]+)")
+읽히나 = req.startswith(BOM들) or any(
+    line[:1] == b"#" and coding선언.search(line) for line in req.split(b"\n")[:2]
+)
+if not 읽히나:
+    fails.append("requirements.txt 에 BOM 도 coding 선언도 없다.\n"
+                 "     pip 가 cp949 로 읽어 한글 주석에서 죽는다.\n"
+                 "     첫 줄에 # -*- coding: utf-8 -*- 을 둔다")
+# 선언이 있어도 실제로 UTF-8 로 풀려야 한다
+try:
+    req.decode("utf-8")
+except UnicodeDecodeError as e:
+    fails.append("requirements.txt 가 UTF-8 이 아니다: %s" % e)
+
 # ── 결과 ─────────────────────────────────────────
 if fails:
     print("실패 %d" % len(fails))
     for f in fails:
         print("  - %s" % f)
     sys.exit(1)
-print("통과. 시험 5 묶음 (상용구 후보 %d 개의 말씨를 봤다)" % 후보수)
+print("통과. 시험 6 묶음 (상용구 후보 %d 개의 말씨를 봤다)" % 후보수)
