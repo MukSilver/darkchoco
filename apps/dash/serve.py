@@ -66,6 +66,23 @@ class _조용히(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(몸)
 
+    def send_head(self):
+        """조건부 요청을 무시합니다. **`Cache-Control` 만으로는 모자랍니다.**
+
+        `no-store` 는 브라우저에게 새로 저장하지 말라는 말이라, 그 헤더가
+        붙기 전에 이미 캐시에 들어간 것에는 안 듣습니다. 브라우저가
+        `If-Modified-Since` 로 물어 오면 `SimpleHTTPRequestHandler` 가
+        파일 시각을 보고 304 를 내주고, 그러면 옛 화면이 그대로 뜹니다.
+
+        **여기를 고치는 것이 근본입니다.** 물어 온 것을 아예 안 보면
+        늘 200 과 새 몸을 냅니다. 로컬 개발 서버라 캐시로 얻을 것이 없습니다.
+        """
+        if "If-Modified-Since" in self.headers:
+            del self.headers["If-Modified-Since"]
+        if "If-None-Match" in self.headers:
+            del self.headers["If-None-Match"]
+        return super().send_head()
+
     def end_headers(self):
         # 화면이 밖으로 아무것도 못 보내게 합니다. 데이터가 표와 노션에서 온 것이라
         # 실수로 나가는 길을 아예 막습니다.
@@ -76,6 +93,14 @@ class _조용히(http.server.SimpleHTTPRequestHandler):
                          "style-src 'self' 'unsafe-inline'; connect-src 'self'; "
                          "img-src 'self' data:")
         self.send_header("X-Robots-Tag", "noindex, nofollow")
+        # **다시 굽고 새로고침해도 옛 화면이 나오던 것을 막습니다.**
+        # `SimpleHTTPRequestHandler` 가 파일 시각으로 `Last-Modified` 를 주면
+        # 브라우저가 `If-Modified-Since` 로 물어 304 를 받습니다. 그런데
+        # `build.py` 가 같은 초에 다시 쓰면 시각이 안 바뀌어 옛 것을 계속
+        # 씁니다. 2026-09-22 에 여기서 15분을 썼고 `touch` 로 풀었습니다.
+        #
+        # 로컬 개발 서버라 캐시로 얻을 것이 없습니다. 127.0.0.1 입니다.
+        self.send_header("Cache-Control", "no-store, must-revalidate")
         super().end_headers()
 
 
