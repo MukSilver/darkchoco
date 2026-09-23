@@ -12,6 +12,15 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+# 한국어 윈도우 콘솔은 cp949 다. 실패 메시지에 em dash 나 화살표가 있으면
+# UnicodeEncodeError 로 죽어서 **무엇이 실패했는지 못 보여 준다.**
+# 깨지는 글자만 ? 로 바꾸고 계속 찍는다.
+try:
+    sys.stdout.reconfigure(errors="replace")
+except (AttributeError, ValueError):   # 파이썬이 낮거나 리다이렉트된 경우
+    pass
+
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import engine as E  # noqa: E402
 
@@ -148,6 +157,20 @@ for t in 실용어:
 for 말 in ("어피실리에이트", "피해사", "업종"):
     if not any(x["한국어"] == 말 for x in 실용어):
         fails.append("실측에서 깨진 「%s」 가 용어집에 없다" % 말)
+
+# **「인증」은 자리 겹침 판을 만들기 전에는 넣지 않는다.**
+# 인증서·본인인증·이중 인증처럼 용어집에 **없는** 낱말 안에 든 「인증」에
+# 부분일치로 붙는데, 긴 열쇠말 필터는 용어집에 있는 것끼리만 견주므로
+# 그것을 원리상 못 막는다. 2026-09-23 에 인증계 열일곱 중 열여섯이 걸렸다.
+if any(x["한국어"] == "인증" for x in 실용어):
+    fails.append("「인증」이 용어집에 들어왔다. **자리(span) 겹침 판을 먼저 만든다** —\n"
+                 "     지금 필터는 인증서·본인인증·이중 인증을 못 막는다")
+
+# 기각한 용어가 슬그머니 돌아오지 않게 못 박는다. 까닭은 terms.json 안에 있다
+for 말 in ("수사", "사기", "공조", "먹튀", "쪽지", "백신", "입장", "경로"):
+    if any(x["한국어"] == 말 for x in 실용어):
+        fails.append("「%s」 는 실측으로 기각한 용어다. terms.json 의 "
+                     "「_안 넣은 것」에 까닭이 있다" % 말)
 
 # ── 짝과 사슬 ────────────────────────────────────
 for pair in E.MODELS:

@@ -18,6 +18,15 @@ import sys
 import tempfile
 from pathlib import Path
 
+# 한국어 윈도우 콘솔은 cp949 다. 실패 메시지에 em dash 나 화살표가 있으면
+# UnicodeEncodeError 로 죽어서 **무엇이 실패했는지 못 보여 준다.**
+# 깨지는 글자만 ? 로 바꾸고 계속 찍는다.
+try:
+    sys.stdout.reconfigure(errors="replace")
+except (AttributeError, ValueError):   # 파이썬이 낮거나 리다이렉트된 경우
+    pass
+
+
 여기 = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(여기))
 import talkaid as T  # noqa: E402
