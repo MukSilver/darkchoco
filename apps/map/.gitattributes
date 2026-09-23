@@ -1,0 +1,4 @@
+# Cloudflare 가 읽는 규칙 파일은 줄 끝을 LF 로 고정한다.
+# Windows 에서 CRLF 로 바뀌면 헤더 규칙이 조용히 틀어질 수 있다
+public/_headers text eol=lf
+public/robots.txt text eol=lf
