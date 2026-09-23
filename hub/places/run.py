@@ -309,6 +309,20 @@ def _조사(갈래: str, 줄들, ctx: dict):
             yield 이름별[pid], p
 
 
+def _깊은판_건너뜀(까닭: Exception) -> None:
+    """깊은 판을 안 돌았다고 적습니다.
+
+    바로 앞에서 「깊게 N줄 (브라우저)」 을 찍어 놓고 조용히 돌아가면 **돈 줄로
+    읽힙니다.** 깃허브 러너에는 playwright 가 없어 늘 이 길이고, 2026-09-22
+    첫 판에서 「깊게 97줄」 뒤가 통째로 비어 사람이 멈춘 줄 알았습니다.
+
+    까닭을 그대로 싣습니다. 「playwright 가 안 깔렸습니다」 와 「크롬이 없습니다」
+    는 손볼 것이 다릅니다.
+    """
+    말 = str(까닭).splitlines()[0] if str(까닭).strip() else "까닭을 못 받았습니다"
+    print(f"    깊은 판을 건너뜁니다 — {말}", flush=True)
+
+
 def 깊게(갈래: str, 열린것, ctx: dict):
     """열린 곳만 브라우저로 다시 열어 수집기 일곱을 돌립니다.
 
@@ -328,14 +342,14 @@ def 깊게(갈래: str, 열린것, ctx: dict):
     from hub.places.collect.모으기 import 모으기          # noqa: PLC0415
     from hub.places.fetch import 브라우저세션, 브라우저없음, 열기  # noqa: PLC0415
 
+    # **여기서는 예외가 안 납니다.** 객체만 만들고 playwright 는 안 부릅니다.
+    # `with` 에 들어가야 `sync_playwright()` 가 돌고 거기서 납니다
+    # (`fetch.py` 의 `__enter__`). 2026-09-22 에 이 자리에 건너뜀 로그를
+    # 넣었다가 한 번도 안 찍혔습니다 — 아래 `except` 로 가기 때문입니다.
     try:
         세션열기 = 브라우저세션(프록시)
-    except 브라우저없음:
-        # 바로 앞에서 「깊게 N줄 (브라우저)」 을 찍어 놓고 여기서 조용히
-        # 돌아가면, 깊은 판이 돈 줄 알게 됩니다. 안 돌았으면 안 돌았다고
-        # 적습니다. 깃허브 러너에는 playwright 가 없어 늘 이 길입니다
-        print("    브라우저가 없어 깊은 판을 건너뜁니다 (playwright 미설치)",
-              flush=True)
+    except 브라우저없음 as e:
+        _깊은판_건너뜀(e)
         return
     try:
         with 세션열기 as 세션:
@@ -374,7 +388,9 @@ def 깊게(갈래: str, 열린것, ctx: dict):
                 q.두드림 = False
                 q.상태 = "미확인"
                 yield r, q
-    except 브라우저없음:
+    except 브라우저없음 as e:
+        # **실제로 여기로 옵니다.** playwright 를 `with` 안에서 부르기 때문입니다
+        _깊은판_건너뜀(e)
         return
 
 
