@@ -193,7 +193,7 @@
   /* ── forum_kit.js ── */
   function modForum() {
 
-    const VER = 'forum kit v2.7';
+    const VER = 'forum kit v2.8';
   /* 같은 페이지에서 다시 눌렀을 때. 버전이 같으면 있던 상자를 다시 보여주고, */
   /* 다르면 옛 상자를 걷어내고 새 코드로 다시 뜬다. 이게 없으면 북마크를 갱신해도 */
   /* 페이지를 새로 열기 전까지 옛 코드가 계속 돌아 갱신이 먹은 줄 모르게 된다 */
@@ -286,6 +286,69 @@
   /* 못 가져온 URL 과 사유. 결과 꼬리에 낸다.
      이게 없으면 요청이 막힌 게시판과 글이 없는 게시판이 결과에서 같아 보인다. */
     const FAILED = [];
+
+    /* ================= 칸 값 (v2.8 · 포럼 사건) =================
+       수집 DB 에 올릴 줄. kit_in.py 가 원문 파일에서 읽던 것과 같은 값을 여기서 바로 모은다.
+       **본문은 안 담는다.** 한국 신호는 본문에서 보되, 담는 것은 .kr 도메인과
+       「한글 · Korea 낱말이 있었나」 뿐이다. 값(이메일 · 전화)은 절대 안 담는다.
+
+       대시보드 주소는 **코드에 안 적는다.** 레포가 공개라 적으면 주소가 공개된다.
+       설치 페이지에서 각자 적으면 그 사람 북마크에만 들어간다. 안 적었으면 클립보드로 넘긴다 */
+    const ROWS = [];
+    const DASH = (v => /^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(v) ? v : '')('@@DASH@@');
+    const KR_DOM = /(?<![\w@.-])((?:[a-z0-9-]+\.)+kr)(?![\w-])/gi;
+    const 칸줄 = (title, url, author, date, board, text, 본문) => {
+      const t = (title || '') + '\n' + (text || '');
+      const 도메인 = [...new Set((t.match(KR_DOM) || []).map(s => s.toLowerCase()))].slice(0, 10);
+      ROWS.push({ 제목: title || '', URL: url || '', 게시자: author || '', 날짜: date || '', 게시판: board || '',
+                  본문, '한국 신호': { 도메인, 한글: /[가-힣]/.test(t), korea: /\bkorea/i.test(t) } });
+    };
+    const 짐 = () => ({ 종류: 'darkchoco-forum-rows', 판: 1, 킷: VER, 호스트: location.hostname,
+                        출처: location.href, 만든때: new Date().toISOString(), 줄: ROWS.slice() });
+    const 내려받기 = (이름, 글, 꼴) => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([글], { type: 꼴 + ';charset=utf-8' }));
+      a.download = 이름; document.body.appendChild(a); a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+    };
+    const 파일이름 = 끝 => `${location.hostname.replace(/[^a-z0-9.-]/gi, '_')}_${TODAY}_${Date.now() % 100000}${끝}`;
+    /* navigator.clipboard 는 https 에서만 된다. onion 은 http 라 옛 방식으로 물러난다 */
+    const 복사 = async 글 => {
+      try { await navigator.clipboard.writeText(글); return true; } catch (e) {}
+      const t = document.createElement('textarea'); t.value = 글; document.body.appendChild(t); t.select();
+      let ok = false; try { ok = document.execCommand('copy'); } catch (e) {}
+      t.remove(); return ok;
+    };
+    const 비었나 = () => { if (ROWS.length) return false;
+      say('넘길 칸 값이 없다. 「본문 받기」 · 「이 글 본문」 · 「글 목록」 중 하나를 먼저 돌릴 것'); return true; };
+    const 대시로 = async () => {
+      if (비었나()) return;
+      const d = 짐();
+      if (!DASH) {
+        const ok = await 복사(JSON.stringify(d));
+        say(ok ? `칸 값 ${d.줄.length}줄을 클립보드에 복사했다. 대시보드 「포럼 사건 올리기」 에 붙여 넣을 것`
+               : '클립보드 복사가 막혔다. 「칸 파일 저장 (VM)」 을 쓸 것');
+        return;
+      }
+      /* 이미 열린 대시보드 창도 새로 읽게 주소 끝을 바꾼다. 해시만 바뀌면 다시 안 읽어 「준비됐다」 가 안 온다 */
+      const w = window.open(`${DASH}/?k=${Date.now()}#forum-rows`, 'darkchoco-dash');
+      if (!w) { const ok = await 복사(JSON.stringify(d));
+        say('새 창이 막혔다(팝업 차단).' + (ok ? ' 대신 클립보드에 복사했다. 대시보드에 붙여 넣을 것' : '')); return; }
+      let 보냄 = false;
+      /* **대시보드가 「준비됐다」 고 한 뒤에, 그 자리에만 보낸다.** 비밀번호 창을 거치느라 늦게 떠도
+         값이 버려지지 않고, 다른 곳이 받지 못한다 */
+      const 듣기 = e => {
+        if (보냄 || e.origin !== DASH || !e.data || e.data.종류 !== 'darkchoco-ready') return;
+        보냄 = true; window.removeEventListener('message', 듣기);
+        w.postMessage(d, DASH);
+        say(`대시보드로 ${d.줄.length}줄을 넘겼다. 대시보드에서 확인하고 「올리기」 를 누를 것`);
+      };
+      window.addEventListener('message', 듣기);
+      say('대시보드 창을 열었다. 비밀번호를 넣으면 값이 넘어간다');
+      setTimeout(() => { if (보냄) return; window.removeEventListener('message', 듣기);
+        say('대시보드가 2분 동안 답이 없다. 「칸 파일 저장 (VM)」 이나 클립보드를 쓸 것'); }, 120000);
+    };
+
     const box = document.createElement('div');
     box.style.cssText = 'position:fixed;inset:4%;z-index:2147483647;background:#111;color:#eee;border:2px solid #666;padding:8px;display:flex;flex-direction:column;font:13px sans-serif;gap:6px';
     const row1 = document.createElement('div'); row1.style.cssText = 'display:flex;gap:6px;align-items:center;flex-wrap:wrap';
@@ -303,7 +366,7 @@
         (hot ? 'background:#0a4;color:#fff;border:1px solid #0f8;font-weight:bold' : 'background:#333;color:#ddd;border:1px solid #555');
       b.onclick = async () => {
         if (BUSY) { say('실행 중이다. 끝나거나 중단한 뒤에 누를 것'); return; }
-        BUSY = true; ABORT = false; FAILED.length = 0;
+        BUSY = true; ABORT = false; FAILED.length = 0; ROWS.length = 0;
         try { await fn(); } catch (e) { say('오류 : ' + e); put('오류\n\n' + (e && e.stack || e)); }
         BUSY = false;
       };
@@ -387,6 +450,27 @@
     const bStop = plain('중단', () => { ABORT = true; say('중단 요청. 현재 건이 끝나면 멈춘다'); });
     const bClose = plain('닫기', () => box.remove());
 
+  /* 결과를 내보내는 단추 셋 (v2.8). 요청을 안 내므로 BUSY 가드를 안 탄다.
+     **원문은 PC 에 파일로만 떨군다.** 개인정보가 값째로 들어 있을 수 있어 서버로 안 보낸다 */
+    const out3 = (label, fn, tip) => { const b = plain(label, fn); b.title = tip;
+      b.style.background = '#223'; b.style.color = '#cde'; b.style.borderColor = '#456'; return b; };
+    const bSaveMd = out3('원문 저장 (.md)', () => {
+      if (!ta.value.trim()) { say('저장할 원문이 없다. 먼저 돌릴 것'); return; }
+      내려받기(파일이름('.md'), ta.value, 'text/markdown'); say('원문을 파일로 저장했다. PC 밖으로 옮기지 말 것');
+    }, '결과 상자의 원문을 이 PC 에 파일로 저장한다. 서버로 안 간다');
+    const bToDash = out3('대시보드로 보내기 (호스트)', 대시로,
+      '호스트 브라우저에서 쓴다. 칸 값(본문 제외)을 대시보드 「포럼 사건 올리기」 로 넘긴다. '
+      + '설치 때 대시보드 주소를 안 적었으면 클립보드에 복사한다');
+    const bSaveRows = out3('칸 파일 저장 (VM)', () => {
+      if (비었나()) return;
+      내려받기(파일이름('_rows.json'), JSON.stringify(짐(), null, 1), 'application/json');
+      say(`칸 값 ${ROWS.length}줄을 파일로 저장했다. 호스트로 옮겨 대시보드에 끌어다 놓을 것`);
+    }, 'VM 안 브라우저에서 쓴다. 칸 값(본문 제외)을 .json 으로 저장한다. 대시보드에 끌어다 놓으면 된다');
+    const row3 = document.createElement('div'); row3.style.cssText = 'display:flex;gap:6px;align-items:center;flex-wrap:wrap';
+    const note3 = document.createElement('span'); note3.style.cssText = 'color:#888;font:11px sans-serif';
+    note3.textContent = '칸 값에는 본문이 안 들어간다. 대시보드에서 미리 보고 사람이 눌러야 노션에 올라간다';
+    row3.append(bSaveMd, bToDash, bSaveRows, note3);
+
   /* 끌어서 옮기기. 붙잡는 손잡이를 따로 둔다 */
     const grip = document.createElement('span');
     grip.textContent = '⠿'; grip.title = '끌어서 옮기기';
@@ -407,6 +491,7 @@
     const bMin = plain('최소화', () => {
       mini = !mini;
       row2.style.display = mini ? 'none' : 'flex';
+      row3.style.display = mini ? 'none' : 'flex';
       ta.style.display = mini ? 'none' : '';
       if (mini) { prevH = box.style.height; prevB = box.style.bottom; box.style.height = 'auto'; box.style.bottom = 'auto'; }
       else { box.style.height = prevH; box.style.bottom = prevB; }
@@ -428,7 +513,7 @@
     if (window.__DKHOME) row1.append(bHome);
     row1.append(bClose);
     row2.append(iN, iSort, iDelay, iWho, cMask, cScope, cSubs, cReplies);
-    box.append(row1, row2, ta);
+    box.append(row1, row2, row3, ta);
 
     const run = async fn => {
       say('실행 중');
@@ -855,6 +940,10 @@
         (t.tag && (t.title || '').startsWith(`[${t.tag}] `)) ? t.title.slice(t.tag.length + 3) : (t.title || ''),
         t.author || '', t.replies ?? '', t.views ?? '', t.date || '', t.url].join('\t')).join('\n') + '\n';
       if (!targets.length) return { md: listMd, status: '0건', empty: true };
+  /* 칸 값. 목록만 받았으면 본문은 「안 봄」 이다. 제목은 TSV 와 같이 내가 붙인 [게시판명] 을 뗀다 */
+      if (!withBodies) targets.forEach(t => 칸줄(
+        (t.tag && (t.title || '').startsWith(`[${t.tag}] `)) ? t.title.slice(t.tag.length + 3) : (t.title || ''),
+        t.url, t.author, t.date, t.tag, '', '안 봄'));
       if (!withBodies) { bHarv.style.background = '#0a4'; bHarv.style.color = '#fff'; bHarv.style.border = '1px solid #0f8'; bHarv.style.fontWeight = 'bold';
         return { md: listMd, status: `글 목록 ${targets.length}건 모음. 본문이 필요하면 초록색 「본문 받기」를 누를 것` }; }
 
@@ -877,7 +966,10 @@
                      say(`중단. ${bad}. 간격을 늘리고 시간을 두고 다시 시도할 것`); ABORT = true; break; }
           if (res.status === 403) {
             out.push(`\n---\n\n## ${t.title}\n\n- URL : ${t.url}\n- 상태 : 403 접근 권한 없음 (등급 제한 또는 삭제·이동)\n- 확인 : ${stamp()}\n`);
-            gated.push(`${t.title} : ${t.url}`); streak = 0; await wait(); continue;
+            gated.push(`${t.title} : ${t.url}`); streak = 0;
+  /* 칸 값. **게시자는 비운다.** 옛 길(kit_in.py)이 본문 없는 줄의 게시자를 비워 UID 를 만들었다. 같게 둬야 겹침이 맞는다 */
+            칸줄(t.title, t.url, '', '', t.tag, '', '403');
+            await wait(); continue;
           }
           if (!res.ok) { fails.push(`${t.url} : HTTP ${res.status}`);
                          if (++streak >= 3) { say('연속 3회 실패. 중단'); ABORT = true; break; } await wait(); continue; }
@@ -896,6 +988,7 @@
               out.push('\n> 구조를 못 읽었다. 덤프\n\n```\n' + (doc.body ? CL(doc.body).slice(0, 1200) : '') + '\n```\n');
               fails.push(`${t.url} : parse`);
             }
+            칸줄(title, t.url, '', '', t.tag, '', '안 봄');
           }
           else {
             let posts = [];
@@ -921,6 +1014,11 @@
               if (p.hrefs && p.hrefs.length) scan(p.hrefs.join('\n')); /* 잘리지 않은 주소로 단서를 보강한다 */
               out.push(`\n### ${i === 0 ? '원문' : '답글 ' + i}  ${p.author}  ${p.date}\n\n\`\`\`\n${proc(p.body)}\n\`\`\`\n`);
             });
+  /* 칸 값. 게시자와 날짜는 원문(첫 글)의 것이다. 한국 신호는 원문에서만 본다 — 답글에서
+     「korea」 를 한 번 말한 것으로 글이 한국 건이 되지는 않는다 */
+            const 첫 = posts[0];
+            칸줄(title, t.url, 첫 ? (첫.author || '').trim() : '', 첫 ? (첫.date || '').trim() : '', t.tag,
+                 첫 ? 첫.body : '', 첫 ? '받음' : '안 봄');
           }
         } catch (e) { fails.push(`${t.url} : ${e}`); }
         await wait();
@@ -1031,6 +1129,10 @@
       if (Object.keys(clue).length) { md += `\n## 추출된 단서\n\n`;
         for (const [k, v] of Object.entries(clue)) md += `- ${LABEL[k] || k} : ${v.join(' · ')}\n`; }
       if (fails.length) md += `\n## 못 받은 쪽 (${fails.length})\n\n` + fails.map(f => '- ' + f).join('\n') + '\n';
+  /* 칸 값. 이어 받기면 첫 글이 원문이 아니라 게시자와 날짜를 비운다 */
+      const 첫 = 시작 > 1 ? null : posts[0];
+      칸줄(title, location.href, 첫 ? (첫.author || '').trim() : '', 첫 ? (첫.date || '').trim() : '', '',
+           첫 ? 첫.body : '', '받음');
       window.__OUT = md;
       return { md, status: `이 글 · 글 ${posts.length}건` + (쪽수 > 시작 ? ` · 답글 ${쪽수}쪽까지` : '')
                            + ` · 단서 ${Object.keys(clue).length}종` + (잘림 ? ' · 뒤쪽 남음' : '') };
