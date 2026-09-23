@@ -1,0 +1,34 @@
+{
+  "name": "darkchoco-map",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "test": "npm run bake:check && node --experimental-strip-types --test src/lib/*.test.mjs",
+    "bake": "python tools/bake.py --out src/data/map.json",
+    "bake:check": "python tools/bake.py --check-only --out src/data/map.json",
+    "deploy": "npm run test && npm run build && npx wrangler deploy"
+  },
+  "dependencies": {
+    "d3-selection": "^3.0.0",
+    "d3-zoom": "^3.0.0",
+    "next": "16.3.5",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/d3-selection": "^3.0.12",
+    "@types/d3-zoom": "^3.0.8",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.5",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

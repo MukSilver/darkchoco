@@ -1,0 +1,100 @@
+@import "tailwindcss";
+@import "./tokens.css";
+
+/*
+ * 의미 토큰을 Tailwind 로 넘긴다.
+ *
+ * **부품은 `bg-panel` 처럼 의미 이름으로만 쓴다.** 원색(`--p-*`)을 부품에
+ * 직접 박으면 모드 전환이 깨진다. 피그마 보드가 그렇게 경고해 두었다.
+ */
+@theme inline {
+  --color-title: var(--t-text-title);
+  --color-strong: var(--t-text-strong);
+  --color-body: var(--t-text-body);
+  --color-sub: var(--t-text-sub);
+  --color-label: var(--t-text-label);
+  --color-disabled: var(--t-text-disabled);
+  --color-on-accent: var(--t-text-on-accent);
+
+  --color-app: var(--t-surface-app);
+  --color-panel: var(--t-surface-panel);
+  --color-card: var(--t-surface-card);
+  --color-canvas: var(--t-surface-canvas);
+  --color-input: var(--t-surface-input);
+  --color-track: var(--t-surface-track);
+  --color-selected: var(--t-surface-selected);
+  --color-kbd: var(--t-surface-kbd);
+  --color-bar-track: var(--t-surface-bar-track);
+  --color-bar-fill: var(--t-bar-fill);
+  --color-row-selected: var(--t-surface-row-selected);
+
+  --color-edge: var(--t-border-card);
+  --color-edge-hex: var(--t-border-hex);
+  --color-divider: var(--t-border-divider);
+  --color-edge-input: var(--t-border-input);
+  --color-edge-strong: var(--t-border-strong);
+
+  --color-accent: var(--t-accent);
+  --color-accent-subtle: var(--t-accent-subtle);
+  --color-accent-edge: var(--t-accent-border);
+  --color-accent-muted: var(--t-accent-muted);
+
+  --color-success: var(--t-success-text);
+  --color-success-bg: var(--t-success-bg);
+  --color-success-edge: var(--t-success-border);
+  --color-neutral: var(--t-neutral-text);
+  --color-neutral-bg: var(--t-neutral-bg);
+  --color-neutral-edge: var(--t-neutral-border);
+  --color-danger: var(--t-danger-text);
+  --color-danger-bg: var(--t-danger-bg);
+  --color-danger-edge: var(--t-danger-border);
+  --color-info: var(--t-info-text);
+  --color-info-bg: var(--t-info-bg);
+  --color-info-edge: var(--t-info-border);
+  --color-warning: var(--t-warning-text);
+  --color-warning-bg: var(--t-warning-bg);
+  --color-warning-edge: var(--t-warning-border);
+  --color-caution: var(--t-caution-text);
+  --color-caution-bg: var(--t-caution-bg);
+  --color-caution-edge: var(--t-caution-border);
+  --color-violet: var(--t-violet-text);
+  --color-violet-bg: var(--t-violet-bg);
+  --color-violet-edge: var(--t-violet-border);
+
+  --color-up: var(--t-trend-up);
+  --color-down: var(--t-trend-down);
+
+  --color-forum: var(--t-island-forum);
+  --color-ransomware: var(--t-island-ransomware);
+  --color-telegram: var(--t-island-telegram);
+  --color-actor: var(--t-island-actor);
+
+  --color-web-open: var(--t-web-open);
+  --color-web-connection: var(--t-web-connection);
+  --color-web-dark: var(--t-web-dark);
+  --color-web-inactive: var(--t-web-inactive);
+
+  --spacing-s1: var(--s-1);
+  --spacing-s2: var(--s-2);
+  --spacing-s3: var(--s-3);
+  --spacing-s4: var(--s-4);
+  --spacing-s5: var(--s-5);
+  --spacing-s6: var(--s-6);
+  --spacing-s7: var(--s-7);
+  --spacing-s8: var(--s-8);
+}
+
+/*
+ * **모드를 `prefers-color-scheme` 에 걸지 않는다.** 여기서 모드는 밝기가 아니라
+ * 「지금 어느 웹을 보고 있나」다. 오픈웹은 화이트, 다크웹은 라이트 블랙,
+ * 네온은 그 위의 선택지다. 사람이 고르는 것이라 OS 설정을 따르면 안 된다.
+ */
+html {
+  background: var(--t-surface-app);
+  color: var(--t-text-body);
+}
+
+body {
+  background: var(--t-surface-app);
+  color: var(--t-text-body);
+}
