@@ -767,6 +767,17 @@ def 표로(결과: list[갈래결과], *, apply: bool, 요약만: bool = False) 
             셈 = " · ".join(f"{k} {v}" for k, v in
                           sorted(r.상태셈.items(), key=lambda kv: -kv[1]))
             줄.append(f"  {'':<12} 상태  {셈}")
+        # 어느 칸이 달라서 자동 줄이 생겼나. **칸 이름과 건수뿐입니다.** 값과 곳 이름은
+        # 안 냅니다. 이것이 없으면 자동 줄이 왜 그만큼 생겼는지 로컬에서 다시 돌려야
+        # 알 수 있는데, 텔레그램 명부는 Tor 가 없는 로컬에서 한 줄도 못 봅니다
+        다른칸: dict = {}
+        for res in r.줄별:
+            for 칸 in getattr(res, "바뀐칸", {}) or {}:
+                다른칸[칸] = 다른칸.get(칸, 0) + 1
+        if 다른칸:
+            셈 = " · ".join(f"{k} {v}" for k, v in
+                          sorted(다른칸.items(), key=lambda kv: -kv[1]))
+            줄.append(f"  {'':<12} 다른 칸  {셈}")
         # 왜 못 봤는지를 까닭별로 셉니다. 한 줄씩 보면 안 보이는 것이
         # 뭉쳐 놓으면 보입니다 — 절반이 같은 이유로 막혔다든가.
         if r.이유셈:
