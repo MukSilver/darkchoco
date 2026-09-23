@@ -99,7 +99,7 @@
 </div>
 
 <script type="module">
-import { mountHead, loadData, el, currentCase, linkToCase, REACH, confirmedItems, mountSampleWarning }
+import { mountHead, loadData, el, currentCase, REACH, confirmedItems, mountSampleWarning }
   from "../assets/shell.js";
 
 const base = mountHead("guide");
@@ -277,7 +277,6 @@ function renderMain() {
   }
 
   const bar = el("div", { class: "toolbar" });
-  bar.append(el("a", { href: linkToCase(base, "map", c.id) }, "이 사고가 어디를 거쳤는지 →"));
   const pr = el("a", { href: "#" }, "종이 한 장으로 뽑기");
   pr.addEventListener("click", e => { e.preventDefault(); window.print(); });
   bar.append(pr);

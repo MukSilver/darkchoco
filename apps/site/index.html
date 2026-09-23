@@ -22,7 +22,7 @@
   .door .go { margin-top: var(--s4); font-size: var(--t-small); font-weight: 600; }
   .door[data-area="guide"] { border-left: 3px solid var(--v-likely); }
   .door[data-area="guide"] .tag, .door[data-area="guide"] .go { color: var(--v-likely); }
-  .door[data-area="map"] { border-left: 3px solid var(--k-forum); }
+  .door[data-area="map"] { border-left: 3px solid var(--k-forum); opacity: .72; }
   .door[data-area="map"] .tag, .door[data-area="map"] .go { color: var(--k-forum); }
   .door[data-area="rag"] { border-left: 3px solid var(--k-broker); opacity: .72; }
   .door[data-area="rag"] .tag, .door[data-area="rag"] .go { color: var(--k-broker); }
@@ -51,13 +51,11 @@
       <div class="go">확인하러 가기 →</div>
     </a>
 
-    <a class="door" data-area="map" href="map/">
+    <div class="door" data-area="map">
       <div class="tag">개인정보 유출 생태계 지도</div>
       <h2>유출물이 어디로 가는지 봅니다</h2>
-      <p>오픈웹과 다크웹 두 층, 그 사이를 오가는 길. 유출물이 내려가 팔리고 다시 올라와
-         남는 과정을 한 장으로 봅니다.</p>
-      <div class="go">지도 보기 →</div>
-    </a>
+      <p>생태계 지도는 새로 만드는 중입니다.</p>
+    </div>
 
     <a class="door" data-area="rag" href="rag/">
       <div class="tag">LLM 다크웹 RAG DB</div>
@@ -69,10 +67,6 @@
   </nav>
 
   <p class="note">
-    <b>세 문이 같은 조사 기록을 씁니다.</b>
-    지도에서 사고를 고르면 그 사고가 가이드로 그대로 넘어가고, 가이드에서 「이 사고가 어디를
-    거쳤나」를 누르면 지도의 그 경로가 밝아집니다.
-    <br><br>
     <b>포럼과 그룹의 이름은 적지만 주소는 적지 않습니다.</b>
     들어가는 법도 적지 않습니다. 세 구역 모두 <b>반출 가능한 자료만</b> 올립니다.
   </p>

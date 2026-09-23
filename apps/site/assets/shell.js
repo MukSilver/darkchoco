@@ -2,7 +2,6 @@
 
 const NAV = [
   { href: "/guide/", label: "내 정보 확인" },
-  { href: "/map/", label: "생태계 지도" },
   { href: "/rag/", label: "RAG DB" },
 ];
 
