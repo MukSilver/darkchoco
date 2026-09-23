@@ -171,6 +171,14 @@
           ]
         },
         {
+          "한국어": "몇 분만 주세요",
+          "영어": "Give me a few mins",
+          "영어들": [
+            "Need a few minutes",
+            "Couple minutes and I'm back"
+          ]
+        },
+        {
           "한국어": "확인해 볼게요",
           "영어": "lemme check",
           "영어들": [
