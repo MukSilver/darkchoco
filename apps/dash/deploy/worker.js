@@ -8,7 +8,7 @@
  * ## 세 가지를 합니다
  *
  *   /data/dash.js    노션을 읽어 화면이 쓰는 데이터를 만들어 냅니다. 60초 캐시
- *   /api/review      O/X 를 노션 「검토 여부」 한 칸에 씁니다
+ *   /api/review      O/X 를 노션 「검토 여부」 에 쓰고 규칙대로 「DB 반영」 을 맞춥니다
  *   /api/run         GitHub Actions 수집을 시작시킵니다
  *   /api/status      그 실행이 어디까지 갔는지 봅니다
  *
@@ -18,8 +18,9 @@
  *
  * ## 무엇을 쓰나
  *
- * 노션에는 **「검토 여부」 하나뿐입니다.** 값도 셋(미검토 · 사건 O · 사건 X)만
- * 받습니다. 그 밖의 칸도, 줄을 만들거나 지우는 것도 안 합니다.
+ * 노션에는 **「검토 여부」 와, 그에 딸린 「DB 반영」 둘뿐입니다.** 값은 셋(미검토 ·
+ * 사건 O · 사건 X)만 받습니다. 「DB 반영」 은 화면이 정하지 않고 `공개로()` 규칙이
+ * 정합니다. 그 밖의 칸도, 줄을 만들거나 지우는 것도 안 합니다.
  * GitHub 에는 **아래 목록에 있는 워크플로만** 시작시킵니다. 임의 실행은 없습니다.
  * 토큰 둘은 Cloudflare 비밀값에만 있고 브라우저로 안 갑니다.
  *
@@ -532,6 +533,30 @@ function 남의자리인가(request) {
   return 본 !== new URL(request.url).origin;
 }
 
+/**
+ * 「검토 여부」 가 전 → 후 로 바뀔 때 「DB 반영」 을 어떻게 하나.
+ * true 는 켠다, false 는 끈다, null 은 안 건드린다. (2026-09-23 최현서 결정)
+ *
+ *     미검토 · 사건 X → 사건 O     켠다
+ *     사건 O · 빈칸  → 사건 O     안 건드린다
+ *     무엇이든      → 사건 X     끈다
+ *     무엇이든      → 미검토     끈다
+ *
+ * **켜는 것은 사건 O 로 새로 들어갈 때뿐입니다.** 「DB 반영 = 꺼짐」 은 두 뜻입니다 —
+ * 아직 검토 전이거나, 사건인데 일부러 안 내보내는 것(옛 「일부러 반출하지 않음」).
+ * 이미 사건 O 인 줄에서 O 를 한 번 더 누른 것으로 켜면 뒤엣것이 무너집니다.
+ * 빈칸은 화면이 사건 O 로 세므로 사건 O 로 봅니다. 끄는 쪽은 안전한 방향이라 조건이
+ * 없습니다.
+ *
+ * **로컬 `api.py` 에 같은 규칙이 파이썬으로 있습니다.** 한쪽만 고치면 로컬과 배포가
+ * 다르게 움직입니다. `packages/tests/test_공개규칙.py` 가 둘을 같은 표로 맞춰 봅니다.
+ */
+function 공개로(전, 후) {
+  if (후 === "사건 X" || 후 === "미검토") return false;
+  if (후 === "사건 O" && (전 === "미검토" || 전 === "사건 X")) return true;
+  return null;
+}
+
 async function 검토쓰기(request, env) {
   if (남의자리인가(request)) return json(403, { 오류: "다른 자리에서 온 요청입니다" });
   if (!(request.headers.get("Content-Type") || "").includes("application/json")) {
@@ -552,14 +577,44 @@ async function 검토쓰기(request, env) {
   if (!검토값.has(값)) return json(400, { 오류: `받지 않는 값입니다: ${값}` });
   if (!쓸만한id(page_id)) return json(400, { 오류: "page id 꼴이 아닙니다" });
 
+  const 머리 = {
+    Authorization: `Bearer ${env.NOTION_TOKEN}`,
+    "Notion-Version": 노션판,
+    "Content-Type": "application/json",
+  };
+
+  // **전 값은 노션에서 읽습니다.** 화면이 보낸 값을 믿으면, 화면이 낡았을 때
+  // 일부러 꺼 둔 줄을 켤 수 있습니다. 누르는 속도라 읽기 한 번이 부담이 안 됩니다.
+  const g = await fetch(`https://api.notion.com/v1/pages/${page_id}`, { headers: 머리 });
+  if (!g.ok) {
+    const 몸 = await g.text();
+    return json(502, { 오류: `노션 ${g.status}: 지금 값을 못 읽었습니다. ${몸.slice(0, 160)}` });
+  }
+  const 전줄 = await g.json();
+  // **수집 DB 줄이 아니면 안 씁니다.** 「DB 반영」 은 검증 DB 에도 있어서, page id
+  // 만 맞으면 남의 DB 의 공개 스위치를 건드릴 수 있습니다. 칸 이름으로 가리면 그쪽에
+  // 같은 이름 칸이 생기는 날 뚫리므로 줄의 소속으로 가립니다.
+  const 소속 = String(((전줄 && 전줄.parent) || {}).data_source_id || "").replace(/-/g, "").toLowerCase();
+  if (소속 !== 수집DS.replace(/-/g, "").toLowerCase()) {
+    return json(400, { 오류: "수집 DB 줄이 아닙니다" });
+  }
+  const 칸 = (전줄 && 전줄.properties) || {};
+  if (!칸["검토 여부"] || !칸["DB 반영"]) {
+    return json(502, { 오류: "수집 DB 에 「검토 여부」 · 「DB 반영」 칸이 없습니다. 이름이 바뀌었나 봅니다" });
+  }
+  const 전 = ((칸["검토 여부"].select) || {}).name || "";
+  const 전반영 = !!칸["DB 반영"].checkbox;
+
+  const 공개 = 공개로(전, 값);
+  const 쓸것 = { "검토 여부": { select: { name: 값 } } };
+  if (공개 !== null) 쓸것["DB 반영"] = { checkbox: 공개 };
+
+  // **한 번에 씁니다.** 둘로 나누면 앞엣것만 되고 뒤엣것이 실패했을 때 사건 O 인데
+  // 공개가 안 켜진 줄이 남습니다.
   const r = await fetch(`https://api.notion.com/v1/pages/${page_id}`, {
     method: "PATCH",
-    headers: {
-      Authorization: `Bearer ${env.NOTION_TOKEN}`,
-      "Notion-Version": 노션판,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ properties: { "검토 여부": { select: { name: 값 } } } }),
+    headers: 머리,
+    body: JSON.stringify({ properties: 쓸것 }),
   });
   if (!r.ok) {
     const 몸 = await r.text();
@@ -568,7 +623,7 @@ async function 검토쓰기(request, env) {
   }
   // 눌러서 바뀐 것이 다음 조회에 바로 보이게 캐시를 버립니다.
   캐시 = { 언제: 0, 몸: null };
-  return json(200, { ok: true, page_id, 검토: 값 });
+  return json(200, { ok: true, page_id, 검토: 값, 공개, DB반영: 공개 === null ? 전반영 : 공개 });
 }
 
 // ── GitHub Actions 돌리기 ────────────────────────────────────────────────
