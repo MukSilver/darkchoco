@@ -22,6 +22,8 @@
 
 「다르다」 의 뜻은 **예전 방식이었으면 사람 줄을 고쳤을 것인가**입니다. 확인일만
 다른 것은 안 칩니다 — 판마다 다르므로 그것까지 치면 모든 줄에 자동 줄이 생깁니다.
+**규모 같은 합치는 칸도 숫자가 같고 날짜만 다르면 안 칩니다** (`_합친값_같나`).
+기계 줄 끝의 「(날짜 기준)」 이 판마다 바뀌기 때문입니다.
 
 사람 줄과 자동 줄을 합치는 것은 나중에 사람이나 LLM 이 합니다. 합친 뒤 자동 줄을
 지우면, 다음 판에 다시 다를 때만 새로 생깁니다.
@@ -48,7 +50,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "packages"))
 from dc_notion import Notion  # noqa: E402
 
 from hub.places.place import (  # noqa: E402
-    Place, 기계칸, 빈칸만칸, 사람판정_상태, 자동금지칸)
+    Place, 기계가_쓴_줄, 기계칸, 빈칸만칸, 사람판정_상태, 자동금지칸, 합치는칸)
 
 __all__ = ["명부", "반영결과", "갈래별_DB", "자동표시"]
 
@@ -274,7 +276,7 @@ class 명부:
                 continue
             지금 = 줄.현재.get(칸, {"규모": 줄.규모, "상태": 줄.상태,
                                  "주소": 줄.주소}.get(칸))
-            if 지금 is not None and _같나(지금, v):
+            if 지금 is not None and _칸같나(칸, 지금, v):
                 continue
             다른칸[칸] = v
         r.바뀐칸 = 다른칸
@@ -304,7 +306,7 @@ class 명부:
         #    줄은 상태가 계속 미확인이라, 「우리가 오늘 이 줄을 두드렸다」 는 사실이
         #    아예 안 남았습니다. 두드리지도 못한 줄은 노션값() 이 이미 걸렀습니다.
         자동바꿀것 = {칸: v for 칸, v in 기계값.items()
-                  if not _같나(짝.현재.get(칸, ""), v)}
+                  if not _칸같나(칸, 짝.현재.get(칸, ""), v)}
         if not 자동바꿀것 or (set(자동바꿀것) <= {"확인일"} and not p.두드림):
             r.자동줄 = "그대로"
             r.안바뀜 = not 다른칸
@@ -372,6 +374,53 @@ def _같나(지금: str, v) -> bool:
         except ValueError:
             return False
     return 지금 == str(v).strip()
+
+
+# 기계가 쓴 줄의 꼬리. `Place.규모줄()` 이 「… (YYYY-MM-DD 기준)」 으로 끝낸다
+_기준꼬리 = re.compile(r"\s*\(\d{4}-\d{2}-\d{2} 기준\)\s*$")
+
+
+def _기계줄숫자(줄: str) -> list[int]:
+    """기계 줄에서 날짜 꼬리를 떼고 숫자만 뽑습니다. 「1,440」 은 1440 입니다."""
+    몸 = _기준꼬리.sub("", 줄)
+    return [int(x.replace(",", "")) for x in re.findall(r"\d[\d,]*", 몸)]
+
+
+def _합친값_같나(지금: str, v: str) -> bool:
+    """합치는 칸(규모 · 피해 대상 · 한국 관련 유출)을 견줍니다.
+
+    **숫자가 같고 날짜만 다르면 같은 것으로 봅니다** (2026-09-24 최현서 결정).
+    기계 줄은 「… (YYYY-MM-DD 기준)」 으로 끝나서 숫자가 그대로여도 판마다 날짜가
+    바뀝니다. 이것까지 다르다고 치면 규모를 적어 둔 사람 줄마다 자동 짝 줄이
+    생겨 명부가 두 배가 됩니다. 「확인일만 다른 것은 안 친다」 와 같은 논리입니다.
+    첫 미리보기에서 텔레그램 자동 줄 12개가 전부 이 까닭이었습니다.
+
+        사람 글         글자 그대로 견줍니다
+        기계 줄         날짜를 떼고 숫자만 견줍니다. 여럿이면 전부 같아야 같습니다
+        숫자 못 뽑음    글자 그대로 견줍니다
+
+    **견주는 규칙만 바꿉니다.** 자동 줄에 쓸 때는 기계가 본 값을 날짜째 씁니다.
+    """
+    a = [l.strip() for l in (지금 or "").splitlines() if l.strip()]
+    b = [l.strip() for l in (v or "").splitlines() if l.strip()]
+    if len(a) != len(b):
+        return False
+    for x, y in zip(a, b):
+        if x == y:
+            continue
+        if not (기계가_쓴_줄(x) and 기계가_쓴_줄(y)):
+            return False
+        nx, ny = _기계줄숫자(x), _기계줄숫자(y)
+        if not nx or not ny or nx != ny:
+            return False
+    return True
+
+
+def _칸같나(칸: str, 지금: str, v) -> bool:
+    """칸에 맞는 규칙으로 견줍니다. 합치는 칸만 날짜를 빼고 봅니다."""
+    if 칸 in 합치는칸 and isinstance(v, str):
+        return _합친값_같나(지금, v)
+    return _같나(지금, v)
 
 
 # ── 값 만들기 ──────────────────────────────────────────────────────
