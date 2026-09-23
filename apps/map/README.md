@@ -95,3 +95,11 @@ npm run deploy          # 시험 → 빌드 → out/ 을 Cloudflare 에 올린�
 ```
 
 코드가 도는 Worker 가 아니라 자산만 올리는 배포다. `out/` 밖의 것은 못 올라간다.
+
+**검색 색인을 거부한다.** 세 겹이다 — `public/robots.txt`, 화면 `<head>` 의 robots meta
+(`src/app/layout.tsx`), 모든 파일에 붙는 `X-Robots-Tag` (`public/_headers`). 공개로 돌릴 때
+셋을 같이 푼다. `_headers` 에는 보안 헤더(CSP · Referrer-Policy · X-Frame-Options 등)도 있다.
+CSP 의 `connect-src 'self'` 가 화면이 다른 곳을 부르지 못하게 막는다.
+
+배포 전에 헤더가 붙는지 로컬에서 볼 수 있다 — `npm run build` 뒤
+`npx wrangler dev --port 8788` 로 띄우면 Cloudflare 와 같은 규칙으로 헤더가 붙는다.
