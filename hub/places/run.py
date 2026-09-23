@@ -750,6 +750,21 @@ def 표로(결과: list[갈래결과], *, apply: bool, 요약만: bool = False) 
             셈 = " · ".join(f"{k} {v}" for k, v in
                           sorted(r.상태셈.items(), key=lambda kv: -kv[1]))
             줄.append(f"  {'':<12} 상태  {셈}")
+        # 어느 칸이 몇 줄에서 바뀌나. 「바뀐 줄」 만으로는 확인일만 바뀐 줄과
+        # 주소가 바뀐 줄이 안 갈립니다. 칸 이름과 건수라 공개 로그에 찍어도
+        # 됩니다 (2026-09-24).
+        칸셈: dict = {}
+        확인일만 = 0
+        for res in r.줄별:
+            바뀐 = getattr(res, "바뀐칸", None) or {}
+            if 바뀐 and set(바뀐) <= {"확인일"}:
+                확인일만 += 1
+            for 칸 in 바뀐:
+                칸셈[칸] = 칸셈.get(칸, 0) + 1
+        if 칸셈:
+            셈 = " · ".join(f"{k} {v}" for k, v in
+                          sorted(칸셈.items(), key=lambda kv: (-kv[1], kv[0])))
+            줄.append(f"  {'':<12} 바뀐 칸  {셈}  (확인일만 바뀐 줄 {확인일만})")
         # 왜 못 봤는지를 까닭별로 셉니다. 한 줄씩 보면 안 보이는 것이
         # 뭉쳐 놓으면 보입니다 — 절반이 같은 이유로 막혔다든가.
         if r.이유셈:
