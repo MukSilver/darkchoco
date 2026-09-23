@@ -1,0 +1,17 @@
+{
+  // Cloudflare 배포 설정. 정적 파일만 올린다.
+  //
+  // 코드가 도는 Worker 가 아니라 자산만 있는 배포다. `npm run build` 가
+  // 만든 out/ 만 올라간다. 구운 파일 밖의 노션 · Supabase 자료는 구조적으로
+  // 못 올라간다 — 굽기(tools/bake.py)의 반출 검사를 지난 것만 out/ 에 든다.
+  //
+  //   npx wrangler login      # 한 번만
+  //   npm run deploy
+  "name": "darkchoco-map",
+  "compatibility_date": "2026-09-23",
+  "assets": {
+    "directory": "./out",
+    // 없는 주소는 404.html 을 404 로 돌려준다
+    "not_found_handling": "404-page"
+  }
+}
