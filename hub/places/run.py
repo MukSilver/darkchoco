@@ -71,7 +71,9 @@ class 갈래결과:
     갈래: str
     본것: int = 0
     못본것: int = 0
-    바뀐줄: int = 0
+    바뀐줄: int = 0          # 사람 줄과 다른 줄. 사람 줄에는 안 씁니다 (write.py 머리말)
+    새자동: int = 0          # 새로 만든 자동 줄
+    고친자동: int = 0        # 고친 자동 줄
     건너뜀: int = 0          # 주소가 없어 조사 못 한 줄
     쉰것: int = 0            # 연속 실패로 이번 판은 안 두드린 줄
     문제: list = field(default_factory=list)
@@ -81,6 +83,14 @@ class 갈래결과:
     오류: str = ""
     초: float = 0.0
     줄별: list = field(default_factory=list)
+
+
+def _자동셈(r: 갈래결과, res) -> None:
+    """자동 줄을 셉니다. 실패한 줄은 안 셉니다 — 오류로 따로 올라갑니다."""
+    if getattr(res, "오류", ""):
+        return
+    r.새자동 += getattr(res, "자동줄", "") == "새로"
+    r.고친자동 += getattr(res, "자동줄", "") == "고침"
 
 
 def _쌓기(db: Path, 갈래: str, 목록: list[Place]) -> None:
@@ -407,7 +417,8 @@ def 이음사전만들기(갈래들목록=None) -> dict:
     명부들 = {}
     for g in (갈래들목록 or list(갈래들)):
         try:
-            명부들[g] = 명부(g).줄들()
+            # 자동 줄은 뺍니다. 사람 줄과 이름 · 주소가 같아 사전에 두 번 들어갑니다
+            명부들[g] = 명부.사람줄(명부(g).줄들())
         except Exception:  # noqa: BLE001  한 갈래가 안 읽혀도 나머지로 만듭니다
             continue
     return links.이름표만들기(명부들)
@@ -422,7 +433,8 @@ def 한갈래(갈래: str, *, apply: bool = False, limit: int = 0,
     t0 = time.time()
     try:
         m = 명부(갈래)
-        줄들 = m.줄들()
+        # **자동 줄은 조사 대상이 아닙니다.** 두드리면 자동 줄의 자동 줄이 생깁니다
+        줄들 = m.사람줄(m.줄들())
     except Exception as e:  # noqa: BLE001
         r.오류 = f"{type(e).__name__}: {e}"[:200]
         r.초 = time.time() - t0
@@ -527,6 +539,7 @@ def 한갈래(갈래: str, *, apply: bool = False, limit: int = 0,
             r.처음본곳.setdefault(h, set()).add(res.이름 or p.이름)
         if res.바뀐칸:
             r.바뀐줄 += 1
+        _자동셈(r, res)
 
     # ── 깊은 판. 열린 곳만 브라우저로 다시 열어 수집기 일곱을 돌립니다
     #
@@ -550,6 +563,7 @@ def 한갈래(갈래: str, *, apply: bool = False, limit: int = 0,
         r.줄별.append(res)
         if res.바뀐칸:
             r.바뀐줄 += 1
+        _자동셈(r, res)
         if 합친것.살펴볼것:
             r.문제.append(f"{res.이름}: {합친것.살펴볼것}")
     # 깊게 못 본 줄(브라우저가 403 을 받았거나 터진 줄)은 얕은 것이라도
@@ -567,6 +581,7 @@ def 한갈래(갈래: str, *, apply: bool = False, limit: int = 0,
         r.줄별.append(res)
         if res.바뀐칸:
             r.바뀐줄 += 1
+        _자동셈(r, res)
 
     if 깊게샘 and not 조용히:
         print(f"    깊게 본 것 {깊게샘}줄 · 얕은 것으로만 "
@@ -637,7 +652,7 @@ def 됐다고_적기(결과: list[갈래결과], db: Path | None = None) -> None
             if r.오류:
                 s.안됐다(이름, r.오류[:200])
             else:
-                s.됐다(이름, f"{r.본것}곳 · 바뀐 줄 {r.바뀐줄}")
+                s.됐다(이름, f"{r.본것}곳 · 자동 줄 새로 {r.새자동} · 고침 {r.고친자동}")
     finally:
         s.close()
 
@@ -737,8 +752,10 @@ def 표로(결과: list[갈래결과], *, apply: bool, 요약만: bool = False) 
         # 회원 수를 못 본 줄까지 「못 본 것」에 들어가서, 얼마나 열렸는지가
         # 안 보였습니다. 상태를 따로 셉니다.
         열림 = r.상태셈.get("online", 0)
+        # 「바뀐 줄」 이 아닙니다. **사람 줄은 안 바뀝니다.** 다른 줄은 자동 줄로 갑니다
         조각 = [f"열린 곳 {열림}", f"수치까지 본 것 {r.본것}",
-               f"바뀐 줄 {r.바뀐줄}"]
+               f"사람 줄과 다름 {r.바뀐줄}",
+               f"자동 줄 새로 {r.새자동} · 고침 {r.고친자동}"]
         if r.건너뜀:
             조각.append(f"주소 없음 {r.건너뜀}")
         # 쉰 줄을 안 적으면 「다 봤다」로 읽힙니다. 안 본 것은 안 봤다고
@@ -786,8 +803,10 @@ def 표로(결과: list[갈래결과], *, apply: bool, 요약만: bool = False) 
                 줄.append(f"    … {len(처음본것) - 12}곳 더")
 
     줄.append("")
-    총바뀜 = sum(r.바뀐줄 for r in 결과)
+    총새로 = sum(r.새자동 for r in 결과)
+    총고침 = sum(r.고친자동 for r in 결과)
     총문제 = sum(len(r.문제) for r in 결과)
     머리 = "썼습니다" if apply else "미리보기입니다. --apply 를 주면 씁니다"
-    줄.append(f"  {머리} — 바뀐 줄 {총바뀜} · 살펴볼 것 {총문제}")
+    줄.append(f"  {머리} — 자동 줄 새로 {총새로} · 고침 {총고침} · 살펴볼 것 {총문제}"
+              f" · 사람 줄은 안 건드립니다")
     return "\n".join(줄)
