@@ -5,12 +5,13 @@
  * 팀원 화면이 갱신됐습니다. 그러면 서버에 올린 뜻이 없습니다 (2026-09-08 지적).
  * 지금은 화면이 열릴 때마다 Worker 가 노션을 직접 읽습니다.
  *
- * ## 세 가지를 합니다
+ * ## 하는 일
  *
  *   /data/dash.js    노션을 읽어 화면이 쓰는 데이터를 만들어 냅니다. 60초 캐시
  *   /api/review      O/X 를 노션 「검토 여부」 에 쓰고 규칙대로 「DB 반영」 을 맞춥니다
  *   /api/run         GitHub Actions 수집을 시작시킵니다
  *   /api/status      그 실행이 어디까지 갔는지 봅니다
+ *   /api/forum-rows  포럼 킷이 낸 칸 값을 수집 DB 에 새 줄로 올립니다 (2026-09-23)
  *
  * 로컬의 `serve.py` · `api.py` · `run_jobs.py` 가 하는 일과 같은 자리입니다.
  * 남의 서버에서는 파이썬이 못 돌고 최현서 PC 의 수집기도 못 부르므로, 수집은
@@ -20,7 +21,8 @@
  *
  * 노션에는 **「검토 여부」 와, 그에 딸린 「DB 반영」 둘뿐입니다.** 값은 셋(미검토 ·
  * 사건 O · 사건 X)만 받습니다. 「DB 반영」 은 화면이 정하지 않고 `공개로()` 규칙이
- * 정합니다. 그 밖의 칸도, 줄을 만들거나 지우는 것도 안 합니다.
+ * 정합니다. 그 밖의 칸도, 줄을 지우는 것도 안 합니다. **줄을 만드는 것은 포럼 사건
+ * 하나뿐입니다** — 사람이 화면에서 미리 보고 누를 때만이고, 미검토 · 공개 꺼짐으로 들어갑니다.
  * GitHub 에는 **아래 목록에 있는 워크플로만** 시작시킵니다. 임의 실행은 없습니다.
  * 토큰 둘은 Cloudflare 비밀값에만 있고 브라우저로 안 갑니다.
  *
@@ -142,6 +144,18 @@ const 일감표 = {
     노션: false,
     파일: "collect.yml",
     입력: { do_ransom: "true", do_telegram: "true", push_to_notion: "false", do_track: "true" },
+  },
+
+  // 포럼 사건은 워크플로가 없습니다. 포럼은 로그인과 챌린지가 있어 러너가 대신 못 봅니다.
+  // 사람이 포럼에서 킷을 누르고, 킷이 낸 칸 값을 이 화면이 받아 올립니다 (2026-09-23)
+  포럼사건: {
+    무리: "사건",
+    이름: "포럼 사건 올리기",
+    설명: "포럼 킷이 낸 칸 값을 받아 미리 보고 수집 DB 에 올립니다. 본문은 안 받습니다",
+    종류: "손",
+    밖: false,
+    노션: true,
+    길: "#forum-rows",
   },
 
   // ── 명부 ────────────────────────────────────────────────
@@ -626,6 +640,211 @@ async function 검토쓰기(request, env) {
   return json(200, { ok: true, page_id, 검토: 값, 공개, DB반영: 공개 === null ? 전반영 : 공개 });
 }
 
+// ── 포럼 사건 받기 ───────────────────────────────────────────────────────
+/*
+ * 포럼 킷이 낸 「칸 값」 을 수집 DB 에 올립니다. 수집 여섯 칸 중 마지막 칸인 포럼 사건입니다
+ * (2026-09-23 최현서 결정).
+ *
+ * **킷은 노션에 직접 쓰지 않습니다.** 킷은 포럼 페이지 안에서 돕니다. 그 페이지는 믿을 수
+ * 없는 곳이라 비밀번호나 열쇠를 들고 있으면 포럼 쪽 스크립트가 가로챌 수 있습니다. 킷은
+ * 값을 넘기기만 하고, 사람이 이 화면에서 미리 보고 누를 때만 여기가 씁니다.
+ *
+ * **본문은 안 받습니다.** 원문은 킷이 사람 PC 에 파일로만 떨굽니다. 여기 오는 것은 제목 ·
+ * 주소 · 게시자 · 날짜 · 게시판 · 한국 신호(도메인 · 한글 · Korea 낱말이 있었나)뿐이고,
+ * 모르는 키는 버립니다.
+ *
+ * **옛 길(kit_in.py → push.py)과 같은 줄을 만듭니다.** UID 를 같은 꼴로 만들어야 두 길로
+ * 올린 같은 글이 두 줄이 되지 않습니다. 로컬 `api.py` 가 같은 일을 파이썬으로 하고,
+ * `packages/tests/test_포럼사건.py` 가 둘과 `dc_store.Item.uid()` 를 맞춰 봅니다.
+ */
+
+// 한 번에 받는 줄. 무료 요금제는 요청 하나에 바깥 요청이 50번까지라, 겹침 조회 한 번과
+// 줄마다 만들기 한 번을 더해 그 밑에 둡니다. 화면이 이만큼씩 나눠 보냅니다
+const 포럼줄상한 = 20;
+const 포럼본문값 = new Set(["받음", "안 봄", "403"]);
+
+// kit_in.py 의 THREAD_ID 와 같은 차례입니다. 글 번호를 못 뽑으면 주소를 통째로 씁니다
+const 글번호꼴 = [/[?&]tid=(\d+)/, /\/threads?\/[^/]*?\.(\d+)/, /[?&]t=(\d+)/,
+  /\/topic\/(\d+)/, /\/(\d{3,})\/?$/];
+
+function 포럼글번호(주소, 곳) {
+  for (const r of 글번호꼴) {
+    const m = 주소.match(r);
+    if (m) return `${곳}/${m[1]}`;
+  }
+  return 주소 || 곳;
+}
+
+/** 앞 n 글자. **코드 포인트로 셉니다.** 파이썬 [:n] 과 같아야 UID 가 맞습니다. 이모지가 든
+ *  제목을 slice 로 자르면 JS 는 반쪽 글자에서 끊습니다. */
+function 앞글자(v, n) {
+  return Array.from(String(v || "")).slice(0, n).join("");
+}
+
+/** 킷이 보낸 것을 거릅니다. { 줄 } 이나 { 오류 } 를 돌려줍니다. */
+function 포럼줄검사(d) {
+  if (!d || d.종류 !== "darkchoco-forum-rows" || d.판 !== 1) {
+    return { 오류: "포럼 킷이 낸 칸 값이 아닙니다" };
+  }
+  const 줄들 = Array.isArray(d.줄) ? d.줄 : [];
+  if (!줄들.length) return { 오류: "줄이 없습니다" };
+  if (줄들.length > 포럼줄상한) return { 오류: `한 번에 ${포럼줄상한}줄까지 받습니다` };
+  // 제어 문자를 빈칸으로 바꾸고 앞뒤를 자릅니다. 제목에 줄바꿈이 섞여 오면 노션 제목이 깨집니다
+  const 글 = (v, n) => 앞글자((typeof v === "string" ? v : "").replace(/[\u0000-\u001f\u007f]/g, " ").trim(), n);
+  const 밖 = [];
+  for (const x of 줄들) {
+    const 주소 = 글(x && x.URL, 2000);
+    let u;
+    try { u = new URL(주소); } catch { return { 오류: `주소 꼴이 아닙니다: ${주소.slice(0, 80)}` }; }
+    if (u.protocol !== "http:" && u.protocol !== "https:") {
+      return { 오류: `http 주소가 아닙니다: ${주소.slice(0, 80)}` };
+    }
+    const 신호 = (x && x["한국 신호"]) || {};
+    const 도메인 = (Array.isArray(신호.도메인) ? 신호.도메인 : [])
+      .map((v) => 글(v, 100).toLowerCase())
+      .filter((v) => /^[a-z0-9-]+(\.[a-z0-9-]+)*\.kr$/.test(v))
+      .slice(0, 10);
+    밖.push({
+      제목: 글(x.제목, 500),
+      URL: 주소,
+      곳: u.host,
+      게시자: 글(x.게시자, 200),
+      날짜: 글(x.날짜, 60),
+      게시판: 글(x.게시판, 200),
+      본문: 포럼본문값.has(x.본문) ? x.본문 : "안 봄",
+      신호: { 도메인, 한글: 신호.한글 === true, korea: 신호.korea === true },
+    });
+  }
+  return { 줄: 밖 };
+}
+
+/** UID 재료. `dc_store.Item.uid()` 의 KEY 차례 그대로입니다 — src_id · venue · post_url · actor ·
+ *  target_org · title. 포럼 킷 줄은 target_org 가 비고 title 은 120 글자로 잘립니다(kit_in.py). */
+function 포럼UID재료(x) {
+  return [포럼글번호(x.URL, x.곳), x.곳, x.URL, x.게시자, "", 앞글자(x.제목, 120)]
+    .map((v) => String(v).trim().toLowerCase()).join("|");
+}
+
+async function 해시16(s) {
+  const b = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(s));
+  return [...new Uint8Array(b)].map((v) => v.toString(16).padStart(2, "0")).join("").slice(0, 16);
+}
+
+/** 한국 관련 근거. 판정기(dc_kr)는 파이썬이라 여기서 못 돌립니다. 킷이 본 신호를 판정기가
+ *  쓰는 말투로 적습니다. 포럼 줄은 옛 길에서도 대부분 「미확인」 이었습니다. */
+function 포럼근거(신호) {
+  const 근거 = [];
+  if (신호.도메인.length) 근거.push(`설명문에 한국 도메인 '${신호.도메인[0]}' (검토 필요)`);
+  if (신호.korea) 근거.push("설명문에 'korea' 언급 (검토 필요)");
+  if (신호.한글) 근거.push("설명문에 한글 포함 (검토 필요)");
+  근거.push("사람이 고른 글. 대상 조직은 검토하면서 채운다");
+  return 근거.join(" · ");
+}
+
+/** 노션 속성. push.py 의 만들기() 가 킷 줄에 내는 칸과 같게 둡니다. */
+function 포럼줄속성(x, uid, 오늘) {
+  const 글칸 = (v) => ({ rich_text: [{ text: { content: 앞글자(v, 2000) } }] });
+  const p = {
+    "자료 제목": { title: [{ text: { content: 앞글자(앞글자(x.제목, 120) || "제목 없음", 2000) } }] },
+    수집자: { select: { name: "자동" } },
+    "검토 여부": { select: { name: "미검토" } },
+  };
+  if (x.게시자) p["게시자 핸들"] = 글칸(x.게시자);
+  p["게시 플랫폼"] = 글칸(x.곳);
+  p["원문 URL"] = 글칸(x.URL);
+  // push.py 의 _날() 과 같습니다. 포럼 날짜는 대부분 「09-20-2026, 10:15 AM」 꼴이라 안 갑니다
+  const 날 = x.날짜;
+  if (날.length >= 10 && 날[4] === "-" && 날[7] === "-") {
+    p["게시 시각"] = { date: { start: 날 } };
+  }
+  p["수집일"] = { date: { start: 오늘 } };
+  p["게시 성격"] = { select: { name: "확인 못 함" } };
+  p["소스"] = { select: { name: "포럼" } };
+  p.UID = 글칸(uid);
+  p["한국 관련"] = { select: { name: "미확인" } };
+  p["한국 관련 근거"] = 글칸(포럼근거(x.신호));
+  return p;
+}
+
+async function 포럼사건받기(request, env) {
+  if (남의자리인가(request)) return json(403, { 오류: "다른 자리에서 온 요청입니다" });
+  if (!(request.headers.get("Content-Type") || "").includes("application/json")) {
+    return json(415, { 오류: "json 으로 보내십시오" });
+  }
+  if (!env.NOTION_TOKEN) {
+    return json(500, { 오류: "NOTION_TOKEN 이 없습니다. wrangler secret put 으로 넣으십시오" });
+  }
+  let d;
+  try {
+    d = await request.json();
+  } catch {
+    return json(400, { 오류: "json 이 아닙니다" });
+  }
+  const 검 = 포럼줄검사(d);
+  if (검.오류) return json(400, { 오류: 검.오류 });
+
+  const 머리 = {
+    Authorization: `Bearer ${env.NOTION_TOKEN}`,
+    "Notion-Version": 노션판,
+    "Content-Type": "application/json",
+  };
+  const 오늘 = 이제(Date.now()).slice(0, 10);
+  const 줄들 = [];
+  for (const x of 검.줄) 줄들.push({ x, uid: await 해시16(포럼UID재료(x)) });
+
+  // **겹침은 한 번에 봅니다.** UID 가 같거나 원문 URL 이 같으면 이미 있는 글입니다. UID 가
+  // 없던 옛 줄은 URL 로만 걸립니다. 사람이 「사건 X」 로 닫은 줄도 여기서 막혀 다시 안 들어갑니다
+  const 조건 = 줄들.flatMap(({ x, uid }) => [
+    { property: "UID", rich_text: { equals: uid } },
+    { property: "원문 URL", rich_text: { equals: x.URL } },
+  ]);
+  const q = await fetch(`https://api.notion.com/v1/data_sources/${수집DS}/query`, {
+    method: "POST",
+    headers: 머리,
+    body: JSON.stringify({ filter: { or: 조건 }, page_size: 100 }),
+  });
+  if (!q.ok) {
+    const 몸 = await q.text();
+    return json(502, { 오류: `노션 ${q.status}: 겹침을 못 봤습니다. 아무것도 안 썼습니다. ${몸.slice(0, 160)}` });
+  }
+  const 본것 = new Set();
+  for (const r of (await q.json()).results || []) {
+    const 칸 = r.properties || {};
+    for (const k of ["UID", "원문 URL"]) {
+      const v = ((칸[k] || {}).rich_text || []).map((t) => t.plain_text || "").join("");
+      if (v) 본것.add(v);
+    }
+  }
+
+  const 결과 = [];
+  let 썼다 = 0;
+  for (const { x, uid } of 줄들) {
+    if (본것.has(uid) || 본것.has(x.URL)) {
+      결과.push({ 제목: 앞글자(x.제목, 80), 결과: "겹침" });
+      continue;
+    }
+    const r = await fetch("https://api.notion.com/v1/pages", {
+      method: "POST",
+      headers: 머리,
+      body: JSON.stringify({
+        parent: { type: "data_source_id", data_source_id: 수집DS },
+        properties: 포럼줄속성(x, uid, 오늘),
+      }),
+    });
+    if (r.ok) {
+      썼다 += 1;
+      본것.add(uid);
+      본것.add(x.URL);
+      결과.push({ 제목: 앞글자(x.제목, 80), 결과: "올림" });
+    } else {
+      const 몸 = await r.text();
+      결과.push({ 제목: 앞글자(x.제목, 80), 결과: `실패 — 노션 ${r.status}: ${몸.slice(0, 120)}` });
+    }
+  }
+  if (썼다) 캐시 = { 언제: 0, 몸: null };
+  return json(200, { ok: true, 썼다, 결과 });
+}
+
 // ── GitHub Actions 돌리기 ────────────────────────────────────────────────
 
 function gh머리(token) {
@@ -934,6 +1153,10 @@ export default {
     if (url.pathname === "/api/run") {
       if (request.method !== "POST") return json(405, { 오류: "POST 로 보내십시오" });
       return 돌리기(request, env);
+    }
+    if (url.pathname === "/api/forum-rows") {
+      if (request.method !== "POST") return json(405, { 오류: "POST 로 보내십시오" });
+      return 포럼사건받기(request, env);
     }
     if (url.pathname === "/api/status") {
       if (request.method !== "POST") return json(405, { 오류: "POST 로 보내십시오" });

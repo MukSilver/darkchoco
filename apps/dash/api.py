@@ -1,4 +1,4 @@
-"""화면이 부르는 자리. **노션 「검토 여부」 와, 그에 딸린 「DB 반영」 만 씁니다.**
+"""화면이 부르는 자리. **노션 「검토 여부」 와 그에 딸린 「DB 반영」, 그리고 포럼 사건 줄만 씁니다.**
 
 `serve.py` 가 이 모듈을 붙여 씁니다. 따로 돌리는 것이 아닙니다.
 
@@ -11,8 +11,9 @@
 ## 무엇만 쓰나
 
 **「검토 여부」 를 쓰고, 규칙대로 「DB 반영」 을 맞춥니다.** 값은 세 가지(`미검토` ·
-`사건 O` · `사건 X`) 만 받습니다. 그 밖의 칸도, 그 밖의 값도, 줄을 만들거나 지우는
-것도 안 합니다.
+`사건 O` · `사건 X`) 만 받습니다. 그 밖의 칸도, 그 밖의 값도, 줄을 지우는 것도 안
+합니다. **줄을 만드는 것은 포럼 사건 하나뿐입니다** (아래 「포럼 사건 받기」, 2026-09-23).
+사람이 화면에서 미리 보고 누를 때만 오고, 미검토 · 공개 꺼짐으로 들어갑니다.
 
 「DB 반영」 은 지도 · RAG · 가이드가 같이 보는 공개 스위치입니다. 2026-09-23 부터
 검토가 그것을 이렇게 움직입니다 (`공개로()` · `DEV.md` 같은 날 판단 기록).
@@ -126,6 +127,147 @@ def 검토바꾸기(page_id: str, 값: str) -> dict:
             "공개": 공개, "DB반영": 전반영 if 공개 is None else 공개}
 
 
+# ── 포럼 사건 받기 (2026-09-23) ─────────────────────────────────────────
+#
+# 포럼 킷이 낸 「칸 값」 을 수집 DB 에 **새 줄로** 올립니다. 위에서 「줄을 만들지 않는다」
+# 고 적은 범위를 이것 하나만큼 넓혔습니다. 사람이 화면에서 미리 보고 누를 때만 옵니다.
+#
+# **배포판 `deploy/worker.js` 의 포럼사건받기() 와 같은 줄을 만듭니다.** UID 는 옛 길
+# (kit_in.py → push.py) 과 같은 코드로 만듭니다. `packages/tests/test_포럼사건.py` 가 셋을
+# 맞춰 봅니다. 본문은 안 받습니다.
+
+포럼줄상한 = 20
+_포럼본문값 = {"받음", "안 봄", "403"}
+_제어 = dict.fromkeys(list(range(0x20)) + [0x7F], " ")
+
+
+def _포럼글(v, n: int) -> str:
+    return (v if isinstance(v, str) else "").translate(_제어).strip()[:n]
+
+
+def 포럼줄검사(d) -> list[dict]:
+    """킷이 보낸 것을 거릅니다. 못 받을 것이면 ValueError. worker.js 의 포럼줄검사() 와 같습니다."""
+    import re
+    from urllib.parse import urlparse
+
+    if not isinstance(d, dict) or d.get("종류") != "darkchoco-forum-rows" or d.get("판") != 1:
+        raise ValueError("포럼 킷이 낸 칸 값이 아닙니다")
+    줄들 = d.get("줄") if isinstance(d.get("줄"), list) else []
+    if not 줄들:
+        raise ValueError("줄이 없습니다")
+    if len(줄들) > 포럼줄상한:
+        raise ValueError("한 번에 %d줄까지 받습니다" % 포럼줄상한)
+    밖 = []
+    for x in 줄들:
+        x = x if isinstance(x, dict) else {}
+        주소 = _포럼글(x.get("URL"), 2000)
+        u = urlparse(주소)
+        if u.scheme not in ("http", "https") or not u.netloc:
+            raise ValueError("http 주소가 아닙니다: %s" % 주소[:80])
+        신호 = x.get("한국 신호") if isinstance(x.get("한국 신호"), dict) else {}
+        도메인 = [_포럼글(v, 100).lower() for v in (신호.get("도메인") or [])
+                if isinstance(신호.get("도메인"), list)]
+        도메인 = [v for v in 도메인 if re.fullmatch(r"[a-z0-9-]+(\.[a-z0-9-]+)*\.kr", v)][:10]
+        밖.append({
+            "제목": _포럼글(x.get("제목"), 500),
+            "URL": 주소,
+            # JS 의 URL.host 와 맞춥니다 — 소문자, 기본 포트는 뺍니다
+            "곳": u.netloc.lower().removesuffix(":443" if u.scheme == "https" else ":80"),
+            "게시자": _포럼글(x.get("게시자"), 200),
+            "날짜": _포럼글(x.get("날짜"), 60),
+            "게시판": _포럼글(x.get("게시판"), 200),
+            "본문": x.get("본문") if x.get("본문") in _포럼본문값 else "안 봄",
+            "신호": {"도메인": 도메인, "한글": 신호.get("한글") is True,
+                   "korea": 신호.get("korea") is True},
+        })
+    return 밖
+
+
+def 포럼UID(x: dict) -> str:
+    """옛 길과 **같은 코드**로 만듭니다. kit_in.py 가 킷 줄을 Item 으로 만드는 꼴 그대로입니다."""
+    sys.path.insert(0, str(ROOT / "skills"))
+    from collect.kit_in import src_id_of
+    from dc_store import Item
+
+    return Item(source="forum", venue=x["곳"], src_id=src_id_of(x["URL"], x["곳"]),
+                actor=x["게시자"], target_org="", title=x["제목"][:120],
+                post_url=x["URL"]).uid()
+
+
+def 포럼근거(신호: dict) -> str:
+    근거 = []
+    if 신호["도메인"]:
+        근거.append("설명문에 한국 도메인 '%s' (검토 필요)" % 신호["도메인"][0])
+    if 신호["korea"]:
+        근거.append("설명문에 'korea' 언급 (검토 필요)")
+    if 신호["한글"]:
+        근거.append("설명문에 한글 포함 (검토 필요)")
+    근거.append("사람이 고른 글. 대상 조직은 검토하면서 채운다")
+    return " · ".join(근거)
+
+
+def 포럼줄속성(x: dict, uid: str, 오늘: str) -> dict:
+    """노션 속성. worker.js 의 포럼줄속성() 과 같습니다."""
+    def 글칸(v):
+        return {"rich_text": [{"text": {"content": str(v or "")[:2000]}}]}
+
+    p = {
+        "자료 제목": {"title": [{"text": {"content": (x["제목"][:120] or "제목 없음")[:2000]}}]},
+        "수집자": {"select": {"name": "자동"}},
+        "검토 여부": {"select": {"name": "미검토"}},
+    }
+    if x["게시자"]:
+        p["게시자 핸들"] = 글칸(x["게시자"])
+    p["게시 플랫폼"] = 글칸(x["곳"])
+    p["원문 URL"] = 글칸(x["URL"])
+    날 = x["날짜"]
+    if len(날) >= 10 and 날[4] == "-" and 날[7] == "-":
+        p["게시 시각"] = {"date": {"start": 날}}
+    p["수집일"] = {"date": {"start": 오늘}}
+    p["게시 성격"] = {"select": {"name": "확인 못 함"}}
+    p["소스"] = {"select": {"name": "포럼"}}
+    p["UID"] = 글칸(uid)
+    p["한국 관련"] = {"select": {"name": "미확인"}}
+    p["한국 관련 근거"] = 글칸(포럼근거(x["신호"]))
+    return p
+
+
+def 포럼사건받기(d) -> dict:
+    from datetime import datetime, timedelta, timezone
+
+    줄들 = [(x, 포럼UID(x)) for x in 포럼줄검사(d)]
+    오늘 = datetime.now(timezone(timedelta(hours=9))).strftime("%Y-%m-%d")
+    n = _노션()
+    조건 = []
+    for x, uid in 줄들:
+        조건 += [{"property": "UID", "rich_text": {"equals": uid}},
+               {"property": "원문 URL", "rich_text": {"equals": x["URL"]}}]
+    있는것 = n.request("POST", "/data_sources/%s/query" % _수집DB(),
+                    {"filter": {"or": 조건}, "page_size": 100}) or {}
+    본것 = set()
+    for r in 있는것.get("results") or []:
+        칸 = r.get("properties") or {}
+        for k in ("UID", "원문 URL"):
+            v = "".join(t.get("plain_text", "") for t in ((칸.get(k) or {}).get("rich_text") or []))
+            if v:
+                본것.add(v)
+    결과, 썼다 = [], 0
+    for x, uid in 줄들:
+        if uid in 본것 or x["URL"] in 본것:
+            결과.append({"제목": x["제목"][:80], "결과": "겹침"})
+            continue
+        try:
+            n.request("POST", "/pages", {
+                "parent": {"type": "data_source_id", "data_source_id": _수집DB()},
+                "properties": 포럼줄속성(x, uid, 오늘)})
+            썼다 += 1
+            본것.update((uid, x["URL"]))
+            결과.append({"제목": x["제목"][:80], "결과": "올림"})
+        except Exception as e:  # noqa: BLE001
+            결과.append({"제목": x["제목"][:80], "결과": "실패 — %s" % str(e)[:120]})
+    return {"ok": True, "썼다": 썼다, "결과": 결과}
+
+
 def 처리(경로: str, 몸: bytes) -> tuple[int, dict]:
     """(HTTP 코드, 돌려줄 것). serve.py 가 부릅니다.
 
@@ -134,6 +276,13 @@ def 처리(경로: str, 몸: bytes) -> tuple[int, dict]:
     """
     if 경로 == "/api/run":
         return _돌리기(몸)
+    if 경로 == "/api/forum-rows":
+        try:
+            return 200, 포럼사건받기(json.loads(몸.decode("utf-8")))
+        except (ValueError, UnicodeDecodeError) as e:
+            return 400, {"오류": str(e)[:300]}
+        except Exception as e:  # noqa: BLE001  노션이 막히거나 토큰이 없을 때
+            return 502, {"오류": "%s: %s" % (type(e).__name__, str(e)[:300])}
     if 경로 == "/api/status":
         import run_jobs
         return 200, run_jobs.상태()
