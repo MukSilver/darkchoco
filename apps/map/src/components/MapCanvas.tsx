@@ -1,0 +1,269 @@
+/**
+ * 지도 캔버스 — 설계서 4.2.3.
+ *
+ * 줌은 50~200%, 25% 단위다. 휠과 +/− 단추 둘 다 받는다. 드래그로 옮기고
+ * 「전체 보기」로 처음 자리(100%, 가운데)로 돌아온다.
+ *
+ * **포인터를 캡처하지 않는다.** 드래그 중 포인터가 캔버스를 벗어나도 따라오게
+ * 하려고 `setPointerCapture` 를 걸었더니, 캡처가 걸린 뒤로는 `pointerup` 과
+ * `click` 의 `target` 이 캡처한 요소로 고정돼 **무엇을 눌렀는지 알 수 없었다.**
+ * 섬 이름표를 눌러도 선택이 안 됐다. 캡처를 걷고 `pointermove` 에서 단추가
+ * 눌린 상태인지(`e.buttons`)로 드래그를 가른다.
+ *
+ * **d3-zoom 을 안 쓰고 직접 했다.** 설계서가 요구하는 것은 25% 단위 이산
+ * 확대와 드래그뿐이라 변환 하나면 끝난다. d3-zoom 을 끼우면 그 쪽이 갖는
+ * 연속 배율과 우리 25% 단위를 맞추는 코드가 더 길어진다. 관성이나 더블클릭
+ * 확대가 필요해지면 그때 바꾼다.
+ *
+ * **「전체 관계 보기」 토글은 안 만들었다.** 피그마 기본 화면 우측 상단에
+ * 보이지만, 설계서 4.2.7 이 「1차 개발 범위에서 제외」라고 못박았고 피그마
+ * 그림 캡션도 「(보류)」다. 둘이 같은 말을 한다.
+ */
+
+"use client";
+
+import { useCallback, useRef, useState } from "react";
+
+import HexMap from "./HexMap";
+import HoverTip from "./HoverTip";
+import type { MapLayout } from "@/lib/layout";
+
+/** 설계서 4.2.3 — 50%~200%, 25% 단위 */
+const ZOOM_MIN = 50;
+const ZOOM_MAX = 200;
+const ZOOM_STEP = 25;
+
+export type MapSelection =
+  | { kind: "none" }
+  | { kind: "island"; key: string; name: string }
+  | { kind: "territory"; id: string; name: string };
+
+/**
+ * 지도 아래 힌트 문구 — 설계서 4.2.3.
+ *
+ * **설계서의 그 표는 칸이 한 줄씩 밀려 있다.** 글자만 뽑으면 「선택 없음」
+ * 줄에 섬 선택 문구가 붙어 보인다. 피그마 기본 화면(선택 없음)의 힌트가
+ * 「섬 이름 클릭 → …」이므로 한 줄씩 당겨 읽은 것이 맞다.
+ */
+function hintText(sel: MapSelection): string {
+  if (sel.kind === "island") {
+    return `${sel.name} 섬 선택됨 · 영토를 클릭하면 관계선 표시`;
+  }
+  if (sel.kind === "territory") {
+    return `${sel.name} 선택됨 · 연결된 영토만 표시 중`;
+  }
+  return "섬 이름 클릭 → 섬 정보 · 영토 클릭 → 관계선";
+}
+
+export type MapCanvasProps = {
+  layout: MapLayout;
+  selection: MapSelection;
+  onSelect: (sel: MapSelection) => void;
+  /** 영토 id → 최근 관측일 `MM-DD`. 툴팁 다섯째 줄에 쓴다 */
+  lastSeen: Record<string, string>;
+};
+
+export default function MapCanvas({
+  layout,
+  selection,
+  onSelect,
+  lastSeen,
+}: MapCanvasProps) {
+  const [zoom, setZoom] = useState(100);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [hover, setHover] = useState<{ id: string; x: number; y: number } | null>(
+    null,
+  );
+  const drag = useRef<{ x: number; y: number; px: number; py: number } | null>(
+    null,
+  );
+  const moved = useRef(false);
+  const box = useRef<HTMLDivElement>(null);
+  /**
+   * 마지막 마우스 자리. 툴팁이 **처음 뜰 때** 여기 뜬다.
+   *
+   * 호버가 시작되는 순간에는 아직 `pointermove` 가 안 와서 좌표를 모른다.
+   * 0,0 으로 두면 툴팁이 캔버스 왼쪽 위에 붙었다가 다음 움직임에 튄다.
+   */
+  const at = useRef({ x: 0, y: 0 });
+
+  const hovered = hover
+    ? layout.territories.find((t) => t.territoryId === hover.id)
+    : undefined;
+  const hoveredIsland = hovered
+    ? layout.islands.find((i) => i.islandKey === hovered.islandKey)
+    : undefined;
+
+  const reset = useCallback(() => {
+    setZoom(100);
+    setPan({ x: 0, y: 0 });
+  }, []);
+
+  const step = (by: number) =>
+    setZoom((z) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z + by)));
+
+  return (
+    <div
+      ref={box}
+      className="relative flex-1 overflow-hidden rounded-[14px] border border-edge bg-canvas"
+    >
+      {/* 점 격자 바탕. 피그마 캔버스에 깔려 있다 */}
+      <div
+        aria-hidden
+        className="absolute inset-0"
+        style={{
+          backgroundImage:
+            "radial-gradient(var(--t-border-card) 1px, transparent 1px)",
+          backgroundSize: "28px 28px",
+          opacity: 0.35,
+        }}
+      />
+
+      {/* 아래쪽 여백은 힌트 알약과 줌 단추가 앉을 자리다. 안 두면 섬이 가린다 */}
+      <div
+        className="absolute inset-0 touch-none pb-[64px] pt-s4"
+        onWheel={(e) => step(e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP)}
+        onPointerDown={(e) => {
+          drag.current = { x: e.clientX, y: e.clientY, px: pan.x, py: pan.y };
+          moved.current = false;
+        }}
+        onPointerMove={(e) => {
+          const r = box.current?.getBoundingClientRect();
+          if (r) {
+            at.current = { x: e.clientX - r.left, y: e.clientY - r.top };
+            setHover((h) => (h ? { ...h, ...at.current } : h));
+          }
+          const d = drag.current;
+          // 왼쪽 단추를 놓은 채 지나가는 것은 드래그가 아니다. 캔버스 밖에서
+          // 놓고 돌아온 경우도 여기서 걸러진다
+          if (!d || (e.buttons & 1) === 0) {
+            drag.current = null;
+            return;
+          }
+          if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 3) {
+            moved.current = true;
+          }
+          setPan({ x: d.px + (e.clientX - d.x), y: d.py + (e.clientY - d.y) });
+        }}
+        onPointerUp={() => {
+          drag.current = null;
+        }}
+        onPointerLeave={() => {
+          drag.current = null;
+        }}
+        onClick={(e) => {
+          // 끌고 놓은 것은 클릭이 아니다
+          if (moved.current) return;
+          const hit =
+            e.target instanceof Element
+              ? e.target.closest("[data-pick]")
+              : null;
+          const id = hit?.getAttribute("data-id") ?? "";
+
+          if (hit?.getAttribute("data-pick") === "island") {
+            const i = layout.islands.find((x) => x.islandKey === id);
+            if (i) onSelect({ kind: "island", key: id, name: i.name });
+            return;
+          }
+          if (hit?.getAttribute("data-pick") === "territory") {
+            const tt = layout.territories.find((x) => x.territoryId === id);
+            if (tt) onSelect({ kind: "territory", id, name: tt.name });
+            return;
+          }
+          // 설계서 4.2.3 — 빈 곳 클릭이면 선택 해제
+          onSelect({ kind: "none" });
+        }}
+      >
+        {layout.islands.length === 0 && (
+          // 스냅샷을 수집 시작 전으로 옮기면 그릴 것이 없다. 빈 캔버스만
+          // 두면 고장난 것처럼 보인다
+          <p className="flex size-full items-center justify-center text-[13px] text-label">
+            이 기준일까지 올라온 사건이 없습니다
+          </p>
+        )}
+        <div
+          className="size-full"
+          style={{
+            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom / 100})`,
+            transformOrigin: "center center",
+          }}
+        >
+          <HexMap
+            layout={layout}
+            selectedTerritory={
+              selection.kind === "territory" ? selection.id : undefined
+            }
+            selectedIsland={
+              selection.kind === "island" ? selection.key : undefined
+            }
+            onHoverTerritory={(id) =>
+              setHover(id ? { id, ...at.current } : null)
+            }
+          />
+        </div>
+      </div>
+
+      {hovered && hoveredIsland && hover && (
+        <HoverTip
+          territory={hovered}
+          islandName={hoveredIsland.name}
+          lastSeen={lastSeen[hovered.territoryId] ?? null}
+          at={{ x: hover.x, y: hover.y }}
+        />
+      )}
+
+      <div
+        className="pointer-events-none absolute left-s5 flex items-center gap-s2 rounded-full border border-edge bg-panel px-s4 text-[12px] text-body"
+        style={{ bottom: "var(--s-5)", height: "var(--h-hint)" }}
+      >
+        <span
+          aria-hidden
+          className="size-[6px] rounded-full"
+          style={{ background: "var(--t-accent)" }}
+        />
+        {hintText(selection)}
+      </div>
+
+      <div
+        className="absolute right-s5 flex items-center gap-s3"
+        style={{ bottom: "var(--s-5)" }}
+      >
+        <div
+          className="flex items-center rounded-full border border-edge bg-panel"
+          style={{ height: "var(--h-zoom)" }}
+        >
+          <button
+            type="button"
+            aria-label="축소"
+            disabled={zoom <= ZOOM_MIN}
+            onClick={() => step(-ZOOM_STEP)}
+            className="px-s4 text-[13px] text-body disabled:text-disabled"
+          >
+            −
+          </button>
+          <span className="w-[52px] text-center text-[12px] tabular-nums text-body">
+            {zoom}%
+          </span>
+          <button
+            type="button"
+            aria-label="확대"
+            disabled={zoom >= ZOOM_MAX}
+            onClick={() => step(ZOOM_STEP)}
+            className="px-s4 text-[13px] text-body disabled:text-disabled"
+          >
+            +
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={reset}
+          className="flex items-center gap-s2 rounded-full border border-edge bg-panel px-s4 text-[12px] text-body"
+          style={{ height: "var(--h-zoom)" }}
+        >
+          <span aria-hidden>⛶</span>
+          전체 보기
+        </button>
+      </div>
+    </div>
+  );
+}
