@@ -4,6 +4,8 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "생태계 지도",
   description: "유출 생태계를 섬 지도로 보여 줍니다",
+  // 색인 거부 세 겹 가운데 둘째 (public/robots.txt · public/_headers 와 같이 푼다)
+  robots: { index: false, follow: false, noarchive: true },
 };
 
 /**
