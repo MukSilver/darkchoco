@@ -474,8 +474,11 @@ class Engine:
               "Translate it into natural, spoken English for a live chat.\n"
               "Keep the meaning exactly. Do not add or remove anything.\n"
               "Plain conversational English. No slang, no formal letter style.\n"
-              "Do not explain. Do not think out loud.\n"
-              "Output exactly one line: the English translation. Nothing else.")
+              "Do not explain. Do not think out loud.")
+        # **이 줄은 반드시 맨 끝에 온다.** 사전을 이 뒤에 붙였더니 1.7B 가 사전을
+        # 마지막 지시로 받아 그 영어를 문장 머리에 박고 나머지를 버렸다.
+        # 2026-09-23 에 용어 46줄 전부로 재고 블라인드로 채점했다
+        끝줄 = "Output exactly one line: the English translation. Nothing else."
         걸린것 = [(t["한국어"], t["영어"]) for t in self.terms
                 if t.get("한국어") and t.get("영어")
                 and _걸리나(t["한국어"], t.get("뒤에오면빼기"), text)]
@@ -495,9 +498,33 @@ class Engine:
         # 「초기 접근」과 「초기 접근 브로커」가 지금도 이 상태다
         걸린것 = [(k, v) for k, v in 걸린것
                 if not any(k != k2 and k in k2 for k2, _ in 걸린것)]
+        # **사전은 규칙과 끝줄 사이에 끼우고 hints 라 부른다.** 세 판을 용어 46줄로
+        # 돌려 블라인드로 채점했다 (2026-09-23, 판정자 셋 × 46문장, O=2 ~=1 X=0).
+        #
+        #                     뜻보존  취재실무  영어감각   합계   O개  X개
+        #     사전 없이          30     34      39     103   28   63
+        #     맨 뒤 · exact     54     60      48     162   48   24
+        #     사이 · exact      54     56      48     158   46   26
+        #     사이 · hints      56     59      57     172   59   25   ← 이것
+        #
+        # **X 를 안 늘리면서 ~ 를 O 로 열한 개 올린다.** 자리와 문구가 따로 값을
+        # 한다 — 자리만 옮기면 오히려 조금 내려가고(158), 문구까지 바꿔야 오른다.
+        #
+        #     맨 뒤 · exact   Bulletproof hosting where do you use it?
+        #     사이 · hints    Where do you use bulletproof hosting?
+        #     맨 뒤 · exact   Double extortion is often used.      ← 물음이 평서문이 됐다
+        #     사이 · hints    Do you often use double extortion?
+        #
+        # 「exact」라는 말이 모델을 굳게 만든다. 「hints」와 「replace single words,
+        # not the sentence」가 사전을 낱말 수준으로 묶어 둔다.
+        #
+        # **사전 자체는 확실히 값을 한다.** 없이가 103 으로 압도적 꼴찌다.
+        # 사전이 해로운 자리가 있다고 해서 사전을 빼면 훨씬 나빠진다
         if 걸린것:
-            지시 += "\nUse these exact terms:\n" + "\n".join(
-                "  %s = %s" % (k, v) for k, v in 걸린것)
+            지시 += ("\nWord hints (Korean → English to use):\n"
+                   + "\n".join("  %s → %s" % (k, v) for k, v in 걸린것)
+                   + "\nHints replace single words, not the sentence.")
+        지시 += "\n" + 끝줄
         # Qwen3 는 생각 모드가 기본이라 토큰을 전부 <think> 에 쓴다.
         # 빈 <think></think> 를 미리 넣는 것이 공식 틀의 enable_thinking=False 다
         return ("<|im_start|>system\n%s<|im_end|>\n"
