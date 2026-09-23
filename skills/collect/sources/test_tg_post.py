@@ -251,10 +251,50 @@ f_w, sh_w, nt_w = tg_post.read_post("{이건 JSON 도 아니고 라벨도 아니
 check("더 못 읽으면 글자만", sh_w, "글자만")
 check("그래도 사유는 남긴다", bool(nt_w), True)
 
+# ── 13묶음. 칸이 없는 글에서 국가와 대상을 뽑는다 (2026-09-23, 관문 「다」) ──
+# 꼴은 2026-09-23 속보 채널 글을 본떴다. 조직명과 도메인은 지어낸 것이다.
+FR, KR_, EU = "\U0001F1EB\U0001F1F7", "\U0001F1F0\U0001F1F7", "\U0001F1EA\U0001F1FA"
+SIREN = "\U0001F6A8"
+check("국기 → 국가", tg_post.flag_country(SIREN + FR + " Examplecorp data leaked"), "FR")
+check("한국 국기", tg_post.flag_country(SIREN + KR_ + " x"), "KR")
+check("EU 는 나라가 아니다", tg_post.flag_country(SIREN + EU + " x"), "")
+check("국기가 둘째 줄에 있으면 안 본다", tg_post.flag_country("hello\n" + FR), "")
+
+for title, want in (
+        ("Examplecorp customer and booking data allegedly leaked", "Examplecorp"),
+        ("Example Shop dataset allegedly exposes 2,535 records", "Example Shop"),
+        ("Examplecorp internal credentials and information allegedly offered for sale",
+         "Examplecorp"),
+        ("JUST IN: Examplebank database leaked", "Examplebank"),
+        ("Hackers claim Examplecorp user data breached", "Examplecorp"),
+        ("Police dismantle example dark web drug network", ""),
+        ("Examplegroup names a healthcare company", "")):
+    check("속보 꼴: %s" % title[:30],
+          tg_post.org_from_text(SIREN + FR + " " + title)[0], want)
+check("국기가 없으면 제목에서 안 뽑는다",
+      tg_post.org_from_text("Examplecorp customer data leaked"), ("", ""))
+check("본문의 한국 도메인", tg_post.org_from_text("selling db\nshop.example.co.kr 20k"),
+      ("shop.example.co.kr", "본문 한국 도메인"))
+check("전자우편은 대상이 아니다", tg_post.org_from_text("contact admin@example.co.kr"),
+      ("", ""))
+check("여섯 낱말을 넘으면 안 뽑는다", tg_post.org_from_text(
+      SIREN + FR + " one two three four five six seven data leaked"), ("", ""))
+
+it_f = item(SIREN + FR + " Examplecorp customer data allegedly leaked\nmore text")
+check("글자만 글에도 대상이 붙는다", it_f.target_org, "Examplecorp")
+check("국가도 붙는다", it_f.country, "FR")
+check("어디서 뽑았는지 남긴다", (it_f.raw.get("대상 조직 출처"), it_f.raw.get("국가 출처")),
+      ("제목(속보 꼴)", "국기"))
+check("제목은 첫 줄 그대로", it_f.title.endswith("allegedly leaked"), True)
+
+it_c = item("\U0001F6E1 New CVE\n• CVE ID: CVE-2026-0001\n• CVSS Score: 9.8\n"
+            "affects shop.example.co.kr")
+check("CVE 글은 본문에서 안 뽑는다", it_c.target_org, "")
+
 # ── 결과 ────────────────────────────────────────
 if fails:
     print("실패 %d" % len(fails))
     for f_ in fails:
         print("  - %s" % f_)
     sys.exit(1)
-print("통과. 시험 12 묶음")
+print("통과. 시험 13 묶음")

@@ -177,10 +177,73 @@ def test_포럼_줄은_대상_조직이_비어도_올린다():
     올림, 왜 = push.사건인가(_기본(source="forum", target_org="", venue="어느포럼"))
     assert 올림 is True
     assert 왜
-    # 랜섬·텔레그램은 대상 조직이 있어야 한다
+    # 랜섬은 대상 조직이 있어야 한다
+    assert push.사건인가(_기본(source="ransom", target_org=""))[0] is False
     for s in ("ransom", "telegram"):
-        assert push.사건인가(_기본(source=s, target_org=""))[0] is False
         assert push.사건인가(_기본(source=s, target_org="어떤 회사"))[0] is True
+
+
+# ── 텔레그램 관문 「나」 (2026-09-23) ────────────────────────────────
+def _텔레(**바꿈) -> 줄:
+    """대상 조직을 못 읽은 텔레그램 글. 기본은 한국 신호가 없다."""
+    r = _기본(source="telegram", venue="t.me/어느채널", venue_kind="telegram",
+             target_org="", target_domain="", country="",
+             title="Some shop customer list 20k lines", body="",
+             raw=json.dumps({"글 종류": "기타", "우리 대상": None}))
+    r.update(바꿈)
+    return r
+
+
+def test_텔레그램은_대상_조직이_없어도_한국_신호가_있으면_올린다():
+    올림, 왜 = push.사건인가(_텔레(title="fresh dump of shop.example.co.kr users"))
+    assert 올림 is True, 왜
+    assert "한국 신호" in 왜 and "example.co.kr" in 왜, 왜
+
+
+def test_텔레그램은_한국_신호도_없으면_뺀다():
+    올림, 왜 = push.사건인가(_텔레())
+    assert 올림 is False and 왜 == "", 왜
+
+
+def test_CVE_와_악성코드는_한국_신호가_있어도_뺀다():
+    """유출 글이 아니다. 판정기를 부르기 전에 뺀다."""
+    r = _텔레(title="CVE in something used by shop.example.co.kr",
+             raw=json.dumps({"글 종류": "CVE 알림", "우리 대상": False}))
+    assert push.사건인가(r) == (False, "유출 글이 아닙니다")
+
+
+def test_랜섬은_한국_신호만으로는_안_올린다():
+    """「나」 는 텔레그램에만 준다. 랜섬 줄은 피해자 칸이 늘 차 있어야 정상이다."""
+    assert push.사건인가(_기본(source="ransom", target_org="",
+                               title="shop.example.co.kr"))[0] is False
+
+
+def _노션줄(검토: str, 조직: str) -> dict:
+    return {"properties": {
+        "검토 여부": {"select": {"name": 검토} if 검토 else None},
+        "대상 조직": {"rich_text": [{"plain_text": 조직}] if 조직 else []},
+    }}
+
+
+def test_확정된_조직은_사건_O_만_짧은_이름과_흔한_말은_뺀다():
+    줄들 = [_노션줄("사건 O", "Examplemart"), _노션줄("사건 X", "Foreignco"),
+          _노션줄("미검토", "Pendingco"), _노션줄("사건 O", "abc"),
+          _노션줄("사건 O", "Korea"), _노션줄("사건 O", "  Examplemart "),
+          _노션줄("사건 O", "")]
+    assert push.확인된_조직들(줄들) == ["examplemart"]
+
+
+def test_확정된_조직을_판정기가_알아본다():
+    """한 번 털린 중소 사이트가 다시 팔리는 글. 기업 목록에 없으면 못 알아봤다."""
+    r = _텔레(title="Examplemart full customer database for sale")
+    try:
+        push._clf = None
+        assert push.사건인가(r)[0] is False, "넣기 전인데 알아봤다"
+        push._분류기(["examplemart"])
+        올림, 왜 = push.사건인가(r)
+        assert 올림 is True and "examplemart" in 왜, 왜
+    finally:
+        push._clf = None          # 다음 시험이 보강된 판정기를 받지 않게
 
 
 def test_글_안의_한국_도메인을_잡는다():
