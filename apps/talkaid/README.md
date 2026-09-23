@@ -484,6 +484,7 @@ PowerToys 를 이미 쓰고 있으면 Text Extractor(`Win+Shift+T`)가 한 단�
     판정결과/        판별 기록. 지우지 않는다 — 옛것과 견줘야 한다
     tests/          test_bag · test_engine · test_talkaid · test_ui
     docs/확인목록.md   **손으로 눌러 봐야 하는 열여섯.** 넘겨주기 전과 exe 를 다시 지은 뒤
+    docs/거리.md      다음에 볼 거리.  하기로 정한 것이 아니라 근거와 크기를 적어 둔 것
 
 시험 마흔아홉 묶음은 창을 안 띄우고 모델을 안 올린다. 단축키 · 클립보드 · 번역
 품질 · exe 안의 자료는 사람이 본다. 그 목록이 `docs/확인목록.md` 다.
