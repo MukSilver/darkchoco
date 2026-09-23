@@ -97,6 +97,55 @@ def 워크플로입력(파일: str) -> dict:
     return 밖
 
 
+def 요약무늬읽기() -> list:
+    """worker.js 의 `요약무늬` 를 파이썬 정규식으로 옮긴다. 이 범위에서는 꼴이 같다."""
+    글 = 워커.read_text(encoding="utf-8")
+    m = re.search(r"^const 요약무늬 = \[$(.*?)^\];$", 글, re.S | re.M)
+    assert m, "worker.js 에서 요약무늬를 못 찾았다"
+    return [re.compile(x) for x in re.findall(r"^\s*/(.+)/,\s*$", m.group(1), re.M)]
+
+
+# 대시보드 로그 요약에 **떠야 하는** 명부 줄. (파일, 코드에 있어야 할 문구, 찍히는 꼴)
+#
+# 2026-09-23 에 `run.py` 가 건너뜀 문구를 바꾸고 worker.js 의 무늬를 안 바꿔서, 그 줄이
+# 대시보드에서 조용히 빠졌다. 코드 문구가 바뀌면 둘째 칸 검사가 먼저 떨어져 여기를
+# 같이 보게 된다.
+떠야할줄 = [
+    ("hub/places/run.py", "깊은 판을 건너뜁니다 — ",
+     "깊은 판을 건너뜁니다 — playwright 가 안 깔렸습니다"),
+    ("hub/places/run.py", "분에서 끊습니다",
+     "깊은 판을 90분에서 끊습니다 (40/97)"),
+    ("hub/places/run.py", "수치까지 본 것 ",
+     "포럼 DB        열린 곳 8 · 수치까지 본 것 12 · 바뀐 줄 3  41초"),
+    ("hub/places/run.py", "— 바뀐 줄 ",
+     "썼습니다 — 바뀐 줄 573 · 살펴볼 것 48"),
+    ("hub/places/run.py", "명부에 없는 이웃 ",
+     "명부에 없는 이웃 42곳 (노션에 안 씁니다)"),
+    ("hub/places/probe/ransom.py", "달치를 받습니다",
+     "집계처에서 피해 6달치를 받습니다 (요청 사이 62초라 6분쯤 걸립니다)"),
+]
+
+# **떠서는 안 되는** 줄. `--요약만` 을 뺐을 때 찍히는 꼴이다. 레포가 공개라 무늬가
+# 이런 줄을 집으면 이름이 화면과 로그 요약으로 나간다
+안떠야할줄 = [
+    "!! 다크포럼클론3: 스키마에 없는 칸 ['별칭']",
+    "mirror2.onion                                    ← qilin",
+]
+
+
+def 로그무늬검사() -> None:
+    무늬 = 요약무늬읽기()
+    for 파일, 문구, 꼴 in 떠야할줄:
+        봄("%s 가 「%s」 를 아직 찍는다" % (파일, 문구.strip()),
+           문구 in (루트 / 파일).read_text(encoding="utf-8"),
+           "문구가 바뀌었다. worker.js 요약무늬도 같이 본다")
+        봄("대시보드가 「%s」 줄을 잡는다" % 문구.strip(),
+           any(p.search(꼴.strip()) for p in 무늬), 꼴)
+    for 꼴 in 안떠야할줄:
+        걸린것 = [p.pattern for p in 무늬 if p.search(꼴.strip())]
+        봄("이름이 든 줄을 안 잡는다 — %s" % 꼴[:24], not 걸린것, " · ".join(걸린것))
+
+
 def main() -> int:
     표 = 일감표읽기()
     봄("일감표를 읽었다 (%d개)" % len(표), len(표) >= 4,
@@ -150,6 +199,8 @@ def main() -> int:
         봄("%s — 잡 ID 가 영문이다" % f, not 나쁜, " · ".join(나쁜))
         나쁜입력 = [k for k in 워크플로입력(f) if not k.isascii()]
         봄("%s — 입력 이름이 영문이다" % f, not 나쁜입력, " · ".join(나쁜입력))
+
+    로그무늬검사()
 
     print("\n%d개 중 %d개 실패" % (len(친것) + len(샌것), len(샌것)))
     return 1 if 샌것 else 0
