@@ -64,16 +64,42 @@ from dc_notion import Notion  # noqa: E402
 _clf: KrClassifier | None = None
 
 
-def _분류기() -> KrClassifier:
+def _분류기(확인된조직: list[str] | None = None) -> KrClassifier:
     """처음 부를 때만 만듭니다. 키워드 파일을 읽는 값이 있습니다.
 
     문턱을 `review` 로 둡니다. 알림은 `likely` 위만 보내지만 여기는 노션에 올리는
     자리라, 사람이 봐야 할 것도 목록에 올려 놓고 검토에서 가르는 편이 낫습니다.
+
+    **`확인된조직` 을 주면 새로 만듭니다** (2026-09-23). 수집 DB 에서 사람이 사건 O 로
+    확정한 한국 조직 이름입니다. 판정기의 기업 목록은 대기업 백여 곳뿐이라, 한 번 털린
+    중소 사이트가 다시 팔리는 글을 못 알아봤습니다. 이름은 노션에서 그때그때 읽고
+    **레포에 적지 않습니다.** 레포가 공개라 피해 조직 목록이 파일로 남습니다.
     """
     global _clf
-    if _clf is None:
+    if 확인된조직 is not None:
+        _clf = KrClassifier({"min_tier_to_report": "review",
+                             "extra_keywords": 확인된조직})
+    elif _clf is None:
         _clf = KrClassifier({"min_tier_to_report": "review"})
     return _clf
+
+
+# 판정기에 더하면 안 되는 이름. 짧거나 흔한 낱말은 남의 글에도 걸립니다
+_흔한이름 = {"korea", "korean", "seoul", "test", "shop", "mall", "bank", "news", "data"}
+
+
+def 확인된_조직들(노션줄들: list[dict]) -> list[str]:
+    """수집 DB 에서 사건 O 인 줄의 대상 조직 이름. **네 글자 미만과 흔한 낱말은 뺍니다.**"""
+    out = set()
+    for r in 노션줄들:
+        p = r.get("properties") or {}
+        if ((p.get("검토 여부") or {}).get("select") or {}).get("name") != "사건 O":
+            continue
+        v = "".join(x.get("plain_text", "")
+                    for x in ((p.get("대상 조직") or {}).get("rich_text") or [])).strip().lower()
+        if len(v) >= 4 and v not in _흔한이름 and not v.isdigit():
+            out.add(v)
+    return sorted(out)
 
 수집DB = "5160ce53-7ce2-4271-879e-06f3ad9957cf"
 기본표 = ROOT / "hub" / "data" / "darkchoco.db"
@@ -238,10 +264,29 @@ def 사건인가(줄) -> tuple[bool, str]:
     다만 포럼은 다릅니다. 킷은 자동으로 안 돕니다 — 사람이 브라우저에서 글을 열고
     눌러야 돕니다. 그 줄은 이미 한 번 걸러진 글이고, 대상 조직이 빈 것은 피해자가
     없어서가 아니라 포럼 글에서는 회사 이름이 칸이 아니라 문장으로만 있어서입니다.
+    텔레그램도 한국 신호가 있으면 올립니다. 아래 본문에 까닭이 있습니다.
     """
-    if 소스.get(_값(줄, "source").strip()) == "포럼":
+    소스이름 = 소스.get(_값(줄, "source").strip())
+    if 소스이름 == "포럼":
         return True, "사람이 킷을 돌린 글"
-    return bool(_값(줄, "target_org").strip()), ""
+    if _값(줄, "target_org").strip():
+        return True, ""
+    if 소스이름 != "텔레그램":
+        return False, ""
+    # **텔레그램은 대상 조직을 못 읽어도 한국 신호가 있으면 올립니다** (2026-09-23, 관문 「나」).
+    #
+    # 채널 글 대부분이 칸 이름 없이 글로만 써서 대상 조직을 못 읽습니다. 한 판 193건 중
+    # 176건이 그랬고 전부 여기서 빠졌습니다. 버리지 않고 「미검토」 로 올려 대시보드에서
+    # 사람이 O/X 를 찍게 합니다. 다만 **한국 신호가 없는 글까지 올리면 외국 판매 글과
+    # 광고가 판마다 쏟아집니다.** 그래서 판정기가 review 이상을 낸 글만 올립니다.
+    #
+    # CVE 알림과 악성코드 시그니처는 유출 글이 아닙니다. 판정 전에 뺍니다.
+    if _raw(_값(줄, "raw")).get("우리 대상") is False:
+        return False, "유출 글이 아닙니다"
+    등급, _점수, 근거 = _분류기().classify(_판정재료(줄))
+    if 등급 != "none":
+        return True, "대상 조직을 못 읽었지만 한국 신호가 있습니다: " + " · ".join(근거)
+    return False, ""
 
 
 def 외국인가(줄) -> bool:
@@ -392,10 +437,12 @@ def _노션줄의_열쇠(r: dict) -> tuple[str, str]:
     return 글("UID").strip(), _열쇠(글("원문 URL"), 제목, 글("게시 플랫폼"))
 
 
-def 이미있는것(n: Notion) -> tuple[set[str], set[str]]:
-    """노션에 이미 있는 줄의 (UID 들, 열쇠들). 사람이 쓴 것도 여기 들어갑니다."""
+def 이미있는것(n: Notion, 줄들: list[dict] | None = None) -> tuple[set[str], set[str]]:
+    """노션에 이미 있는 줄의 (UID 들, 열쇠들). 사람이 쓴 것도 여기 들어갑니다.
+
+    이미 읽어 둔 `줄들` 을 주면 노션을 다시 안 읽습니다."""
     본uid, 본것 = set(), set()
-    for r in n.query_all(수집DB):
+    for r in (줄들 if 줄들 is not None else n.query_all(수집DB)):
         uid, k = _노션줄의_열쇠(r)
         if uid:
             본uid.add(uid)
@@ -430,6 +477,9 @@ def main(argv: list[str] | None = None) -> int:
     # 피해자가 없으면 사건이 아닙니다. 그것이 가르는 가장 단순한 기준입니다.
     # 표에는 그대로 두고 노션에만 안 올립니다. 나중에 어댑터가 유출 글을
     # 가려내게 되면 그때 올라갑니다.
+    #
+    # 예외가 둘입니다 — 포럼 킷 줄, 그리고 **한국 신호가 있는 텔레그램 글**
+    # (2026-09-23). 까닭은 사건인가() 에 있습니다.
     # **관문을 SQL 에 두지 않습니다.** 소스마다 자격이 다른데 조건문에 넣으면
     # 조건이 계속 자라고 시험을 못 씁니다. 넓게 뽑아 파이썬에서 가릅니다.
     조건, 값 = ["forgotten = 0"], []
@@ -438,13 +488,29 @@ def main(argv: list[str] | None = None) -> int:
     q = "select * from items where " + " and ".join(조건) + " order by first_seen desc"
     전부 = list(c.execute(q, 값))
 
+    # **노션을 먼저 읽습니다.** 겹침을 보려고 어차피 읽는데, 사람이 사건 O 로 확정한
+    # 조직 이름을 판정기에 먼저 넣어야 관문(사건인가)이 그 이름을 알아봅니다.
+    n = Notion()
+    print("  노션에 이미 있는 것을 봅니다...", flush=True)
+    노션줄들 = n.query_all(수집DB)
+    확인된것 = 확인된_조직들(노션줄들)
+    _분류기(확인된것)
+    print("  판정기에 사람이 확정한 한국 조직 %d곳을 더했습니다" % len(확인된것))
+
     # **--limit 은 거른 뒤에 겁니다.** SQL 에 걸면 스무 줄을 뽑아 거기서 또 빼므로
     # 실제로 올라가는 것이 몇 줄일지 미리 알 수 없습니다.
-    줄들, 사건아님, 외국 = [], 0, []
+    줄들, 외국 = [], []
+    유출아님 = 신호없음 = 신호로올림 = 0
     for r in 전부:
-        if not a.모두 and not 사건인가(r)[0]:
-            사건아님 += 1
-            continue
+        if not a.모두:
+            올림, 왜 = 사건인가(r)
+            if not 올림:
+                if 왜 == "유출 글이 아닙니다":
+                    유출아님 += 1
+                else:
+                    신호없음 += 1
+                continue
+            신호로올림 += 왜.startswith("대상 조직을 못 읽었지만")
         if a.kr and 외국인가(r):
             외국.append(_자취(r))
             continue
@@ -454,20 +520,21 @@ def main(argv: list[str] | None = None) -> int:
 
     print()
     print("  items 표 %d줄 중 %d줄을 골랐습니다" % (len(전부), len(줄들)))
-    if 사건아님:
-        print("    대상 조직이 없는 %d줄은 뺐습니다. 유출 사건이 아닙니다" % 사건아님)
+    if 유출아님 or 신호없음:
+        print("    대상 조직이 없는 %d줄은 뺐습니다. 유출 사건이 아닙니다" % (유출아님 + 신호없음))
+        print("      CVE · 악성코드 %d줄 · 대상 조직도 한국 신호도 없는 %d줄" % (유출아님, 신호없음))
         print("      (포럼 줄은 사람이 킷을 돌린 글이라 대상 조직이 비어도 올립니다)")
         # **여기는 자취를 안 찍습니다.** 매 실행마다 130줄 넘게 나오고 대부분
         # 같은 채널 공지가 되풀이됩니다. 로그를 그만큼 불려도 되짚을 것이 없습니다.
+    if 신호로올림:
+        print("    대상 조직은 못 읽었지만 한국 신호가 있어 미검토로 올리는 텔레그램 %d줄" % 신호로올림)
     if 외국:
         print("    국가가 한국이 아닌 %d줄은 뺐습니다. 모르는 것은 올립니다" % len(외국))
         _뺀줄찍기(외국)
     if not 줄들:
         return 0
 
-    n = Notion()
-    print("  노션에 이미 있는 것을 봅니다...", flush=True)
-    본uid, 본것 = 이미있는것(n)
+    본uid, 본것 = 이미있는것(n, 노션줄들)
     print("  노션에 %d줄이 있습니다 (UID 가 찬 줄 %d)" % (len(본것), len(본uid)))
 
     # **표 안에서도 겹칩니다.** URL 이 없는 줄은 제목과 곳으로만 가리는데,
