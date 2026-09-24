@@ -206,6 +206,27 @@ def test_이어_붙이기_규칙():
     assert 붙("— 없음 —", "y.example") == "y.example"
 
 
+def test_미러_줄은_주소마다_본다():
+    """랜섬 조사기는 미러 여럿을 「a · b · c」 한 줄로 넘긴다. 첫 주소만 보면 안 된다.
+
+    2026-09-24 첫 쓰기에서 첫 주소가 새것인 줄이 이미 있던 미러까지 통째로 붙어
+    랜섬 9줄에 같은 주소가 두 번 들어갔다.
+    """
+    붙 = write._이어붙이기
+    있던 = "http://a.onion · http://b.onion"
+    assert 붙(있던, "http://c.onion · http://a.onion · http://b.onion") == 있던 + "\nhttp://c.onion"
+    assert 붙("http://a.onion", "http://a.onion · http://d.onion") == "http://a.onion\nhttp://d.onion"
+    assert 붙(있던, "http://b.onion · http://a.onion") == 있던
+    assert 붙("(http://a.onion)", "http://a.onion/") == "(http://a.onion)"
+    assert 붙("x.example (2026.08.04 확인)", "y.example") == "x.example (2026.08.04 확인)\ny.example"
+
+
+def test_미러가_섞여_와도_없던_것만_이전_주소에_붙인다():
+    쪽 = _쪽(주소="http://a.example", 이전주소="http://z.example")
+    r, 가짜, 쓴것 = _돌려(쪽, _본것(이전주소="http://m.example · http://z.example"))
+    assert _글자값(쓴것["이전 주소"]) == "http://z.example\nhttp://m.example", 쓴것
+
+
 # ── 규모: 숫자가 같고 날짜만 다르면 안 쓴다 ─────────────────────────
 def _규모본것(게시물: int = 821000) -> Place:
     return _본것(회원수=349000, 게시물수=게시물)
