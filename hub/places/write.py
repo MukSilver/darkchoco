@@ -13,10 +13,23 @@
 
 **못 넣은 칸이 하나라도 있으면 알립니다.** 칸 이름이 틀리면 노션은
 오류를 내지 않고 그 칸만 건너뜁니다. 조용히 틀리는 것이 제일 위험합니다.
+
+**명부는 한 곳에 한 줄입니다** (2026-09-24 최현서 결정). 사람 값은 칸 갈래로
+지킵니다. 갈래는 `place.py` 에 있습니다.
+
+    빈칸만칸       사람이 쓴 칸은 안 건드린다
+    합치는칸       사람 글은 두고 기계 줄만 갈아 끼운다
+    이어붙이는칸   지우지 않고 새 주소를 맨 뒤에 붙인다
+    주소           사이트가 스스로 옮겼을 때(리다이렉트)만 바꾼다. 그 밖에 기계가
+                   본 주소가 다르면 「이전 주소」 에 이어 붙인다
+
+그리고 **숫자가 같고 날짜만 다른 합치는 칸은 안 씁니다.** 기계 줄 끝의
+「(날짜 기준)」 이 판마다 바뀌어서, 이것까지 치면 판마다 모든 줄을 고칩니다.
 """
 
 from __future__ import annotations
 
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -26,7 +39,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "packages"))
 from dc_notion import Notion  # noqa: E402
 
 from hub.places.place import (  # noqa: E402
-    Place, 기계칸, 빈칸만칸, 사람판정_상태, 자동금지칸)
+    Place, 기계가_쓴_줄, 기계칸, 빈칸만칸, 사람판정_상태, 이어붙이는칸, 자동금지칸,
+    합치는칸)
 
 __all__ = ["명부", "반영결과", "갈래별_DB"]
 
@@ -169,6 +183,32 @@ class 명부:
                 사람글.append(칸)
                 continue
             찬것[칸] = v
+
+        # 2-1. 이어붙이는칸은 지우지 않습니다. 새로 본 주소를 맨 뒤에 붙입니다.
+        #      이미 있는 주소면 그대로라 아래 4 에서 「같다」 로 걸러집니다.
+        for 칸 in [k for k in 찬것 if k in 이어붙이는칸]:
+            찬것[칸] = _이어붙이기(줄.현재.get(칸) or "", 찬것[칸])
+
+        # 2-2. 사람이 적은 주소는 사이트가 스스로 옮겼을 때만 바꿉니다.
+        #      조사기가 주소를 새로 적는 것은 리다이렉트뿐이고 그때 명부에 적힌
+        #      주소가 p.이전주소 로 옵니다. p.이전주소 는 「다른 미러」 에도
+        #      쓰이므로, **명부의 주소와 같을 때만** 옮겨 간 것으로 봅니다.
+        #      그 밖의 까닭(표기만 다른 것 등)으로 사람 값을 바꾸지 않습니다.
+        #
+        #      **기계가 본 주소가 사람 주소와 다르면 버리지 않고 「이전 주소」 에
+        #      이어 붙입니다.** 그 칸은 원래 「리다이렉트 전 주소 · 다른 미러」
+        #      를 적는 자리입니다(Place.이전주소). 랜섬은 집계 API 가 고른 대표
+        #      유출 사이트 주소가 오는데, 사람이 적은 주소와 다를 수 있습니다.
+        #      표기만 다른 같은 주소(http · 끝의 / · 대소문자)는 붙이지 않습니다.
+        지금주소 = 줄.현재.get("주소") or 줄.주소 or ""
+        옮겼나 = bool(p.이전주소) and _주소열쇠(p.이전주소) == _주소열쇠(지금주소)
+        if "주소" in 찬것 and _사람이_쓴것(지금주소) and not 옮겼나:
+            기계주소 = str(찬것.pop("주소") or "")
+            사람글.append("주소")
+            if (기계주소 and _주소열쇠(기계주소) != _주소열쇠(지금주소)
+                    and "이전 주소" in self.스키마):
+                바탕 = 찬것.get("이전 주소") or 줄.현재.get("이전 주소") or ""
+                찬것["이전 주소"] = _이어붙이기(str(바탕), 기계주소)
         r.사람글 = 사람글
 
         # 3. 선택지에 없는 값을 거릅니다. 갈래마다 선택지가 다릅니다.
@@ -195,7 +235,7 @@ class 명부:
         for 칸, v in 골라낸것.items():
             지금 = 줄.현재.get(칸, {"규모": 줄.규모, "상태": 줄.상태,
                                  "주소": 줄.주소}.get(칸))
-            if 지금 is not None and str(지금).strip() == str(v).strip():
+            if 지금 is not None and _칸같나(칸, str(지금), v):
                 continue
             달라진것[칸] = v
         # 확인일만 바뀌는 줄도 **두드린 것이면** 씁니다.
@@ -217,6 +257,131 @@ class 명부:
         except Exception as e:  # noqa: BLE001
             r.오류 = str(e).replace("\n", " ")[:200]
         return r
+
+
+# ── 값 견주기 ──────────────────────────────────────────────────────
+def _읽은꼴(v) -> str:
+    """보낼 값을 `_글자()` 가 노션에서 읽어 오는 꼴로 바꿉니다."""
+    if isinstance(v, bool):
+        return "예" if v else "아니오"
+    if isinstance(v, (list, tuple, set)):
+        return " · ".join(str(x)[:100] for x in v)
+    return str(v)
+
+
+def _같나(지금: str, v) -> bool:
+    """노션에서 읽은 글자 `지금` 과 보낼 값 `v` 가 같은가.
+
+    **타입마다 읽은 꼴이 달라 맞춰서 봅니다.** 전에는 글자로만 견줘서 다중
+    선택(목록)이 늘 다르게 나왔습니다. 빈칸만칸 규칙이 가려 드러나지 않았을
+    뿐, 사람이 비워 둔 다중 선택 칸은 판마다 다시 썼습니다.
+    """
+    지금 = (지금 or "").strip()
+    if isinstance(v, bool):
+        return 지금 == _읽은꼴(v)
+    if isinstance(v, (list, tuple, set)):
+        return ({x.strip() for x in 지금.split(" · ") if x.strip()}
+                == {str(x).strip()[:100] for x in v})
+    if isinstance(v, (int, float)):
+        try:
+            return float(지금) == float(v)
+        except ValueError:
+            return False
+    return 지금 == str(v).strip()
+
+
+# 기계가 쓴 줄의 꼬리. `Place.규모줄()` 이 「… (YYYY-MM-DD 기준)」 으로 끝낸다
+_기준꼬리 = re.compile(r"\s*\(\d{4}-\d{2}-\d{2} 기준\)\s*$")
+
+
+def _기계줄숫자(줄: str) -> list[int]:
+    """기계 줄에서 날짜 꼬리를 떼고 숫자만 뽑습니다. 「1,440」 은 1440 입니다."""
+    몸 = _기준꼬리.sub("", 줄)
+    return [int(x.replace(",", "")) for x in re.findall(r"\d[\d,]*", 몸)]
+
+
+def _합친값_같나(지금: str, v: str) -> bool:
+    """합치는 칸(규모 · 피해 대상 · 한국 관련 유출)을 견줍니다.
+
+    **숫자가 같고 날짜만 다르면 같은 것으로 봅니다** (2026-09-24 최현서 결정).
+    기계 줄은 「… (YYYY-MM-DD 기준)」 으로 끝나서 숫자가 그대로여도 판마다 날짜가
+    바뀝니다. 이것까지 다르다고 치면 판마다 규모가 있는 줄을 전부 고칩니다.
+    「확인일만 다른 것은 안 친다」 와 같은 논리입니다.
+
+        사람 글         글자 그대로 견줍니다
+        기계 줄         날짜를 떼고 숫자만 견줍니다. 여럿이면 전부 같아야 같습니다
+        숫자 못 뽑음    글자 그대로 견줍니다
+
+    **견주는 규칙만 바꿉니다.** 숫자가 바뀌어 쓸 때는 기계가 본 값을 날짜째 씁니다.
+    """
+    a = [l.strip() for l in (지금 or "").splitlines() if l.strip()]
+    b = [l.strip() for l in (v or "").splitlines() if l.strip()]
+    if len(a) != len(b):
+        return False
+    for x, y in zip(a, b):
+        if x == y:
+            continue
+        if not (기계가_쓴_줄(x) and 기계가_쓴_줄(y)):
+            return False
+        nx, ny = _기계줄숫자(x), _기계줄숫자(y)
+        if not nx or not ny or nx != ny:
+            return False
+    return True
+
+
+def _칸같나(칸: str, 지금: str, v) -> bool:
+    """칸에 맞는 규칙으로 견줍니다. 합치는 칸만 날짜를 빼고 봅니다."""
+    if 칸 in 합치는칸 and isinstance(v, str):
+        return _합친값_같나(지금, v)
+    return _같나(지금, v)
+
+
+# ── 이어 붙이기 ────────────────────────────────────────────────────
+def _빈값(값: str) -> bool:
+    """비었거나 자리표시자인가. 「— 미기입 —」 · 「— 없음 —」 도 빈 것입니다.
+
+    `_사람이_쓴것()` 은 앞뒤 줄표가 붙은 꼴을 못 가립니다. 그 꼴이 든 칸 뒤에
+    주소를 붙이면 조사기가 첫 조각 「—」 을 두드리려다 어니언 대체 경로를
+    잃습니다.
+    """
+    s = (값 or "").strip().strip("-—– ").strip().lower()
+    return not s or s in 자리표시자 or s == "없음"
+
+
+def _주소열쇠(조각: str) -> str:
+    """같은 주소인지 가를 열쇠. 앞의 http:// · 뒤의 / · 대소문자를 뗍니다."""
+    s = (조각 or "").strip().lower()
+    s = re.sub(r"^[a-z][a-z0-9+.-]*://", "", s)
+    return s.rstrip("/")
+
+
+def _이어붙이기(기존: str, 새것) -> str:
+    """기존 값은 그대로 두고, 없던 주소만 맨 뒤에 한 줄씩 붙입니다.
+
+    **맨 뒤에 붙이는 까닭.** 조사기는 여러 줄 중 첫 주소만 두드립니다
+    (`probe/forum.py` 의 `_어니언정리`). 사람이 먼저 적어 둔 주소가 계속
+    먼저 두드려집니다.
+
+    같은 주소인지는 `_주소열쇠()` 로 봅니다. 기존 줄에 「abc.onion (2026-07-30
+    확인)」 처럼 꼬리가 붙어 있어도 주소 조각끼리 견줍니다.
+    """
+    새것 = str(새것 or "").strip()
+    기존 = (기존 or "").strip()
+    if not 새것:
+        return 기존
+    if _빈값(기존):
+        return 새것
+    있는것 = {_주소열쇠(t) for t in re.findall(r"[^\s,·]+", 기존)}
+    붙일것 = []
+    for 줄 in 새것.splitlines():
+        줄 = 줄.strip()
+        if not 줄:
+            continue
+        열쇠 = _주소열쇠(줄.split()[0])
+        if 열쇠 and 열쇠 not in 있는것:
+            붙일것.append(줄)
+            있는것.add(열쇠)
+    return 기존 + "\n" + "\n".join(붙일것) if 붙일것 else 기존
 
 
 # ── 값 만들기 ──────────────────────────────────────────────────────
