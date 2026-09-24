@@ -71,6 +71,38 @@ h1{font-size:24px;margin:0 0 4px;letter-spacing:-.02em}
       font-variant-numeric:tabular-nums;white-space:nowrap}
 code{background:#0b0f14;border:1px solid var(--ln);border-radius:4px;
      padding:1px 5px;font-size:13px}
+.dash input{width:100%;margin-top:8px;background:#0b0f14;color:var(--ink);
+     border:1px solid var(--ln);border-radius:6px;padding:7px 10px;font:14px monospace}
+.dash .ok{color:#54c79e} .dash .no{color:var(--warn)}
+"""
+
+# 대시보드 주소를 북마클릿에 넣는 자리 (2026-09-23 · 포럼 사건).
+#
+# **주소를 레포에 안 적는다.** 레포가 공개라 킷에 적으면 주소가 공개된다. 킷에는
+# `@@DASH@@` 자리표시자만 두고, 이 페이지에서 각자 적은 주소를 **끌어다 놓기 직전에**
+# 링크 안에서 바꿔 넣는다. 주소는 그 사람 북마크에만 남는다. 이 페이지는 주소를
+# 어디에도 저장하지 않는다.
+#
+# 안 적으면 킷의 「대시보드로 보내기」 가 칸 값을 클립보드에 복사한다. 그래도 된다.
+DASH_JS = r"""
+<script>
+(function(){
+  var 칸 = document.getElementById('dash'), 말 = document.getElementById('dashsay');
+  var 링크 = [].slice.call(document.querySelectorAll('a.bm'));
+  링크.forEach(function(a){ a.dataset.orig = a.getAttribute('href'); });
+  function 바꾸기(){
+    var v = (칸.value || '').trim().replace(/\/+$/, '');
+    var 맞음 = /^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(v);
+    링크.forEach(function(a){
+      a.setAttribute('href', 맞음 ? a.dataset.orig.split('@@DASH@@').join(v) : a.dataset.orig);
+    });
+    말.className = v ? (맞음 ? 'ok' : 'no') : '';
+    말.textContent = !v ? '비워 두면 클립보드로 넘긴다'
+      : 맞음 ? '킷 링크에 넣었다. 이제 끌어다 놓는다' : 'https:// 로 시작하는 주소만 된다. 경로는 빼고 적는다';
+  }
+  칸.addEventListener('input', 바꾸기); 바꾸기();
+})();
+</script>
 """
 
 
@@ -143,14 +175,23 @@ Safer 이상이면 JS 가 꺼져서 눌러도 아무 일이 안 일어난다.
 <b>지금 둘 다 6만 자 아래다.</b> 그래서 길이 벽에 안 걸린다.
 자리 시험은 되는데 킷이 안 되면 길이가 아니라 다른 문제다.
 </div>
+
+<div class="step dash">
+<b>대시보드 주소 (호스트 브라우저에서만, 선택)</b><br>
+포럼 킷의 「대시보드로 보내기 (호스트)」 가 이 주소로 창을 열어 칸 값을 넘긴다.
+주소는 팀 채널에서 받는다. <b>이 페이지는 주소를 저장하지 않고, 적은 뒤 끌어다 놓은 북마크에만 들어간다.</b>
+VM 안 브라우저에 설치할 때는 비워 둔다. 비워 두면 칸 값을 클립보드로 넘긴다.
+<input id="dash" placeholder="https://… (경로 없이)" autocomplete="off" spellcheck="false">
+<div id="dashsay"></div>
+</div>
 %s
 <div class="step" style="margin-top:24px">
 <b>안 되면</b> 개발자도구로도 된다.
 <code>F12</code> → 콘솔 → <code>allow pasting</code> 을 직접 타이핑하고 Enter →
 <code>javascript:</code> 를 뺀 코드를 붙여넣고 Enter.
 </div>
-</div></body></html>
-""" % (CSS, "\n".join(rows))
+</div>%s</body></html>
+""" % (CSS, "\n".join(rows), DASH_JS)
 
 
 def main() -> int:

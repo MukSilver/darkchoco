@@ -138,10 +138,13 @@
   .무리:first-child{margin-top:0}
   /* **너비를 고정한다.** 이름 길이가 제각각이라 설명 시작점이 들쭉날쭉했다.
      좁은 화면에서는 아래 미디어 쿼리가 설명을 다음 줄로 내린다 */
-  .일감줄 .돌리기{background:var(--판2);border:1px solid var(--줄);color:var(--글);
+  .일감줄 .돌리기,.일감줄 .손단추{background:var(--판2);border:1px solid var(--줄);color:var(--글);
                   border-radius:var(--둥2);padding:var(--틈2) var(--틈4);font:inherit;font-size:13px;
                   cursor:pointer;min-width:190px;width:270px;text-align:left}
-  .일감줄 .돌리기:hover:not(:disabled){border-color:var(--점)}
+  /* 사람이 하는 일. GitHub Actions 를 안 부르고 이 화면 안의 받는 자리를 연다.
+     점선으로 「누르면 무언가 돈다」 와 가른다 */
+  .일감줄 .손단추{border-style:dashed}
+  .일감줄 .돌리기:hover:not(:disabled),.일감줄 .손단추:hover{border-color:var(--점)}
   .일감줄 .돌리기:disabled{opacity:.45;cursor:not-allowed}
   .일감줄 .돌리기.도는중{border-color:var(--기다림);color:var(--기다림)}
   /* 「밖으로 요청을 보냅니다」. 그 줄에서 결과가 가장 큰 사실인데 지금은
@@ -167,6 +170,21 @@
             align-self:center}
   .공개알림[data-켬="1"]{color:var(--좋음)}
   .빔{color:var(--더흐린);padding:var(--틈6);text-align:center}
+  /* 포럼 사건 받는 자리 */
+  .받는칸{display:flex;gap:var(--틈3);flex-wrap:wrap;align-items:stretch;margin:var(--틈4) 0}
+  .받는칸 textarea{flex:1 1 320px;min-height:72px;background:var(--깊판);border:1px solid var(--줄);
+                  border-radius:var(--둥2);color:var(--코드글);font:12px/1.5 ui-monospace,Consolas,monospace;
+                  padding:var(--틈3)}
+  .받는칸 .끌어놓기{flex:0 1 260px;display:flex;flex-direction:column;gap:var(--틈2);justify-content:center;
+                  border:1px dashed var(--줄);border-radius:var(--둥2);padding:var(--틈4);color:var(--흐린글);
+                  font-size:12px}
+  #포럼사건[data-끌림="1"] .끌어놓기{border-color:var(--점);color:var(--글)}
+  .받는칸 button,.올리기{background:var(--판2);border:1px solid var(--줄);color:var(--글);
+                  border-radius:var(--둥1);padding:var(--틈1) var(--틈4);font:inherit;font-size:13px;cursor:pointer}
+  .올리기{border-color:var(--점);margin-top:var(--틈4)}
+  .받는칸 button:hover,.올리기:hover:not(:disabled){border-color:var(--점)}
+  .올리기:disabled{opacity:.45;cursor:wait}
+  .결과올림{color:var(--좋음)} .결과겹침{color:var(--흐린글)} .결과실패{color:var(--나쁨)}
   footer{color:var(--더흐린);font-size:12px;margin-top:var(--틈7);line-height:1.8}
 
   /* 좁은 화면. **쿼리보다 flex-wrap 이 먼저다** — 쿼리는 내가 고른 폭에서만 듣고
@@ -205,6 +223,7 @@
 
   <section id="제어판"></section>
   <section id="사건" hidden></section>
+  <section id="포럼사건" hidden></section>
 
   <footer>
     <!-- 「화면이 명령을 만들지 못합니다」 는 「명령으로 치려면」 절을 가리키는 말로
@@ -212,9 +231,10 @@
          없다** 는 것이라 그대로 적습니다. 「명부 셋은…」 은 여기 없는 것을 설명하는
          문장이라 뺐습니다. -->
     <div><span id="어디">이 화면은 127.0.0.1 에만 뜹니다.</span> 돌릴 수 있는 것은 <b>정해진 목록</b>뿐이고
-        화면이 아무 명령이나 만들어 보낼 수 없습니다. 노션에 쓰는 것은 <b>검토 여부</b>와,
-        그에 따라 서버가 맞추는 <b>DB 반영</b>(공개) 둘뿐입니다. 사건 O 로 새로 바꾸면 공개가 켜지고,
-        사건 X 나 미검토로 바꾸면 꺼집니다.</div>
+        화면이 아무 명령이나 만들어 보낼 수 없습니다. 노션에 쓰는 것은 <b>검토 여부</b>,
+        그에 따라 서버가 맞추는 <b>DB 반영</b>(공개), 그리고 사람이 미리 보고 누른
+        <b>포럼 사건 줄</b> 셋뿐입니다. 사건 O 로 새로 바꾸면 공개가 켜지고,
+        사건 X 나 미검토로 바꾸면 꺼집니다. 포럼 사건 줄은 미검토 · 공개 꺼짐으로 들어갑니다.</div>
     <div>본문과 개인정보 값은 담지 않습니다.</div>
   </footer>
 </div>
@@ -344,7 +364,10 @@
   // 보냅니다」 가 붙어 넷이 똑같이 반복됐습니다. 경고는 한 번 보일 때 읽히지,
   // 줄마다 있으면 안 읽힙니다. 일감에 따라 다를 때만 줄마다 답니다.
   const 일감들 = ev.일감 || [];
-  const 다밖 = 일감들.length > 0 && 일감들.every(j => j.밖);
+  // 「손」 일감은 밖으로 요청을 안 보내므로 셈에서 뺍니다. 넣으면 「모두 밖으로」 가 거짓이
+  // 되어 밖 일감마다 경고가 되풀이됩니다
+  const 밖일감 = 일감들.filter(j => j.종류 !== "손");
+  const 다밖 = 밖일감.length > 0 && 밖일감.every(j => j.밖);
 
   // **무리로 묶어 냅니다.** 단추가 넷일 때는 한 덩이가 읽혔는데 아홉이 되면서
   // 사건과 명부가 구분 없이 늘어섰습니다. 수집은 [포럼 · 텔레그램 · 랜섬] 에
@@ -358,8 +381,12 @@
     if (!칸) { 칸 = { 이름: g, 것들: [] }; 무리차례.push(칸); }
     칸.것들.push(j);
   }
-  const 일감줄 = j =>
-    '<div class="일감줄"><button class="돌리기" data-일감="'+안전(j.열쇠)+'">'+안전(j.이름)+'</button>'
+  // **「손」 은 돌리기가 아닙니다.** 서버가 워크플로를 안 부르고 이 화면 안의 자리를 엽니다.
+  // 돌리기 단추로 그리면 누를 때 /api/run 이 「밖이 아닙니다」 로 거절합니다
+  const 일감줄 = j => j.종류 === "손"
+    ? '<div class="일감줄"><button class="손단추" data-손="'+안전(j.길)+'">'+안전(j.이름)+'</button>'
+      + '<span class="더흐림">'+안전(j.설명)+'</span></div>'
+    : '<div class="일감줄"><button class="돌리기" data-일감="'+안전(j.열쇠)+'">'+안전(j.이름)+'</button>'
     + '<span class="더흐림">'+안전(j.설명)
     + (!다밖 && j.밖 ? ' · <b>밖으로 요청을 보냅니다</b>' : '')+'</span></div>';
 
@@ -609,6 +636,173 @@
     }
   }
 
+  // ── 포럼 사건 올리기 ──────────────────────────────
+  // 포럼 킷이 낸 칸 값을 받아 미리 보입니다. **사람이 「올리기」 를 누를 때만** 서버가
+  // 노션에 씁니다. 들어오는 길이 셋입니다.
+  //
+  //   호스트   킷이 이 창을 열어 넘깁니다 (창 사이 메시지). 킷에 대시보드 주소를 적어 둔 경우
+  //   VM      킷이 저장한 칸 파일(.json)을 끌어다 놓거나 고릅니다
+  //   붙여넣기  킷에 주소를 안 적었으면 킷이 칸 값을 클립보드에 복사합니다
+  //
+  // 킷이 도는 포럼 페이지는 믿을 수 없는 곳입니다. 들어온 값은 **글자로만** 그리고
+  // (안전()), 주소는 링크로 안 만듭니다. 서버도 한 번 더 거릅니다.
+  const 포럼자리 = $("#포럼사건");
+  const 포럼한번 = 20;              // worker.js 의 포럼줄상한과 같게 둡니다
+  let 포럼받음 = null;              // { 킷, 호스트, 어디서, 줄: [...] }
+  let 포럼도는중 = false;
+
+  function 포럼열기(){
+    document.querySelectorAll("nav button").forEach(x=>x.classList.remove("켬"));
+    $("#제어판").hidden = true;
+    $("#사건").hidden = true;
+    포럼자리.hidden = false;
+    포럼그리기();
+  }
+
+  function 포럼읽기(d, 어디서){
+    if (!d || d.종류 !== "darkchoco-forum-rows" || d.판 !== 1 || !Array.isArray(d.줄)){
+      alert("포럼 킷이 낸 칸 값이 아닙니다.\n\n킷의 「대시보드로 보내기」 나 「칸 파일 저장」 이 낸 것을 넣으십시오.");
+      return;
+    }
+    포럼받음 = {
+      킷: String(d.킷 || ""), 호스트: String(d.호스트 || ""), 어디서,
+      줄: d.줄.slice(0, 500).map(x => ({ 원: x, 고름: true, 결과: "" })),
+    };
+    포럼열기();
+  }
+
+  function 포럼신호(x){
+    const s = (x && x["한국 신호"]) || {};
+    const 말 = [];
+    if (Array.isArray(s.도메인) && s.도메인.length) 말.push(s.도메인.slice(0, 2).join(" · "));
+    if (s.한글) 말.push("한글");
+    if (s.korea) 말.push("Korea");
+    return 말.join(" · ") || "-";
+  }
+
+  function 포럼그리기(){
+    let s = '<h2>포럼 사건 올리기 <span class="더흐림">— 포럼 킷이 낸 칸 값을 미리 보고 수집 DB 에 올립니다. '
+      + '본문은 여기로 안 옵니다</span></h2>'
+      + '<div class="받는칸">'
+      + '<textarea id="포럼붙임" placeholder="킷이 클립보드에 복사한 칸 값을 여기에 붙여 넣으십시오 (Ctrl+V)"></textarea>'
+      + '<div class="끌어놓기"><div>VM 에서 저장한 <b>칸 파일(.json)</b> 을 이 화면에 끌어다 놓거나 고르십시오</div>'
+      + '<input type="file" id="포럼파일" accept=".json,application/json"></div>'
+      + '<div style="display:flex;flex-direction:column;gap:var(--틈2)">'
+      + '<button data-포럼="읽기">붙인 것 읽기</button><button data-포럼="닫기">닫기</button></div>'
+      + '</div>';
+    if (!포럼받음){
+      s += '<div class="빔">아직 받은 것이 없습니다. 포럼에서 킷의 「대시보드로 보내기 (호스트)」 를 누르거나, '
+        + '위에 붙여 넣거나 칸 파일을 넣으십시오.</div>';
+      포럼자리.innerHTML = s;
+      return;
+    }
+    const 줄들 = 포럼받음.줄;
+    const 고른 = 줄들.filter(x => x.고름 && !x.결과).length;
+    s += '<div class="더흐림">'+안전(포럼받음.어디서)+' · '+안전(포럼받음.킷 || "킷 판 모름")
+      + ' · '+안전(포럼받음.호스트 || "")+' · '+줄들.length+'줄</div>'
+      + '<div class="감쌈" style="margin-top:var(--틈3)"><table><thead><tr>'
+      + '<th class="짧음"><button data-포럼="모두" title="모두 고르기 · 모두 풀기">✓</button></th>'
+      + '<th>자료 제목</th><th class="짧음">게시자</th><th class="짧음">게시</th>'
+      + '<th class="짧음">본문</th><th class="짧음">한국 신호</th><th>원문 주소</th><th class="짧음">결과</th>'
+      + '</tr></thead><tbody>'
+      + 줄들.map((r, i) => {
+          const x = r.원 || {};
+          const 꼴 = r.결과 === "올림" ? "결과올림" : r.결과 === "겹침" ? "결과겹침" : r.결과 ? "결과실패" : "";
+          return '<tr>'
+            + '<td class="짧음"><input type="checkbox" data-포럼줄="'+i+'"'+(r.고름?" checked":"")
+              + (r.결과?" disabled":"")+'></td>'
+            + '<td>'+안전(x.제목 || "")+'</td>'
+            + '<td class="흐림 짧음">'+안전(x.게시자 || "-")+'</td>'
+            + '<td class="흐림 짧음">'+안전(x.날짜 || "")+'</td>'
+            + '<td class="흐림 짧음">'+안전(x.본문 || "")+'</td>'
+            + '<td class="흐림 짧음">'+안전(포럼신호(x))+'</td>'
+            + '<td class="더흐림" style="word-break:break-all">'+안전(String(x.URL || "").slice(0, 120))+'</td>'
+            + '<td class="짧음 '+꼴+'">'+안전(r.결과 || "")+'</td>'
+            + '</tr>';
+        }).join("")
+      + '</tbody></table></div>'
+      + '<button class="올리기" data-포럼="올리기"'+(포럼도는중||!고른?" disabled":"")+'>'
+      + (포럼도는중 ? "올리는 중…" : '고른 '+고른+'줄을 노션에 올리기')+'</button>'
+      + '<div class="더흐림" style="margin-top:var(--틈2)">미검토 · 공개 꺼짐으로 들어갑니다. '
+      + '같은 글이 이미 있으면(UID 나 원문 주소가 같으면) 새로 안 만듭니다.</div>';
+    포럼자리.innerHTML = s;
+  }
+
+  async function 포럼올리기(){
+    if (!포럼받음 || 포럼도는중) return;
+    const 보낼 = 포럼받음.줄.map((r, i) => ({ r, i })).filter(({ r }) => r.고름 && !r.결과);
+    if (!보낼.length) return;
+    포럼도는중 = true;
+    포럼그리기();
+    let 올림 = 0;
+    for (let k = 0; k < 보낼.length; k += 포럼한번){
+      const 묶음 = 보낼.slice(k, k + 포럼한번);
+      try{
+        const r = await fetch("/api/forum-rows", {
+          method:"POST", headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({ 종류:"darkchoco-forum-rows", 판:1, 킷: 포럼받음.킷,
+                                 줄: 묶음.map(({ r }) => r.원) }),
+        });
+        const d = await r.json().catch(()=>({}));
+        if (!r.ok) throw new Error(d.오류 || ("HTTP " + r.status));
+        (d.결과 || []).forEach((x, j) => {
+          const 자리 = 묶음[j];
+          if (자리) 자리.r.결과 = String(x.결과 || "");
+          if (x.결과 === "올림") 올림 += 1;
+        });
+      }catch(e){
+        묶음.forEach(({ r }) => { r.결과 = "실패 — " + (e && e.message ? e.message : e); });
+      }
+      포럼그리기();
+    }
+    포럼도는중 = false;
+    포럼그리기();
+    // 올린 줄이 사건 탭에 보이게 다음에 새로 읽을 때 반영됩니다
+    if (올림) alert(올림 + "줄을 올렸습니다. 사건 탭은 새로 고치면 보입니다.");
+  }
+
+  function 포럼파일읽기(f){
+    if (!f) return;
+    if (f.size > 2 * 1024 * 1024){ alert("파일이 너무 큽니다. 칸 파일은 보통 수십 KB 입니다."); return; }
+    const 읽개 = new FileReader();
+    읽개.onload = () => {
+      try{ 포럼읽기(JSON.parse(String(읽개.result)), "칸 파일 " + f.name); }
+      catch(e){ alert("json 이 아닙니다.\n\n" + e); }
+    };
+    읽개.readAsText(f, "utf-8");
+  }
+
+  // 킷 창에서 넘어오는 것. 포럼 쪽 주소는 매번 달라서 보낸 곳을 가리지 않고, 모양만 봅니다.
+  // 여기서는 미리보기만 채웁니다. 노션에 쓰는 것은 사람이 「올리기」 를 누를 때입니다
+  window.addEventListener("message", (e)=>{
+    const d = e && e.data;
+    if (d && d.종류 === "darkchoco-forum-rows") 포럼읽기(d, "킷 창에서 받음");
+  });
+  document.addEventListener("change", (e)=>{
+    const t = e.target;
+    if (t && t.id === "포럼파일") 포럼파일읽기(t.files && t.files[0]);
+    if (t && t.dataset && t.dataset.포럼줄 != null && 포럼받음){
+      const r = 포럼받음.줄[Number(t.dataset.포럼줄)];
+      if (r) r.고름 = t.checked;
+      포럼그리기();
+    }
+  });
+  포럼자리.addEventListener("dragover", (e)=>{ e.preventDefault(); 포럼자리.dataset.끌림 = "1"; });
+  포럼자리.addEventListener("dragleave", ()=>{ 포럼자리.dataset.끌림 = ""; });
+  포럼자리.addEventListener("drop", (e)=>{
+    e.preventDefault(); 포럼자리.dataset.끌림 = "";
+    포럼파일읽기(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]);
+  });
+  // 킷이 이 창을 열었으면 준비됐다고 알립니다. 킷은 이 말을 듣고 나서 값을 보냅니다 —
+  // 비밀번호 창을 거치느라 늦게 뜨는 동안 보낸 것이 버려지지 않게 하려는 것입니다.
+  // 알리는 말에는 값이 없습니다
+  // **주소의 해시는 ASCII 로 둡니다.** 한글을 넣으면 브라우저가 퍼센트 인코딩해서
+  // location.hash 가 「#%ED%8F%AC…」 가 되고 비교가 안 맞습니다 (2026-09-23 실제로 겪었다)
+  if (location.hash === "#forum-rows"){
+    포럼열기();
+    try{ if (window.opener) window.opener.postMessage({ 종류: "darkchoco-ready" }, "*"); }catch(e){}
+  }
+
   // ── 누르기 ────────────────────────────────────────
   document.addEventListener("click", (e)=>{
     const b = e.target.closest("button");
@@ -617,7 +811,24 @@
       document.querySelectorAll("nav button").forEach(x=>x.classList.toggle("켬", x===b));
       document.querySelector("#제어판").hidden = b.dataset.탭!=="제어판";
       document.querySelector("#사건").hidden   = b.dataset.탭!=="사건";
+      포럼자리.hidden = true;
     }
+    if (b.dataset.손 === "#forum-rows") 포럼열기();
+    if (b.dataset.포럼 === "닫기"){
+      포럼자리.hidden = true;
+      $("#제어판").hidden = false;
+      document.querySelectorAll("nav button").forEach(x=>x.classList.toggle("켬", x.dataset.탭==="제어판"));
+    }
+    if (b.dataset.포럼 === "읽기"){
+      const 글 = ($("#포럼붙임") || {}).value || "";
+      try{ 포럼읽기(JSON.parse(글), "붙여넣기"); }catch(err){ alert("json 이 아닙니다.\n\n" + err); }
+    }
+    if (b.dataset.포럼 === "모두" && 포럼받음){
+      const 다 = 포럼받음.줄.every(r => r.고름 || r.결과);
+      포럼받음.줄.forEach(r => { if (!r.결과) r.고름 = !다; });
+      포럼그리기();
+    }
+    if (b.dataset.포럼 === "올리기") 포럼올리기();
     if (b.dataset.복사){
       const t = document.getElementById(b.dataset.복사).textContent;
       navigator.clipboard.writeText(t).then(()=>{
