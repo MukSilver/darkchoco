@@ -242,6 +242,69 @@ def origin(links: list, body: str, fields: dict) -> str:
 DOMAIN = re.compile(r"^[\w-]+(\.[\w-]+)+$")
 
 
+# ── 칸이 없는 글에서 대상과 국가를 뽑는다 (2026-09-23, 텔레그램 관문 「다」) ──────
+#
+# 2026-09-23 한 판 193건 중 176건이 칸 이름 없이 글로만 쓴 글(「기타」)이었다.
+# 대상 조직을 못 읽으니 push.py 관문에서 전부 빠졌다. 그중 속보 채널 글은 꼴이 일정하다.
+#
+#     🚨🇫🇷 Autobacs customer and booking data allegedly leaked
+#
+# **국기가 국가이고 첫머리가 조직명이다.** 그 꼴만 뽑는다. 넓게 뽑으면 광고와 잡담에서
+# 엉뚱한 말이 대상 조직이 되어 관문을 통과한다.
+#
+#   국기          첫 줄 앞머리의 국기 이모지 → 국가. 칸에 국가가 없을 때만
+#   속보 꼴 제목   국기가 있을 때만. 국가를 알아야 push.py --kr 이 외국 건을 거른다
+#   한국 도메인    본문에 .kr 도메인이 있으면 그것이 대상이다. 전자우편 주소는 뺀다
+#
+# 어디서 뽑았는지는 raw 에 적는다. 칸에서 읽은 것과 글에서 뽑은 것은 믿을 만한 정도가 다르다.
+FLAG = re.compile("([\U0001F1E6-\U0001F1FF])([\U0001F1E6-\U0001F1FF])")
+_NOT_COUNTRY = {"EU", "UN"}
+ALERT = re.compile(
+    r"^(?P<org>[^\s:：][^:：]{0,60}?)\s+"
+    r"(?:(?:customer|customers|user|users|internal|employee|employees|client|clients|"
+    r"patient|patients|member|members|student|students|citizen|citizens|personal|"
+    r"account|accounts|company|corporate|business|booking|order|orders)\b.{0,60}?\s+)?"
+    r"(?:data|dataset|datasets|database|databases|db|records|credentials|information|info|"
+    r"source code)\b.{0,60}?"
+    r"\b(?:allegedly\s+)?(?:leak|leaked|leaks|breach|breached|hacked|exposed|exposes|dumped|"
+    r"compromised|stolen|advertised|offered|for sale|on sale|sold|listed)\b",
+    re.I)
+ALERT_HEAD = re.compile(r"^(?:just in|update|breaking|alert|new)\s*[:：\-]\s*", re.I)
+# 「해커가 ○○ 를 털었다고 주장」 처럼 앞에 주어가 붙은 제목. 주어를 떼어 낸다
+ALERT_CLAIM = re.compile(r"^.{0,40}?\b(?:claims?|claimed|alleges?|says?|reports?)\s+", re.I)
+KR_DOMAIN = re.compile(r"(?<![\w@.-])((?:[a-z0-9-]+\.)+kr)(?![\w-])", re.I)
+
+
+def flag_country(text: str) -> str:
+    """첫 줄 앞머리의 국기 이모지를 ISO 두 글자로. 없으면 빈 문자열."""
+    head = (text or "").split("\n")[0][:16]
+    m = FLAG.search(head)
+    if not m:
+        return ""
+    cc = "".join(chr(ord(x) - 0x1F1E6 + ord("A")) for x in m.groups())
+    return "" if cc in _NOT_COUNTRY else cc
+
+
+def org_from_text(text: str) -> tuple[str, str]:
+    """(대상, 어디서 뽑았나). 못 뽑으면 ("", "")."""
+    t = text or ""
+    m = KR_DOMAIN.search(t)
+    if m and "t.me" not in m.group(1).lower():
+        return m.group(1).lower(), "본문 한국 도메인"
+    if not flag_country(t):
+        return "", ""
+    first = clean(t.split("\n")[0])
+    first = ALERT_HEAD.sub("", first).strip()
+    m = ALERT.match(first)
+    if not m:
+        return "", ""
+    org = ALERT_CLAIM.sub("", m.group("org")).strip(" -–—:,")
+    # 여섯 낱말을 넘으면 조직명이 아니라 문장을 잡은 것이다
+    if not org or len(org.split()) > 6:
+        return "", ""
+    return org, "제목(속보 꼴)"
+
+
 def to_item(*, chan: str, src_id: str, text: str, links: list, when: str,
             perma: str, got_by: str, body_via: str) -> Item:
     """글 하나를 항목으로. **두 길이 같은 것을 낸다.**
@@ -251,6 +314,15 @@ def to_item(*, chan: str, src_id: str, text: str, links: list, when: str,
     kind, ours = classify(fields)
     src = origin(links, text, fields)
     org = first(fields, PICK["org"])
+    org_how = "칸" if org else ""
+    country = first(fields, PICK["country"])
+    country_how = "칸" if country else ""
+    # 칸에서 못 읽은 것만 글에서 뽑는다. CVE · 악성코드 글은 유출 글이 아니라 안 뽑는다
+    if not org and ours is not False:
+        org, org_how = org_from_text(text)
+    if not country:
+        country = flag_country(text)
+        country_how = "국기" if country else ""
     # `source` 칸이 도메인만 적혀 있으면 그것이 원 출처의 자리다
     src_dom = refang(fields.get("source", ""))
     venue = (src.split("/")[2] if src.startswith("http")
@@ -275,12 +347,14 @@ def to_item(*, chan: str, src_id: str, text: str, links: list, when: str,
         post_url=src,
         via=["t.me/" + chan],
         claimed_size=first(fields, PICK["size"]),
-        country=first(fields, PICK["country"]),
+        country=country,
         kind=TO_KIND.get(kind, ""),
         clues={"링크": links[:10]} if links else {},
         raw={"글 종류": kind, "우리 대상": ours, "글 꼴": shape,
              "집계 채널 글 주소": perma,
              "본문 칸": {k: clean(v) for k, v in fields.items()},
+             **({"대상 조직 출처": org_how} if org else {}),
+             **({"국가 출처": country_how} if country else {}),
              **({"못 읽은 것": note} if note else {})},
         got_by=got_by,
     )
