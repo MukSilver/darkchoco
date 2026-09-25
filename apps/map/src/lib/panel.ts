@@ -7,7 +7,7 @@
  */
 
 import type { MapLayout } from "./layout.ts";
-import { connectedIslandCount, islandPairs, partnerCount, type RelView } from "./relations.ts";
+import { connectedIslandCount, islandPairs, linksOf, partnerCount, type RelView } from "./relations.ts";
 import type { MapResult, TerritoryMetrics } from "./score.ts";
 import type { Ev } from "./types.ts";
 
@@ -337,9 +337,11 @@ export function territoryView(
   if (!t) return null;
   const isl = layout.islands.find((x) => x.islandKey === t.islandKey);
   const m = t.metrics;
-  // 탭 배지는 연결된 엔티티 수, 머리글은 연결된 섬 수다 (설계서 4.3.2)
-  const linkCount = partnerCount(i.rels, territoryId);
-  const islandsLinked = connectedIslandCount(i.rels, territoryId, islandOfFn(layout));
+  // 탭 배지는 연결된 엔티티 수, 머리글은 연결된 섬 수다 (설계서 4.3.2).
+  // 행위자는 활동 관계만 센다 — [연결] 탭이 활동한 영토만 늘어놓는다 (4.3.8)
+  const mine = linksOf(i.rels, territoryId, isl?.islandId === "ACTOR");
+  const linkCount = partnerCount(mine, territoryId);
+  const islandsLinked = connectedIslandCount(mine, territoryId, islandOfFn(layout));
 
   // 자동 문장. **설계서에도 피그마에도 예시가 없어 우리가 정한 꼴이다.**
   // 갖고 있는 값(섬 이름 · 비중 · 상태)만으로 만들고 없는 말은 안 붙인다

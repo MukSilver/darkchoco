@@ -11,7 +11,8 @@
 
   1. 줄 관문      「DB 반영」이 꺼졌거나 「검토 여부」가 미검토·사건 X 면 뺀다
   2. 읽는 칸      `ALLOWED_COLS` 에 없는 칸을 읽으려 하면 멈춘다. 원문 URL ·
-                 자료 제목 · 대상 조직 · 다크웹 주소는 `DENY_COLS` 다
+                 자료 제목 · 다크웹 주소는 `DENY_COLS` 다. 대상 조직은
+                 `MATCH_ONLY_COLS` 라 관계선 원문에 조직명이 섞였는지 대조만 한다
   3. 나가는 키    `TERRITORY_KEYS` · `EV_KEYS` · `RELATION_KEYS` 에 없는 키가
                  있으면 멈춘다
   4. 값 훑기      다 만든 뒤 JSON 에서 도메인 · `@` · 긴 숫자열을 찾는다
@@ -163,13 +164,31 @@ COUNTRY_CODE = {
     "한국": "KR", "미국": "US", "일본": "JP", "중국": "CN", "대만": "TW",
     "베트남": "VN", "인도": "IN", "러시아": "RU", "영국": "GB", "독일": "DE",
     "프랑스": "FR", "캐나다": "CA", "호주": "AU", "태국": "TH", "인도네시아": "ID",
+    # 수집기(`hub/events/push.py` 의 `나라`)가 쓰는 값 가운데 위에 없던 둘
+    "터키": "TR", "브라질": "BR",
 }
 
-#: 주장 규모 글에서 뽑는 숫자와 단위. 처음 걸린 하나만 쓴다
-RE_CLAIM_SIZE = re.compile(
-    r"(\d[\d,]*(?:\.\d+)?)\s*(TB|GB|MB|KB|만|천|억|K|M|건|rows?|records?)(?![A-Za-z])",
-    re.IGNORECASE,
-)
+#: 수집 DB 「산업 분야」 선택지 → 제목 낱말 (2026-09-25 에 있던 선택지 전부).
+#: **표에 없는 값은 싣지 않는다.** 노션 선택지는 누구나 새로 칠 수 있어서, 조직
+#: 이름을 선택지로 잘못 만들면 제목에 그대로 나간다. 기타 · 미확인도 뺀다.
+#: 새 선택지가 생기면 여기에 더한다 (굽기 로그에 표 밖 값 건수가 남는다)
+INDUSTRY_SHORT = {
+    "유통·이커머스": "유통", "교육": "교육", "IT·플랫폼": "IT", "쇼핑": "쇼핑",
+    "의료": "의료", "금융": "금융", "공공·행정": "공공", "제조": "제조",
+    "건설·부동산": "건설", "운송·물류": "운송", "이러닝": "이러닝", "통신": "통신",
+}
+
+#: 주장 규모 글의 숫자 — `1,200` · `20 000 000` · `1.5` 꼴. 빈칸으로 세 자리씩
+#: 끊은 수도 읽는다 (설계서 3.2 가 `9 000 000` 을 예로 든다)
+_NUM = r"(\d{1,3}(?:[ ,]\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)"
+#: 바이트 단위
+RE_CLAIM_BYTES = re.compile(_NUM + r"\s*(TB|GB|MB|KB)(?![A-Za-z])", re.IGNORECASE)
+#: 건수 단위 (영문). K · M 은 천 · 백만으로 읽는다
+#: 개 · lines 는 안 읽는다 — 「파일 5개」 · 「테이블 12개」 · 「5 lines sample」 은
+#: 레코드 수가 아니다
+RE_CLAIM_COUNT = re.compile(_NUM + r"\s*(K|M|건|명|rows?|records?)(?![A-Za-z])", re.IGNORECASE)
+#: 한국어 수 단위가 이어진 덩어리 — `5천만` · `1억 2천만` · `120만`
+RE_CLAIM_KO = re.compile(r"\d[\d,.]*\s*(?:억|만|천|백)(?:\s*\d[\d,.]*\s*(?:억|만|천|백)|\s*(?:억|만))*")
 
 #: 관계선 DB 「출발 섬」·「도착 섬」 → 섬 코드. 미분류는 관계선 DB 선택지에 없다
 ISLAND_OF_NAME = {
@@ -226,13 +245,17 @@ ALLOWED_COLS = frozenset({
     "한국 관련",
     "관측 시각",
     "수집일",
-    # ↓ 명부 DB 넷. 이름 칸이 영토 이름이 된다. 규모는 활동도 원자료다
+    # ↓ 명부 DB 셋. 이름 칸이 영토 이름이 된다. 규모는 활동도 원자료다
     "포럼 이름",
     "채널 이름",
     "그룹 이름",
     "상태",
     "규모",
     "이전 이름·별칭",  # 사건을 영토에 맞추는 데만 쓴다. 밖에 안 낸다
+    # ↓ 명부 DB. 근거 사건 없이 이 칸에서 만든 관계선은 **이 칸의 원문을 보인다**
+    #   (설계서 4.3.6, 2026-09-25 최현서 결정). 상대 영토 이름이 든 항목만 싣고,
+    #   대상 조직 이름과 겹치는 항목은 뺀다 (`relation_note`)
+    "연결된 곳",
     # ↓ 수집 DB. 사건 제목 재료다 (2026-09-25 최현서 결정 — 제목은
     #   「국가 · 산업 분야 · 날짜 · 규모」). 넷 다 선택지 칸이라 조직명이 못 든다.
     #   카운트다운 표기는 채워졌는지만 보고 값은 안 싣는다 (피해 주장 칩)
@@ -248,18 +271,24 @@ ALLOWED_COLS = frozenset({
 
 #: **맞추는 데만 쓰는 칸.** 값을 읽되 구운 파일에 절대 안 싣는다.
 #:
-#: 지금은 없다. 「게시자 핸들」이 여기 있었는데 2026-09-25 에 행위자 영토
-#: 이름으로 내기로 해서 `ALLOWED_COLS` 로 옮겼다. 그때 핸들 모양을 셌다 —
-#: 관문을 지난 사건(랜섬웨어 섬 제외)의 핸들 22개에 @ · 주소 · 긴 숫자 ·
-#: 한글 · 빈칸 섞임이 하나도 없었다.
-MATCH_ONLY_COLS: frozenset[str] = frozenset()
+#: 지금은 「대상 조직」 하나다 (2026-09-25). 관계선 원문에 피해 조직 이름이
+#: 섞였는지 대조하는 데만 쓴다 — **이 칸을 지우면 원문의 조직명 거르기가
+#: 사라진다** (`org_tokens` · `relation_note`).
+#:
+#: 「게시자 핸들」이 여기 있었는데 2026-09-25 에 행위자 영토 이름으로 내기로 해서
+#: `ALLOWED_COLS` 로 옮겼다. 그때 핸들 모양을 셌다 — 관문을 지난 사건(랜섬웨어
+#: 섬 제외)의 핸들 22개에 @ · 주소 · 긴 숫자 · 한글 · 빈칸 섞임이 하나도 없었다.
+MATCH_ONLY_COLS: frozenset[str] = frozenset({
+    # 관계선 원문(「연결된 곳」)에 피해 조직 이름이 섞였는지 대조하는 데만 쓴다
+    # (2026-09-25 최현서 결정). 값은 비교에만 쓰고 어디에도 안 담는다
+    "대상 조직",
+})
 
 #: **절대 읽지 않는 칸.** 값에 개인정보나 피해 조직 이름이 들어 있다.
 #:
 #: 허용 목록만으로도 막히지만 이름을 적어 둔다. 왜 안 읽는지가 보여야
 #: 나중에 누가 「이것도 필요한데」 하고 허용 목록에 옮기기 전에 멈춘다.
 DENY_COLS = frozenset({
-    "대상 조직",      # 피해 조직 이름 (2026-09-23 최현서 결정: 지도에 안 낸다)
     "자료 제목",      # 196줄 중 172줄에 대상 조직 표기가 들어 있다
     "원문 URL",
     # ↓ 명부 DB. 다크웹 주소와 접속 방법, 사람이 쓴 설명이다
@@ -275,7 +304,6 @@ DENY_COLS = frozenset({
     "개인정보 유출",
     "한국 관련 유출",
     "피해 대상",
-    "연결된 곳",
     "다루는 것",
     "한국 관련 근거",
     "관측 근거",
@@ -348,7 +376,11 @@ EV_KEYS = frozenset({
     "kind", "country", "industry", "sizeValue", "sizeUnit",
 })
 #: 관계선. 건수와 처음·마지막 본 날은 싣지 않는다 — 화면이 `evidence` 로 센다
-RELATION_KEYS = frozenset({"id", "from", "to", "kind", "confidence", "evidence"})
+RELATION_KEYS = frozenset({
+    "id", "from", "to", "kind", "confidence", "evidence",
+    # 근거 사건이 없는 관계선의 명부 「연결된 곳」 원문 (설계서 4.3.6)
+    "note",
+})
 
 #: 다크웹 섬 코드 (설계서 2.3). 미분류는 2026-09-23 에 없앴다.
 #: `islands.ts` 의 `DARK_ISLANDS` 와 같아야 한다. 섬 이름과 색은 거기 있고
@@ -410,10 +442,44 @@ def event_kind(post: str | None, countdown: bool, repost: bool) -> str | None:
 
 
 def industry_short(raw: str | None) -> str | None:
-    """산업 분야 선택지를 제목용으로 줄인다. `유통·이커머스` → `유통`. 기타는 뺀다."""
-    if not raw or not raw.strip() or raw.strip() == "기타":
+    """산업 분야 선택지를 제목 낱말로 바꾼다. **`INDUSTRY_SHORT` 표 밖이면 None.**"""
+    if not raw:
         return None
-    return raw.split("·", 1)[0].strip() or None
+    return INDUSTRY_SHORT.get(raw.strip())
+
+
+def _to_float(num: str) -> float | None:
+    try:
+        return float(num.replace(",", "").replace(" ", ""))
+    except ValueError:
+        return None
+
+
+def _korean_count(chunk: str) -> float | None:
+    """`5천만` → 50,000,000 · `1억 2천만` → 120,000,000. 천 · 백은 만 · 억 묶음 안에서 곱한다."""
+    small = {"천": 1_000, "백": 100}
+    big = {"만": 10_000, "억": 100_000_000}
+    total = 0.0
+    cur = 0.0
+    for num, unit in re.findall(r"(\d[\d,.]*)?\s*(억|만|천|백)", chunk):
+        v = _to_float(num) if num else None
+        if unit in small:
+            cur += (v if v is not None else 1) * small[unit]
+        else:
+            group = cur + (v if v is not None else 0)
+            total += (group or 1) * big[unit]
+            cur = 0.0
+    total += cur
+    return total or None
+
+
+def _count_value(total: float) -> tuple[float, str]:
+    """건수를 화면 단위로 줄인다 — 1억 이상은 억, 1만 이상은 만, 나머지는 건."""
+    if total >= 100_000_000:
+        return round(total / 100_000_000, 2), "억"
+    if total >= 10_000:
+        return round(total / 10_000, 2), "만"
+    return float(round(total)), "건"
 
 
 def claim_size(raw: str | None) -> tuple[float, str] | None:
@@ -421,23 +487,29 @@ def claim_size(raw: str | None) -> tuple[float, str] | None:
 
     **원문은 안 싣는다.** 자유 글이라 조직명이 섞일 수 있다. 숫자와 정해진
     단위만 남기면 조직명이 들어갈 틈이 없다.
+
+    **레코드 수가 있으면 그것을, 없으면 바이트를 쓴다.** 레코드 수가 여럿이면
+    가장 큰 것이다 — 「관리자 3명 포함 120만 건」은 120만이다. 바이트는 그대로
+    (`255GB`), 건수는 억 · 만 · 건으로 맞춘다 — `5천만 건` → `5000만`,
+    `20 000 000 rows` → `2000만`, `1.2M records` → `120만`.
     """
     if not raw:
         return None
-    m = RE_CLAIM_SIZE.search(raw)
-    if not m:
-        return None
-    try:
-        value = float(m.group(1).replace(",", ""))
-    except ValueError:
-        return None
-    unit = m.group(2)
-    low = unit.lower()
-    if low.startswith("row") or low.startswith("record"):
-        unit = "건"
-    elif unit.isascii():
-        unit = unit.upper()
-    return value, unit
+    counts: list[float] = []
+    for m in RE_CLAIM_KO.finditer(raw):
+        t = _korean_count(m.group(0))
+        if t:
+            counts.append(t)
+    for m in RE_CLAIM_COUNT.finditer(raw):
+        v = _to_float(m.group(1))
+        if v:
+            counts.append(v * {"k": 1_000, "m": 1_000_000}.get(m.group(2).lower(), 1))
+    if counts:
+        return _count_value(max(counts))
+    m = RE_CLAIM_BYTES.search(raw)
+    if m and (v := _to_float(m.group(1))) is not None:
+        return v, m.group(2).upper()
+    return None
 
 
 def size_grade(raw: str | None) -> str:
@@ -632,11 +704,16 @@ def number_duplicates(items: list[dict]) -> None:
 
 # ── 반출 검사 ───────────────────────────────────────────────────────────────
 
-RE_AT = re.compile(r"@")
+RE_AT = re.compile(r"[@＠]")
 RE_DIGITS = re.compile(r"\d{11,}")
 #: 점을 낀 낱말. 아는 TLD 만 막으면 모르는 TLD 로 샌다 —
 #: 2026-09-03 에 `.at` 도메인이 그렇게 빠져나갔다
 RE_DOTTED = re.compile(r"[A-Za-z0-9가-힣_-]+\.[A-Za-z0-9가-힣_-]{2,}")
+#: 끊어 적은 전화번호와 주민번호 모양. 11자리 연속 숫자 검사는 `010-1234-5678` ·
+#: `900101-1234567` 을 못 잡는다. 사람이 쓴 글(관계선 원문)이 나가면서 더했다
+RE_PII = re.compile(r"(?<!\d)(?:\d{2,4}[-.–— _]\d{3,4}[-.–— _]\d{4}|\d{6}\s*[-–—]\s*[1-8]\d{6})(?!\d)")
+#: 가려 적은 이메일 — `name [at] host` · `name(at)host`
+RE_AT_WORD = re.compile(r"[\[({]\s*at\s*[\]})]|_at_|\s+at\s+\S+\s*(?:\.|\bdot\b)", re.IGNORECASE)
 
 
 def scan_strings(node, path: str, bad: list[str]) -> None:
@@ -655,8 +732,20 @@ def scan_strings(node, path: str, bad: list[str]) -> None:
             bad.append(f"{path}: @ 가 들어 있습니다")
         if RE_DIGITS.search(node):
             bad.append(f"{path}: 숫자가 11자리 넘게 이어집니다")
-        if RE_DOTTED.search(node):
+        if RE_PII.search(node):
+            bad.append(f"{path}: 전화번호나 주민번호 모양이 있습니다")
+        if RE_AT_WORD.search(node):
+            bad.append(f"{path}: 가려 적은 이메일 모양이 있습니다")
+        # 관계선 원문(`note`)은 주소를 싣는다 — 가해 쪽 주소와 행위자 이름은 내도
+        # 된다 (2026-09-25 최현서 결정). @ 와 긴 숫자열은 여기서도 막는다
+        if RE_DOTTED.search(node) and not path.endswith(".note"):
             bad.append(f"{path}: 점을 낀 낱말이 있습니다 (도메인일 수 있습니다)")
+
+
+#: 사건 종류 칩 값 (`types.ts` 의 `EvKind`). 굽기가 내는 값은 `event_kind` 가 정한다
+EV_KIND_VALUES = {"data_post", "claim", "sale", "access_sale", "repost", "official"}
+#: 규모 단위. `claim_size` 가 내는 값뿐이다 (`mapData.ts` 의 `SIZE_UNITS` 와 같게)
+SIZE_UNITS = {"TB", "GB", "MB", "KB", "억", "만", "건"}
 
 
 def check(data: dict) -> list[str]:
@@ -684,6 +773,18 @@ def check(data: dict) -> list[str]:
         extra = set(e) - EV_KEYS
         if extra:
             bad.append(f"사건에 허용 밖 칸이 있습니다: {sorted(extra)}")
+        # 제목 재료는 모양까지 본다. 화면(`mapData.ts`)이 버리는 값도 파일째 번들에
+        # 실려 나가므로, 여기서 막아야 손으로 고친 파일이 배포되지 않는다
+        if "kind" in e and e["kind"] not in EV_KIND_VALUES:
+            bad.append(f"사건 {e['id']} 의 종류가 설계서 2.3 에 없습니다")
+        if "country" in e and e["country"] not in COUNTRY_CODE.values():
+            bad.append(f"사건 {e['id']} 의 국가 부호가 표에 없습니다")
+        if "industry" in e and e["industry"] not in INDUSTRY_SHORT.values():
+            bad.append(f"사건 {e['id']} 의 산업 분야가 표에 없습니다")
+        if ("sizeValue" in e) != ("sizeUnit" in e) or (
+            "sizeUnit" in e and e["sizeUnit"] not in SIZE_UNITS
+        ):
+            bad.append(f"사건 {e['id']} 의 규모 단위가 틀렸습니다")
 
     # 관계선은 양 끝이 목록 안 영토여야 하고, 근거는 목록 안 사건이어야 한다.
     # 목록 밖을 가리키면 굽기가 이름을 잘못 맞췄거나 어디선가 지어낸 것이다
@@ -704,6 +805,9 @@ def check(data: dict) -> list[str]:
         for x in r.get("evidence", []):
             if x not in evs:
                 bad.append(f"관계선 {r.get('id')} 의 근거 {x} 가 사건 목록에 없습니다")
+        # 원문은 근거 사건이 없는 관계선에만 싣는다 (설계서 4.3.6)
+        if "note" in r and r.get("evidence"):
+            bad.append(f"관계선 {r.get('id')} 는 근거 사건이 있는데 원문이 붙었습니다")
 
     # 연결 관계 DB(오픈웹 ↔ 다크웹)는 노션에 없다 (설계서 5.1-5). 3D 보류와 함께
     # 비어 있는 것이 맞다. 값이 들어 있으면 어디선가 지어낸 것이다
@@ -781,8 +885,177 @@ def split_evidence(raw: str | None) -> list[str]:
     return out
 
 
+def split_links(raw) -> list[str]:
+    """명부 「연결된 곳」 칸을 항목으로 가른다.
+
+    가름은 줄바꿈 · 쌍반점 · 가운뎃점(` · `) · 쉼표다. **괄호 안의 쉼표에서는 안
+    가른다** — `포럼: X (원본, 2022~2023)` 이 두 조각이 되면 앞 조각에 괄호가 열린
+    채 남는다. 가운뎃점은 수집기(`hub/places/extract/links.py`)가 항목 사이에 쓴다.
+    """
+    if not isinstance(raw, str):
+        return []
+    items: list[str] = []
+    buf: list[str] = []
+    depth = 0
+    i = 0
+    while i < len(raw):
+        ch = raw[i]
+        if ch in "([（":
+            depth += 1
+        elif ch in ")]）":
+            depth = max(0, depth - 1)
+        cut = ch in "\n;" or (ch == "," and depth == 0)
+        if ch == "\n":
+            depth = 0  # 한 줄에서 안 닫힌 괄호가 다음 줄 항목까지 삼키지 않게
+        if not cut and depth == 0 and raw.startswith(" · ", i):
+            cut = True
+            i += 2
+        if cut:
+            items.append("".join(buf))
+            buf = []
+        else:
+            buf.append(ch)
+        i += 1
+    items.append("".join(buf))
+    return [x.strip() for x in items if x.strip() and x.strip() not in PLACEHOLDERS]
+
+
+#: 조직 이름 뒤에 붙는 법인 꼬리. 떼고 남은 이름으로도 대조한다
+RE_LEGAL = re.compile(
+    r"\b(?:co\.?,?\s*ltd\.?|ltd\.?|inc\.?|corp\.?|corporation|company|co\.|llc|plc|gmbh)\b"
+    r"|주식회사|유한회사|\(주\)|㈜|\(유\)",
+    re.IGNORECASE,
+)
+#: 조직 이름으로 보지 않을 낱말. 이런 값과 겹친다고 원문을 버리지 않는다
+ORG_STOP = {
+    "기타", "미상", "미확인", "없음", "모름", "unknown", "n/a", "한국", "korea", "대한민국",
+    # 법인 꼬리 · 주소 조각만 남은 것. 이것과 겹친다고 원문을 버리면 가해 쪽 URL 이 든
+    # 원문까지 다 빠진다 (URL 은 싣기로 했다, 2026-09-25)
+    "ltd", "inc", "corp", "co", "llc", "plc", "gmbh", "company", "corporation",
+    "주식회사", "유한회사", "www", "http", "https", "com", "net", "org",
+}
+
+
+#: 도메인 끝의 공통 꼬리. 등록 이름은 이것들 바로 앞 조각이다
+DOMAIN_TAILS = {"com", "net", "org", "kr", "co", "or", "go", "ac", "ne", "re", "pe", "gov", "edu", "io", "jp", "cn"}
+
+
+def registrable_label(dom: str) -> str:
+    """`shop.lamaba.com` → `lamaba` · `ganada.co.kr` → `ganada`. 첫 조각(`shop` · `www`)은 흔한 낱말이라 안 쓴다."""
+    labels = [x for x in dom.split(".") if x]
+    while len(labels) > 1 and labels[-1] in DOMAIN_TAILS:
+        labels.pop()
+    return labels[-1] if labels else ""
+
+
+def org_tokens(values: set[str]) -> set[str]:
+    """수집 DB 「대상 조직」 값들에서 대조할 낱말을 뽑는다. 소문자다.
+
+    한 칸에 여러 조직(`A / B` · `A, B` · `A·B`)과 괄호 · 도메인 · 법인 꼬리가
+    붙어 있다. 칸 전체만 대조하면 원문이 조직을 조금만 다르게 적어도 놓친다.
+    칸 전체 · 조각마다 · 괄호 안 · 법인 꼬리를 뗀 이름 · 빈칸을 뺀 이름 · 도메인과
+    그 첫 조각을 모두 낱말로 쓴다. **덜 걸러서 새는 것보다 더 걸러서 원문을 못
+    보이는 편이 낫다.**
+    """
+    out: set[str] = set()
+
+    def add(x: str) -> None:
+        x = x.strip(" .,·/-_:'\"").casefold()
+        if not x or x in ORG_STOP or x.isdigit():
+            return
+        out.add(x)
+        out.add(re.sub(r"\s+", "", x))
+        bare = RE_LEGAL.sub(" ", x).strip(" .,·/-")
+        if bare and bare != x and bare not in ORG_STOP:
+            out.add(bare)
+            out.add(re.sub(r"\s+", "", bare))
+
+    for v in values:
+        v = re.sub(r"https?://", " ", v, flags=re.IGNORECASE)
+        add(v)
+        for part in re.split(r"[,/·;|]|\s+[-–]\s+|\n", v):
+            add(part)
+            for inner in re.findall(r"\(([^)]*)\)", part):
+                add(inner)
+            add(re.sub(r"\([^)]*\)", " ", part))
+        for dom in re.findall(r"[a-z0-9-]+(?:\.[a-z0-9-]+)+", re.sub(r"https?://", " ", v.casefold())):
+            dom = re.sub(r"^www\.", "", dom)
+            add(dom)
+            add(registrable_label(dom))
+    # 한글은 두 글자부터, 라틴 글자는 세 글자부터 쓴다. 두 글자 라틴 약칭(`SK`)은
+    # 아래에서 낱말 경계로만 대조한다
+    return {t for t in out if len(t) >= 2}
+
+
+def mentions_org(text: str, tokens: set[str]) -> bool:
+    """글에 조직 낱말이 있나. 라틴 세 글자 이하는 낱말 경계로, 나머지는 부분 문자열로 본다."""
+    low = text.casefold()
+    squeezed = re.sub(r"\s+", "", low)
+    for t in tokens:
+        if re.fullmatch(r"[a-z0-9]{1,3}", t):
+            if re.search(rf"(?<![a-z0-9]){re.escape(t)}(?![a-z0-9])", low):
+                return True
+        elif t in low or t in squeezed:
+            return True
+    return False
+
+
+def relation_note(
+    ca: dict, cb: dict, org_names: set[str], ambiguous: frozenset[str] = frozenset(),
+) -> tuple[str | None, str | None]:
+    """근거 없는 관계선의 원문 — 두 영토의 「연결된 곳」에서 상대 이름이 든 항목.
+
+    설계서 5.1-4 는 이 칸을 「종류: 이름 (관계 종류)」 꼴로 적게 했다. 실제로는
+    자유 글이 많아(2026-09-25 에 형식을 따른 항목이 포럼 95개 중 5개) 상대
+    영토 이름이 든 항목을 고른다. 이름은 명부 이름 · 괄호를 뗀 이름 · 별칭으로 본다.
+
+    **피해 조직 이름이 든 항목은 뺀다** (2026-09-23 결정). 값 훑기는 조직 이름
+    같은 평범한 낱말을 못 잡아서 수집 DB 「대상 조직」에서 뽑은 낱말(`org_tokens`)과
+    대조한다. `@` · 긴 숫자열 · 전화 · 주민번호 · 가려 적은 이메일 모양이 든 항목도
+    뺀다 — 값 훑기가 굽기를 멈추기 전에 여기서 거른다. 돌려주는 둘째 값은 뺀
+    까닭이다 (로그에 건수만 남긴다).
+
+    `org_names` 는 `org_tokens` 가 낸 낱말 모음이다. `ambiguous` 는 괄호를 떼면
+    둘 이상의 영토가 같아지는 이름이다 — `BreachForums (bf.st)` 와 `(breached.su)`
+    는 둘 다 `breachforums` 라, 그 이름으로 고르면 한 클론의 원문이 다른 클론
+    관계선에 붙는다. 그런 이름은 괄호째 이름과 괄호 안 도메인으로만 고른다.
+    """
+    def names(c: dict) -> set[str]:
+        out = {c["rawName"].casefold()}
+        base, paren = clean_name(c["rawName"])
+        for short in (base.casefold(), display_name(c["rawName"]).casefold()):
+            if short not in ambiguous:
+                out.add(short)
+        if paren and "." in paren:
+            out.add(paren.casefold())
+        for a in c.get("aliases", []):
+            if a.casefold() not in ambiguous and clean_name(a)[0].casefold() not in ambiguous:
+                out.add(a.casefold())
+        return {x for x in out if len(x) >= 3}
+
+    picked: list[str] = []
+    why = None
+    for own, other in ((ca, cb), (cb, ca)):
+        target = names(other)
+        for item in own.get("links", []):
+            low = item.casefold()
+            if not any(t in low for t in target):
+                continue
+            if mentions_org(item, org_names):
+                why = "조직명"
+                continue
+            if RE_AT.search(item) or RE_DIGITS.search(item) or RE_PII.search(item) or RE_AT_WORD.search(item):
+                why = why or "@ · 긴 숫자"
+                continue
+            if item not in picked:
+                picked.append(item)
+    if not picked:
+        return None, why
+    return " / ".join(picked)[:400], why
+
+
 def bake_relations(n, ds: str, find_tid, events: list[dict],
-                   read, log) -> list[dict]:
+                   read, log, note_for=None) -> list[dict]:
     """관계선 DB 를 읽어 지도 영토끼리 잇는 관계선만 남긴다.
 
     **영토는 섬과 이름을 같이 맞춘다.** 관계선 DB 는 영토를 명부 이름 글자로
@@ -820,8 +1093,8 @@ def bake_relations(n, ds: str, find_tid, events: list[dict],
         a = find(col(read, p, "출발 섬"), col(read, p, "출발 영토"))
         b = find(col(read, p, "도착 섬"), col(read, p, "도착 영토"))
         if not a or not b:
-            # 명부에서 걸러진 영토(offline · 규모 없음 · DB 반영 꺼짐)나 행위자
-            # DB 에 없는 핸들을 가리키는 관계선이 여기로 온다
+            # 명부에서 걸러진 영토(offline · 규모 없음 · DB 반영 꺼짐)나, 지도에 오른
+            # 사건의 게시자 핸들에 없는 행위자를 가리키는 관계선이 여기로 온다
             dropped["양 끝 영토가 지도에 없음"] += 1
             continue
         if a == b:
@@ -840,14 +1113,21 @@ def bake_relations(n, ds: str, find_tid, events: list[dict],
             dropped["근거가 모두 지도 밖"] += 1
             continue
 
-        out.append({
+        rel = {
             "id": col(read, p, "관계 ID") or f"rel-{i}",
             "from": a,
             "to": b,
             "kind": kind,
             "confidence": CONF_OF.get(col(read, p, "확실한 정도") or "", "estimated"),
             "evidence": ev,
-        })
+        }
+        # 근거 사건 없이 명부 「연결된 곳」에서 만든 관계선은 그 칸의 원문을 싣는다
+        # (설계서 4.3.6)
+        if not ev_all and note_for:
+            note = note_for(a, b)
+            if note:
+                rel["note"] = note
+        out.append(rel)
 
     log(f"관계선 DB {len(rows)}줄 → {len(out)}줄")
     log("관계선에서 뺀 줄 — " + " · ".join(f"{k} {v}" for k, v in dropped.items()))
@@ -860,7 +1140,7 @@ def bake_relations(n, ds: str, find_tid, events: list[dict],
 
 
 def read_registry(n, sources: dict[str, str], read, log) -> list[dict]:
-    """명부 DB 넷을 읽어 영토 후보를 만든다. 거르기는 사건을 붙인 뒤에 한다.
+    """명부 DB 셋(포럼 · 랜섬웨어 · 텔레그램)을 읽어 영토 후보를 만든다. 거르기는 사건을 붙인 뒤에 한다.
 
     **이름이 똑같은 줄은 한 후보로 합친다.** 같은 곳을 어니언 주소 줄과 일반
     주소 줄로 두 번 적은 경우가 있다 (정본 확인필요 탭 7~13행). 이름이 조금이라도
@@ -888,6 +1168,7 @@ def read_registry(n, sources: dict[str, str], read, log) -> list[dict]:
             ]
             size = {} if island == "ACTOR" else registry_size(island, col(read, p, "규모"))
             on = col(read, p, "DB 반영") is True
+            links = split_links(col(read, p, "연결된 곳")) if on else []
             online = col(read, p, "상태") == "online"
             k = (island, raw_name.casefold())
             if k in by_name:
@@ -897,7 +1178,7 @@ def read_registry(n, sources: dict[str, str], read, log) -> list[dict]:
                     continue  # 꺼진 줄은 보태지 않는다
                 if not c["on"]:
                     # 먼저 들어온 꺼진 줄을 켜진 줄로 갈아 끼운다
-                    c.update({"aliases": aliases, "on": True, "online": online})
+                    c.update({"aliases": aliases, "on": True, "online": online, "links": links})
                     for s in ("raw", "posts", "threads"):
                         c.pop(s, None)
                     c.update(size)
@@ -906,10 +1187,11 @@ def read_registry(n, sources: dict[str, str], read, log) -> list[dict]:
                 for s, v in size.items():
                     c[s] = max(c.get(s) or 0, v)
                 c["aliases"] += [a for a in aliases if a not in c["aliases"]]
+                c["links"] += [x for x in links if x not in c["links"]]
                 continue
             c = {
                 "island": island, "rawName": raw_name, "aliases": aliases,
-                "on": on, "online": online, "order": len(out), **size,
+                "on": on, "online": online, "order": len(out), "links": links, **size,
             }
             by_name[k] = c
             out.append(c)
@@ -933,6 +1215,15 @@ def clean_handle(raw) -> str | None:
         return None
     h = raw.strip().lstrip("@").strip()
     if not h or h.casefold() in {x.casefold() for x in HANDLE_PLACEHOLDERS}:
+        return None
+    # 값 훑기에 걸릴 모양이면 행위자로 안 만든다. 남기면 핸들 하나 때문에 하루
+    # 굽기가 통째로 멈춘다 (`scan_strings`)
+    if RE_AT.search(h) or RE_DIGITS.search(h) or RE_DOTTED.search(h) or RE_PII.search(h) or RE_AT_WORD.search(h):
+        return None
+    # 영토 id 는 핸들을 `-` 로 이어 붙인 모양이다(`slug`). `user_010_1234_5678` 은
+    # id 가 되면서 전화번호 모양이 된다
+    as_id = re.sub(r"[^a-z0-9]+", "-", h.lower())
+    if RE_PII.search(as_id) or RE_DIGITS.search(as_id.replace("-", "")):
         return None
     return h
 
@@ -1033,6 +1324,14 @@ def bake(n, sources: dict[str, str], log) -> dict:
     why: dict[str, int] = {}
     raw_events: list[dict] = []
 
+    # 관계선 원문 대조용 조직 이름. 관문과 무관하게 모든 줄에서 모은다 —
+    # 지도에 안 오른 사건의 조직도 원문에 적혀 있으면 안 된다
+    org_names: set[str] = set()
+    for row in rows:
+        org = col_match(read, row.get("properties", {}), "대상 조직")
+        if org:
+            org_names.add(org.casefold())
+
     for row in rows:
         p = row.get("properties", {})
 
@@ -1124,6 +1423,7 @@ def bake(n, sources: dict[str, str], log) -> dict:
             ),
             "country": COUNTRY_CODE.get(col(read, p, "국가") or ""),
             "industry": industry_short(col(read, p, "산업 분야")),
+            "industryRaw": bool(col(read, p, "산업 분야")),
             "claim": claim_size(col(read, p, "주장 규모")),
         })
 
@@ -1151,11 +1451,16 @@ def bake(n, sources: dict[str, str], log) -> dict:
     # 올라온 사건의 게시자 핸들 하나가 행위자 영토 하나다. 허위도 센다 (정본에
     # 사건이 모두 허위인 행위자가 있다). 대소문자만 다른 핸들은 한 사람으로 본다.
     #
-    # **랜섬웨어 그룹 이름과 같은 핸들은 뺀다.** 랜섬웨어 그룹은 행위자가 아니라
-    # 영토다 (설계서 2.4 · 4.3.8 「랜섬웨어 그룹은 넣지 않음」)
+    # **명부 영토 이름과 같은 핸들은 뺀다.** 랜섬웨어 그룹은 행위자가 아니라
+    # 영토다 (설계서 2.4 · 4.3.8 「랜섬웨어 그룹은 넣지 않음」). 텔레그램 사건은
+    # 핸들로 채널을 찾으므로 그 핸들이 곧 채널 이름이다 — 행위자로 만들면 같은
+    # 곳이 채널과 행위자로 두 번 선다. 포럼도 같게 본다
+    # 랜섬웨어 그룹은 꺼졌거나 offline 이어도 행위자가 아니다. 포럼 · 채널은 지도에
+    # 남은 곳과 같은 이름만 뺀다 — 꺼진 명부 줄 이름과 우연히 같은 핸들까지 지우면
+    # 실제 행위자와 그 관계가 사라진다
     group_names = set()
     for c in cands:
-        if c["island"] == "RANSOMWARE":
+        if c["island"] == "RANSOMWARE" or id(c) in places:
             group_names.add(c["rawName"].casefold())
             group_names.add(display_name(c["rawName"]).casefold())
     actor_of: dict[str, dict] = {}
@@ -1175,7 +1480,7 @@ def bake(n, sources: dict[str, str], log) -> dict:
             }
         e["actor"] = actor_of[k]
     actor_cands = list(actor_of.values())
-    log(f"행위자 — 게시자 핸들에서 {len(actor_cands)}곳 · 랜섬 그룹 이름과 같아 뺀 핸들 {len(as_group)}개")
+    log(f"행위자 — 게시자 핸들에서 {len(actor_cands)}곳 · 명부 영토 이름과 같아 뺀 핸들 {len(as_group)}개")
 
     kept = [c for c in cands if id(c) in places] + actor_cands
     kept_ids = places | {id(c) for c in actor_cands}
@@ -1244,6 +1549,10 @@ def bake(n, sources: dict[str, str], log) -> dict:
 
     log("관문에서 뺀 줄 — " + " · ".join(f"{k} {v}" for k, v in gate.items()))
     log("지도에서 뺀 사건 — " + (" · ".join(f"{k} {v}" for k, v in sorted(why.items())) or "없음"))
+    odd_industry = sum(1 for e in raw_events if e["industryRaw"] and not e["industry"])
+    if odd_industry:
+        # 값은 안 찍는다. 조직 이름이 선택지로 잘못 만들어졌을 수도 있다
+        log(f"  산업 분야가 INDUSTRY_SHORT 표 밖(기타 · 미확인 포함)이라 제목에서 뺀 사건 {odd_industry}건")
     by_island: dict[str, int] = {}
     for t in out_terr:
         by_island[t["islandId"]] = by_island.get(t["islandId"], 0) + 1
@@ -1266,7 +1575,30 @@ def bake(n, sources: dict[str, str], log) -> dict:
                 c = index.find(isl, nm)
             return tid_of.get(id(c)) if c else None
 
-        relations = bake_relations(n, sources["relations"], find_tid, events, read, log)
+        cand_of = {tid: c for c in kept for tid in [tid_of.get(id(c))] if tid}
+        dropped_notes = {"조직명": 0, "@ · 긴 숫자": 0}
+        # 괄호를 떼면 둘 이상이 같아지는 이름 (`relation_note` 의 `ambiguous`).
+        # **명부 전체로 센다** — 한 클론이 offline 이라 지도에서 빠져도 그 클론의
+        # 원문이 남은 클론 관계선에 붙으면 안 된다
+        short_count: dict[str, int] = {}
+        for c in cands + actor_cands:
+            for short in {clean_name(c["rawName"])[0].casefold(), display_name(c["rawName"]).casefold()}:
+                short_count[short] = short_count.get(short, 0) + 1
+        ambiguous = frozenset(k for k, v in short_count.items() if v > 1)
+        org_tok = org_tokens(org_names)
+
+        def note_for(a: str, b: str) -> str | None:
+            ca, cb = cand_of.get(a), cand_of.get(b)
+            if not ca or not cb:
+                return None
+            note, why = relation_note(ca, cb, org_tok, ambiguous)
+            if why:
+                dropped_notes[why] += 1
+            return note
+
+        relations = bake_relations(n, sources["relations"], find_tid, events, read, log, note_for)
+        log(f"관계선 원문 {sum(1 for r in relations if 'note' in r)}줄 · 뺀 항목 — "
+            + " · ".join(f"{k} {v}" for k, v in dropped_notes.items()))
     else:
         log("관계선 DB 를 안 알려 줘서 관계선을 비웁니다 "
             f"(DC_MAP_RELATIONS_DS 또는 {SOURCES_FILE.name} 의 relations)")

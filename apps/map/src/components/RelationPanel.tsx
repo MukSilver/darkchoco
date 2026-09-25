@@ -182,6 +182,15 @@ export default function RelationPanel(p: RelationPanelProps) {
         </p>
       )}
 
+      {sel && sel.fromRegistry && sel.rel.note && (
+        <section className="flex flex-col gap-s3">
+          <h3 className="text-[13px] font-semibold text-strong">명부 「연결된 곳」 원문</h3>
+          <p className="break-all rounded-[12px] border border-edge bg-card px-s4 py-s3 font-mono text-[12px] leading-[1.6] text-body">
+            {sel.rel.note}
+          </p>
+        </section>
+      )}
+
       {sel && !sel.fromRegistry && (
         <section className="flex flex-col gap-s3">
           <div className="flex items-baseline justify-between">

@@ -33,6 +33,7 @@ import {
   defaultCenter,
   islandPairs,
   linkRows,
+  linksOf,
   pairViews,
   partnerOf,
   relationsAt,
@@ -77,6 +78,12 @@ const ALL_RELS = withActivity(MAP.relations, MAP.events);
  * 「출발 화면 상태 (선택, 탭, 행 선택, 줌, 기준일) 그대로 복원」).
  */
 type Origin = {
+  /**
+   * 이 이동이 쌓은 뒤로 가기 기록의 표. 남은 옛 기록과 가르는 데 쓴다. 새로
+   * 고친 뒤에도 겹치지 않게 연 시각을 붙인다 — 카운터만 쓰면 새로 고친 뒤 다시
+   * 1 부터 세어 옛 기록과 같아진다
+   */
+  seq: string;
   tab: ViewTabKey;
   selection: MapSelection;
   panelTab: PanelTabKey;
@@ -87,6 +94,9 @@ type Origin = {
 
 /** 뒤로 가기 기록에 우리가 넣은 칸이라는 표시 */
 const HISTORY_KEY = "dcRel";
+
+/** 이 창을 연 시각. 뒤로 가기 기록 표가 새로 고침 전 것과 겹치지 않게 한다 */
+const OPENED_AT = Date.now().toString(36);
 
 function presentIn(d: Date): Set<string> {
   const r = computeMap({ ...MAP, today: TODAY }, d);
@@ -186,18 +196,38 @@ export default function Page() {
    *   [연결] 행을 고름     그 관계선만. 상대 영토도 떠오른다
    *   유형 간 행을 고름    그 섬 쌍의 관계선만
    */
+  const isActor = useCallback(
+    (id: string) =>
+      layout.islands.find((i) => i.islandKey === terr.get(id)?.islandKey)?.islandId === "ACTOR",
+    [layout, terr],
+  );
+
+  /**
+   * [연결] 행 선택. **기준일을 옮겨 그 행이 없어졌으면 없던 것으로 본다** — 남겨
+   * 두면 빈 섬 쌍을 그리느라 지도 전체가 흐려지는데, 목록에는 고른 행이 없어
+   * 사람이 풀 길이 없다. 상태는 그대로 둔다 (기준일을 되돌리면 다시 산다)
+   */
+  const liveLinkSel: LinkSel = useMemo(() => {
+    if (!linkSel) return null;
+    if (linkSel.type === "pair") {
+      return pairViews(rels, islandOf, linkSel.from, linkSel.to).length ? linkSel : null;
+    }
+    return rels.some((v) => v.rel.id === linkSel.id) ? linkSel : null;
+  }, [linkSel, rels, islandOf]);
+
   const mapRel = useMemo(() => {
-    if (linkSel?.type === "pair") {
-      const lines = pairViews(rels, islandOf, linkSel.from, linkSel.to);
+    if (liveLinkSel?.type === "pair") {
+      const lines = pairViews(rels, islandOf, liveLinkSel.from, liveLinkSel.to);
       const lit = new Set(lines.flatMap((v) => [v.rel.from, v.rel.to]));
-      return { lines, lit, raised: lit, litIslands: new Set([linkSel.from, linkSel.to]) };
+      return { lines, lit, raised: lit, litIslands: new Set([liveLinkSel.from, liveLinkSel.to]) };
     }
     if (selection.kind !== "territory") return null;
     const id = selection.id;
-    let lines = touching(rels, id);
+    // 행위자는 활동 관계만 그린다 — [연결] 목록과 같게 (설계서 4.3.8)
+    let lines = linksOf(rels, id, isActor(id));
     let raised: Set<string> | undefined;
-    if (linkSel?.type === "rel") {
-      const v = lines.find((x) => x.rel.id === linkSel.id);
+    if (liveLinkSel?.type === "rel") {
+      const v = lines.find((x) => x.rel.id === liveLinkSel.id);
       if (v) {
         lines = [v];
         raised = new Set([partnerOf(v, id)]);
@@ -206,8 +236,22 @@ export default function Page() {
     const lit = new Set([id, ...lines.map((v) => partnerOf(v, id))]);
     const litIslands = new Set([...lit].map((x) => islandOf(x)).filter((x): x is string => !!x));
     return { lines, lit, raised, litIslands };
-  }, [rels, selection, linkSel, islandOf]);
+  }, [rels, selection, liveLinkSel, islandOf, isActor]);
 
+  /**
+   * 관계 탭 중심. 고른 영토가 없거나, 기준일을 옮겨 그 영토가 지도에서 빠졌으면
+   * **관계가 가장 많은 영토**다 (설계서 4.3.6). 「기준일 옮기기」 뒤에도 이것으로
+   * 중심이 선다 — 전에는 비어 있는 채로 남아 그래프가 안 그려졌다
+   */
+  const center = useMemo(
+    () =>
+      relPair
+        ? null
+        : relCenter && present.has(relCenter)
+          ? relCenter
+          : defaultCenter(rels, terrName),
+    [relPair, relCenter, present, rels, terrName],
+  );
   /** 설계서 4.2.4 — 섬이나 영토를 고르면 패널이 자동으로 펼쳐진다 */
   const select = (s: MapSelection) => {
     setSelection(s);
@@ -222,6 +266,12 @@ export default function Page() {
   useEffect(() => {
     originRef.current = origin;
   }, [origin]);
+  /** 뒤로 가기 기록 번호. 관계 탭에 들어갈 때마다 하나씩 늘린다 */
+  const seqRef = useRef(0);
+  /** `history.back()` 을 불렀고 아직 popstate 가 안 왔다. 두 번 눌러 앱 밖으로 나가지 않게 한다 */
+  const popping = useRef(false);
+  const ourEntry = (o: Origin | null) =>
+    !!o && !!window.history.state && window.history.state[HISTORY_KEY] === o.seq;
 
   const clearRel = () => {
     setRelSel(null);
@@ -245,25 +295,32 @@ export default function Page() {
   /**
    * 브라우저 뒤로 가기도 출발 화면을 되살린다 (설계서 4.3.3). 관계 탭에 들어갈
    * 때 기록을 한 칸만 쌓고, 관계 탭 안에서 중심을 바꾸는 것은 안 쌓는다.
+   *
+   * **기록에 번호를 단다.** 표시만 보면 앞서 남은 기록(탭을 눌러 관계 탭을 떠났거나
+   * 새로 고친 뒤)과 이번 기록이 구별되지 않아, 돌아가기가 한 번에 안 된다.
+   * 이번 이동의 기록을 떠났으면(번호가 다르면) 되살린다.
    */
   useEffect(() => {
     const onPop = () => {
+      popping.current = false;
       const o = originRef.current;
-      if (o && !(window.history.state && window.history.state[HISTORY_KEY])) restore(o);
+      if (o && !(window.history.state && window.history.state[HISTORY_KEY] === o.seq)) restore(o);
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, [restore]);
 
   const enterFromLinks = (next: { center: string | null; sel: string | null; pair: RelPair | null }) => {
-    setOrigin({ tab, selection, panelTab, linkSel, mapView, ym });
+    seqRef.current += 1;
+    const seq = `${OPENED_AT}-${seqRef.current}`;
+    setOrigin({ seq, tab, selection, panelTab, linkSel, mapView, ym });
     setRelCenter(next.center);
     setRelSel(next.sel);
     setRelPair(next.pair);
     setTab("relation");
     setPlaying(false);
     try {
-      window.history.pushState({ ...(window.history.state ?? {}), [HISTORY_KEY]: 1 }, "");
+      window.history.pushState({ ...(window.history.state ?? {}), [HISTORY_KEY]: seq }, "");
     } catch {
       // 기록을 못 쌓아도 돌아가기 단추는 된다
     }
@@ -281,8 +338,21 @@ export default function Page() {
   };
 
   const back = () => {
-    if (window.history.state && window.history.state[HISTORY_KEY]) window.history.back();
-    else if (origin) restore(origin);
+    if (popping.current || !origin) return;
+    if (ourEntry(origin)) {
+      popping.current = true;
+      window.history.back();
+    } else {
+      restore(origin);
+    }
+  };
+
+  /** 관계 탭을 탭으로 떠날 때 우리가 쌓은 기록을 걷는다. 남기면 다음 돌아가기가 한 번 헛돈다 */
+  const dropOurEntry = () => {
+    if (!ourEntry(origin)) return;
+    originRef.current = null;
+    popping.current = true;
+    window.history.back();
   };
 
   /**
@@ -298,12 +368,13 @@ export default function Page() {
     if (k === tab) return;
     if (k === "relation") {
       const picked = selection.kind === "territory" && present.has(selection.id) ? selection.id : null;
-      setRelCenter(picked ?? defaultCenter(rels, terrName));
+      setRelCenter(picked);
       clearRel();
     } else if (tab === "relation") {
-      if (k === "map" && relCenter && terr.has(relCenter)) {
-        select({ kind: "territory", id: relCenter, name: terrName(relCenter) });
+      if (k === "map" && center && terr.has(center)) {
+        select({ kind: "territory", id: center, name: terrName(center) });
       }
+      dropOurEntry();
       clearRel();
     }
     setTab(k);
@@ -316,8 +387,8 @@ export default function Page() {
    */
   const relViews = relPair
     ? pairViews(rels, islandOf, relPair.from, relPair.to)
-    : relCenter
-      ? touching(rels, relCenter)
+    : center
+      ? touching(rels, center)
       : [];
   const relEmpty = tab === "relation" && !relPair && relViews.length === 0;
 
@@ -336,10 +407,10 @@ export default function Page() {
       if (q === ym) continue;
       const qd = quarterEnd(q, TODAY);
       const here = relationsAt(ALL_RELS, MAP.events, qd, presentIn(qd));
-      if (relCenter ? touching(here, relCenter).length > 0 : here.length > 0) return q;
+      if (center ? touching(here, center).length > 0 : here.length > 0) return q;
     }
     return null;
-  }, [relEmpty, relCenter, ym, quarters]);
+  }, [relEmpty, center, ym, quarters]);
 
   /**
    * 단축키 둘.
@@ -401,10 +472,10 @@ export default function Page() {
     }
     const s = relViews.find((v) => v.rel.id === relSel);
     if (s) return `${terrName(s.rel.from)} → ${terrName(s.rel.to)} 관계선 선택됨`;
-    if (!relCenter) return "이 기준일에 기록된 관계가 없습니다";
+    if (!center) return "이 기준일에 기록된 관계가 없습니다";
     return relViews.length
-      ? `중심 엔티티 ${terrName(relCenter)} · 1단계 관계 ${relViews.length}`
-      : `중심 엔티티 ${terrName(relCenter)} · 관계 0`;
+      ? `중심 엔티티 ${terrName(center)} · 1단계 관계 ${relViews.length}`
+      : `중심 엔티티 ${terrName(center)} · 관계 0`;
   };
 
   /**
@@ -438,7 +509,7 @@ export default function Page() {
           nameOf={terrName}
           islandOf={islandOf}
           islandInfo={islandInfo}
-          selected={linkSel}
+          selected={liveLinkSel}
           onSelect={setLinkSel}
           onOpenRel={openRel}
           onOpenPair={openPair}
@@ -457,7 +528,7 @@ export default function Page() {
         nameOf={terrName}
         islandOf={islandOf}
         islandInfo={islandInfo}
-        selected={linkSel}
+        selected={liveLinkSel}
         onSelect={setLinkSel}
         onOpenRel={openRel}
         onOpenPair={openPair}
@@ -539,7 +610,7 @@ export default function Page() {
               <RelationTab
                 layout={layout}
                 views={rels}
-                center={relCenter}
+                center={center}
                 onCenter={(id) => {
                   setRelCenter(id);
                   setRelSel(null);
@@ -631,7 +702,7 @@ export default function Page() {
               onToggle={setPanelOpen}
               layout={layout}
               views={relViews}
-              center={relPair ? null : relCenter}
+              center={center}
               selected={relSel}
               onSelect={setRelSel}
               pair={relPair}
