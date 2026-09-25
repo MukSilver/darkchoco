@@ -165,9 +165,9 @@ export function byMonth(events: readonly Ev[]): { month: string; items: Ev[] }[]
   return out;
 }
 
-/** 기간 이름 — 헤더 오른쪽 `90일 · 5건` */
-export function periodLabel(p: Period): string {
+/** 기간 이름 — 헤더 오른쪽 `90일 · 5건`. 날짜 범위가 기준일 뒤로 가 90일로 물러섰으면 그렇게 적는다 */
+export function periodLabel(p: Period, d: Date): string {
   if (p.kind === "days") return `${p.days}일`;
   if (p.kind === "all") return "전체";
-  return "기간 지정";
+  return clampRange(p, d) ? "기간 지정" : "90일";
 }

@@ -78,8 +78,12 @@ const ALL_RELS = withActivity(MAP.relations, MAP.events);
  * 「출발 화면 상태 (선택, 탭, 행 선택, 줌, 기준일) 그대로 복원」).
  */
 type Origin = {
-  /** 이 이동이 쌓은 뒤로 가기 기록의 번호. 남은 옛 기록과 가르는 데 쓴다 */
-  seq: number;
+  /**
+   * 이 이동이 쌓은 뒤로 가기 기록의 표. 남은 옛 기록과 가르는 데 쓴다. 새로
+   * 고친 뒤에도 겹치지 않게 연 시각을 붙인다 — 카운터만 쓰면 새로 고친 뒤 다시
+   * 1 부터 세어 옛 기록과 같아진다
+   */
+  seq: string;
   tab: ViewTabKey;
   selection: MapSelection;
   panelTab: PanelTabKey;
@@ -90,6 +94,9 @@ type Origin = {
 
 /** 뒤로 가기 기록에 우리가 넣은 칸이라는 표시 */
 const HISTORY_KEY = "dcRel";
+
+/** 이 창을 연 시각. 뒤로 가기 기록 표가 새로 고침 전 것과 겹치지 않게 한다 */
+const OPENED_AT = Date.now().toString(36);
 
 function presentIn(d: Date): Set<string> {
   const r = computeMap({ ...MAP, today: TODAY }, d);
@@ -305,7 +312,7 @@ export default function Page() {
 
   const enterFromLinks = (next: { center: string | null; sel: string | null; pair: RelPair | null }) => {
     seqRef.current += 1;
-    const seq = seqRef.current;
+    const seq = `${OPENED_AT}-${seqRef.current}`;
     setOrigin({ seq, tab, selection, panelTab, linkSel, mapView, ym });
     setRelCenter(next.center);
     setRelSel(next.sel);
