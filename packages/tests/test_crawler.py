@@ -1230,7 +1230,6 @@ def test_텔레그램도_게시판_부품을_쓴다():
     assert "body" not in 넣는줄, 넣는줄
 
 
-
 # ── merge.py ───────────────────────────────────────────────────────────
 def _랜섬(**kw):
     from hub.places.place import Place
@@ -1848,13 +1847,6 @@ def test_판정이_죽어도_수집_결과는_쓴다():
     자리 = 글[글.index("dls-observatory 의 판정을 얹습니다"):]
     assert "except Exception:" in 자리, "판정이 터지면 조사까지 날아갑니다"
 
-if __name__ == "__main__":
-    n = 0
-    for k, v in sorted(globals().items()):
-        if k.startswith("test_"):
-            v(); print(f"  OK  {k}"); n += 1
-    print(f"\n{n}개 통과")
-
 
 # ── 랜섬 규모: 최근 180일 월평균 (2026-09-25, 인계 A) ─────────────────────
 def test_랜섬_규모는_최근_180일만_센다():
@@ -1898,3 +1890,11 @@ def test_옛_규모_줄은_갈아_끼우고_사람_글은_남긴다():
     assert "피해 월평균 5.0건 (최근 180일) (2026-09-25 기준)" in 새, 새
     assert "사람이 적은 메모" in 새, "사람 글이 사라졌다"
     assert 기계가_쓴_줄("피해 월평균 5.0건 (최근 180일) (2026-09-25 기준)")
+
+
+if __name__ == "__main__":
+    n = 0
+    for k, v in sorted(globals().items()):
+        if k.startswith("test_"):
+            v(); print(f"  OK  {k}"); n += 1
+    print(f"\n{n}개 통과")
