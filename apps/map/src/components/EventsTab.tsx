@@ -240,7 +240,11 @@ export default function EventsTab({
                 where={whereOf(e)}
                 on={picked === e.id}
                 onClick={() => onPick(picked === e.id ? null : e.id)}
-                onOpen={() => onOpen(e.id)}
+                // 열 때 그 줄을 강조해 둔다. 이미 강조된 줄은 첫 click 이 강조를 풀어서다
+                onOpen={() => {
+                  onPick(e.id);
+                  onOpen(e.id);
+                }}
               />
             ))}
           </div>

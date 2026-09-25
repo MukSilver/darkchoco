@@ -195,6 +195,8 @@ LEAK_ITEMS = {"이름", "이메일", "전화", "계정", "주소", "카드금융
 #: 위험도 높음 유출 항목 (설계서 3.10)
 RISK_ITEMS = {"주민번호", "카드금융"}
 RISK_VALUES = {"high", "medium", "low"}
+#: 관계 번호 모양 — `REL-012` · `ACT-...` 처럼 글자 · 숫자 · `_` · `-` 만
+RE_REL_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 CONFIRM_VALUES = {"조직 공식 발표", "게시글만", "언론 보도", "규제기관 확정", "연구자 발견"}
 SOURCE_KINDS = {"언론 보도", "보안업체", "기타", "기업 공지", "개인정보보호위원회", "한국인터넷진흥원"}
 
@@ -963,6 +965,8 @@ def check(data: dict) -> list[str]:
             bad.append(f"관계선 {r.get('id')} 가 같은 영토끼리 잇습니다")
         if r.get("kind") not in KIND_OF.values():
             bad.append(f"관계선 {r.get('id')} 의 종류가 설계서 2.3 에 없습니다")
+        if not RE_REL_ID.match(str(r.get("id", ""))):
+            bad.append("관계선 번호가 번호 모양이 아닙니다")
         if r.get("confidence") not in CONF_OF.values():
             bad.append(f"관계선 {r.get('id')} 의 확실한 정도가 설계서 2.5 에 없습니다")
         for x in r.get("evidence", []):
@@ -1277,7 +1281,9 @@ def bake_relations(n, ds: str, find_tid, events: list[dict],
             continue
 
         rel = {
-            "id": col(read, p, "관계 ID") or f"rel-{i}",
+            # 관계 ID 는 사람이 쓰는 제목 칸이다. 번호 모양이 아니면 코드가 번호를 매긴다 —
+            # 보고서 팝업 · JSON 내보내기에 이 값이 나간다 (검토에서 찾음)
+            "id": rid if (rid := col(read, p, "관계 ID")) and RE_REL_ID.match(rid) else f"rel-{i}",
             "from": a,
             "to": b,
             "kind": kind,
@@ -1485,30 +1491,35 @@ class RegistryIndex:
 OVERRIDES_FILE = Path(__file__).with_name("overrides.json")
 
 
-def apply_overrides(raw_events: list[dict], index: "RegistryIndex", log) -> list[dict]:
+def load_overrides(log) -> dict:
+    """손 고침 표를 읽는다. 없거나 모양이 틀리면 빈 표다."""
     if not OVERRIDES_FILE.is_file():
-        return raw_events
+        return {}
     table = json.loads(OVERRIDES_FILE.read_text(encoding="utf-8")).get("events", {})
-    out, used = [], 0
-    for e in raw_events:
-        o = table.get(e["id"])
-        if not o:
-            out.append(e)
-            continue
-        used += 1
-        if o.get("drop"):
-            continue
-        if o.get("kind") in EV_KIND_VALUES:
-            e["kind"] = o["kind"]
-        if isinstance(o.get("postedAt"), str) and RE_ISO_DAY.match(o["postedAt"]):
-            e["postedAt"] = o["postedAt"]
-        t = o.get("territory")
-        if isinstance(t, list) and len(t) == 2:
-            c = index.find(t[0], t[1])
-            if c:
-                e["cand"] = c
-        out.append(e)
-    log(f"손 고침 표 {OVERRIDES_FILE.name} — {used}건에 썼습니다")
+    if not isinstance(table, dict):
+        return {}
+    log(f"손 고침 표 {OVERRIDES_FILE.name} — {len(table)}줄")
+    return table
+
+
+def override_of(ov: dict | None, index: "RegistryIndex") -> dict:
+    """손 고침 표 한 줄을 쓸 값으로 (설계서 3.12). **관문보다 먼저 쓴다** — 영토나 게시 시각을
+    못 정해 빠질 줄(확인필요)을 살리는 것이 이 표의 쓸모다. 표 밖 값은 버린다.
+
+    돌려주는 것: drop(뺀다), postedAt(날짜만 적힌 ISO), kind(사건 종류 칩), cand(명부 후보).
+    9/26 첫 판은 관문 뒤에 써서 이미 빠진 줄을 못 살렸고 날짜 대체 표시도 안 지웠다 (검토에서 찾음)
+    """
+    ov = ov or {}
+    out: dict = {"drop": ov.get("drop") is True}
+    if isinstance(ov.get("postedAt"), str) and RE_ISO_DAY.match(ov["postedAt"]):
+        out["postedAt"] = ov["postedAt"]
+    if ov.get("kind") in EV_KIND_VALUES:
+        out["kind"] = ov["kind"]
+    t = ov.get("territory")
+    if isinstance(t, list) and len(t) == 2 and all(isinstance(x, str) for x in t):
+        c = index.find(t[0], t[1])
+        if c:
+            out["cand"] = c
     return out
 
 
@@ -1702,6 +1713,7 @@ def bake(n, sources: dict[str, str], log) -> dict:
     raw_events: list[dict] = []
     # 확인필요 목록 (설계서 3.12 「못 찾으면 확인필요 탭에 올라감」). 사건 번호만 찍는다
     review: list[str] = []
+    overrides = load_overrides(log)
 
     # 관계선 원문 대조용 조직 이름. 관문과 무관하게 모든 줄에서 모은다 —
     # 지도에 안 오른 사건의 조직도 원문에 적혀 있으면 안 된다
@@ -1731,23 +1743,33 @@ def bake(n, sources: dict[str, str], log) -> dict:
             gate["검토 여부"] += 1
             continue
 
+        # ── 손 고침 표 (설계서 3.12) — 관문보다 먼저 ───────────────────
+        eid = unique_id(col_prop(p, "사건 ID")) or f"row-{len(raw_events) + 1}"
+        ov = override_of(overrides.get(eid), index)
+        if ov["drop"]:
+            why["손 고침 표로 뺌"] = why.get("손 고침 표로 뺌", 0) + 1
+            continue
+
         # ── 지도에서 빼는 사건 (설계서 2.5) ──────────────────────────
-        island = ISLAND_OF_SOURCE.get(col(read, p, "소스") or "")
+        island = ov["cand"]["island"] if "cand" in ov else ISLAND_OF_SOURCE.get(col(read, p, "소스") or "")
         place = col(read, p, "게시처")
         plat = col(read, p, "게시 플랫폼")
 
         # 게시 시각이 없으면 관측 시각, 그것도 없으면 수집일을 대신 넣는다.
-        # 점수와 칸에는 들고 창 · 상태 · 급상승에서는 빠진다 (정본 업데이트 탭)
+        # 점수와 칸에는 들고 창 · 상태 · 급상승에서는 빠진다 (정본 업데이트 탭).
+        # 손 고침 표의 날짜는 사람이 정한 게시 시각이라 대신 넣은 것이 아니다
         posted = col(read, p, "게시 시각")
         substituted = False
         if not posted:
             posted = col(read, p, "관측 시각") or col(read, p, "수집일")
             substituted = bool(posted)
+        if "postedAt" in ov:
+            posted, substituted = ov["postedAt"], False
 
         reason = None
         if not island:
             reason = "소스 없음"
-        elif not (plat or "").strip():
+        elif not (plat or "").strip() and "cand" not in ov:
             reason = "게시 플랫폼 없음"
         elif not posted:
             reason = "날짜 없음"
@@ -1755,8 +1777,8 @@ def bake(n, sources: dict[str, str], log) -> dict:
             # 랜섬웨어 섬은 한국 관련이 정확히 「직접」인 사건만 든다 (정본 사건!N)
             reason = "한국 관련 아님"
 
-        cand = None
-        if not reason:
+        cand = ov.get("cand")
+        if not reason and cand is None:
             if island == "TELEGRAM":
                 # 텔레그램 재유포 사건의 채널 (설계서 3.3). t.me 주소가 게시 플랫폼에
                 # 있으면 그 채널, 없으면 게시자 핸들이 채널 이름과 같을 때만.
@@ -1785,12 +1807,12 @@ def bake(n, sources: dict[str, str], log) -> dict:
         if reason:
             why[reason] = why.get(reason, 0) + 1
             if reason == "영토를 정할 수 없음":
-                review.append(unique_id(col_prop(p, "사건 ID")) or row["id"][:8])
+                review.append(eid)
             continue
 
         items = [x for x in (col(read, p, "유출 항목") or []) if x in LEAK_ITEMS]
         raw_events.append({
-            "id": unique_id(col_prop(p, "사건 ID")) or f"row-{len(raw_events) + 1}",
+            "id": eid,
             "pid": row["id"],
             # 수집 DB 「같은 사건」 두 칸의 페이지 id. 내보낼 때 사건 번호로 바꾼다
             "same": rel_ids(col_prop(p, "같은 사건")) + rel_ids(col_prop(p, "같은 사건 (역방향)")),
@@ -1810,7 +1832,7 @@ def bake(n, sources: dict[str, str], log) -> dict:
             ),
             "repost": (col(read, p, "중복 관계") or "") in REPOST_VALUES,
             "substituted": substituted,
-            "kind": event_kind(
+            "kind": ov.get("kind") or event_kind(
                 col(read, p, "게시 성격"),
                 bool(col(read, p, "카운트다운 표기")),
                 (col(read, p, "중복 관계") or "") in REPOST_VALUES,
@@ -1854,6 +1876,10 @@ def bake(n, sources: dict[str, str], log) -> dict:
                 reason = "위치가 영토와 안 맞음"
             elif not posted:
                 reason = "공표 시점 없음"
+            elif cand["island"] == "RANSOMWARE" and col(read, p, "국가") != "한국":
+                # 랜섬웨어 섬은 한국 관련 사건만 든다 (정본 사건!N · 수집 DB 랜섬 사건과 같게).
+                # 포럼 공식 발표는 해외여도 든다 (정본 INC-138 · INC-52)
+                reason = "한국 관련 아님"
             elif iid in SAME_AS_COLLECT or (org and same_org_keys({org.casefold()}) & collect_keys):
                 reason = "수집 DB 와 같은 사고"
             if reason:
@@ -1900,7 +1926,6 @@ def bake(n, sources: dict[str, str], log) -> dict:
         log("유출 사고 DB 를 안 알려 줘서 공식 발표 사고를 건너뜁니다 "
             f"(DC_MAP_INCIDENT_DS 또는 {SOURCES_FILE.name} 의 incident)")
     org_tok = org_tokens(org_names)
-    raw_events = apply_overrides(raw_events, index, log)
 
     # 4) 영토 거르기 (설계서 2.5, 정본 영토 탭에서 되짚은 규칙)
     counted = {id(c): 0 for c in cands}
@@ -1936,6 +1961,9 @@ def bake(n, sources: dict[str, str], log) -> dict:
         if c["island"] == "RANSOMWARE" or id(c) in places:
             group_names.add(c["rawName"].casefold())
             group_names.add(display_name(c["rawName"]).casefold())
+            if c["island"] == "RANSOMWARE":
+                # 그룹의 다른 이름으로 올린 핸들도 그룹이다 (검토에서 찾음)
+                group_names.update(a.casefold() for a in c["aliases"])
     linked = {id(c): 0 for c in cands}
     as_group = set()
     no_actor = set()
@@ -1952,7 +1980,13 @@ def bake(n, sources: dict[str, str], log) -> dict:
             continue
         e["actor"] = a
         linked[id(a)] += 1
-    actors = {id(c) for c in cands if c["island"] == "ACTOR" and c["on"] and linked[id(c)] > 0}
+    # 행위자 DB 역할이 「랜섬웨어 그룹」인 줄은 행위자 섬에 넣지 않는다 (설계서 4.3.8 「랜섬웨어
+    # 그룹은 넣지 않음」). 그룹은 랜섬웨어 섬의 영토다
+    actors = {
+        id(c) for c in cands
+        if c["island"] == "ACTOR" and c["on"] and linked[id(c)] > 0
+        and "랜섬웨어 그룹" not in ((c.get("info") or {}).get("roles") or [])
+    }
     # 값은 안 찍는다. 핸들은 개인 계정일 수 있다
     log(f"행위자 — 행위자 DB 에서 {len(actors)}곳 · 행위자 DB 에 없는 핸들 {len(no_actor)}개 · "
         f"영토 이름과 같아 안 이은 핸들 {len(as_group)}개")

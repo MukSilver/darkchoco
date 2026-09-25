@@ -7,7 +7,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { latestSeen, monthDay, recentKpi } from './entity.ts';
+import { latestSeen, monthDay, recentKpi, seenDays } from './entity.ts';
 import { computeMap } from './score.ts';
 
 let seq = 0;
@@ -70,4 +70,20 @@ test('최근 관측은 시각으로 둔다 — 해가 바뀌어도 차례가 맞
   assert.equal(monthDay(seen.a1), '05-01', '행위자 영토는 그 행위자가 올린 사건도 제 것');
   // 글자로는 '12-30' > '01-02' 지만 실제로는 t2 가 더 최근이다
   assert.ok(seen.t2 > seen.t1);
+});
+
+test('최근 관측 글자는 가장 늦은 사건의 노션 날짜 글자다 (사건 줄과 같게)', () => {
+  const D = new Date('2026-09-30T23:59:59Z');
+  const ev = (id, t, postedAt, extra = {}) => ({
+    id, territoryId: t, postedAt, verdict: 'high', size: 'unknown', repost: false, excluded: false, ...extra,
+  });
+  const got = seenDays([
+    ev('a', 'f', '2026-05-14T06:58:00.000+09:00'),
+    ev('b', 'f', '2026-05-01T10:00:00.000+09:00'),
+    ev('c', 'r', '2026-06-01', { actorTerritoryId: 'x' }),
+    ev('d', 'r', '2026-10-05'),
+    ev('e', 'r', '2026-07-01', { verdict: 'false' }),
+  ], D);
+  // +09:00 새벽 사건도 노션 날짜(05-14) 그대로다. UTC 로 옮기면 05-13 이 된다
+  assert.deepEqual(got, { f: '05-14', r: '06-01', x: '06-01' });
 });

@@ -461,9 +461,14 @@ export function agoText(at: number, now: number): string {
   const min = Math.floor((now - at) / 60000);
   if (min < 1) return "방금";
   if (min < 60) return `${min}분 전`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `${h}시간 전`;
-  if (h < 48) return "어제";
+  // 「어제」는 달력 날짜로 가른다 (보는 사람의 시계). 24~48시간으로 세면 이틀 전 저녁이 어제가 된다
+  const day = (ms: number) => {
+    const x = new Date(ms);
+    return new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  };
+  const days = Math.round((day(now) - day(at)) / 86400000);
+  if (days <= 0) return `${Math.floor(min / 60)}시간 전`;
+  if (days === 1) return "어제";
   const d = new Date(at);
   const p = (n: number) => String(n).padStart(2, "0");
   return `${p(d.getMonth() + 1)}-${p(d.getDate())}`;
