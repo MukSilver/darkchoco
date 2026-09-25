@@ -6,8 +6,9 @@
 # 주도하게 됐습니다. 원래 주인은 그대로 두고 @grute02 를 더했습니다.
 # 여럿이 적힌 곳은 그중 한 명이 승인하면 됩니다. 주인이 바뀌는 것이 아닙니다.
 
-/apps/kr-leak-alarm/     @60secAgo @grute02
-/apps/tg-korea-alert/    @minsmiths @grute02
+# 2026-09-26 에 legacy/ 로 뗐습니다(인계 E-1). 주인은 그대로입니다
+/legacy/kr-leak-alarm/   @60secAgo @grute02
+/legacy/tg-korea-alert/  @minsmiths @grute02
 /skills/                 @grute02
 /packages/               @MukSilver @minsmiths @60secAgo @leesubhin060-max @grute02
 

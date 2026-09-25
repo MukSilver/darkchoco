@@ -41,35 +41,8 @@ jobs:
         env:
           PYTHONIOENCODING: utf-8
 
-  apps:
-    name: 앱 자체 테스트
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - run: pip install -e "packages[all]"
-
-      - name: kr-leak-alarm
-        working-directory: apps/kr-leak-alarm
-        run: |
-          pip install -r requirements.txt
-          python -m tests.test_all
-        env:
-          PYTHONIOENCODING: utf-8
-
-      # 앱이 둘인데 이 일이 하나만 돌고 있었습니다.
-      # **test_monitor_ordering 만 돌립니다.** 같은 폴더의 test.py 는 실제로
-      # 텔레그램에 로그인하고 test_classifier.py 는 디스코드로 보냅니다.
-      # 둘 다 GitHub 서버가 밖으로 나가는 일이라 CI 에서 돌리면 안 됩니다.
-      - name: tg-korea-alert
-        working-directory: apps/tg-korea-alert
-        run: |
-          pip install -r requirements.txt
-          python -m unittest test_monitor_ordering -v
-        env:
-          PYTHONIOENCODING: utf-8
+  # **앱 자체 테스트 잡을 지웠습니다** (2026-09-26, 인계 E-1). 돌리던 두 앱(kr-leak-alarm ·
+  # tg-korea-alert)을 legacy/ 로 뗐습니다. 대체한 것과 안 한 것은 legacy/README.md 에 있습니다.
 
   skills:
     name: skills 검사
@@ -104,14 +77,14 @@ jobs:
       # 일부러 아무것도 안 깝니다. 남의 도구를 훑어보는 상황입니다.
       # 이름의 수를 아래 줄 수와 맞춥니다. 「여섯」이라 적혀 있는데 다섯만
       # 있었습니다. 명령을 더하거나 뺄 때 이름도 같이 고칩니다.
-      - name: 다섯 진입점
+      # 2026-09-26 에 tg-korea-alert 줄을 뺐습니다(legacy/ 로 뗌). 다섯 → 넷
+      - name: 네 진입점
         run: |
           set -e
           python dc.py list
           python dc.py plan
           python dc.py install-task --show
           python dc.py readme --check
-          (cd apps/tg-korea-alert   && python korea_alert_monitor.py --help > /dev/null)
           echo "전부 뜹니다"
         env:
           PYTHONIOENCODING: utf-8

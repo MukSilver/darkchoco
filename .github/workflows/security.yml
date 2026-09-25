@@ -42,7 +42,7 @@ jobs:
       - name: 알림 밖에서 밖으로 보내는 코드가 생겼나
         run: |
           # bash 변수 이름은 아스키여야 합니다. 한글로 두면 그 줄에서 죽습니다
-          ALLOW='apps/kr-leak-alarm/collector/notify.py|skills/collect/notify.py'
+          ALLOW='legacy/kr-leak-alarm/collector/notify.py|skills/collect/notify.py'
           if grep -rn -E 'requests\.post|smtplib|socket\.send' \
               --include='*.py' . \
               | grep -v -E "$ALLOW" \

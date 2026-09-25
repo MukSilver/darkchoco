@@ -44,6 +44,7 @@ packages/  ←  hub/  ←  dc.py
 | `packages/` | 공용 부품 6종 | 필수 |
 | `apps/` | 알림 · 대시보드 | 불필요 |
 | `skills/` | 수집 · AI 검증 | 불필요 |
+| `legacy/` | 뗀 옛 수집기. **안 돌립니다** (2026-09-26) | 불필요 |
 
 ```
 dc.py                진입점
@@ -53,14 +54,16 @@ hub/
   sched.py           실행 주기
 packages/            dc_notion · dc_telegram · dc_ransomfeed
                      dc_safety · dc_store · dc_console
-apps/                kr-leak-alarm · tg-korea-alert
+apps/                dash · map
 skills/              collect · darkweb-verify-ko
 scripts/             VM 구성 · 배포 · 실행
+legacy/              kr-leak-alarm · tg-korea-alert · ransom_kr   (안 돌림. legacy/README.md)
 docs/                운영 문서 4종 · 기록 2종
 ```
 
 `packages/` 는 상위 계층을 참조하지 않습니다. `apps/` 는 `hub/` 를 참조하지
-않습니다. `hub/events/sources/` 만 `apps/` 를 호출합니다.
+않습니다. `legacy/` 는 어디서도 부르지 않습니다 — 2026-09-26 에 옛 수집기를 떼면서
+`hub/events/sources/` 가 `apps/` 를 부르던 길(ransom_kr)도 같이 뗐습니다.
 
 ---
 
@@ -74,8 +77,6 @@ docs/                운영 문서 4종 · 기록 2종
 | [collect](skills/collect) | 최현서 | 없음 | 1곳 | 내 PC | 텔레그램·랜섬·브라우저킷 결과를 SQLite 한 표로 모읍니다 |
 | [crawler](hub) | 김무근 | 없음 | 2곳 | VM | 포럼·텔레그램·랜섬 명부를 한 명령으로 조사해 노션에 반영합니다 |
 | [darkweb-verify-ko](skills/skills/darkweb-verify-ko) | 최현서 | 없음 | 0곳 | 내 PC | 유출 주장 하나를 아홉 단계로 검증합니다 (AI 스킬) |
-| [kr-leak-alarm](apps/kr-leak-alarm) | 안유빈 | 필요 | 0곳 | 내 PC | 랜섬 피드 세 곳에서 한국 피해를 골라 대시보드로 냅니다 |
-| [tg-korea-alert](apps/tg-korea-alert) | 성민서 | 필요 | 5곳 | 내 PC | 텔레그램에서 한국 관련 글을 골라 디스코드로 알립니다 |
 <!-- 도구표 끝 -->
 
 ### 최초 실행 명령
@@ -83,8 +84,6 @@ docs/                운영 문서 4종 · 기록 2종
 | 도구 | 명령 |
 |---|---|
 | crawler | `python dc.py crawl` |
-| kr-leak-alarm | `scripts\run.bat run` |
-| tg-korea-alert | `python korea_alert_monitor.py` |
 | collect | `python -m collect.main --db <경로>` |
 
 설치 전에도 `--help` 를 실행할 수 있습니다. `.env.example` 이 있는 도구는 그

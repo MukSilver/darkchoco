@@ -50,7 +50,8 @@ def test_tool_json_이_전부_읽힌다():
         본것 += 1
     # 숫자를 박지 않습니다. 도구가 늘거나 줄 때마다 깨집니다 —
     # 2026-08-30 에 crawler 를 넣고 둘을 지우면서 세 번 걸렸습니다.
-    assert 본것 >= 4, f"tool.json 이 {본것}장뿐이다. 너무 적습니다"
+    # 2026-09-26 에 둘(kr-leak-alarm · tg-korea-alert)을 legacy/ 로 떼어 하한을 4 → 3 으로
+    assert 본것 >= 3, f"tool.json 이 {본것}장뿐이다. 너무 적습니다"
 
 
 def test_명령에_이상문자가_없다():
@@ -73,14 +74,17 @@ def test_list_가_돈다():
     # 지울 때 또 걸렸습니다. 세어서 봅니다.
     몇장 = len([x for x in _tool_json들() if ".git" not in x.parts])
     assert f"도구 {몇장}개" in out, f"{몇장}장인데 화면은: {out[:300]!r}"
-    for n in ("kr-leak-alarm", "darkweb-verify-ko", "crawler"):
+    # kr-leak-alarm 은 2026-09-26 에 legacy/ 로 뗐다(E-1). 목록에 나오면 안 된다
+    for n in ("collect", "darkweb-verify-ko", "crawler"):
         assert n in out, f"{n} 이 목록에 없다"
+    for n in ("kr-leak-alarm", "tg-korea-alert"):
+        assert n not in out, f"legacy 로 뗀 {n} 이 목록에 나온다"
 
 
 def test_info_가_돈다():
-    code, out = _dc("info", "kr-leak-alarm")
+    code, out = _dc("info", "collect")
     assert code == 0, out
-    assert "안유빈" in out and "run.bat" in out, out[:300]
+    assert "최현서" in out and "skills/collect" in out, out[:300]
     code, _ = _dc("info", "없는도구")
     assert code == 1, "없는 도구인데 0 을 돌려준다"
 

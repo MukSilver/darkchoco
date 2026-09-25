@@ -22,16 +22,16 @@ async def main():
     try:
         if not await client.is_user_authorized():
             # 이 폴더에는 test.py 가 없습니다. 세션을 만드는 것은
-            # apps/tg-korea-alert/test.py 이고, 세션 파일은 그 앱 폴더에
+            # legacy/tg-korea-alert/test.py 이고, 세션 파일은 그 앱 폴더에
             # 생깁니다. 여기서 보는 자리는 SESSION_PATH 입니다.
             print("로그인된 세션이 없습니다.")
             print(f"이 스크립트가 보는 세션 파일: {SESSION_PATH}")
-            print("세션을 만드는 스크립트: apps/tg-korea-alert/test.py"
+            print("세션을 만드는 스크립트: legacy/tg-korea-alert/test.py"
                   " (세션을 그 앱 폴더에 만듭니다)")
             # 만든 세션을 손으로 옮겨야 합니다. 그 한 걸음을 안 적어 두면
             # test.py 를 돌리고도 여기서 다시 막힙니다
             print("만든 뒤 이 자리로 옮기십시오:")
-            print("  copy apps\\tg-korea-alert\\telegram_session.session "
+            print("  copy legacy\\tg-korea-alert\\telegram_session.session "
                   "hub\\events\\telegram\\")
             return
 

@@ -40,8 +40,8 @@ data/
 hub/data/
 
 # 개인정보가 든 변환 재료와 결과. convert_tt_to_xlsx.py 가 이 둘을 다룹니다
-apps/tg-korea-alert/tt.txt
-apps/tg-korea-alert/tt.xlsx
+legacy/tg-korea-alert/tt.txt
+legacy/tg-korea-alert/tt.xlsx
 
 # 텔레그램 실계정 세션. 이것만 있으면 남이 그 계정으로 읽습니다.
 # hub/events/telegram/*.py 셋이 BASE_DIR/telegram_session 을 보므로
