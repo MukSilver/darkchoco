@@ -89,9 +89,8 @@ export const CONF_DASH: Record<Confidence, string> = {
 };
 
 /**
- * 근거 사건 목록의 판정 · 규모 이름 (설계서 2.5 · 3.2). 근거 목록은 사건
- * 제목을 안 낸다 — 제목에 피해 조직 이름이 든다 (2026-09-23 결정). 그래서
- * 날짜 · 판정 · 규모 · 올라온 곳만 보인다
+ * 판정 · 규모 이름 (설계서 2.5 · 3.2). 사건 줄은 자료 제목 대신 `eventTitle` 이
+ * 분류 칸으로 지은 제목을 낸다 — 자료 제목에 피해 조직 이름이 든다 (2026-09-23 결정)
  */
 export const VERDICT_LABEL: Record<Ev["verdict"], string> = {
   confirmed: "확인됨",
@@ -287,16 +286,132 @@ export function defaultCenter(views: readonly RelView[], nameOf: (id: string) =>
 /**
  * 중심 엔티티 칩 줄 — 설계서 4.3.6. 관계 건수 상위 6곳이고, **지금 중심이
  * 그 안에 없으면 맨 앞에 붙인다.**
+ *
+ * [연결] 탭에서 넘어왔으면 **출발 영토도 칩 줄에 둔다** (4.3.3 ① 「출발 영토 Qilin
+ * 칩에 점 표시」). 상위 6곳에 없으면 점을 찍을 칩이 없어서, 중심 다음 자리에 붙인다
  */
 export function centerChips(
   views: readonly RelView[],
   center: string | null,
   nameOf: (id: string) => string,
   n = 6,
+  origin: string | null = null,
 ): string[] {
   const top = byWeight(views, nameOf).slice(0, n);
-  if (center && !top.includes(center)) return [center, ...top];
-  return top;
+  const front = [center, origin].filter((id): id is string => !!id && !top.includes(id));
+  return [...new Set([...front, ...top])];
+}
+
+/**
+ * 추정 관계 거르기 — 피그마 ⑦-8g 「추정 관계 포함」. 끄면 신뢰도가 추정인 관계를
+ * 뺀다. 확인됨 · 높은 신뢰는 그대로 둔다 (설계서 2.5 신뢰도 3단계)
+ */
+export function withEstimated(views: readonly RelView[], on: boolean): RelView[] {
+  return views.filter((v) => on || v.rel.confidence !== "estimated");
+}
+
+/** 중심과 바로 이어졌거나 이웃의 이웃인 영토 — 관계 탭 그래프 노드 */
+export type Hops = {
+  /** 바로 이어진 영토 (1단계). 건수 합이 큰 순, 같으면 이름 순 */
+  hop1: string[];
+  /** 이웃의 이웃 (2단계). 중심과 바로 이어지지 않은 곳만. 차례는 위와 같다 */
+  hop2: string[];
+  /** 2단계 영토마다 그곳을 이어 준 1단계 영토. 건수가 가장 큰 쪽이다 */
+  via: Map<string, string>;
+  /** 자리가 모자라 뺀 2단계 영토 수 */
+  rest: number;
+  /** 그릴 관계. 중심이나 1단계 영토에 닿고, 양 끝이 노드에 든 것 */
+  views: RelView[];
+};
+
+/**
+ * 관계 탭 그래프 노드와 선 — 설계서 4.3.6 「바로 이어진 영토만 표시 (1단계)」,
+ * 피그마 ⑦-8g 「2단계로 확장」.
+ *
+ * 1단계는 중심에 닿은 관계뿐이다 (지금까지와 같다 — [연결] 탭 행과 같은 집합).
+ * 2단계는 1단계 영토의 관계를 한 번 더 따라가 **이웃의 이웃**을 더한다. 1단계끼리
+ * 이어진 선도 같이 그린다. 2단계끼리의 선은 중심에서 세 걸음이라 뺀다.
+ *
+ * 2단계가 `limit` 곳을 넘으면 건수 합이 큰 곳만 남기고 뺀 수를 `rest` 에 적는다.
+ * 한 판에 이름을 다 앉힐 자리가 없다.
+ */
+export function expandHops(
+  views: readonly RelView[],
+  center: string,
+  depth: 1 | 2,
+  nameOf: (id: string) => string,
+  limit = 16,
+): Hops {
+  const order = (w: Map<string, number>) =>
+    [...w.keys()].sort((a, b) => (w.get(b) ?? 0) - (w.get(a) ?? 0) || nameOf(a).localeCompare(nameOf(b)));
+
+  const near = touching(views, center);
+  const w1 = new Map<string, number>();
+  for (const v of near) {
+    const o = partnerOf(v, center);
+    w1.set(o, (w1.get(o) ?? 0) + v.count);
+  }
+  const hop1 = order(w1);
+  if (depth === 1) return { hop1, hop2: [], via: new Map(), rest: 0, views: near };
+
+  const one = new Set(hop1);
+  const inner = new Set([center, ...hop1]);
+  const w2 = new Map<string, number>();
+  // 2단계 영토 → (1단계 영토 → 건수)
+  const links = new Map<string, Map<string, number>>();
+  for (const v of views) {
+    const { from, to } = v.rel;
+    // a 는 1단계 쪽 끝, b 는 그 바깥 끝
+    let a: string;
+    let b: string;
+    if (one.has(from) && !inner.has(to)) [a, b] = [from, to];
+    else if (one.has(to) && !inner.has(from)) [a, b] = [to, from];
+    else continue;
+    w2.set(b, (w2.get(b) ?? 0) + v.count);
+    const m = links.get(b) ?? new Map<string, number>();
+    m.set(a, (m.get(a) ?? 0) + v.count);
+    links.set(b, m);
+  }
+  const all2 = order(w2);
+  const hop2 = all2.slice(0, limit);
+  const via = new Map<string, string>();
+  for (const id of hop2) {
+    const m = links.get(id) ?? new Map<string, number>();
+    // 건수가 같으면 1단계 차례가 앞선 쪽
+    const best = [...m.keys()].sort((x, y) => (m.get(y) ?? 0) - (m.get(x) ?? 0) || hop1.indexOf(x) - hop1.indexOf(y))[0];
+    if (best) via.set(id, best);
+  }
+  const keep = new Set([...inner, ...hop2]);
+  return {
+    hop1,
+    hop2,
+    via,
+    rest: all2.length - hop2.length,
+    views: views.filter(
+      (v) => (inner.has(v.rel.from) || inner.has(v.rel.to)) && keep.has(v.rel.from) && keep.has(v.rel.to),
+    ),
+  };
+}
+
+/** 출발 탭 이름 — 돌아가기 단추가 쓴다 */
+const BACK_TO: Record<"map" | "entity" | "relation" | "timeline", string> = {
+  map: "지도로",
+  entity: "엔티티로",
+  relation: "관계로",
+  timeline: "타임라인으로",
+};
+
+/**
+ * 관계 탭 왼쪽 위 돌아가기 단추 글 (설계서 4.3.3 ① 「‹ Qilin 연결로 돌아가기」).
+ *
+ * 고른 영토나 섬이 있었으면 그 이름의 연결로 돌아간다. **고른 것 없이 들어왔으면
+ * 출발 탭 이름을 쓴다** — 검색에서 관계를 골랐거나(4.2.2 「4.3.3 의 ①과 같은
+ * 상태」) 선택 없음 패널 [연결]에서 섬 쌍을 더블클릭한 경우다. 돌아가기는 어느
+ * 쪽이든 출발 화면을 그대로 되살린다 (4.3.3 「돌아가기」)
+ */
+export function backLabel(tab: "map" | "entity" | "relation" | "timeline", selected: string | null): string {
+  if (selected) return `${selected} 연결로 돌아가기`;
+  return `${BACK_TO[tab]} 돌아가기`;
 }
 
 /** 관계 유형 구성 — 관계 종류별 근거 사건 수 (설계서 4.3.6). 많은 순 */
@@ -458,15 +573,23 @@ export function historyText(v: RelView, nameOf: (id: string) => string): string 
  * 활동은 2026년 9월에 기록되었습니다.」
  *
  * 「확인되었습니다」 는 쓰지 않는다. 추정 관계가 섞이므로 「있습니다」로 쓴다.
+ *
+ * `hiddenEstimated` 는 「추정 관계 포함」을 꺼서 가린 추정 관계 수다. 그것뿐이라
+ * 관계가 비었으면 피그마 ⑦-8g 문안을 그대로 쓴다 — 「Exploit.in은 아직 확인된
+ * 관계가 없습니다. 추정 관계를 포함하면 연결 후보를 확인할 수 있습니다.」
  */
 export function summaryText(
   name: string,
   views: readonly RelView[],
   partners: number,
   islands: number,
+  hiddenEstimated = 0,
 ): string {
   if (views.length === 0) {
-    return `${name}${josa(name, "은", "는")} 이 기준일에 기록된 관계가 없습니다.`;
+    const subj = `${name}${josa(name, "은", "는")}`;
+    return hiddenEstimated > 0
+      ? `${subj} 아직 확인된 관계가 없습니다. 추정 관계를 포함하면 연결 후보를 확인할 수 있습니다.`
+      : `${subj} 이 기준일에 기록된 관계가 없습니다.`;
   }
   const top = kindMix(views)[0];
   let first: string | null = null;
@@ -488,6 +611,9 @@ export function summaryText(
  * 관계선을 골랐을 때의 요약 (피그마 ⑦-8e) — 「선택한 관계 Qilin →
  * BreachForums는 제휴자 모집 14건으로, BreachForums의 관계 중 사건이 가장
  * 많습니다.」
+ *
+ * 2단계로 넓히면 중심에 닿지 않은 선도 고를 수 있다. 그 선은 중심의 관계와
+ * 견주지 않는다.
  */
 export function selectedText(
   v: RelView,
@@ -497,7 +623,8 @@ export function selectedText(
 ): string {
   const pair = `${nameOf(v.rel.from)} → ${nameOf(v.rel.to)}`;
   const c = nameOf(center);
-  const most = views.every((x) => x === v || x.count < v.count);
+  const mine = v.rel.from === center || v.rel.to === center;
+  const most = mine && views.every((x) => x === v || x.count < v.count);
   const tail = most ? `으로, ${c}의 관계 중 사건이 가장 많습니다.` : "입니다.";
   return `선택한 관계 ${pair}${josa(nameOf(v.rel.to), "은", "는")} ${KIND_LABEL[v.rel.kind]} ${v.count}건${tail} ${CONF_SENTENCE[v.rel.confidence]}`;
 }
