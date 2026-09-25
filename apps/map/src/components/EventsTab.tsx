@@ -18,7 +18,7 @@
 import { useState } from "react";
 
 import EventRow from "./EventRow";
-import { byMonth, periodBounds, periodLabel, type Period } from "@/lib/events";
+import { byMonth, periodDays, periodLabel, type Period } from "@/lib/events";
 import type { Ev } from "@/lib/types";
 
 const CHOICES: { label: string; p: Period }[] = [
@@ -55,10 +55,9 @@ export default function EventsTab({
 }) {
   const [picked, setPicked] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
-  const bounds = periodBounds(period, d);
-  const firstDay = list.length ? list[list.length - 1].postedAt.slice(0, 10) : isoDay(d.getTime());
-  const fromDay = Number.isFinite(bounds.from) ? isoDay(bounds.from + 1) : firstDay;
-  const toDay = isoDay(bounds.to);
+  // 화면에 적는 기간은 거르기와 같은 규칙으로 낸다 (`periodDays`). 전체면 가장 이른 사건 날짜다
+  const [start, toDay] = periodDays(period, d);
+  const fromDay = start ?? (list.length ? list[list.length - 1].postedAt.slice(0, 10) : toDay);
 
   return (
     <section className="flex flex-col gap-s3">

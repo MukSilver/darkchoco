@@ -20,6 +20,7 @@ import {
   josa,
   kindMix,
   linkRows,
+  linksOf,
   pairViews,
   partnerCount,
   relationsAt,
@@ -201,4 +202,13 @@ test('연혁 설명 · 요약 · 고른 관계 문장 (피그마 ⑦-8 · ⑦-8e
     selectedText(r1, 'f1', mine, nameOf),
     /^선택한 관계 Qilin → Darkforums는 제휴자 모집 3건으로, Darkforums의 관계 중 사건이 가장 많습니다\./,
   );
+});
+
+test('행위자는 활동 관계만 본다 — [연결] 목록 · 배지 · 지도 선이 같게 (설계서 4.3.8)', () => {
+  const e1 = ev('f1', '2026-05-01T00:00:00Z', { actorTerritoryId: 'a1' });
+  const rels = withActivity([rel('R9', 'a1', 't1', 'contact')], [e1]);
+  const views = relationsAt(rels, [e1], D, ALL);
+  assert.deepEqual(linksOf(views, 'a1', true).map((v) => v.rel.kind), ['activity']);
+  assert.equal(linksOf(views, 'a1', false).length, 2, '행위자가 아니면 모든 종류');
+  assert.equal(partnerCount(linksOf(views, 'a1', true), 'a1'), 1);
 });
