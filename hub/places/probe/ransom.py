@@ -36,6 +36,7 @@
 from __future__ import annotations
 
 import collections
+import http.client
 import json
 import sys
 import time
@@ -62,6 +63,10 @@ NEEDS_PACKAGES: list[str] = []      # 표준 라이브러리만 씁니다
 
 간격 = 62.0          # 초. 1req/분/엔드포인트 (실측)
 연속실패_상한 = 3
+# 한 번 받기가 실패한 것으로 셀 예외. **IncompleteRead(HTTPException) 도 넣습니다.** Tor 로 받다가
+# 응답이 잘리면 나는데 OSError 가 아니라서 빠져나가 갈래 하나를 통째로 죽였습니다(2026-09-25 검토).
+# 소급(monthly.py)도 이것을 씁니다 — http 를 부르는 자리는 조사기 안에만 둡니다(test_직접호출금지)
+받기오류 = (urllib.error.URLError, OSError, ValueError, http.client.HTTPException)
 # 피해 목록을 몇 달치 받나. **여섯 달을 받습니다.**
 #
 # 예전에는 0(안 받음)이었습니다. apps/dls-observatory/dls_fill.py 가 같은
@@ -316,7 +321,7 @@ def _피해모으기(마지막: list[float], 개월수: int, op=None) -> tuple[d
             실패 = 0
             print(f"      {i}/{len(달들)}  {년}-{월:02d}  {len(건들) if isinstance(건들, list) else 0}건",
                   flush=True)
-        except (urllib.error.URLError, OSError, ValueError) as e:
+        except 받기오류 as e:
             못본달.append(f"{년}-{월:02d}({type(e).__name__})")
             실패 += 1
             if 실패 >= 연속실패_상한:
@@ -393,7 +398,7 @@ def 조사(*, dry: bool = False, limit: int = 0,
     print("    집계처에서 그룹 목록을 받습니다", flush=True)
     try:
         그룹들 = _받기(rl_groups(), 마지막, op)
-    except (urllib.error.URLError, OSError, ValueError) as e:
+    except 받기오류 as e:
         yield Place(갈래="ransom", 이름="(그룹 목록)",
                     못본이유=f"그룹 목록을 못 받았습니다: {e}",
                     받은곳="ransomware.live/groups")
