@@ -2,13 +2,18 @@
  * 검색 결과 한 줄 — 검색 창(피그마 ⑦-10 · ⑦-10a · ⑦-10c)과 전체 결과 화면(⑦-10d)이 같이 쓴다.
  *
  *   묶음      아이콘      굵은 줄                    아랫줄                          오른쪽
- *   엔티티    섬 색 육각   이름                       섬 · 활동도 · 사건 N건           N건
- *   행위자    섬 색 육각   핸들                       주 활동 영토 · 사건 N건          N건
+ *   엔티티    섬 색 육각   이름                       웹 · 섬 · 활동도 · 사건 N건      N건
+ *   행위자    섬 색 육각   핸들                       웹 · 주 활동 영토 · 사건 N건     N건
  *   사건      시계        [KR · 유통 · 날짜 · 규모]   날짜 · 올라온 곳(행위자 → 영토)  종류 칩
  *   관계      ⇄          출발 → 도착                 종류 · 신뢰도 · N건
  *
  * 설계서 4.2.2 자동완성 표를 따른다. 검색어에 걸린 글자는 굵게 칠한다. 사건 제목에는
  * 이름이 없어 칠할 곳이 아랫줄의 올라온 곳뿐이다.
+ *
+ * 엔티티 · 행위자 줄 아랫줄 맨 앞에 웹을 적는다 (설계서 4.2.2 「결과에 오픈웹/다크웹
+ * 표시」, 5.3 「결과 행에 웹 표시」). 지금 찾는 대상은 다크웹뿐이라 늘 「다크웹」이다.
+ * 사건 · 관계 줄에는 안 적는다 — 4.2.2 표가 두 줄에 웹을 두지 않았고, 올라온 영토의
+ * 웹을 따라가므로 같은 말을 되풀이하게 된다.
  */
 
 "use client";
@@ -19,7 +24,8 @@ import { Chip, hexPoints } from "./RelBits";
 import { EV_KIND_LABEL, EV_KIND_TONE, dayOf, eventTitle } from "@/lib/events";
 import { CONF_LABEL, KIND_NAME } from "@/lib/relations";
 import { markAt, type Hit, type Recent, type SearchIndex } from "@/lib/search";
-import type { IslandCode } from "@/lib/types";
+import type { IslandCode, Web } from "@/lib/types";
+import { WEB_LABEL, webOfIsland } from "@/lib/web";
 
 /** 줄을 그리는 데 드는 것. 부르는 쪽(`page.tsx`)이 한 번 만들어 넘긴다 */
 export type SearchCtx = {
@@ -66,6 +72,26 @@ export function HexIcon({ token }: { token: string }) {
   );
 }
 
+/** 웹 점 색. 머리띠 웹 전환 탭의 점과 같은 토큰이다 (설계서 6.5 「탭 강조」) */
+const WEB_DOT: Record<Web, string> = {
+  open: "var(--t-web-open)",
+  dark: "var(--t-web-dark)",
+};
+
+/** 웹 표시 — 점 하나와 웹 이름. 아랫줄 글 사이에 끼므로 줄 안 요소로 둔다 */
+export function WebTag({ web }: { web: Web }) {
+  return (
+    <>
+      <span
+        aria-hidden
+        className="mr-s1 inline-block size-[6px] rounded-full align-middle"
+        style={{ background: WEB_DOT[web] }}
+      />
+      {WEB_LABEL[web]}
+    </>
+  );
+}
+
 function nameOf(ctx: SearchCtx, id: string): string {
   return ctx.ix.byId.get(id)?.name ?? id;
 }
@@ -101,13 +127,32 @@ export function rowParts(ctx: SearchCtx, h: Hit, needle: string): RowParts {
         {e.eventCount}건
       </span>
     );
+    const web = <WebTag web={webOfIsland(e.islandId)} />;
     if (h.kind === "actor") {
       const main = h.main ? `주 활동 ${nameOf(ctx, h.main)}` : "주 활동 영토 없음";
-      return { icon, title, sub: `${main} · 사건 ${e.eventCount}건${alias}`, side };
+      return {
+        icon,
+        title,
+        sub: (
+          <>
+            {web} · {main} · 사건 {e.eventCount}건{alias}
+          </>
+        ),
+        side,
+      };
     }
     const a = ctx.activityOf(e.id);
     const act = a === null ? "이 기준일 지도에 없음" : `활동도 ${a}`;
-    return { icon, title, sub: `${ctx.islandName(e.islandId)} · ${act} · 사건 ${e.eventCount}건${alias}`, side };
+    return {
+      icon,
+      title,
+      sub: (
+        <>
+          {web} · {ctx.islandName(e.islandId)} · {act} · 사건 {e.eventCount}건{alias}
+        </>
+      ),
+      side,
+    };
   }
 
   if (h.kind === "event") {
