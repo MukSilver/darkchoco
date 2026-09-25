@@ -8,15 +8,25 @@
  *   관계선 · 라벨 클릭  그 선을 고른다. 나머지는 흐려지고 근거 팝오버가 뜬다
  *   빈 곳 클릭         선택 해제
  *
+ * **강조와 선택은 다르다** (4.3.3 ①). [연결] 행 더블클릭 · 검색 · 섬 간 보기에서
+ * 넘어오면 그 관계를 **강조**만 한다 — 선과 라벨 테두리가 진하고 나머지는 흐리며,
+ * 패널 관계 연혁에서 그 항목이 강조된다. 근거 팝오버는 안 뜬다. 강조된 선이나
+ * 「근거 보기」를 눌러야 **선택**(근거 화면, ⑦-8e)이 된다 (4.3.3 「강조된 관계선이나
+ * '근거 보기' 클릭 시 근거 화면」).
+ *
  * **섬 간 보기**(4.3.3 ②)도 여기서 그린다. [연결] 탭의 「유형 간 연결」 행을
  * 더블클릭하면 온다. 왼쪽에 출발 섬 영토, 오른쪽에 도착 섬 영토를 세우고 그
  * 섬 쌍의 선만 긋는다. 선을 누르면 보통 관계 탭(①)으로 넘어간다.
  *
+ * **「추정 관계 포함」 · 「2단계로 확장」**은 피그마 ⑦-8g 관계 없음 화면의 두 단추다.
+ * 관계가 있을 때도 켜고 끌 수 있어야 해서 판 오른쪽 위에도 둔다 — 2단계로 넓힌
+ * 뒤에는 관계 없음 화면이 사라져 되돌릴 단추가 없어진다. 그 자리는 피그마 ⑦-8 의
+ * 「전체 관계 보기」 스위치 자리인데, 그 스위치는 보류라 비어 있다.
+ *
  * 안 만든 것
  *
- *   「전체 관계 보기」 스위치   설계서 4.2.7 · 6.3 이 보류로 정했다 (지도 탭과 같다)
- *   로고                      굽기가 로고를 안 싣는다. 노드는 섬 색 육각형이다
- *   근거 사건 더블클릭 → 보고서 팝업   팝업(4.3.4)이 아직 없다
+ *   「전체 관계 보기」 스위치 · 단추   설계서 4.2.7 · 6.3 이 보류로 정했다 (지도 탭과 같다)
+ *   로고                            굽기가 로고를 안 싣는다. 노드는 섬 색 육각형이다
  *
  * 근거 사건 없이 명부 「연결된 곳」에서 만든 관계선은 팝오버에 그 칸의 원문을
  * 보인다 (4.3.6). 굽기가 상대 이름이 든 항목만 골라 `note` 로 싣는다.
@@ -24,7 +34,7 @@
 
 "use client";
 
-import { useMemo, type MouseEvent } from "react";
+import { useMemo, type MouseEvent, type ReactNode } from "react";
 
 import { Chip, KindDot, TeamMark, hexPoints } from "./RelBits";
 import type { MapLayout, TerritoryShape } from "@/lib/layout";
@@ -36,10 +46,11 @@ import {
   KIND_NAME,
   KIND_ORDER,
   centerChips,
+  expandHops,
+  historyText,
   josa,
   pairViews,
-  partnerOf,
-  touching,
+  type Hops,
   type RelView,
 } from "@/lib/relations";
 
@@ -47,24 +58,37 @@ export type RelPair = { from: string; to: string };
 
 export type RelationTabProps = {
   layout: MapLayout;
-  /** 기준일에 그릴 관계 전부 (`relationsAt`) */
+  /** 기준일에 그릴 관계 전부 (`relationsAt`). 「추정 관계 포함」을 끄면 추정을 뺀 목록 */
   views: RelView[];
   center: string | null;
   onCenter: (territoryId: string) => void;
-  /** 고른 관계선 id */
+  /** 고른 관계선 id — 근거 화면 (⑦-8e) */
   selected: string | null;
   onSelect: (relationId: string | null) => void;
+  /** 강조한 관계선 id — [연결] · 검색 · 섬 간 보기에서 넘어온 관계 (4.3.3 ①) */
+  highlight: string | null;
   /** 섬 간 보기 필터. 있으면 섬 간 보기로 그린다 */
   pair: RelPair | null;
   onClearPair: () => void;
   /** 섬 간 보기에서 선을 눌렀을 때 — 보통 관계 탭(①)으로 넘어간다 */
   onPairPick: (v: RelView) => void;
-  /** [연결] 탭에서 넘어왔으면 출발 영토. 칩에 점을 찍고 돌아가기를 띄운다 (4.3.3 ①) */
-  origin: { id: string; name: string } | null;
+  /**
+   * 들어올 때의 출발 화면. `label` 은 돌아가기 단추 글이다 (`backLabel`). 출발에서
+   * 영토를 골라 두었으면 `id` 가 그 영토라 칩에 점을 찍는다 (4.3.3 ①)
+   */
+  origin: { id: string | null; label: string } | null;
   onBack: () => void;
   /** 관계가 없을 때 관계가 처음 생기는 분기. 「기준일 옮기기」 단추에 쓴다 (4.3.3 예외) */
   moveTo: QuarterKey | null;
   onMove: () => void;
+  /** 추정 관계 포함 (피그마 ⑦-8g) */
+  est: boolean;
+  onEst: (on: boolean) => void;
+  /** 몇 단계까지 그리나. 2 면 이웃의 이웃까지 (피그마 ⑦-8g 「2단계로 확장」) */
+  depth: 1 | 2;
+  onDepth: (depth: 1 | 2) => void;
+  /** 추정 관계 포함을 꺼서 가린 중심의 관계 수. 관계 없음 안내 문안이 갈린다 */
+  hiddenEst: number;
 };
 
 /* 그래프 판 크기. viewBox 단위라 화면 크기와 무관하다 */
@@ -94,6 +118,8 @@ type Node = {
   actor: boolean;
   /** 이름을 붙일 자리. 섬 간 보기는 세로로 촘촘해서 옆에 붙인다 */
   side: "below" | "left" | "right";
+  /** 2단계 바깥 고리. 자리가 좁아 이름만 작게 붙인다 */
+  outer: boolean;
 };
 
 type Edge = {
@@ -159,22 +185,64 @@ function buildEdges(views: RelView[], nodes: Map<string, Node>, tBase = 0.5): Ed
   return out;
 }
 
+/**
+ * 켜고 끄는 단추 — 피그마 ⑦-8 오른쪽 위 스위치 모양 (둥근 통 + 손잡이 + 글).
+ * 판 위 도구 줄과 관계 없음 안내가 같이 쓴다
+ */
+function Toggle({
+  on,
+  onClick,
+  disabled,
+  title,
+  children,
+}: {
+  on: boolean;
+  onClick: () => void;
+  disabled?: boolean;
+  title?: string;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      disabled={disabled}
+      title={title}
+      onClick={onClick}
+      className="flex items-center gap-s2 rounded-[10px] border border-edge bg-panel px-s3 py-s2 text-[12px] text-body enabled:hover:text-title disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      <span
+        aria-hidden
+        className="relative h-[16px] w-[28px] shrink-0 rounded-full"
+        style={{ background: on ? "var(--t-accent)" : "var(--t-border-strong)" }}
+      >
+        <span
+          className="absolute top-[2px] size-[12px] rounded-full"
+          style={{ left: on ? 14 : 2, background: "var(--t-text-on-accent)" }}
+        />
+      </span>
+      {children}
+    </button>
+  );
+}
+
 export default function RelationTab(p: RelationTabProps) {
   const byId = useMemo(() => new Map(p.layout.territories.map((t) => [t.territoryId, t])), [p.layout]);
   const islandById = useMemo(() => new Map(p.layout.islands.map((i) => [i.islandKey, i])), [p.layout]);
   const nameOf = (id: string) => byId.get(id)?.name ?? id;
   const islandOf = (id: string) => byId.get(id)?.islandKey;
 
-  const node = (id: string, x: number, y: number, r: number, side: Node["side"] = "below"): Node | null => {
+  const node = (id: string, x: number, y: number, r: number, side: Node["side"] = "below", outer = false): Node | null => {
     const t = byId.get(id);
     if (!t) return null;
     const isl = islandById.get(t.islandKey);
-    return { id, x, y, r, t, islandName: isl?.name ?? "", actor: isl?.islandId === "ACTOR", side };
+    return { id, x, y, r, t, islandName: isl?.name ?? "", actor: isl?.islandId === "ACTOR", side, outer };
   };
 
   /* ── 그릴 것 ─────────────────────────────────────────── */
 
-  const graph = useMemo(() => {
+  const graph = useMemo((): { nodes: Map<string, Node>; edges: Edge[]; list: RelView[]; hops: Hops | null } => {
     const nodes = new Map<string, Node>();
     if (p.pair) {
       const list = pairViews(p.views, islandOf, p.pair.from, p.pair.to);
@@ -192,39 +260,80 @@ export default function RelationTab(p: RelationTabProps) {
       place(left, 400, "left");
       place(right, 760, "right");
       // 선이 오른쪽으로 모이므로 라벨은 왼쪽(퍼져 있는 쪽)에 앉힌다
-      return { nodes, edges: buildEdges(list, nodes, 0.3), list };
+      return { nodes, edges: buildEdges(list, nodes, 0.3), list, hops: null };
     }
-    if (!p.center) return { nodes, edges: [], list: [] };
-    const list = touching(p.views, p.center);
+    if (!p.center) return { nodes, edges: [], list: [], hops: null };
     // 건수가 큰 상대가 맨 위에 오도록 세운다
-    const weight = new Map<string, number>();
-    for (const v of list) {
-      const o = partnerOf(v, p.center);
-      weight.set(o, (weight.get(o) ?? 0) + v.count);
-    }
-    const partners = [...weight.keys()].sort(
-      (a, b) => (weight.get(b) ?? 0) - (weight.get(a) ?? 0) || nameOf(a).localeCompare(nameOf(b)),
-    );
-    const n = partners.length;
-    const R = n <= 4 ? 210 : n <= 8 ? 235 : 250;
-    const r = n <= 8 ? 26 : 20;
-    const c = node(p.center, CX, CY, 34);
+    const hops = expandHops(p.views, p.center, p.depth, nameOf);
+    const n1 = hops.hop1.length;
+    const c = node(p.center, CX, CY, p.depth === 2 ? 30 : 34);
     if (c) nodes.set(p.center, c);
-    partners.forEach((id, i) => {
-      const a = ((-90 + (i * 360) / n) * Math.PI) / 180;
-      const nd = node(id, CX + R * Math.cos(a), CY + R * Math.sin(a) * 0.86, r);
+
+    if (p.depth === 1) {
+      const R = n1 <= 4 ? 210 : n1 <= 8 ? 235 : 250;
+      const r = n1 <= 8 ? 26 : 20;
+      hops.hop1.forEach((id, i) => {
+        const a = ((-90 + (i * 360) / n1) * Math.PI) / 180;
+        const nd = node(id, CX + R * Math.cos(a), CY + R * Math.sin(a) * 0.86, r);
+        if (nd) nodes.set(id, nd);
+      });
+      return { nodes, edges: buildEdges(hops.views, nodes), list: hops.views, hops };
+    }
+
+    // 2단계 — 1단계는 안쪽 고리, 이웃의 이웃은 바깥 고리
+    const deg1 = new Map<string, number>();
+    hops.hop1.forEach((id, i) => {
+      const deg = -90 + (i * 360) / n1;
+      deg1.set(id, deg);
+      const a = (deg * Math.PI) / 180;
+      const nd = node(id, CX + 180 * Math.cos(a), CY + 140 * Math.sin(a), n1 <= 8 ? 22 : 18);
       if (nd) nodes.set(id, nd);
     });
-    return { nodes, edges: buildEdges(list, nodes), list };
+    // 바깥 고리는 이어 준 1단계 영토의 각도 차례로 줄 세우고 고르게 벌린 뒤, 그 자리를
+    // 통째로 돌려 저마다 이어 준 영토 쪽에 가깝게 앉힌다 (돌릴 각은 어긋남의 원형 평균)
+    const want = hops.hop2
+      .map((id) => ({ id, deg: deg1.get(hops.via.get(id) ?? "") ?? -90 }))
+      .sort((a, b) => a.deg - b.deg);
+    const step = 360 / Math.max(want.length, 1);
+    let sx = 0;
+    let sy = 0;
+    want.forEach((w, i) => {
+      const off = ((w.deg - i * step) * Math.PI) / 180;
+      sx += Math.cos(off);
+      sy += Math.sin(off);
+    });
+    const shift = want.length ? (Math.atan2(sy, sx) * 180) / Math.PI : -90;
+    want.forEach((w, i) => {
+      const a = ((shift + i * step) * Math.PI) / 180;
+      const nd = node(w.id, CX + 390 * Math.cos(a), CY + 250 * Math.sin(a), 15, "below", true);
+      if (nd) nodes.set(w.id, nd);
+    });
+    return { nodes, edges: buildEdges(hops.views, nodes), list: hops.views, hops };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [p.views, p.center, p.pair, byId, islandById]);
+  }, [p.views, p.center, p.pair, p.depth, byId, islandById]);
 
   const sel = graph.edges.find((e) => e.v.rel.id === p.selected)?.v ?? null;
-  const onSel = (id: string) => sel && (sel.rel.from === id || sel.rel.to === id);
+  // 골라 둔 선이 있으면 그쪽이 앞선다. 강조는 들어올 때 한 번 건다
+  const hi = sel ? null : (graph.edges.find((e) => e.v.rel.id === p.highlight)?.v ?? null);
+  const focus = sel ?? hi;
+  const onFocus = (id: string) => focus && (focus.rel.from === id || focus.rel.to === id);
+  /** 중심에 닿지 않은 선 — 2단계로 넓혔을 때만 있다 */
+  const outerEdge = (v: RelView) => !p.pair && !!p.center && v.rel.from !== p.center && v.rel.to !== p.center;
   const empty = !p.pair && graph.list.length === 0;
   const centerName = p.center ? nameOf(p.center) : "";
+  const rest = graph.hops?.rest ?? 0;
 
-  const chips = p.pair ? [] : centerChips(p.views, p.center, nameOf);
+  // 출발 영토가 지도에 있으면 칩 줄에 둔다 — 점을 찍을 칩이 있어야 한다 (4.3.3 ①)
+  const originId = p.origin?.id && byId.has(p.origin.id) ? p.origin.id : null;
+  const chips = p.pair ? [] : centerChips(p.views, p.center, nameOf, 6, originId);
+
+  const withName = `${centerName}${josa(centerName, "과", "와")}`;
+  const emptyBody = !p.center
+    ? "기준일을 옮기면 관계가 보일 수 있습니다."
+    : p.hiddenEst > 0
+      ? `${withName} 연결된 관계는 추정 관계 ${p.hiddenEst}개뿐입니다. 추정 관계를 포함하면 연결 후보를 확인할 수 있습니다.`
+      : `${withName} 연결된 관계가 이 기준일에는 관측되지 않았습니다. ` +
+        (p.moveTo ? "기준일을 옮기면 관계가 보일 수 있습니다." : "위 칩 줄에서 다른 영토를 골라 보세요.");
 
   /* ── 그리기 ─────────────────────────────────────────── */
 
@@ -237,7 +346,7 @@ export default function RelationTab(p: RelationTabProps) {
             onClick={p.onBack}
             className="rounded-full border border-edge bg-card px-s3 py-s1 text-[12px] text-body hover:text-title"
           >
-            ‹ {p.origin.name} 연결로 돌아가기
+            ‹ {p.origin.label}
           </button>
         )}
         {p.pair ? (
@@ -274,7 +383,7 @@ export default function RelationTab(p: RelationTabProps) {
                   >
                     <span aria-hidden className="size-[8px] rounded-full" style={{ background: `var(--t-island-${token})` }} />
                     {nameOf(id)}
-                    {p.origin?.id === id && (
+                    {originId === id && (
                       <span aria-label="출발 영토" className="size-[6px] rounded-full" style={{ background: "var(--t-accent)" }} />
                     )}
                   </button>
@@ -323,12 +432,13 @@ export default function RelationTab(p: RelationTabProps) {
 
           {/* 선 */}
           {graph.edges.map(({ v, d }) => {
-            const on = sel?.rel.id === v.rel.id;
-            const dimmed = sel && !on;
+            const on = focus?.rel.id === v.rel.id;
+            const picked = sel?.rel.id === v.rel.id;
+            const dimmed = focus && !on;
             const pick = (e: MouseEvent) => {
               e.stopPropagation();
               if (p.pair) p.onPairPick(v);
-              else p.onSelect(on ? null : v.rel.id);
+              else p.onSelect(picked ? null : v.rel.id);
             };
             return (
               <g key={v.rel.id} className="cursor-pointer" onClick={pick}>
@@ -341,15 +451,21 @@ export default function RelationTab(p: RelationTabProps) {
                   strokeDasharray={CONF_DASH[v.rel.confidence] || undefined}
                   strokeLinecap="round"
                   markerEnd={`url(#rel-arrow-${v.rel.kind})`}
-                  opacity={dimmed ? 0.15 : on ? 1 : 0.85}
+                  opacity={dimmed ? 0.15 : on ? 1 : outerEdge(v) ? 0.5 : 0.85}
                 />
               </g>
             );
           })}
 
-          {/* 선 라벨 — 「Recruitment 14건」 (설계서 4.3.6) */}
+          {/*
+            선 라벨 — 「Recruitment 14건」 (설계서 4.3.6). 고른 선은 칠하고, 강조한 선은
+            테두리만 진하게 한다 (4.3.3 ① 「'Recruitment 14건' 강조 테두리」).
+            2단계 바깥 선은 라벨이 겹쳐 강조 · 선택했을 때만 단다
+          */}
           {graph.edges.map(({ v, mid }) => {
-            const on = sel?.rel.id === v.rel.id;
+            const on = focus?.rel.id === v.rel.id;
+            const picked = sel?.rel.id === v.rel.id;
+            if (outerEdge(v) && !on) return null;
             const name = KIND_NAME[v.rel.kind];
             const w = textWidth(name, 13) + textWidth(`${v.count}건`, 12) + 34;
             return (
@@ -357,24 +473,25 @@ export default function RelationTab(p: RelationTabProps) {
                 key={`l-${v.rel.id}`}
                 transform={`translate(${mid.x - w / 2} ${mid.y - 13})`}
                 className="cursor-pointer"
-                opacity={sel && !on ? 0.3 : 1}
+                opacity={focus && !on ? 0.3 : 1}
                 onClick={(e) => {
                   e.stopPropagation();
                   if (p.pair) p.onPairPick(v);
-                  else p.onSelect(on ? null : v.rel.id);
+                  else p.onSelect(picked ? null : v.rel.id);
                 }}
               >
                 <rect
                   width={w}
                   height={26}
                   rx={6}
-                  fill={on ? `var(--t-rel-${v.rel.kind})` : "var(--t-surface-panel)"}
+                  fill={picked ? `var(--t-rel-${v.rel.kind})` : "var(--t-surface-panel)"}
                   stroke={on ? `var(--t-rel-${v.rel.kind})` : "var(--t-border-card)"}
+                  strokeWidth={on && !picked ? 2 : 1}
                 />
-                {!on && <circle cx={13} cy={13} r={3.5} fill={`var(--t-rel-${v.rel.kind})`} />}
-                <text x={on ? 12 : 23} y={17.5} fontSize={13} fontWeight={600}>
-                  <tspan fill={on ? "var(--t-text-on-accent)" : "var(--t-text-title)"}>{name}</tspan>
-                  <tspan dx={6} fontSize={12} fontWeight={400} fill={on ? "var(--t-text-on-accent)" : "var(--t-text-label)"}>
+                {!picked && <circle cx={13} cy={13} r={3.5} fill={`var(--t-rel-${v.rel.kind})`} />}
+                <text x={picked ? 12 : 23} y={17.5} fontSize={13} fontWeight={600}>
+                  <tspan fill={picked ? "var(--t-text-on-accent)" : "var(--t-text-title)"}>{name}</tspan>
+                  <tspan dx={6} fontSize={12} fontWeight={400} fill={picked ? "var(--t-text-on-accent)" : "var(--t-text-label)"}>
                     {v.count}건
                   </tspan>
                 </text>
@@ -386,7 +503,7 @@ export default function RelationTab(p: RelationTabProps) {
           {[...graph.nodes.values()].map((n) => {
             const isCenter = n.id === p.center && !p.pair;
             const c = `var(--t-island-${n.t.token})`;
-            const faded = sel && !onSel(n.id);
+            const faded = focus && !onFocus(n.id);
             return (
               <g
                 key={n.id}
@@ -416,7 +533,11 @@ export default function RelationTab(p: RelationTabProps) {
                     fillOpacity={empty && isCenter ? 0.25 : 1}
                   />
                 )}
-                {n.side === "below" ? (
+                {n.side === "below" && n.outer ? (
+                  <text x={n.x} y={n.y + n.r + 16} textAnchor="middle" fontSize={12} fontWeight={600} fill="var(--t-text-title)">
+                    {n.t.name}
+                  </text>
+                ) : n.side === "below" ? (
                   <>
                     <text
                       x={n.x}
@@ -476,9 +597,25 @@ export default function RelationTab(p: RelationTabProps) {
           </ul>
         </div>
 
-        {/* 근거 팝오버 — 피그마 ⑦-8e 「선택한 관계 · Evidence」 */}
+        {/*
+          판 위 도구 — 피그마 ⑦-8g 의 두 단추. 관계 없음이면 안내 상자가 대신 띄운다.
+          섬 간 보기에는 안 둔다 — 중심이 없어 2단계가 뜻이 없고, 오른쪽 줄 이름을 가린다.
+          섬 간 보기는 들어올 때마다 추정을 포함한 기본값이다
+        */}
+        {!empty && !p.pair && (
+          <div className="absolute right-s4 top-s4 flex items-center gap-s2">
+            <Toggle on={p.est} onClick={() => p.onEst(!p.est)}>
+              추정 관계 포함
+            </Toggle>
+            <Toggle on={p.depth === 2} onClick={() => p.onDepth(p.depth === 2 ? 1 : 2)}>
+              2단계로 확장
+            </Toggle>
+          </div>
+        )}
+
+        {/* 근거 팝오버 — 피그마 ⑦-8e 「선택한 관계 · Evidence」. 도구 줄 아래에 띄운다 */}
         {sel && (
-          <div className="absolute right-s4 top-s4 flex w-[330px] flex-col gap-s3 rounded-[12px] border border-edge bg-panel px-s5 py-s4 shadow-lg">
+          <div className="absolute right-s4 top-[64px] flex w-[330px] flex-col gap-s3 rounded-[12px] border border-edge bg-panel px-s5 py-s4 shadow-lg">
             <p className="text-[11px] text-label">선택한 관계 · Evidence</p>
             <div className="flex items-center gap-s2">
               <span className="text-[15px] font-semibold text-title">
@@ -495,47 +632,61 @@ export default function RelationTab(p: RelationTabProps) {
               <dd className="font-mono text-title">{sel.first ? sel.first.slice(0, 7) : "—"}</dd>
               <dt className="text-label">Last Seen</dt>
               <dd className="font-mono text-title">{sel.last ? sel.last.slice(0, 7) : "—"}</dd>
-              <dt className="text-label">근거 사건</dt>
-              <dd className="text-title tabular-nums">{sel.fromRegistry ? "없음" : `${sel.evidence.length}건`}</dd>
+              {/* 출처는 근거 사건이다. 명부에서 만든 관계는 그 칸 하나가 출처다 */}
+              <dt className="text-label">출처 수</dt>
+              <dd className="text-title tabular-nums">{sel.fromRegistry ? "명부 칸" : `${sel.evidence.length}건`}</dd>
             </dl>
-            {sel.fromRegistry && sel.rel.note ? (
+            {/* 설명 — 관계 연혁과 같은 자동 문장 (설계서 4.3.6 「설명」) */}
+            <p className="text-[12px] leading-[1.7] text-body">{historyText(sel, nameOf)}</p>
+            {sel.fromRegistry && sel.rel.note && (
               <div className="flex flex-col gap-s1">
                 <p className="text-[11px] text-label">명부 「연결된 곳」 원문</p>
                 <p className="break-all rounded-[8px] bg-card px-s3 py-s2 font-mono text-[12px] leading-[1.6] text-body">
                   {sel.rel.note}
                 </p>
               </div>
-            ) : (
-              <p className="text-[12px] leading-[1.7] text-body">
-                {sel.fromRegistry
-                  ? "근거 사건 없이 명부의 「연결된 곳」 칸에서 만든 관계입니다."
-                  : "근거 사건 목록은 오른쪽 패널에 있습니다."}
-              </p>
             )}
           </div>
         )}
 
-        {/* 관계 없음 — 피그마 ⑦-8g */}
+        {/*
+          관계 없음 — 피그마 ⑦-8g. 「2단계로 확장」은 바로 이어진 영토가 없으면 넓힐 곳이
+          없어 끈다. 2단계로 넓힌 채 여기 왔으면 되돌릴 수 있게 켜 둔다.
+          「전체 관계 보기」는 보류라 안 둔다 (설계서 4.2.7)
+        */}
         {empty && (
-          <div className="absolute bottom-[84px] left-1/2 flex w-[440px] -translate-x-1/2 flex-col items-center gap-s3 rounded-[14px] border border-edge bg-panel px-s6 py-s5 text-center">
+          <div className="absolute bottom-[84px] left-1/2 flex w-[460px] max-w-[calc(100%-32px)] -translate-x-1/2 flex-col items-center gap-s3 rounded-[14px] border border-edge bg-panel px-s6 py-s5 text-center">
             <h3 className="text-[15px] font-semibold text-title">
-              {p.center ? "관계가 없습니다" : "이 기준일에 기록된 관계가 없습니다"}
+              {p.center ? "확인된 관계가 없습니다" : "이 기준일에 기록된 관계가 없습니다"}
             </h3>
-            <p className="text-[12px] leading-[1.7] text-body">
-              {p.center
-                ? `${centerName}${josa(centerName, "과", "와")} 연결된 관계가 이 기준일에는 없습니다. 위 칩 줄에서 다른 영토를 골라 보세요.`
-                : "기준일을 옮기면 관계가 보일 수 있습니다."}
-            </p>
-            {p.moveTo && (
-              <button
-                type="button"
-                onClick={p.onMove}
-                className="rounded-[8px] px-s4 py-s2 text-[13px] font-semibold text-on-accent"
-                style={{ background: "var(--t-accent)" }}
-              >
-                {quarterText(p.moveTo)} 부터 관계 확인 · 기준일 옮기기
-              </button>
-            )}
+            <p className="text-[12px] leading-[1.7] text-body">{emptyBody}</p>
+            <div className="flex flex-wrap items-center justify-center gap-s2">
+              {p.center && (
+                <>
+                  <Toggle on={p.est} onClick={() => p.onEst(!p.est)}>
+                    추정 관계 포함
+                  </Toggle>
+                  <Toggle
+                    on={p.depth === 2}
+                    disabled={p.depth === 1}
+                    title={p.depth === 1 ? "바로 이어진 영토가 없어 2단계로 넓힐 곳이 없습니다" : undefined}
+                    onClick={() => p.onDepth(p.depth === 2 ? 1 : 2)}
+                  >
+                    2단계로 확장
+                  </Toggle>
+                </>
+              )}
+              {p.moveTo && (
+                <button
+                  type="button"
+                  onClick={p.onMove}
+                  className="rounded-[8px] px-s4 py-s2 text-[13px] font-semibold text-on-accent"
+                  style={{ background: "var(--t-accent)" }}
+                >
+                  {quarterText(p.moveTo)} 부터 관계 확인 · 기준일 옮기기
+                </button>
+              )}
+            </div>
           </div>
         )}
 
@@ -545,12 +696,16 @@ export default function RelationTab(p: RelationTabProps) {
         >
           <span aria-hidden className="size-[6px] rounded-full" style={{ background: "var(--t-accent)" }} />
           {empty
-            ? "관계 없음 · 칩 줄에서 다른 영토를 고르세요"
+            ? "관계 없음 상태 · 액션으로 탐색 확장"
             : p.pair
               ? "섬 간 보기 · 선을 누르면 그 관계로 이동"
               : sel
                 ? "선택한 관계선 강조 · 나머지 흐리게 · 근거 팝오버"
-                : "관계선 클릭 → 근거(Evidence) 표시"}
+                : hi
+                  ? "강조된 관계선 클릭 → 근거(Evidence) 표시"
+                  : p.depth === 2
+                    ? `2단계 확장 · 바깥 선은 누르면 라벨과 근거 표시${rest ? ` · 건수가 적은 ${rest}곳은 뺐습니다` : ""}`
+                    : "관계선 클릭 → 근거(Evidence) 표시"}
         </div>
       </div>
     </div>
