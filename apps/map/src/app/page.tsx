@@ -28,6 +28,7 @@ import ViewTabs, { type ViewTabKey } from "@/components/ViewTabs";
 import { DARK_ISLANDS, islandToken } from "@/lib/islands";
 import { layoutMap } from "@/lib/layout";
 import { MAP, isBaked } from "@/lib/mapData";
+import { latestSeen, monthDay } from "@/lib/entity";
 import { DEFAULT_PERIOD, eventTitle, eventsIn, type Period } from "@/lib/events";
 import { allIslandPairs, belongsTo, ecosystemView, islandView, territoryView } from "@/lib/panel";
 import type { Ev } from "@/lib/types";
@@ -59,7 +60,7 @@ import {
   type SearchFilter,
 } from "@/lib/search";
 import { quarterEnd, quarterOfDate, spanOf, type QuarterKey } from "@/lib/quarter";
-import { chipQuarter, quartersOf, snapshots } from "@/lib/timeline";
+import { quartersOf, snapshots, type Compare } from "@/lib/timeline";
 
 /**
  * 「오늘」. **구운 시각이다.** 구운 파일이 없을 때만 보는 사람의 시계를 쓴다.
@@ -137,6 +138,8 @@ export default function Page() {
   const [tab, setTab] = useState<ViewTabKey>("map");
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
+  // 타임라인 시점 비교 (⑦-9c). 제목 옆 설명이 이것을 읽어 여기서 들고 있다
+  const [compare, setCompare] = useState<Compare | null>(null);
   // 검색 창. null 이면 닫힘, 글이면 그 검색어를 채워 연다 (설계서 4.2.2)
   const [searchQ, setSearchQ] = useState<string | null>(null);
   // 최근 검색과 필터. 검색 부품은 닫으면 사라지므로 여기서 들고 있는다
@@ -184,30 +187,14 @@ export default function Page() {
   /**
    * 영토별 최근 관측일. 툴팁 다섯째 줄(설계서 4.2.3)과 영토 패널에 쓴다.
    *
-   * 기준일 뒤에 올라온 사건은 뺀다 — 스냅샷을 과거로 옮겼는데 최근 관측이
-   * 미래 날짜로 보이면 안 된다.
+   * 기준일 뒤에 올라온 사건 · 허위는 뺀다 (`latestSeen`). 시각은 엔티티 탭이
+   * 정렬에 쓰고, 화면에는 `MM-DD` 만 적는다 (설계서 4.3.5)
    */
-  const lastSeen = useMemo(() => {
-    const cut = d.getTime();
-    const out: Record<string, number> = {};
-    for (const e of MAP.events) {
-      if (e.excluded) continue;
-      const t = new Date(e.postedAt).getTime();
-      if (Number.isNaN(t) || t > cut) continue;
-      // 행위자 영토는 그 행위자가 올린 사건도 제 것이다 (Ev.actorTerritoryId)
-      for (const id of [e.territoryId, e.actorTerritoryId]) {
-        if (!id) continue;
-        if (!(id in out) || t > out[id]) out[id] = t;
-      }
-    }
-    return Object.fromEntries(
-      Object.entries(out).map(([id, ms]) => {
-        const dt = new Date(ms);
-        const p = (n: number) => String(n).padStart(2, "0");
-        return [id, `${p(dt.getUTCMonth() + 1)}-${p(dt.getUTCDate())}`];
-      }),
-    );
-  }, [d]);
+  const seenAt = useMemo(() => latestSeen(MAP.events, d), [d]);
+  const lastSeen = useMemo(
+    () => Object.fromEntries(Object.entries(seenAt).map(([id, ms]) => [id, monthDay(ms)])),
+    [seenAt],
+  );
 
   const view = useMemo(() => {
     const input = { layout, result, events: MAP.events, d, rels, lastSeen, registry: registryOf };
@@ -411,6 +398,9 @@ export default function Page() {
       dropOurEntry();
       clearRel();
     }
+    // 타임라인을 떠나면 시점 비교를 끈다. 비교 중 기준 시점은 늘 B 라 따로 옮길 것이
+    // 없다 (4.3.7 「끄면 B 시점」). 검색 결과로 옮긴 기준일도 그대로 산다
+    if (tab === "timeline") setCompare(null);
     setTab(k);
     setPlaying(false);
   };
@@ -824,9 +814,11 @@ export default function Page() {
                     ? `엔티티 ${activeTerritories.length} · 유형별 목록 · 활동도 순`
                     : tab === "relation"
                       ? relSubtitle()
-                      : playing
-                        ? `재생 중 · ${quarters[0]} → ${quarters[quarters.length - 1]} (${speed}×)`
-                        : `누적 · ${quarters[0]} → ${quarters[quarters.length - 1]}`}
+                      : compare
+                        ? `시점 비교 · A ${compare.a} ↔ B ${compare.b}`
+                        : playing
+                          ? `재생 중 · ${quarters[0]} → ${quarters[quarters.length - 1]} (${speed}×)`
+                          : `누적 · ${quarters[0]} → ${quarters[quarters.length - 1]}`}
               </p>
               <div className="flex-1" />
               {results !== null ? (
@@ -856,7 +848,8 @@ export default function Page() {
                 snaps={snaps}
                 current={ym}
                 onPick={setYm}
-                onPickYear={(y) => setYm(chipQuarter(y))}
+                compare={compare}
+                onCompare={setCompare}
                 playing={playing}
                 onPlaying={setPlaying}
                 speed={speed}
@@ -924,6 +917,7 @@ export default function Page() {
                 events={MAP.events}
                 d={d}
                 lastSeen={lastSeen}
+                seenAt={seenAt}
                 islandKey={
                   selection.kind === "island"
                     ? selection.key
