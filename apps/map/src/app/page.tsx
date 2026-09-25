@@ -390,9 +390,15 @@ export default function Page() {
    *
    * 관계 탭에 들어가면 지도에서 고른 영토가 중심이다. 없으면 관계가 가장 많은
    * 영토다 (4.3.6). 관계 탭에서 지도로 가면 중심 영토를 고른 지도다 (4.3.3 예외 표).
+   *
+   * **엔티티 · 타임라인 탭에서는 상세 패널을 접는다.** 피그마 ⑦-7 · ⑦-9b 가 오른쪽을
+   * 「‹ 상세패널」 접힘 레일로 두고 가운데 표와 지도를 넓게 쓴다. 거기서 행이나 섬을
+   * 고르면 `select` 가 다시 편다 (설계서 4.2.4 「섬 또는 영토 클릭 → 자동으로 펼침」).
+   * 지도 · 관계 탭으로 오면 편다 — ⑦-1 · ⑦-8 은 패널이 펼쳐진 화면이다
    */
   const goTab = (k: ViewTabKey) => {
     if (k === tab) return;
+    setPanelOpen(k === "map" || k === "relation");
     if (k === "relation") {
       const picked = selection.kind === "territory" && present.has(selection.id) ? selection.id : null;
       setRelCenter(picked);
@@ -406,6 +412,34 @@ export default function Page() {
     }
     setTab(k);
     setPlaying(false);
+  };
+
+  /**
+   * 로고 — 첫 화면으로 (설계서 4.2.1 「클릭 시 첫 화면」).
+   *
+   * 정본의 첫 화면은 연결 3D(③-0)인데 3D 가 보류라 다크웹을 처음 연 상태로 돌린다.
+   * 선택 · 화면 탭 · 줌 100% · 기준일(가장 최근 분기) · 패널 [개요]를 연 직후 값으로
+   * 되돌리고 검색 · 전체 결과 · 이동 안내 · 재생을 닫는다. 관계 탭에서 쌓은 뒤로 가기
+   * 기록도 걷는다. 최근 검색 · 검색 필터 · 재생 속도는 사람이 고른 설정이라 둔다
+   */
+  const goHome = () => {
+    dropOurEntry();
+    clearRel();
+    setRelCenter(null);
+    setTab("map");
+    setSelection({ kind: "none" });
+    setLinkSel(null);
+    setActorFilter(null);
+    setFocusEvent(null);
+    setPanelOpen(true);
+    setPanelTab("overview");
+    setPeriod(DEFAULT_PERIOD);
+    setMapView(MAP_VIEW_HOME);
+    setYm(TO);
+    setPlaying(false);
+    setSearchQ(null);
+    setResults(null);
+    setToast(null);
   };
 
   /**
@@ -719,6 +753,7 @@ export default function Page() {
         <AppHeader
           current="dark"
           generatedAt={MAP.generatedAt}
+          onHome={goHome}
           onSearch={() => setSearchQ(results ?? toast?.q ?? "")}
           query={results ?? toast?.q}
         >
