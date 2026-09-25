@@ -1,0 +1,166 @@
+name: 지도 갱신
+
+# 노션에서 지도를 굽고 Cloudflare 에 배포합니다 (apps/map). **로컬 PC 가 필요 없습니다.**
+#
+#   굽기(노션 읽기) → 구운 파일 확인 → bake:check · 시험 → 빌드 → 배포 → 배포 확인
+#
+# 전에는 사람이 자기 PC 에서 굽고 배포해야 지도가 바뀌었습니다. 노션이 매일 바뀌는데
+# 지도만 멈춰 있으면 의미가 없습니다 (2026-09-25 최현서).
+#
+# ## 한 단계라도 실패하면 배포하지 않습니다
+#
+# 단계는 차례로 돌고, 앞 단계가 실패하면 뒤 단계는 안 돕니다. 특히 둘을 지킵니다.
+#
+#   bake:check   피해 조직명 · 개인정보 모양 · 허용 밖 칸을 막는 반출 검사입니다
+#   구운 파일     굽기가 실패해 빈 파일로 물러서면 예시 데이터가 실제 사이트에 올라갑니다.
+#                `ensure_map.mjs --baked` 가 사건 0건인 파일을 막습니다
+#
+# ## 로그에 이름을 안 찍습니다
+#
+# **레포가 공개라 Actions 로그도 90일 동안 누구나 봅니다.** 굽기는 건수만 찍도록
+# 만들어져 있습니다(tools/bake.py 의 log). 여기서 `set -x` 나 map.json 출력을 더하지
+# 마십시오. 구운 파일은 아티팩트 · 캐시로도 남기지 않습니다 — 공개 레포에 파일로 남습니다.
+#
+# ## 넣어야 하는 비밀값 열
+#
+#   MAP_NOTION_TOKEN        팀 산출물용 노션 토큰. 레포의 NOTION_TOKEN(수집용)과 다른 토큰입니다
+#   CLOUDFLARE_API_TOKEN    Workers 배포 권한이 있는 API 토큰
+#   CLOUDFLARE_ACCOUNT_ID   Cloudflare 계정 id
+#   DC_MAP_COLLECT_DS       수집 DB      ┐
+#   DC_MAP_VERIFY_DS        검증 DB      │
+#   DC_MAP_FORUM_DS         포럼 DB      │ data_source id 입니다 (database id 아님).
+#   DC_MAP_TELEGRAM_DS      텔레그램 DB   │ 비밀은 아니지만 무엇을 보는지 드러나지 않게
+#   DC_MAP_RANSOMWARE_DS    랜섬웨어 DB   │ 비밀값으로 둡니다 — 로그에서 가려집니다
+#   DC_MAP_ACTOR_DS         행위자 DB     │
+#   DC_MAP_RELATIONS_DS     관계선 DB    ┘ (이것만 없어도 굽습니다. 관계선이 빕니다)
+#
+# 레포 Settings → Secrets and variables → Actions 에서 넣습니다.
+
+on:
+  schedule:
+    # 하루 두 번. 게시처 조사(places.yml, UTC 03 · 15시, 최대 두 시간)가 끝난 뒤이고,
+    # 수집(collect.yml, UTC 00 · 12시) 뒤입니다. KST 로는 14:30 · 02:30 입니다
+    - cron: "30 5,17 * * *"
+  workflow_dispatch:
+    # 입력 이름은 영문만 됩니다 (collect.yml 주석, 2026-09-08)
+    inputs:
+      deploy:
+        description: "배포까지 할지. 끄면 굽기 · 검사 · 빌드만 합니다"
+        type: boolean
+        default: true
+
+concurrency:
+  group: map
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  # 배포 주소. README 와 같습니다. 배포 확인 단계가 씁니다
+  MAP_URL: https://darkchoco-map.h42381309.workers.dev
+  # 예약 실행에는 inputs 가 없어 비므로 event_name 으로 가릅니다 (places.yml 과 같은 방식)
+  DEPLOY: ${{ github.event_name == 'schedule' && 'yes' || (inputs.deploy && 'yes' || 'no') }}
+
+jobs:
+  bake-deploy:
+    name: 굽기 · 검사 · 배포
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: apps/map
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/map/package-lock.json
+
+      - name: 부품 설치
+        run: |
+          set -e
+          pip install -e ../../packages
+          npm ci --no-audit --no-fund
+
+      - name: 비밀값을 파일로
+        # **환경변수 대신 파일로 둡니다.** 환경변수는 하위 프로세스 목록에 남습니다.
+        # dc_notion 이 NOTION_TOKEN_FILE 을 먼저 봅니다 (packages/dc_notion/token.py)
+        env:
+          TOKEN_VALUE: ${{ secrets.MAP_NOTION_TOKEN }}
+        run: |
+          set -e
+          mkdir -p "$RUNNER_TEMP/cfg"
+          if [ -z "$TOKEN_VALUE" ]; then
+            echo "::error::MAP_NOTION_TOKEN 이 없습니다. 레포 Settings → Secrets 에 넣으십시오"
+            exit 1
+          fi
+          printf '%s' "$TOKEN_VALUE" > "$RUNNER_TEMP/cfg/notion_token"
+          chmod 600 "$RUNNER_TEMP/cfg/notion_token"
+
+      - name: 굽기
+        # 건수만 찍습니다. 실패하면(허용 밖 칸 · 반출 검사) 파일을 안 쓰고 멈춥니다
+        env:
+          NOTION_TOKEN_FILE: ${{ runner.temp }}/cfg/notion_token
+          DC_PACKAGES: ${{ github.workspace }}/packages
+          DC_MAP_COLLECT_DS: ${{ secrets.DC_MAP_COLLECT_DS }}
+          DC_MAP_VERIFY_DS: ${{ secrets.DC_MAP_VERIFY_DS }}
+          DC_MAP_FORUM_DS: ${{ secrets.DC_MAP_FORUM_DS }}
+          DC_MAP_TELEGRAM_DS: ${{ secrets.DC_MAP_TELEGRAM_DS }}
+          DC_MAP_RANSOMWARE_DS: ${{ secrets.DC_MAP_RANSOMWARE_DS }}
+          DC_MAP_ACTOR_DS: ${{ secrets.DC_MAP_ACTOR_DS }}
+          DC_MAP_RELATIONS_DS: ${{ secrets.DC_MAP_RELATIONS_DS }}
+          PYTHONIOENCODING: utf-8
+        run: python tools/bake.py --out src/data/map.json
+
+      - name: 구운 파일 확인
+        # 사건이 0건이면 멈춥니다. 빈 파일로 배포하면 예시 데이터가 실제 사이트에 올라갑니다
+        run: node tools/ensure_map.mjs --baked
+
+      - name: 반출 검사 · 시험
+        # npm test 가 bake:check(반출 검사)를 먼저 돌리고 시험을 돌립니다
+        env:
+          PYTHONIOENCODING: utf-8
+        run: npm test
+
+      - name: 빌드
+        run: npm run build
+
+      - name: 배포
+        if: env.DEPLOY == 'yes'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        # 판을 고정합니다. 로컬 배포(2026-09-25)에 쓴 판입니다
+        run: npx --yes wrangler@4.140.0 deploy
+
+      - name: 배포 확인
+        # 색인 거부 세 겹 가운데 헤더와 robots.txt 를 보고, 예시 데이터가 안 올라갔는지 봅니다.
+        # 새 판이 퍼지는 데 몇 초 걸려 세 번까지 봅니다
+        if: env.DEPLOY == 'yes'
+        run: |
+          set -e
+          ok=""
+          for i in 1 2 3; do
+            sleep 10
+            head=$(curl -sI --max-time 20 "$MAP_URL" || true)
+            robots=$(curl -s --max-time 20 "$MAP_URL/robots.txt" || true)
+            page=$(curl -s --max-time 20 "$MAP_URL" || true)
+            if printf '%s' "$head" | grep -qi '^x-robots-tag: noindex' \
+              && printf '%s' "$robots" | grep -q '^Disallow: /' \
+              && ! printf '%s' "$page" | grep -q '예시 데이터입니다'; then
+              ok=yes
+              break
+            fi
+          done
+          if [ -z "$ok" ]; then
+            echo "::error::배포 확인 실패 — 색인 거부 헤더 · robots.txt · 예시 데이터 중 하나가 어긋납니다"
+            exit 1
+          fi
+          echo "배포 확인: 색인 거부 헤더 · robots.txt · 실제 데이터"
