@@ -36,7 +36,6 @@ import argparse
 import collections
 import os
 import sys
-import urllib.error
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -175,8 +174,6 @@ def 소급(달수: int, *, apply: bool, 프록시: str | None) -> int:
         달마다 씀  받은 달은 바로 씁니다. 중간에 끊겨도(90분 상한 등) 받은 달은 남습니다
         멈춤      연속 세 번 실패하면 멈춥니다(조사기와 같은 상한). 못 받은 달이 있으면 1 로 끝냅니다
     """
-    import http.client
-
     from dc_ransomfeed import rl_victims
     from hub.places import egress
     from hub.places.egress import 오프너
@@ -201,7 +198,7 @@ def 소급(달수: int, *, apply: bool, 프록시: str | None) -> int:
         연월 = f"{년}-{월:02d}"
         try:
             건들 = ransom._받기(rl_victims(년, 월), 마지막, op)
-        except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException) as e:
+        except ransom.받기오류 as e:          # IncompleteRead 도 한 달 실패로 센다
             못본.append(f"{연월}({type(e).__name__})")
             실패 += 1
             if 실패 >= ransom.연속실패_상한:
