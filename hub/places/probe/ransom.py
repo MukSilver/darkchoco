@@ -258,6 +258,36 @@ def _달들(n: int) -> list[tuple[int, int]]:
     return out
 
 
+# 판에서 받은 달의 그룹별 건수. 「YYYY-MM」 → {그룹: {건수, 한국, 업종}}. hub/places/monthly.py 가
+# 「랜섬 그룹 월별 피해」 DB 에 쌓을 때 읽습니다 (2026-09-25 인계 B). **못 받은 달은 안 들어갑니다.**
+# 피해 조직 이름은 안 담습니다. 그룹 · 건수뿐입니다
+마지막달별: dict[str, dict[str, dict]] = {}
+
+_모르는업종 = ("not found", "unknown", "none")
+
+
+def 달별세기(건들: list) -> dict[str, dict]:
+    """한 달 피해 목록을 그룹별로 셉니다. {그룹: {건수, 한국, 업종(Counter)}}.
+
+    **달로 셉니다.** 목록 자체가 그 달에 올라온 것이라 게시일 창(180일)을 안 봅니다.
+    """
+    밖: dict[str, dict] = {}
+    for v in 건들 if isinstance(건들, list) else []:
+        if not isinstance(v, dict):
+            continue
+        g = str(v.get("group") or "").strip()
+        if not g:
+            continue
+        d = 밖.setdefault(g, {"건수": 0, "한국": 0, "업종": collections.Counter()})
+        d["건수"] += 1
+        업종 = str(v.get("activity") or "").strip()
+        if 업종 and 업종.lower() not in _모르는업종:
+            d["업종"][업종] += 1
+        if str(v.get("country") or "").upper() == "KR":
+            d["한국"] += 1
+    return 밖
+
+
 def _피해모으기(마지막: list[float], 개월수: int, op=None) -> tuple[dict, list[str]]:
     """그룹 이름 → {건수, 마지막활동, 업종, 한국건수} 로 모읍니다.
 
@@ -268,6 +298,7 @@ def _피해모으기(마지막: list[float], 개월수: int, op=None) -> tuple[d
     """
     모음: dict = {}
     못본달: list[str] = []
+    마지막달별.clear()
     # 180일 창의 첫날. 이 날부터 오늘까지 게시된 것만 셉니다
     시작 = (_오늘() - timedelta(days=창 - 1)).isoformat()
     실패 = 0
@@ -295,6 +326,7 @@ def _피해모으기(마지막: list[float], 개월수: int, op=None) -> tuple[d
         if not isinstance(건들, list):
             못본달.append(f"{년}-{월:02d}(꼴이 바뀜)")
             continue
+        마지막달별[f"{년}-{월:02d}"] = 달별세기(건들)
         for v in 건들:
             if not isinstance(v, dict):
                 continue

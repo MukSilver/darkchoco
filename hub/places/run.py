@@ -581,6 +581,20 @@ def 한갈래(갈래: str, *, apply: bool = False, limit: int = 0,
         except Exception as e:  # noqa: BLE001
             r.문제.append(f"시계열을 못 쌓았습니다: {type(e).__name__}: {e}"[:200])
 
+    # **랜섬 그룹 × 달 피해 건수를 쌓습니다** (2026-09-25 인계 B). 조사기가 이번 판에 받은
+    # 달 목록으로 이번 달과 지난달만 고칩니다. 미리보기에서는 셈만 냅니다. 못 써도 명부
+    # 조사는 그대로 둡니다 — 월별 DB 는 곁가지입니다. 로그에는 건수만 찍습니다
+    if 갈래 == "ransom" and ransom.마지막달별:
+        try:
+            from hub.places import monthly
+            셈 = monthly.판마다(m.n, ransom.마지막달별, 줄들, 오늘=ransom._오늘(), apply=apply)
+            if not 조용히 and sum(셈.values()):
+                print(monthly.요약(셈, "이번 달 · 지난달"), flush=True)
+            if 셈["실패"]:
+                r.문제.append(f"월별 피해 {셈['실패']}줄을 못 썼습니다")
+        except Exception as e:  # noqa: BLE001
+            r.문제.append(f"월별 피해를 못 봤습니다: {type(e).__name__}"[:120])
+
     # 두드린 자취는 **미리보기에서도 남깁니다.** 노션에 쓰는 것과
     # 두드렸다는 사실은 다른 일입니다. 미리보기로 30초를 기다린 것도
     # 기다린 것이라, 여기서 안 남기면 백오프가 영영 안 걸립니다.

@@ -1,0 +1,158 @@
+name: 랜섬 월별 피해 소급
+
+# 랜섬 그룹 × 달 피해 건수를 노션 「랜섬 그룹 월별 피해」 DB 에 소급해 채웁니다 (2026-09-25 인계 B).
+# 판마다 이번 달과 지난달은 명부 조사(places.yml)가 고칩니다. 여기는 **지난 달들을 한 번에**
+# 채우는 자리입니다. 손으로만 돌립니다. 코드는 hub/places/monthly.py 에 있습니다.
+#
+# ## 기본은 미리보기입니다
+#
+# write_to_notion 을 켜야 씁니다. 먼저 미리보기로 「새로 · 고침 · 그대로」 건수를 보고
+# 켭니다. 되돌리려면 노션에서 그 DB 줄을 지우면 됩니다 — 명부와 수집 DB 는 안 건드립니다.
+#
+# ## 걸리는 시간
+#
+# 집계처가 분당 1회라 스물넷이면 24분쯤입니다. 요청 간격 62초는 줄이지 않습니다.
+#
+# ## Tor 를 탑니다
+#
+# 명부 조사와 같은 까닭입니다. 아래 Tor 단계 다섯은 places.yml 의 crawl-tor 잡과 같게 둡니다.
+# 한쪽을 고치면 다른 쪽도 봅니다.
+#
+# ## 로그에 이름을 안 찍습니다
+#
+# 레포가 공개라 Actions 로그도 누구나 봅니다. monthly.py 는 달마다 건수와 「새로 · 고침 ·
+# 그대로」 만 찍습니다. 그룹 이름을 찍는 줄을 더하지 마십시오.
+
+on:
+  workflow_dispatch:
+    # **입력 이름은 영문·숫자·-·_ 만 됩니다.** 한글이면 워크플로 파일 자체가 거부됩니다
+    inputs:
+      months:
+        description: "지난 몇 달을 받을지 (1~60)"
+        type: string
+        default: "24"
+      write_to_notion:
+        description: "노션에 실제로 쓸지. 끄면 미리보기만"
+        type: boolean
+        default: false
+
+concurrency:
+  # 명부 조사와 같은 무리입니다. 둘이 같은 집계처를 동시에 두드리지 않게 합니다
+  group: places
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  backfill:
+    name: 월별 피해 소급 (Tor)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 부품 설치
+        run: pip install -e packages
+
+      - name: 비밀값을 파일로
+        # **환경변수 대신 파일로 둡니다.** dc_notion 이 NOTION_TOKEN_FILE 을 먼저 봅니다
+        env:
+          TOKEN_VALUE: ${{ secrets.NOTION_TOKEN }}
+        run: |
+          set -e
+          mkdir -p "$RUNNER_TEMP/cfg"
+          if [ -z "$TOKEN_VALUE" ]; then
+            echo "::error::NOTION_TOKEN 이 없습니다. 레포 Settings → Secrets 에 넣으십시오"
+            exit 1
+          fi
+          printf '%s' "$TOKEN_VALUE" > "$RUNNER_TEMP/cfg/notion_token"
+          chmod 600 "$RUNNER_TEMP/cfg/notion_token"
+
+      - name: tor 설치
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq tor
+
+      - name: torrc 쓰고 되읽어 확인
+        # **ExcludeExitNodes 가 빠지면 한국 출구를 씁니다.** places.yml 과 같습니다
+        run: |
+          set -e
+          mkdir -p "$RUNNER_TEMP/tor/data"
+          chmod 700 "$RUNNER_TEMP/tor/data"
+          cat > "$RUNNER_TEMP/tor/torrc" <<TORRC
+          DataDirectory $RUNNER_TEMP/tor/data
+          Log notice file $RUNNER_TEMP/tor/notices.log
+          HTTPTunnelPort 9080
+          SocksPort 0
+          ExcludeExitNodes {kr}
+          StrictNodes 1
+          TORRC
+          grep -q 'ExcludeExitNodes {kr}' "$RUNNER_TEMP/tor/torrc" || {
+            echo "::error::torrc 에 ExcludeExitNodes 가 없습니다"; exit 1; }
+          grep -q 'StrictNodes 1' "$RUNNER_TEMP/tor/torrc" || {
+            echo "::error::torrc 에 StrictNodes 가 없습니다"; exit 1; }
+          grep -q 'HTTPTunnelPort 9080' "$RUNNER_TEMP/tor/torrc" || {
+            echo "::error::torrc 에 HTTPTunnelPort 가 없습니다"; exit 1; }
+          echo "torrc 세 줄 확인"
+
+      - name: tor 띄우기
+        run: |
+          set -e
+          nohup tor -f "$RUNNER_TEMP/tor/torrc" > "$RUNNER_TEMP/tor/stdout.log" 2>&1 &
+          for i in $(seq 1 60); do
+            if grep -q 'Bootstrapped 100%' "$RUNNER_TEMP/tor/notices.log" 2>/dev/null; then
+              echo "tor 준비됨 (${i}0초)"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::tor 가 5분 안에 안 떴습니다"
+          tail -20 "$RUNNER_TEMP/tor/notices.log" 2>/dev/null || true
+          exit 1
+
+      - name: 관문 — Tor 로 나가는지 확인
+        # **밖으로 나가는 요청은 여기가 처음입니다.** 실패하면 다음 단계가 안 돕니다
+        env:
+          TOR_SOCKS_PROXY: http://127.0.0.1:9080
+        run: |
+          python - <<'PY'
+          import sys, time
+          sys.path[:0] = ["packages", "."]
+          from hub.places import egress
+          for 판 in range(3):
+              r = egress.출구확인(timeout=20)
+              print(r["말"])
+              if r["된다"]:
+                  raise SystemExit(0)
+              if 판 < 2:
+                  time.sleep(20)
+          print("::error::Tor 로 안 나갑니다. 요청을 하나도 안 보내고 멈춥니다")
+          raise SystemExit(1)
+          PY
+
+      - name: 월별 피해 소급
+        env:
+          NOTION_TOKEN_FILE: ${{ runner.temp }}/cfg/notion_token
+          TOR_SOCKS_PROXY: http://127.0.0.1:9080
+          MONTHS_INPUT: ${{ inputs.months }}
+          WRITE_INPUT: ${{ inputs.write_to_notion }}
+        run: |
+          set -e
+          # 문자열로 들어오므로 숫자가 아니면 기본값으로 둡니다. argparse 가 죽습니다
+          N="${MONTHS_INPUT:-24}"
+          case "$N" in ''|*[!0-9]*) N=24;; esac
+          if [ "$WRITE_INPUT" = "true" ]; then
+            python -m hub.places.monthly --소급 "$N" --apply
+          else
+            python -m hub.places.monthly --소급 "$N"
+          fi
+
+      - name: 뒷정리
+        if: always()
+        run: |
+          pkill -x tor || true
+          rm -rf "$RUNNER_TEMP/tor"
+          rm -f "$RUNNER_TEMP/cfg/notion_token"
