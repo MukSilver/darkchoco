@@ -168,25 +168,24 @@ def test_위험도는_악용_가능성과_유출_항목으로_가른다():
     assert rl("불가", None) == "low" and rl(None, []) == "low"
 
 
-def test_손_고침_표는_번호로_사건을_고치고_지운다():
+def test_손_고침_표는_관문_앞에서_영토_날짜_칩을_정한다():
     import tempfile
     q, f = _cand("RANSOMWARE", "Qilin"), _cand("FORUM", "Altenen")
     ix = bake.RegistryIndex([q, f])
-    evs = [{"id": "LEAK-1", "cand": q, "kind": "claim", "postedAt": "2026-01-01"},
-           {"id": "LEAK-2", "cand": q, "kind": "claim", "postedAt": "2026-01-02"},
-           {"id": "LEAK-3", "cand": q, "kind": "claim", "postedAt": "2026-01-03"}]
+    ov = bake.override_of
+    assert ov(None, ix) == {"drop": False}
+    assert ov({"drop": True}, ix)["drop"] is True
+    got = ov({"kind": "sale", "postedAt": "2026-02-02", "territory": ["FORUM", "Altenen"]}, ix)
+    assert got == {"drop": False, "postedAt": "2026-02-02", "kind": "sale", "cand": f}, got
+    got = ov({"kind": "없는 칩", "postedAt": "어제", "territory": ["FORUM", "없는 곳"]}, ix)
+    assert got == {"drop": False}, "표 밖 값은 버린다"
     old = bake.OVERRIDES_FILE
     with tempfile.TemporaryDirectory() as d:
         bake.OVERRIDES_FILE = Path(d) / "overrides.json"
-        bake.OVERRIDES_FILE.write_text(
-            '{"events": {"LEAK-1": {"drop": true}, "LEAK-2": {"kind": "sale", "postedAt": "2026-02-02",'
-            ' "territory": ["FORUM", "Altenen"]}, "LEAK-3": {"kind": "없는 칩"}}}', encoding="utf-8")
-        out = bake.apply_overrides(evs, ix, lambda m: None)
+        assert bake.load_overrides(lambda m: None) == {}, "파일이 없으면 빈 표"
+        bake.OVERRIDES_FILE.write_text('{"events": {"LEAK-1": {"drop": true}}}', encoding="utf-8")
+        assert bake.load_overrides(lambda m: None) == {"LEAK-1": {"drop": True}}
     bake.OVERRIDES_FILE = old
-    assert [e["id"] for e in out] == ["LEAK-2", "LEAK-3"]
-    assert out[0]["kind"] == "sale" and out[0]["postedAt"] == "2026-02-02" and out[0]["cand"] is f
-    assert out[1]["kind"] == "claim", "표 밖 칩은 안 쓴다"
-    assert bake.apply_overrides(evs, ix, lambda m: None) == evs, "파일이 없으면 그대로다"
 
 
 def test_연결된_사건은_목록_안_사건끼리만():

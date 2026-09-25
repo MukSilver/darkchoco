@@ -234,4 +234,9 @@ test('최근 검색 시각 배지', () => {
   assert.equal(agoText(now - 5 * 3600000, now), '5시간 전');
   assert.equal(agoText(now - 30 * 3600000, now), '어제');
   assert.equal(agoText(Date.parse('2026-09-14T09:00:00'), now), '09-14');
+  // 달력 날짜로 가른다 — 46시간 전이어도 이틀 전 날짜면 어제가 아니다
+  const late = Date.parse('2026-09-25T23:00:00');
+  assert.equal(agoText(Date.parse('2026-09-24T01:00:00'), late), '어제');
+  assert.equal(agoText(Date.parse('2026-09-24T00:30:00'), Date.parse('2026-09-25T22:30:00')), '어제');
+  assert.equal(agoText(Date.parse('2026-09-23T23:30:00'), Date.parse('2026-09-25T21:30:00')), '09-23');
 });

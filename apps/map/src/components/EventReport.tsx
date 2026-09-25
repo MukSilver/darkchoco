@@ -75,10 +75,31 @@ export default function EventReport({
     return () => prev?.focus();
   }, []);
 
-  // 연결된 사건으로 바뀌면 본문을 맨 위로 올린다
+  // 연결된 사건으로 바뀌면 본문을 맨 위로 올리고 초점도 팝업으로 되돌린다 — 누른 줄이 사라져
+  // 초점이 문서 맨 앞(body)으로 빠지면 키보드 사용자가 팝업 밖으로 나간다
   useEffect(() => {
     body.current?.scrollTo({ top: 0 });
+    dialog.current?.focus();
   }, [model.id]);
+
+  /** Tab 이 팝업 안에서만 돈다 (aria-modal). 뒤 화면 단추로 초점이 새지 않게 한다 */
+  const trapTab = (e: React.KeyboardEvent) => {
+    if (e.key !== "Tab" || !dialog.current) return;
+    const items = [...dialog.current.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    )];
+    if (items.length === 0) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    const now = document.activeElement;
+    if (e.shiftKey && (now === first || now === dialog.current)) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && now === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
 
   const exportJson = () => {
     const blob = new Blob([JSON.stringify(reportJson(model), null, 2)], { type: "application/json" });
@@ -112,6 +133,7 @@ export default function EventReport({
         aria-modal="true"
         aria-labelledby="event-report-title"
         tabIndex={-1}
+        onKeyDown={trapTab}
         className="flex flex-col overflow-hidden rounded-[16px] border border-edge bg-panel shadow-2xl outline-none"
         style={{
           width: "min(var(--w-modal), calc(100vw - 32px))",
