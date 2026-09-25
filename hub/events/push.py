@@ -38,6 +38,10 @@ CLAUDE.md 의 「나가는 것은 필드명, 패턴, 건수뿐이다」와도 �
 **게시처(+명부 없음)도 같이 씁니다** (2026-09-25). 명부 셋으로 맞추고 규칙은
 `hub/events/publisher.py` 에 있습니다. 명부를 못 읽으면 그 칸만 비우고 줄은 올립니다.
 
+**판 끝에 행위자 DB 도 채웁니다** (2026-09-25). 수집 DB 전체를 훑어 행위자 DB · 명부 셋 어디에도
+없는 판매 · 공개 핸들을 올립니다. 올릴 줄이 없는 판에도 돕니다. 규칙은 `hub/events/actor.py` 에
+있고, 실패해도 수집은 그대로입니다.
+
 **빈 규모는 「없음」 이 아니라 모르는 것입니다.** 칸을 아예 안 보냅니다. `-` 나 `n/a` 처럼
 없다는 표시로 온 것도 같이 봅니다. 발견일은 UTC 를 KST 로 옮긴 뒤에 자릅니다.
 
@@ -63,7 +67,7 @@ sys.path.insert(0, str(ROOT))
 
 from dc_kr import KrClassifier, normalize_country  # noqa: E402
 from dc_notion import Notion  # noqa: E402
-from hub.events import publisher  # noqa: E402
+from hub.events import actor, publisher  # noqa: E402
 
 _clf: KrClassifier | None = None
 
@@ -466,6 +470,14 @@ def 이미있는것(n: Notion, 줄들: list[dict] | None = None) -> tuple[set[st
     return 본uid, 본것
 
 
+def 행위자훑기(n: Notion, apply: bool) -> None:
+    """판 끝에 행위자 DB 를 채웁니다. **여기서 죽어도 수집은 성공입니다.** 규칙은 `actor.py`."""
+    try:
+        print(actor.요약(actor.훑기(n, apply=apply), apply))
+    except Exception as e:  # noqa: BLE001
+        print("  행위자 DB 를 못 채웠습니다 (%s). 다음 판에 다시 봅니다" % type(e).__name__)
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="사건 수집 표를 노션 수집 DB 로 올립니다")
     ap.add_argument("--apply", action="store_true",
@@ -548,6 +560,7 @@ def main(argv: list[str] | None = None) -> int:
         print("    국가가 한국이 아닌 %d줄은 뺐습니다. 모르는 것은 올립니다" % len(외국))
         _뺀줄찍기(외국)
     if not 줄들:
+        행위자훑기(n, a.apply)
         return 0
 
     본uid, 본것 = 이미있는것(n, 노션줄들)
@@ -606,6 +619,7 @@ def main(argv: list[str] | None = None) -> int:
                 p["한국 관련"]["select"]["name"]))
         if len(새것) > 5:
             print("    ... 그리고 %d줄 더" % (len(새것) - 5))
+        행위자훑기(n, False)
         return 0
 
     쓴것, 못쓴것 = 0, []
@@ -627,6 +641,8 @@ def main(argv: list[str] | None = None) -> int:
         print("  못 올린 것 %d줄" % len(못쓴것))
         for m in 못쓴것[:5]:
             print("    " + m)
+    # 방금 올린 줄까지 보도록 올린 뒤에 훑습니다
+    행위자훑기(n, True)
     return 1 if 못쓴것 else 0
 
 
