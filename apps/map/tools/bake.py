@@ -11,7 +11,8 @@
 
   1. 줄 관문      「DB 반영」이 꺼졌거나 「검토 여부」가 미검토·사건 X 면 뺀다
   2. 읽는 칸      `ALLOWED_COLS` 에 없는 칸을 읽으려 하면 멈춘다. 원문 URL ·
-                 자료 제목 · 대상 조직 · 다크웹 주소는 `DENY_COLS` 다
+                 자료 제목 · 다크웹 주소는 `DENY_COLS` 다. 대상 조직은
+                 `MATCH_ONLY_COLS` 라 관계선 원문에 조직명이 섞였는지 대조만 한다
   3. 나가는 키    `TERRITORY_KEYS` · `EV_KEYS` · `RELATION_KEYS` 에 없는 키가
                  있으면 멈춘다
   4. 값 훑기      다 만든 뒤 JSON 에서 도메인 · `@` · 긴 숫자열을 찾는다
@@ -233,6 +234,10 @@ ALLOWED_COLS = frozenset({
     "상태",
     "규모",
     "이전 이름·별칭",  # 사건을 영토에 맞추는 데만 쓴다. 밖에 안 낸다
+    # ↓ 명부 DB. 근거 사건 없이 이 칸에서 만든 관계선은 **이 칸의 원문을 보인다**
+    #   (설계서 4.3.6, 2026-09-25 최현서 결정). 상대 영토 이름이 든 항목만 싣고,
+    #   대상 조직 이름과 겹치는 항목은 뺀다 (`relation_note`)
+    "연결된 곳",
     # ↓ 수집 DB. 사건 제목 재료다 (2026-09-25 최현서 결정 — 제목은
     #   「국가 · 산업 분야 · 날짜 · 규모」). 넷 다 선택지 칸이라 조직명이 못 든다.
     #   카운트다운 표기는 채워졌는지만 보고 값은 안 싣는다 (피해 주장 칩)
@@ -252,14 +257,17 @@ ALLOWED_COLS = frozenset({
 #: 이름으로 내기로 해서 `ALLOWED_COLS` 로 옮겼다. 그때 핸들 모양을 셌다 —
 #: 관문을 지난 사건(랜섬웨어 섬 제외)의 핸들 22개에 @ · 주소 · 긴 숫자 ·
 #: 한글 · 빈칸 섞임이 하나도 없었다.
-MATCH_ONLY_COLS: frozenset[str] = frozenset()
+MATCH_ONLY_COLS: frozenset[str] = frozenset({
+    # 관계선 원문(「연결된 곳」)에 피해 조직 이름이 섞였는지 대조하는 데만 쓴다
+    # (2026-09-25 최현서 결정). 값은 비교에만 쓰고 어디에도 안 담는다
+    "대상 조직",
+})
 
 #: **절대 읽지 않는 칸.** 값에 개인정보나 피해 조직 이름이 들어 있다.
 #:
 #: 허용 목록만으로도 막히지만 이름을 적어 둔다. 왜 안 읽는지가 보여야
 #: 나중에 누가 「이것도 필요한데」 하고 허용 목록에 옮기기 전에 멈춘다.
 DENY_COLS = frozenset({
-    "대상 조직",      # 피해 조직 이름 (2026-09-23 최현서 결정: 지도에 안 낸다)
     "자료 제목",      # 196줄 중 172줄에 대상 조직 표기가 들어 있다
     "원문 URL",
     # ↓ 명부 DB. 다크웹 주소와 접속 방법, 사람이 쓴 설명이다
@@ -275,7 +283,6 @@ DENY_COLS = frozenset({
     "개인정보 유출",
     "한국 관련 유출",
     "피해 대상",
-    "연결된 곳",
     "다루는 것",
     "한국 관련 근거",
     "관측 근거",
@@ -348,7 +355,11 @@ EV_KEYS = frozenset({
     "kind", "country", "industry", "sizeValue", "sizeUnit",
 })
 #: 관계선. 건수와 처음·마지막 본 날은 싣지 않는다 — 화면이 `evidence` 로 센다
-RELATION_KEYS = frozenset({"id", "from", "to", "kind", "confidence", "evidence"})
+RELATION_KEYS = frozenset({
+    "id", "from", "to", "kind", "confidence", "evidence",
+    # 근거 사건이 없는 관계선의 명부 「연결된 곳」 원문 (설계서 4.3.6)
+    "note",
+})
 
 #: 다크웹 섬 코드 (설계서 2.3). 미분류는 2026-09-23 에 없앴다.
 #: `islands.ts` 의 `DARK_ISLANDS` 와 같아야 한다. 섬 이름과 색은 거기 있고
@@ -655,7 +666,9 @@ def scan_strings(node, path: str, bad: list[str]) -> None:
             bad.append(f"{path}: @ 가 들어 있습니다")
         if RE_DIGITS.search(node):
             bad.append(f"{path}: 숫자가 11자리 넘게 이어집니다")
-        if RE_DOTTED.search(node):
+        # 관계선 원문(`note`)은 주소를 싣는다 — 가해 쪽 주소와 행위자 이름은 내도
+        # 된다 (2026-09-25 최현서 결정). @ 와 긴 숫자열은 여기서도 막는다
+        if RE_DOTTED.search(node) and not path.endswith(".note"):
             bad.append(f"{path}: 점을 낀 낱말이 있습니다 (도메인일 수 있습니다)")
 
 
@@ -781,8 +794,54 @@ def split_evidence(raw: str | None) -> list[str]:
     return out
 
 
+def split_links(raw) -> list[str]:
+    """명부 「연결된 곳」 칸을 항목으로 가른다. 줄바꿈 · 쉼표 · 쌍반점이 가름이다."""
+    if not isinstance(raw, str):
+        return []
+    return [x.strip() for x in re.split(r"[\n;,]+", raw) if x.strip() and x.strip() not in PLACEHOLDERS]
+
+
+def relation_note(ca: dict, cb: dict, org_names: set[str]) -> tuple[str | None, str | None]:
+    """근거 없는 관계선의 원문 — 두 영토의 「연결된 곳」에서 상대 이름이 든 항목.
+
+    설계서 5.1-4 는 이 칸을 「종류: 이름 (관계 종류)」 꼴로 적게 했다. 실제로는
+    자유 글이 많아(2026-09-25 에 형식을 따른 항목이 포럼 95개 중 5개) 상대
+    영토 이름이 든 항목을 고른다. 이름은 명부 이름 · 괄호를 뗀 이름 · 별칭으로 본다.
+
+    **피해 조직 이름이 든 항목은 뺀다** (2026-09-23 결정). 값 훑기는 조직 이름
+    같은 평범한 낱말을 못 잡아서 수집 DB 「대상 조직」과 대조한다. `@` 나 긴
+    숫자열이 든 항목도 뺀다 — 값 훑기가 굽기를 멈추기 전에 여기서 거른다.
+    돌려주는 둘째 값은 뺀 까닭이다 (로그에 건수만 남긴다).
+    """
+    def names(c: dict) -> set[str]:
+        out = {c["rawName"].casefold(), clean_name(c["rawName"])[0].casefold(),
+               display_name(c["rawName"]).casefold()}
+        out |= {a.casefold() for a in c.get("aliases", [])}
+        return {x for x in out if len(x) >= 3}
+
+    picked: list[str] = []
+    why = None
+    for own, other in ((ca, cb), (cb, ca)):
+        target = names(other)
+        for item in own.get("links", []):
+            low = item.casefold()
+            if not any(t in low for t in target):
+                continue
+            if any(len(o) >= 3 and o in low for o in org_names):
+                why = "조직명"
+                continue
+            if RE_AT.search(item) or RE_DIGITS.search(item):
+                why = why or "@ · 긴 숫자"
+                continue
+            if item not in picked:
+                picked.append(item)
+    if not picked:
+        return None, why
+    return " / ".join(picked)[:400], why
+
+
 def bake_relations(n, ds: str, find_tid, events: list[dict],
-                   read, log) -> list[dict]:
+                   read, log, note_for=None) -> list[dict]:
     """관계선 DB 를 읽어 지도 영토끼리 잇는 관계선만 남긴다.
 
     **영토는 섬과 이름을 같이 맞춘다.** 관계선 DB 는 영토를 명부 이름 글자로
@@ -840,14 +899,21 @@ def bake_relations(n, ds: str, find_tid, events: list[dict],
             dropped["근거가 모두 지도 밖"] += 1
             continue
 
-        out.append({
+        rel = {
             "id": col(read, p, "관계 ID") or f"rel-{i}",
             "from": a,
             "to": b,
             "kind": kind,
             "confidence": CONF_OF.get(col(read, p, "확실한 정도") or "", "estimated"),
             "evidence": ev,
-        })
+        }
+        # 근거 사건 없이 명부 「연결된 곳」에서 만든 관계선은 그 칸의 원문을 싣는다
+        # (설계서 4.3.6)
+        if not ev_all and note_for:
+            note = note_for(a, b)
+            if note:
+                rel["note"] = note
+        out.append(rel)
 
     log(f"관계선 DB {len(rows)}줄 → {len(out)}줄")
     log("관계선에서 뺀 줄 — " + " · ".join(f"{k} {v}" for k, v in dropped.items()))
@@ -888,6 +954,7 @@ def read_registry(n, sources: dict[str, str], read, log) -> list[dict]:
             ]
             size = {} if island == "ACTOR" else registry_size(island, col(read, p, "규모"))
             on = col(read, p, "DB 반영") is True
+            links = split_links(col(read, p, "연결된 곳")) if on else []
             online = col(read, p, "상태") == "online"
             k = (island, raw_name.casefold())
             if k in by_name:
@@ -897,7 +964,7 @@ def read_registry(n, sources: dict[str, str], read, log) -> list[dict]:
                     continue  # 꺼진 줄은 보태지 않는다
                 if not c["on"]:
                     # 먼저 들어온 꺼진 줄을 켜진 줄로 갈아 끼운다
-                    c.update({"aliases": aliases, "on": True, "online": online})
+                    c.update({"aliases": aliases, "on": True, "online": online, "links": links})
                     for s in ("raw", "posts", "threads"):
                         c.pop(s, None)
                     c.update(size)
@@ -906,10 +973,11 @@ def read_registry(n, sources: dict[str, str], read, log) -> list[dict]:
                 for s, v in size.items():
                     c[s] = max(c.get(s) or 0, v)
                 c["aliases"] += [a for a in aliases if a not in c["aliases"]]
+                c["links"] += [x for x in links if x not in c["links"]]
                 continue
             c = {
                 "island": island, "rawName": raw_name, "aliases": aliases,
-                "on": on, "online": online, "order": len(out), **size,
+                "on": on, "online": online, "order": len(out), "links": links, **size,
             }
             by_name[k] = c
             out.append(c)
@@ -1032,6 +1100,14 @@ def bake(n, sources: dict[str, str], log) -> dict:
     gate = {"DB 반영 꺼짐": 0, "검토 여부": 0}
     why: dict[str, int] = {}
     raw_events: list[dict] = []
+
+    # 관계선 원문 대조용 조직 이름. 관문과 무관하게 모든 줄에서 모은다 —
+    # 지도에 안 오른 사건의 조직도 원문에 적혀 있으면 안 된다
+    org_names: set[str] = set()
+    for row in rows:
+        org = col_match(read, row.get("properties", {}), "대상 조직")
+        if org:
+            org_names.add(org.casefold())
 
     for row in rows:
         p = row.get("properties", {})
@@ -1266,7 +1342,21 @@ def bake(n, sources: dict[str, str], log) -> dict:
                 c = index.find(isl, nm)
             return tid_of.get(id(c)) if c else None
 
-        relations = bake_relations(n, sources["relations"], find_tid, events, read, log)
+        cand_of = {tid: c for c in kept for tid in [tid_of.get(id(c))] if tid}
+        dropped_notes = {"조직명": 0, "@ · 긴 숫자": 0}
+
+        def note_for(a: str, b: str) -> str | None:
+            ca, cb = cand_of.get(a), cand_of.get(b)
+            if not ca or not cb:
+                return None
+            note, why = relation_note(ca, cb, org_names)
+            if why:
+                dropped_notes[why] += 1
+            return note
+
+        relations = bake_relations(n, sources["relations"], find_tid, events, read, log, note_for)
+        log(f"관계선 원문 {sum(1 for r in relations if 'note' in r)}줄 · 뺀 항목 — "
+            + " · ".join(f"{k} {v}" for k, v in dropped_notes.items()))
     else:
         log("관계선 DB 를 안 알려 줘서 관계선을 비웁니다 "
             f"(DC_MAP_RELATIONS_DS 또는 {SOURCES_FILE.name} 의 relations)")

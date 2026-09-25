@@ -17,6 +17,9 @@
  *   「전체 관계 보기」 스위치   설계서 4.2.7 · 6.3 이 보류로 정했다 (지도 탭과 같다)
  *   로고                      굽기가 로고를 안 싣는다. 노드는 섬 색 육각형이다
  *   근거 사건 더블클릭 → 보고서 팝업   팝업(4.3.4)이 아직 없다
+ *
+ * 근거 사건 없이 명부 「연결된 곳」에서 만든 관계선은 팝오버에 그 칸의 원문을
+ * 보인다 (4.3.6). 굽기가 상대 이름이 든 항목만 골라 `note` 로 싣는다.
  */
 
 "use client";
@@ -495,11 +498,20 @@ export default function RelationTab(p: RelationTabProps) {
               <dt className="text-label">근거 사건</dt>
               <dd className="text-title tabular-nums">{sel.fromRegistry ? "없음" : `${sel.evidence.length}건`}</dd>
             </dl>
-            <p className="text-[12px] leading-[1.7] text-body">
-              {sel.fromRegistry
-                ? "근거 사건 없이 명부의 「연결된 곳」 칸에서 만든 관계입니다."
-                : "근거 사건 목록은 오른쪽 패널에 있습니다."}
-            </p>
+            {sel.fromRegistry && sel.rel.note ? (
+              <div className="flex flex-col gap-s1">
+                <p className="text-[11px] text-label">명부 「연결된 곳」 원문</p>
+                <p className="break-all rounded-[8px] bg-card px-s3 py-s2 font-mono text-[12px] leading-[1.6] text-body">
+                  {sel.rel.note}
+                </p>
+              </div>
+            ) : (
+              <p className="text-[12px] leading-[1.7] text-body">
+                {sel.fromRegistry
+                  ? "근거 사건 없이 명부의 「연결된 곳」 칸에서 만든 관계입니다."
+                  : "근거 사건 목록은 오른쪽 패널에 있습니다."}
+              </p>
+            )}
           </div>
         )}
 
