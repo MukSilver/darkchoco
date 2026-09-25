@@ -148,6 +148,29 @@ SIZE_OF = {"큼": "large", "중간": "medium", "작음": "small", "모름": "unk
 #: 「일부 조건이 다른 같은 케이스」는 팀이 정하기 전까지 처음 게시로 둔다
 REPOST_VALUES = {"재게시", "아예 동일 케이스"}
 
+#: 수집 DB 「게시 성격」 → 사건 종류 칩 (설계서 2.3). 「랜섬웨어 유출」은 파일이
+#: 공개됐는지로 데이터 게시 · 피해 주장이 갈린다 — 아래 `event_kind`.
+#: 「사기 의심」은 칩 없이 필터에서만 쓴다. 재게시는 이 표보다 앞선다
+KIND_OF_POST = {
+    "DB 무료 공개": "data_post",
+    "DB 판매": "sale",
+    "접근 권한 판매": "access_sale",
+}
+
+#: 수집 DB 「국가」 → 제목 앞머리 (2026-09-25 최현서 예시 `[KR · 유통 · …]`).
+#: 표에 없는 값(기타 · 미확인 포함)은 제목에서 뺀다. 글자를 그대로 내지 않는다
+COUNTRY_CODE = {
+    "한국": "KR", "미국": "US", "일본": "JP", "중국": "CN", "대만": "TW",
+    "베트남": "VN", "인도": "IN", "러시아": "RU", "영국": "GB", "독일": "DE",
+    "프랑스": "FR", "캐나다": "CA", "호주": "AU", "태국": "TH", "인도네시아": "ID",
+}
+
+#: 주장 규모 글에서 뽑는 숫자와 단위. 처음 걸린 하나만 쓴다
+RE_CLAIM_SIZE = re.compile(
+    r"(\d[\d,]*(?:\.\d+)?)\s*(TB|GB|MB|KB|만|천|억|K|M|건|rows?|records?)(?![A-Za-z])",
+    re.IGNORECASE,
+)
+
 #: 관계선 DB 「출발 섬」·「도착 섬」 → 섬 코드. 미분류는 관계선 DB 선택지에 없다
 ISLAND_OF_NAME = {
     "포럼": "FORUM", "랜섬웨어": "RANSOMWARE", "텔레그램": "TELEGRAM", "행위자": "ACTOR",
@@ -210,6 +233,13 @@ ALLOWED_COLS = frozenset({
     "상태",
     "규모",
     "이전 이름·별칭",  # 사건을 영토에 맞추는 데만 쓴다. 밖에 안 낸다
+    # ↓ 수집 DB. 사건 제목 재료다 (2026-09-25 최현서 결정 — 제목은
+    #   「국가 · 산업 분야 · 날짜 · 규모」). 넷 다 선택지 칸이라 조직명이 못 든다.
+    #   카운트다운 표기는 채워졌는지만 보고 값은 안 싣는다 (피해 주장 칩)
+    "게시 성격",
+    "국가",
+    "산업 분야",
+    "카운트다운 표기",
     # ↓ 수집 DB. **행위자 영토 이름이 된다** (2026-09-25 최현서 결정). 전에는
     #   맞추기 전용이라 밖에 안 냈다. 관문을 지난 사건의 핸들만 쓰고, 값 훑기
     #   (`scan_strings`)가 @ · 주소 · 긴 숫자열을 한 번 더 막는다
@@ -312,6 +342,10 @@ EV_KEYS = frozenset({
     "id", "territoryId", "postedAt", "verdict", "size", "repost", "excluded",
     # 행위자 섬 영토 id(핸들 글자가 아니다)와 날짜를 대신 넣었다는 표시
     "actorTerritoryId", "dateSubstituted",
+    # 사건 종류 칩과 제목 재료 (설계서 2.3 · 4.3.2, 2026-09-25 최현서 결정).
+    # 규모는 숫자와 단위를 나눠 싣는다 — 「1.2TB」 를 글자로 두면 값 훑기가
+    # 도메인으로 본다. 주장 규모 원문은 안 싣는다 (자유 글이다)
+    "kind", "country", "industry", "sizeValue", "sizeUnit",
 })
 #: 관계선. 건수와 처음·마지막 본 날은 싣지 않는다 — 화면이 `evidence` 로 센다
 RELATION_KEYS = frozenset({"id", "from", "to", "kind", "confidence", "evidence"})
@@ -359,6 +393,51 @@ def _num(s: str) -> float | None:
         return float(clean)
     except ValueError:
         return None
+
+
+def event_kind(post: str | None, countdown: bool, repost: bool) -> str | None:
+    """사건 종류 칩 (설계서 2.3). 칩이 없는 사건은 None.
+
+    「랜섬웨어 유출」은 파일이 공개되면 데이터 게시, 카운트다운 중이면 피해
+    주장이다. 수집 DB 「공개된 파일 수」가 비어 있어(2026-09-25 에 0줄) 「카운트다운
+    표기」가 있는지로 가른다. 재게시는 게시 성격보다 앞선다.
+    """
+    if repost:
+        return "repost"
+    if post == "랜섬웨어 유출":
+        return "claim" if countdown else "data_post"
+    return KIND_OF_POST.get(post or "")
+
+
+def industry_short(raw: str | None) -> str | None:
+    """산업 분야 선택지를 제목용으로 줄인다. `유통·이커머스` → `유통`. 기타는 뺀다."""
+    if not raw or not raw.strip() or raw.strip() == "기타":
+        return None
+    return raw.split("·", 1)[0].strip() or None
+
+
+def claim_size(raw: str | None) -> tuple[float, str] | None:
+    """주장 규모 글에서 숫자와 단위만 뽑는다. 못 뽑으면 None.
+
+    **원문은 안 싣는다.** 자유 글이라 조직명이 섞일 수 있다. 숫자와 정해진
+    단위만 남기면 조직명이 들어갈 틈이 없다.
+    """
+    if not raw:
+        return None
+    m = RE_CLAIM_SIZE.search(raw)
+    if not m:
+        return None
+    try:
+        value = float(m.group(1).replace(",", ""))
+    except ValueError:
+        return None
+    unit = m.group(2)
+    low = unit.lower()
+    if low.startswith("row") or low.startswith("record"):
+        unit = "건"
+    elif unit.isascii():
+        unit = unit.upper()
+    return value, unit
 
 
 def size_grade(raw: str | None) -> str:
@@ -513,20 +592,38 @@ def when(s: str) -> datetime:
     return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
 
 
+def domain_head(raw: str) -> str | None:
+    """괄호 안 도메인의 첫 조각. `BreachForums (bf.st)` → `bf`. 도메인이 아니면 None."""
+    paren = clean_name(raw)[1]
+    if not paren or "." not in paren:
+        return None
+    head = paren.split(".", 1)[0].strip()
+    return head if re.fullmatch(r"[A-Za-z0-9-]{1,24}", head) else None
+
+
 def number_duplicates(items: list[dict]) -> None:
-    """같은 섬에 화면 이름이 겹치면 뒤에 번호를 붙인다.
+    """같은 섬에 화면 이름이 겹치면 뒤에 구분어를 붙인다.
 
     **도메인을 못 내서 생기는 일이다.** 「BreachForums (bf.st)」와
     「BreachForums (breached.su)」는 다른 포럼인데 괄호를 떼면 둘 다
-    「BreachForums」가 된다. 첫 사건이 이른 곳부터 1, 2 를 붙인다. 사건이
-    없으면 명부 차례를 따른다. 나중에 생긴 클론이 뒤 번호를 받으므로 앞
-    번호가 바뀌지 않는다.
+    「BreachForums」가 된다.
+
+    **도메인의 첫 조각을 붙인다** — 「BreachForums bf」 · 「BreachForums
+    breached」 (2026-09-25 최현서 결정). 점이 없어 주소가 아니고 값 훑기를
+    지난다. 겹친 이름 가운데 하나라도 도메인이 없거나 첫 조각이 서로 같으면
+    번호로 물러선다 — 첫 사건이 이른 곳부터 1, 2 다. 사건이 없으면 명부 차례를
+    따른다.
     """
     groups: dict[tuple[str, str], list[dict]] = {}
     for it in items:
         groups.setdefault((it["islandId"], it["name"].casefold()), []).append(it)
     for same in groups.values():
         if len(same) < 2:
+            continue
+        heads = [domain_head(it["_c"]["rawName"]) for it in same]
+        if all(heads) and len({h.casefold() for h in heads}) == len(heads):
+            for it, h in zip(same, heads):
+                it["name"] = f"{it['name']} {h}"
             continue
         same.sort(key=lambda x: (when(x["_since"]) if x["_since"] else FAR_FUTURE, x["_order"]))
         for i, it in enumerate(same, 1):
@@ -1020,6 +1117,14 @@ def bake(n, sources: dict[str, str], log) -> dict:
             ),
             "repost": (col(read, p, "중복 관계") or "") in REPOST_VALUES,
             "substituted": substituted,
+            "kind": event_kind(
+                col(read, p, "게시 성격"),
+                bool(col(read, p, "카운트다운 표기")),
+                (col(read, p, "중복 관계") or "") in REPOST_VALUES,
+            ),
+            "country": COUNTRY_CODE.get(col(read, p, "국가") or ""),
+            "industry": industry_short(col(read, p, "산업 분야")),
+            "claim": claim_size(col(read, p, "주장 규모")),
         })
 
     # 4) 영토 거르기 (설계서 2.5, 정본 영토 탭에서 되짚은 규칙)
@@ -1129,6 +1234,12 @@ def bake(n, sources: dict[str, str], log) -> dict:
             ev["actorTerritoryId"] = tid_of[id(a)]
         if e["substituted"]:
             ev["dateSubstituted"] = True
+        # 제목 재료. 비어 있으면 키를 안 둔다 (화면이 그 조각을 뺀다)
+        for k in ("kind", "country", "industry"):
+            if e[k]:
+                ev[k] = e[k]
+        if e["claim"]:
+            ev["sizeValue"], ev["sizeUnit"] = e["claim"]
         events.append(ev)
 
     log("관문에서 뺀 줄 — " + " · ".join(f"{k} {v}" for k, v in gate.items()))

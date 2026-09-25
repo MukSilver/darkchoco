@@ -8,8 +8,8 @@
  *
  * 무엇을 보여 줄지는 `panel.ts` 가 정한다. 여기는 그리기만 한다.
  *
- * 탭은 개요 / 사건 / 연결 셋이다. **사건 탭은 아직 없다** — 행마다 사건 제목이
- * 필요한데 제목에 피해 조직 이름이 든다. 연결 탭은 `LinksTab` 이 그린다.
+ * 탭은 개요 / 사건 / 연결 셋이다. 사건 탭은 `EventsTab`, 연결 탭은 `LinksTab` 이
+ * 그린다. 사건 제목은 분류 칸으로 새로 지은 것이다 (2026-09-25, `events.ts`).
  * 다른 영토를 눌러도 열려 있던 탭을 그대로 둔다 (설계서 4.2.3).
  */
 
@@ -20,7 +20,7 @@ import type { ReactNode } from "react";
 import PanelShell from "./PanelShell";
 import type { PanelBar, PanelView } from "@/lib/panel";
 
-export type PanelTabKey = "overview" | "links";
+export type PanelTabKey = "overview" | "events" | "links";
 
 const TABS = [
   { key: "overview", name: "개요" },
@@ -36,12 +36,26 @@ export type DetailPanelProps = {
   onTab: (k: PanelTabKey) => void;
   /** [연결] 탭 본문. 없으면(선택 없음) 탭이 안 눌린다 */
   links: ReactNode | null;
+  /** [사건] 탭 본문. 없으면(선택 없음) 탭이 안 눌린다 */
+  events: ReactNode | null;
+  /** [사건] 탭 배지 — 지금 기간의 건수 (설계서 4.3.2) */
+  eventBadge: number | null;
 };
 
-export default function DetailPanel({ view, open, onToggle, tab, onTab, links }: DetailPanelProps) {
-  // 연결을 보일 것이 없는데 연결 탭이 열려 있으면 개요로 보인다.
-  // 탭 상태는 그대로 둔다 — 다시 영토를 고르면 연결 탭으로 돌아온다
-  const shown: PanelTabKey = tab === "links" && links ? "links" : "overview";
+export default function DetailPanel({
+  view,
+  open,
+  onToggle,
+  tab,
+  onTab,
+  links,
+  events,
+  eventBadge,
+}: DetailPanelProps) {
+  // 보일 것이 없는 탭이 열려 있으면 개요로 보인다. 탭 상태는 그대로 둔다 —
+  // 다시 영토를 고르면 그 탭으로 돌아온다
+  const body = { overview: true, events: events !== null, links: links !== null };
+  const shown: PanelTabKey = body[tab] ? tab : "overview";
 
   return (
     <PanelShell
@@ -58,9 +72,13 @@ export default function DetailPanel({ view, open, onToggle, tab, onTab, links }:
       <nav aria-label="패널 탭" className="flex gap-s5 border-b border-divider">
         {TABS.map((t) => {
           const on = t.key === shown;
-          const enabled = t.key === "overview" || (t.key === "links" && links !== null);
+          const enabled = body[t.key];
           const badge =
-            t.key === "events" ? view.eventCount : t.key === "links" ? view.linkCount : null;
+            t.key === "events"
+              ? (eventBadge ?? view.eventCount)
+              : t.key === "links"
+                ? view.linkCount
+                : null;
           return (
             <button
               key={t.key}
@@ -68,15 +86,9 @@ export default function DetailPanel({ view, open, onToggle, tab, onTab, links }:
               disabled={!enabled}
               aria-current={on ? "page" : undefined}
               onClick={() => {
-                if (t.key !== "events" && enabled) onTab(t.key);
+                if (enabled) onTab(t.key);
               }}
-              title={
-                enabled
-                  ? undefined
-                  : t.key === "links"
-                    ? "섬이나 영토를 고르면 연결이 보입니다"
-                    : "사건 목록은 아직 만들지 않았습니다"
-              }
+              title={enabled ? undefined : "섬이나 영토를 고르면 보입니다"}
               className={[
                 "-mb-px border-b-2 pb-s3 text-[13px]",
                 on
@@ -92,7 +104,7 @@ export default function DetailPanel({ view, open, onToggle, tab, onTab, links }:
         })}
       </nav>
 
-      {shown === "links" ? links : <Overview view={view} />}
+      {shown === "links" ? links : shown === "events" ? events : <Overview view={view} />}
     </PanelShell>
   );
 }
