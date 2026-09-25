@@ -74,6 +74,8 @@ export type MapCanvasProps = {
   lit?: ReadonlySet<string>;
   raised?: ReadonlySet<string>;
   litIslands?: ReadonlySet<string>;
+  /** 힌트 문구를 바꿔 낼 때. 검색 결과로 왔을 때 쓴다 (피그마 ⑦-10b) */
+  hint?: string;
 };
 
 export default function MapCanvas({
@@ -87,6 +89,7 @@ export default function MapCanvas({
   lit,
   raised,
   litIslands,
+  hint,
 }: MapCanvasProps) {
   const { zoom, pan } = view;
   const setPan = (p: MapView["pan"]) => onView({ zoom, pan: p });
@@ -241,7 +244,7 @@ export default function MapCanvas({
           className="size-[6px] rounded-full"
           style={{ background: "var(--t-accent)" }}
         />
-        {hintText(selection)}
+        {hint ?? hintText(selection)}
       </div>
 
       <div
