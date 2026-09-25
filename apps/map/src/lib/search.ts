@@ -121,7 +121,14 @@ export type SearchIndex = {
 };
 
 export type IndexInput = {
-  territories: readonly { id: string; name: string; islandId: IslandCode; aliases?: string[] }[];
+  territories: readonly {
+    id: string;
+    name: string;
+    islandId: IslandCode;
+    aliases?: string[];
+    /** 행위자 다른 이름도 찾는다 (4.2.2 「행위자 핸들과 다른 이름」) */
+    actor?: { otherNames?: string[] };
+  }[];
   events: readonly Ev[];
   /** 활동 관계를 넣은 관계 전부 (`withActivity`) */
   relations: readonly Relation[];
@@ -161,7 +168,7 @@ export function buildIndex(i: IndexInput): SearchIndex {
     .map((t) => ({
       id: t.id,
       name: t.name,
-      aliases: t.aliases ?? [],
+      aliases: [...(t.aliases ?? []), ...(t.actor?.otherNames ?? [])],
       islandId: t.islandId,
       eventCount: count.get(t.id) ?? 0,
       lastAt: last.get(t.id) ?? null,

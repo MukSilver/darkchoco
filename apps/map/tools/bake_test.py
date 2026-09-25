@@ -89,6 +89,72 @@ def test_값_훑기는_끊어_적은_전화와_주민번호를_잡는다():
     assert {x.split(":")[0] for x in bad} == {"m.a", "m.b", "m.c"}, bad
 
 
+def _cand(island, name, aliases=(), on=True):
+    return {"island": island, "rawName": name, "aliases": list(aliases), "on": on, "online": True,
+            "order": 0, "links": []}
+
+
+def test_공식_발표_위치는_명부_이름이나_유출_사이트로만_맞춘다():
+    # 유출 사고 DB 「보도된 유출 위치」 (설계서 3.2 「유출 사고 DB를 사건으로 넣는 방법」)
+    q, a, f, t = (_cand("RANSOMWARE", "Qilin"), _cand("RANSOMWARE", "Anubis"),
+                  _cand("FORUM", "Altenen"), _cand("TELEGRAM", "leakchan"))
+    ix = bake.RegistryIndex([q, a, f, t])
+    ip = bake.incident_place
+    assert ip(ix, "Qilin 유출 사이트(DLS)") is q
+    assert ip(ix, "Anubis 다크웹 블로그") is a, "「다크웹」 도 떼고 본다"
+    assert ip(ix, "Altenen 포럼 (1차 소스가 venue를 밝힌 사례)") is f, "괄호 안 설명은 떼고 본다"
+    assert ip(ix, "텔레그램 t.me/leakchan") is t
+    for miss in ["텔레그램", "X (트위터)", "GitHub", "미명시", None, "Qilin, Anubis"]:
+        assert ip(ix, miss) is None, f"{miss} 는 짐작하지 않는다"
+
+
+def test_같은_사고는_조직_이름_전체로만_가른다():
+    k = bake.same_org_keys
+    assert k({"(주)가나다라"}) & k({"가나다라 주식회사"}), "법인 꼬리를 떼고 같다"
+    assert k({"x (ganada.co.kr)"}) & k({"https://www.ganada.co.kr/notice"}), "도메인 이름이 같다"
+    assert not (k({"한국abc대학교"}) & k({"abc 코리아"})), "조각이 겹친다고 같은 사고가 아니다"
+    assert "INC-241" in bake.SAME_AS_COLLECT, "정본이 사람 눈으로 짝지은 줄"
+
+
+def test_행위자_정보는_선택지와_모양을_통과한_것만_싣는다():
+    c = _cand("ACTOR", "hexb", aliases=["hex_b2", "출처: 포럼 글", "x.y", "hexb", "가나다라샵"])
+    c["info"] = {"roles": ["판매자", "미확인", "새 선택지"], "countries": ["미확인", "중국"],
+                 "firstSeen": "2026-03-01T00:00:00.000+09:00", "deals": "한국 쇼핑몰 DB\n카드 정보"}
+    tok = bake.org_tokens({"가나다라샵"})
+    out, dropped = bake.actor_info(c, tok)
+    assert out == {"roles": ["판매자"], "countries": ["중국"], "firstSeen": "2026-03-01",
+                   "deals": "한국 쇼핑몰 DB · 카드 정보", "otherNames": ["hex_b2"]}, out
+    assert dropped == 4, dropped  # 메모 · 점 낀 것 · 자기 이름 · 조직명
+    c["info"]["deals"] = "가나다라샵 회원 DB"
+    assert "deals" not in bake.actor_info(c, tok)[0], "조직 이름이 든 글은 안 싣는다"
+    c["info"]["deals"] = "문의 010-1234-5678"
+    assert "deals" not in bake.actor_info(c, tok)[0], "전화 모양은 안 싣는다"
+
+
+def test_새_칸도_반출_검사가_모양까지_본다():
+    base = {"territories": [{"id": "a1", "name": "hexb", "islandId": "ACTOR", "web": "dark"},
+                            {"id": "f1", "name": "F", "islandId": "FORUM", "web": "dark"}],
+            "events": [{"id": "INC-1", "territoryId": "f1", "postedAt": "2026-01-01", "verdict": "confirmed",
+                        "size": "unknown", "repost": False, "excluded": False, "kind": "official",
+                        "occurredAt": "2025-12-30", "leakItems": ["이름"], "confirm": "언론 보도",
+                        "sourceKind": "보안업체"}],
+            "relations": [], "links": []}
+    assert bake.check(base) == []
+    bad = json_copy(base)
+    bad["events"][0]["leakItems"] = ["고객 명단"]
+    bad["events"][0]["kind"] = "sale"
+    assert len(bake.check(bad)) == 2, bake.check(bad)
+    bad = json_copy(base)
+    bad["territories"][1]["actor"] = {"roles": ["판매자"]}
+    bad["territories"][0]["actor"] = {"deals": "x" * 81, "otherNames": ["a b"], "memo": "?"}
+    assert len(bake.check(bad)) == 4, bake.check(bad)
+
+
+def json_copy(x):
+    import json
+    return json.loads(json.dumps(x))
+
+
 if __name__ == "__main__":
     tests = [(k, v) for k, v in dict(globals()).items() if k.startswith("test_") and callable(v)]
     for name, fn in tests:
