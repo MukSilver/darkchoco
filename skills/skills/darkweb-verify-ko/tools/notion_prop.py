@@ -33,14 +33,20 @@ def res(db_id: str) -> str:
 
     Notion-Version 2025-09-03 부터 DB 가 database 와 data_source 로 갈렸다.
     칸 정보는 data_source 쪽에 있고, search 가 돌려주는 id 도 그쪽이다.
-    옛 워크스페이스는 아직 databases 로만 열리므로 둘 다 본다."""
+    옛 워크스페이스는 아직 databases 로만 열리므로 둘 다 본다.
+
+    **`SystemExit` 도 잡는다.** `notion._call` 은 노션 오류를 `SystemExit` 로 바꿔 던진다.
+    `except Exception` 만 두면 첫 경로가 404 일 때 둘째 경로를 안 보고 끝났다.
+    둘 다 실패하면 마지막 까닭을 같이 낸다. 토큰이 없을 때도 그 말이 보인다."""
+    까닭 = ""
     for path in ("/data_sources/" + db_id, "/databases/" + db_id):
         try:
             notion._call(path)
             return path
-        except Exception:
+        except (Exception, SystemExit) as e:  # noqa: BLE001
+            까닭 = str(e)
             continue
-    raise SystemExit("DB 를 찾지 못했다: " + db_id)
+    raise SystemExit("DB 를 찾지 못했다: %s\n%s" % (db_id, 까닭))
 
 
 def db(db_id: str) -> dict:
