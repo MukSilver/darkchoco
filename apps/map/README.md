@@ -53,8 +53,12 @@ NOTION_TOKEN_FILE=~/.config/darkchoco/NOTION_TOKEN_산출물.txt npm run bake
 **DB id 를 저장소에 박지 않는다.** 값은 database id 가 아니라 data_source id 다.
 
     collect · verify                 수집 DB · 검증 DB
-    forum · telegram · ransomware · actor   명부 넷 — 이 줄들이 영토가 된다
+    forum · telegram · ransomware    명부 셋 — 이 줄들이 영토가 된다
     relations                        관계선 DB (없어도 굽는다)
+
+**행위자 섬은 수집 DB 「게시자 핸들」에서 만든다** (2026-09-25 최현서). 관문을 지난 사건에 적힌
+핸들 하나가 행위자 영토 하나다. 랜섬웨어 섬 사건의 핸들과 랜섬 그룹 이름과 같은 핸들은 뺀다.
+행위자 DB 는 굽기가 안 읽는다 — 행위자 탭을 따로 만들게 되면 그때 쓴다.
 
 ## 계산 규칙 (정본)
 
@@ -98,14 +102,14 @@ NOTION_TOKEN_FILE=~/.config/darkchoco/NOTION_TOKEN_산출물.txt npm run bake
 ## 반출 경계
 
 **피해 조직 이름은 지도에 내지 않는다** (2026-09-23 최현서 결정). 가해 쪽 — 포럼 · 랜섬웨어
-그룹 · 텔레그램 채널 · 행위자 DB 에 등록된 행위자 — 는 영토 이름으로 낸다.
+그룹 · 텔레그램 채널 · 행위자(사건에 적힌 게시자 핸들) — 는 영토 이름으로 낸다.
 
 **이 결정은 공개 지도(`apps/map`)에만 적용된다.** 비밀번호 뒤 대시보드(`apps/dash`)는 범위
 밖이다. 대시보드는 팀 안에서 검토하는 화면이라 사건 제목과 대상 조직을 보인다.
 
     1. 줄 관문      「DB 반영」이 꺼졌거나 「검토 여부」가 미검토 · 사건 X 면 뺀다
     2. 읽는 칸      ALLOWED_COLS 밖의 칸을 읽으면 멈춘다. 대상 조직 · 자료 제목 ·
-                   원문 URL · 다크웹 주소는 DENY_COLS. 게시자 핸들은 맞추기 전용
+                   원문 URL · 다크웹 주소는 DENY_COLS
     3. 나가는 키    TERRITORY_KEYS · EV_KEYS · RELATION_KEYS 밖의 키가 있으면 멈춘다
     4. 값 훑기      도메인 · @ · 11자리 넘는 숫자열을 찾는다
     5. 화면         src/lib/mapData.ts 가 아는 칸만 골라 담는다
