@@ -167,6 +167,69 @@ def test_배포와_로컬이_같은_게시처를_낸다():
     assert py[0] == {"게시처": {"select": {"name": "breachforums (bf.st)"}}}, py[0]
 
 
+# ── 2026-09-25 머지 전 검토로 고친 것 ────────────────────────────────
+def test_쉼표가_든_이름은_쉼표_없이_간다():
+    """노션 선택지 이름에는 쉼표가 못 들어가 줄 만들기 전체가 거부됐다."""
+    p = pub.속성(_표(), [], "텔레그램", "", "GroupA, GroupB")
+    assert p["게시처"] == {"select": {"name": "GroupA · GroupB"}}, p
+    표 = pub.명부표([("포럼", "포럼 이름", [_쪽("콤마, 포럼", "포럼 이름", 주소="https://comma.example/")])])
+    assert api.포럼게시처칸("comma.example", 표, []) == {"게시처": {"select": {"name": "콤마 · 포럼"}}}
+
+
+def test_짧은_열쇠는_통째로만_맞춘다():
+    """민키가 한글 · 키릴을 지워 한글 이름끼리 아무 선택지에나 붙었다."""
+    assert pub.선택지맞춤("Хакер", ["다른포럼", "Cl0p"]) == "Хакер"
+    assert pub.선택지맞춤("새포럼", ["옛포럼"]) == "새포럼"
+    assert pub.선택지맞춤("포럼 A", ["게시판 A"]) == "포럼 A"
+    assert pub.선택지맞춤("XSS", ["xss"]) == "xss"            # 짧아도 대소문자만 다르면 같다
+    assert pub.선택지맞춤("옛포럼", ["옛포럼 "]) == "옛포럼 "
+
+
+def test_자리표시_핸들은_게시처로_안_쓴다():
+    for h in ("Unknown", "N/A", "-", "없음"):
+        assert pub.고르기(_표(), "텔레그램", "", h)[0] == "", h
+        assert pub.속성(_표(), [], "텔레그램", "", h) == {}, h
+
+
+def test_한글에_붙은_주소와_대괄호_점도_주소로_읽는다():
+    assert pub.호스트들("examplefor.st로 이전") == ["examplefor.st"]
+    assert pub.호스트들("abcexample[.]onion (2026-07-30 확인)") == ["abcexample.onion"]
+
+
+# 검토에서 나온 경우를 담은 명부. 위의 포럼 목록은 그대로 둔다
+포럼더 = 포럼 + [_쪽("ForumA", "포럼 이름", 이전="examplefor.st로 이전"),
+                _쪽("DotForum", "포럼 이름", 주소="https://dotforum[.]example/"),
+                _쪽("콤마, 포럼", "포럼 이름", 주소="https://comma.example/"),
+                _쪽("새포럼", "포럼 이름", 주소="https://kf.example/")]
+
+
+def test_배포와_로컬이_검토에서_나온_경우도_같게_낸다():
+    node = shutil.which("node")
+    if not node:
+        print("  ?? node 가 없어 JS 쪽을 못 봤다. 파이썬 쪽만 봤다")
+        return
+    물음 = ["examplefor.st", "dotforum.example", "comma.example", "kf.example", "bf.st"]
+    선택지 = ["옛포럼", "breachforums (bf.st)", "Cl0p"]
+    짝 = [["Хакер", ["다른포럼", "Cl0p"]], ["-", ["다른포럼"]], ["새포럼", ["옛포럼"]],
+          ["XSS", ["xss"]], ["포럼 A", ["게시판 A"]], ["Emperador", ["emperador"]]]
+    코드 = (_js_부분()
+          + "\nconst 표 = 포럼명부표(%s);\n" % json.dumps(포럼더, ensure_ascii=False)
+          + "console.log(JSON.stringify([%s.map(q => 포럼게시처칸(q, 표, %s)), "
+            "%s.map(([a, b]) => 선택지맞춤(a, b))]));\n"
+          % (json.dumps(물음, ensure_ascii=False), json.dumps(선택지, ensure_ascii=False),
+             json.dumps(짝, ensure_ascii=False)))
+    r = subprocess.run([node, "-e", 코드], capture_output=True, text=True, encoding="utf-8", timeout=30)
+    assert r.returncode == 0, "node 가 실패했다: " + r.stderr[:400]
+    js칸, js맞춤 = json.loads(r.stdout.strip())
+    표 = pub.명부표([("포럼", "포럼 이름", 포럼더)])
+    py칸 = [api.포럼게시처칸(q, 표, 선택지) for q in 물음]
+    for q, j, p in zip(물음, js칸, py칸):
+        assert j == p, "%r — JS %r · 파이썬 %r" % (q, j, p)
+    assert py칸[:4] == [{"게시처": {"select": {"name": n}}} for n in ("ForumA", "DotForum", "콤마 · 포럼", "새포럼")], py칸
+    py맞춤 = [pub.선택지맞춤(a, b) for a, b in 짝]
+    assert js맞춤 == py맞춤, (js맞춤, py맞춤)
+
+
 if __name__ == "__main__":
     시험들 = [(k, v) for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     실패 = 0
