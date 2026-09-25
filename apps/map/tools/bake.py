@@ -78,6 +78,8 @@ SOURCES_FILE = Path.home() / ".config" / "darkchoco" / "map_sources.json"
 #: 꼭 있어야 하는 DB. 게시처 DB 셋(포럼 · 텔레그램 · 랜섬웨어)과 행위자 DB 가
 #: 영토가 된다 (설계서 2.4 · 2.5, 2026-09-23 결정 6 · 2026-09-25 22시 최현서)
 REQUIRED_SOURCES = ("collect", "verify", "forum", "telegram", "ransomware", "actor")
+#: 없어도 굽는 DB. 자동 갱신 워크플로에 비밀값을 넣기 전에도 굽기가 멈추지 않게 한다
+OPTIONAL_SOURCES = ("relations", "incident")
 
 
 def load_sources() -> dict[str, str]:
@@ -88,13 +90,14 @@ def load_sources() -> dict[str, str]:
     실제로는 이 혼동이었다. 여기서 받는 것은 data_source id 다.
 
     환경변수 `DC_MAP_<KEY>_DS`(예: `DC_MAP_FORUM_DS`)가 파일보다 앞선다.
-    관계선 DB(`relations`)는 없어도 굽는다. 없으면 관계선이 비고 로그에 남는다.
+    관계선 DB(`relations`)와 유출 사고 DB(`incident`)는 없어도 굽는다. 없으면
+    관계선 · 공식 발표 사고가 비고 로그에 남는다.
     """
     got: dict[str, str] = {}
     if SOURCES_FILE.is_file():
         got.update({k: v for k, v in json.loads(SOURCES_FILE.read_text(encoding="utf-8")).items()
                     if k != "_" and v})
-    for key in (*REQUIRED_SOURCES, "relations"):
+    for key in (*REQUIRED_SOURCES, *OPTIONAL_SOURCES):
         env = os.environ.get(f"DC_MAP_{key.upper()}_DS")
         if env:
             got[key] = env
@@ -178,6 +181,29 @@ INDUSTRY_SHORT = {
     "의료": "의료", "금융": "금융", "공공·행정": "공공", "제조": "제조",
     "건설·부동산": "건설", "운송·물류": "운송", "이러닝": "이러닝", "통신": "통신",
 }
+
+#: 유출 사고 DB 「업종」 → 제목 낱말. 수집 DB 산업 분야 낱말(`INDUSTRY_SHORT` 값)에
+#: 맞춘다. 기타는 뺀다
+INDUSTRY_OF_SECTOR = {
+    "공공": "공공", "의료": "의료", "금융": "금융", "플랫폼": "IT", "교육": "교육",
+    "커머스": "유통", "통신": "통신", "제조": "제조",
+}
+
+#: 유출 사고 DB 선택지 (2026-09-26 에 있던 것 전부). **표 밖 값은 싣지 않는다** —
+#: 노션 선택지는 누구나 새로 칠 수 있다
+LEAK_ITEMS = {"이름", "이메일", "전화", "계정", "주소", "카드금융", "주민번호", "기타"}
+CONFIRM_VALUES = {"조직 공식 발표", "게시글만", "언론 보도", "규제기관 확정", "연구자 발견"}
+SOURCE_KINDS = {"언론 보도", "보안업체", "기타", "기업 공지", "개인정보보호위원회", "한국인터넷진흥원"}
+
+#: 행위자 DB 「역할」 선택지. 미확인은 뺀다
+ROLE_VALUES = {"판매자", "운영자", "해킹 그룹", "재배포", "중개·보증", "랜섬웨어 그룹"}
+#: 행위자 DB 「국가」 값 모양 — 나라 이름 낱말
+RE_ACTOR_COUNTRY = re.compile(r"^[가-힣A-Za-z ]{1,12}$")
+#: 다른 이름으로 싣는 핸들 모양. 빈칸 · 점 · 기호가 든 것(메모 · 주소)은 안 싣는다
+RE_HANDLE_SHAPE = re.compile(r"^[\w\-]{2,32}$")
+#: 「다루는 것」 글 길이 한도. 넘으면 싣지 않는다 (메모일 가능성이 크다)
+DEALS_MAX = 80
+RE_ISO_DAY = re.compile(r"^\d{4}-\d{2}-\d{2}")
 
 #: 주장 규모 글의 숫자 — `1,200` · `20 000 000` · `1.5` 꼴. 빈칸으로 세 자리씩
 #: 끊은 수도 읽는다 (설계서 3.2 가 `9 000 000` 을 예로 든다)
@@ -266,6 +292,23 @@ ALLOWED_COLS = frozenset({
     "국가",
     "산업 분야",
     "카운트다운 표기",
+    # ↓ 행위자 DB. 행위자 패널 [개요] 재료 (설계서 4.3.8, 2026-09-26 최현서 — 행위자
+    #   정보 칸 싣기). 역할 · 국가는 선택지, 처음 본 날은 날짜라 조직명이 못 든다.
+    #   「다루는 것」은 사람이 쓰는 글이라 조직명 대조와 값 훑기를 통과한 것만
+    #   싣는다 (`actor_info`)
+    "역할",
+    "처음 본 날",
+    "다루는 것",
+    # ↓ 유출 사고 DB. 공식 발표 사고 (설계서 2.4 · 3.2 · 4.3.4, 2026-09-26 최현서 —
+    #   읽어도 된다. 조직명은 지도 어디에도 안 낸다). 선택지 · 날짜 · 숫자만 싣는다.
+    #   유출 규모는 숫자와 단위만 뽑는다 (`claim_size`). 원문은 안 싣는다
+    "공표 시점",
+    "사고 시점",
+    "업종",
+    "유출 규모",
+    "유출 항목",
+    "외부 확인",
+    "출처",
 })
 
 #: **맞추는 데만 쓰는 칸.** 값을 읽되 구운 파일에 절대 안 싣는다.
@@ -278,6 +321,12 @@ ALLOWED_COLS = frozenset({
 MATCH_ONLY_COLS: frozenset[str] = frozenset({
     "대상 조직",
     "게시자 핸들",
+    # ↓ 유출 사고 DB (2026-09-26). 조직명은 수집 DB 와 같은 사고인지 가르고 관계선
+    #   원문 · 행위자 글의 조직명 거르기에 보탠다. 위치는 영토, 행위자는 행위자 DB
+    #   줄을 찾는 데만 쓴다. 셋 다 사람이 쓴 글이라 URL · 조직명이 섞여 있다
+    "조직명",
+    "보도된 유출 위치",
+    "보도된 행위자",
 })
 
 #: **절대 읽지 않는 칸.** 값에 개인정보나 피해 조직 이름이 들어 있다.
@@ -300,7 +349,6 @@ DENY_COLS = frozenset({
     "개인정보 유출",
     "한국 관련 유출",
     "피해 대상",
-    "다루는 것",
     "한국 관련 근거",
     "관측 근거",
     "비고",
@@ -310,6 +358,13 @@ DENY_COLS = frozenset({
     "관측자",
     "검증자",
     "근거",          # 관계선 DB. 사람이 쓴 설명이라 무엇이 적혀 있을지 모른다
+    # ↓ 유출 사고 DB. 기사 · 공지 주소에 조직 이름이 든다. 메모와 가격은 사람이 쓴 글이다
+    "출처 링크",
+    "메모",
+    "보도 가격",
+    # ↓ 사람 이름이다 (팀원)
+    "기록자",
+    "담당자",
 })
 
 
@@ -361,6 +416,8 @@ TERRITORY_KEYS = frozenset({
     "id", "name", "islandId", "web",
     # 활동도 원자료(숫자)와 처음 나온 날 (설계서 3.3, score.ts presentAt)
     "raw", "posts", "threads", "since",
+    # 행위자 섬만. 행위자 DB 정보 칸 (설계서 4.3.8, 2026-09-26). 속 키는 ACTOR_INFO_KEYS
+    "actor",
 })
 EV_KEYS = frozenset({
     "id", "territoryId", "postedAt", "verdict", "size", "repost", "excluded",
@@ -370,7 +427,12 @@ EV_KEYS = frozenset({
     # 규모는 숫자와 단위를 나눠 싣는다 — 「1.2TB」 를 글자로 두면 값 훑기가
     # 도메인으로 본다. 주장 규모 원문은 안 싣는다 (자유 글이다)
     "kind", "country", "industry", "sizeValue", "sizeUnit",
+    # 공식 발표 사고만 (유출 사고 DB, 설계서 4.3.4). 사고 시점 · 유출 항목 · 외부 확인 ·
+    # 출처 종류. 넷 다 날짜나 선택지다. 조직명과 출처 링크는 싣지 않는다
+    "occurredAt", "leakItems", "confirm", "sourceKind",
 })
+#: 행위자 정보의 속 키 (설계서 4.3.8). 역할 · 국가 · 처음 본 날 · 다루는 것 · 다른 이름
+ACTOR_INFO_KEYS = frozenset({"roles", "countries", "firstSeen", "deals", "otherNames"})
 #: 관계선. 건수와 처음·마지막 본 날은 싣지 않는다 — 화면이 `evidence` 로 센다
 RELATION_KEYS = frozenset({
     "id", "from", "to", "kind", "confidence", "evidence",
@@ -738,7 +800,7 @@ def scan_strings(node, path: str, bad: list[str]) -> None:
             scan_strings(v, f"{path}[{i}]", bad)
     elif isinstance(node, str):
         # 게시 시각은 ISO 문자열이라 콜론과 숫자가 많다. 날짜는 건너뛴다
-        if path.endswith((".postedAt", ".generatedAt", ".since")):
+        if path.endswith((".postedAt", ".generatedAt", ".since", ".firstSeen", ".occurredAt")):
             return
         if RE_AT.search(node):
             bad.append(f"{path}: @ 가 들어 있습니다")
@@ -781,6 +843,24 @@ def check(data: dict) -> list[str]:
         extra = set(t) - TERRITORY_KEYS
         if extra:
             bad.append(f"영토에 허용 밖 칸이 있습니다: {sorted(extra)}")
+        a = t.get("actor")
+        if a is None:
+            continue
+        if t["islandId"] != "ACTOR" or not isinstance(a, dict):
+            bad.append(f"영토 {t['id']} 의 행위자 정보는 행위자 섬에만 둡니다")
+            continue
+        if set(a) - ACTOR_INFO_KEYS:
+            bad.append(f"영토 {t['id']} 의 행위자 정보에 허용 밖 칸이 있습니다: {sorted(set(a) - ACTOR_INFO_KEYS)}")
+        if set(a.get("roles", [])) - ROLE_VALUES:
+            bad.append(f"영토 {t['id']} 의 역할이 선택지 밖입니다")
+        if any(not RE_ACTOR_COUNTRY.match(x) for x in a.get("countries", [])):
+            bad.append(f"영토 {t['id']} 의 국가 모양이 틀렸습니다")
+        if "firstSeen" in a and not RE_ISO_DAY.match(str(a["firstSeen"])):
+            bad.append(f"영토 {t['id']} 의 처음 본 날이 날짜가 아닙니다")
+        if "deals" in a and (not isinstance(a["deals"], str) or len(a["deals"]) > DEALS_MAX):
+            bad.append(f"영토 {t['id']} 의 다루는 것이 너무 깁니다")
+        if any(not RE_HANDLE_SHAPE.match(x) for x in a.get("otherNames", [])):
+            bad.append(f"영토 {t['id']} 의 다른 이름이 핸들 모양이 아닙니다")
     for e in data["events"]:
         extra = set(e) - EV_KEYS
         if extra:
@@ -797,6 +877,17 @@ def check(data: dict) -> list[str]:
             "sizeUnit" in e and e["sizeUnit"] not in SIZE_UNITS
         ):
             bad.append(f"사건 {e['id']} 의 규모 단위가 틀렸습니다")
+        # 공식 발표 칸은 공식 발표 사건에만, 모양까지 본다
+        if any(k in e for k in ("occurredAt", "leakItems", "confirm", "sourceKind")) and e.get("kind") != "official":
+            bad.append(f"사건 {e['id']} 는 공식 발표가 아닌데 공식 발표 칸이 있습니다")
+        if "occurredAt" in e and not RE_ISO_DAY.match(str(e["occurredAt"])):
+            bad.append(f"사건 {e['id']} 의 사고 시점이 날짜가 아닙니다")
+        if "leakItems" in e and (not isinstance(e["leakItems"], list) or set(e["leakItems"]) - LEAK_ITEMS):
+            bad.append(f"사건 {e['id']} 의 유출 항목이 선택지 밖입니다")
+        if "confirm" in e and e["confirm"] not in CONFIRM_VALUES:
+            bad.append(f"사건 {e['id']} 의 외부 확인이 선택지 밖입니다")
+        if "sourceKind" in e and e["sourceKind"] not in SOURCE_KINDS:
+            bad.append(f"사건 {e['id']} 의 출처 종류가 선택지 밖입니다")
 
     # 관계선은 양 끝이 목록 안 영토여야 하고, 근거는 목록 안 사건이어야 한다.
     # 목록 밖을 가리키면 굽기가 이름을 잘못 맞췄거나 어디선가 지어낸 것이다
@@ -1187,6 +1278,15 @@ def read_registry(n, sources: dict[str, str], read, log) -> list[dict]:
                 if a.strip() and a.strip() not in PLACEHOLDERS
             ]
             size = {} if island == "ACTOR" else registry_size(island, col(read, p, "규모"))
+            # 행위자 정보 칸 (설계서 4.3.8). 싣기 전에 `actor_info` 가 다시 거른다
+            info = None
+            if island == "ACTOR":
+                info = {
+                    "roles": col(read, p, "역할") or [],
+                    "countries": col(read, p, "국가") or [],
+                    "firstSeen": col(read, p, "처음 본 날"),
+                    "deals": col(read, p, "다루는 것") or "",
+                }
             on = col(read, p, "DB 반영") is True
             links = split_links(col(read, p, "연결된 곳")) if on else []
             online = col(read, p, "상태") == "online"
@@ -1198,7 +1298,7 @@ def read_registry(n, sources: dict[str, str], read, log) -> list[dict]:
                     continue  # 꺼진 줄은 보태지 않는다
                 if not c["on"]:
                     # 먼저 들어온 꺼진 줄을 켜진 줄로 갈아 끼운다
-                    c.update({"aliases": aliases, "on": True, "online": online, "links": links})
+                    c.update({"aliases": aliases, "on": True, "online": online, "links": links, "info": info})
                     for s in ("raw", "posts", "threads"):
                         c.pop(s, None)
                     c.update(size)
@@ -1212,6 +1312,7 @@ def read_registry(n, sources: dict[str, str], read, log) -> list[dict]:
             c = {
                 "island": island, "rawName": raw_name, "aliases": aliases,
                 "on": on, "online": online, "order": len(out), "links": links, **size,
+                "info": info,
             }
             by_name[k] = c
             out.append(c)
@@ -1313,6 +1414,135 @@ class RegistryIndex:
 
 
 RE_TME = re.compile(r"t\.me/(?:s/)?([A-Za-z0-9_]{3,64})", re.IGNORECASE)
+
+#: 보도된 유출 위치에서 떼어 낼 낱말 — 「Qilin 랜섬웨어 유출 사이트」 → 「Qilin」
+RE_PLACE_WORDS = re.compile(
+    r"유출\s*사이트|다크웹(?:\s*사이트)?|leak\s*site|data\s*leak\s*site|\bDLS\b|블로그|\bblog\b|"
+    r"랜섬웨어|ransomware|그룹|\bgroup\b|포럼|\bforums?\b(?=\s*$)",
+    re.IGNORECASE,
+)
+
+
+def incident_place(index: "RegistryIndex", loc: str | None) -> dict | None:
+    """유출 사고 DB 「보도된 유출 위치」 → 명부 후보 (설계서 3.2 「유출 사고 DB를 사건으로 넣는 방법」).
+
+    포럼 · 랜섬웨어 · 텔레그램 이름과 그대로 맞으면 그곳, 랜섬웨어 유출 사이트(DLS)라고
+    적혔으면 그 그룹이다. 텔레그램은 t.me 주소가 있어야 한다. **맞는 후보가 둘 이상이거나
+    하나도 없으면 None** — 짐작하지 않는다 (X, GitHub, 미명시, 채널 이름 없는 텔레그램 등).
+    """
+    if not loc or not loc.strip():
+        return None
+    tries: list[str] = []
+    m = RE_TME.search(loc)
+    for part in [loc, *re.split(r"[,/;|\n·]|\s-\s", loc)]:
+        t = part.strip(" .:[]")
+        if not t:
+            continue
+        tries += [x.strip() for x in re.findall(r"\(([^)]*)\)", t) if x.strip()]
+        # 괄호 안 설명(「(1차 소스가 … 밝힌 사례)」)을 뗀 꼴도 본다
+        for x in (t, re.sub(r"\([^)]*\)", " ", t)):
+            x = re.sub(r"\s+", " ", x).strip(" .:()[]-")
+            if not x:
+                continue
+            tries.append(x)
+            bare = re.sub(r"\s+", " ", RE_PLACE_WORDS.sub(" ", x)).strip(" .:()[]-")
+            if bare and bare != x:
+                tries.append(bare)
+    hits: list[dict] = []
+    if m:
+        c = index.find("TELEGRAM", m.group(1))
+        if c:
+            hits.append(c)
+    for t in tries:
+        for isl in ("FORUM", "RANSOMWARE"):
+            c = index.find(isl, t)
+            if c and c not in hits:
+                hits.append(c)
+    return hits[0] if len(hits) == 1 else None
+
+
+#: 정본 작업판(사건 탭 「지도 점수 제외」, 2026-09-22)이 수집 DB 와 같은 사고로 본
+#: 유출 사고 줄. **사람이 이름을 대조해 정한 짝이라 글자로는 못 가르는 것이 있다**
+#: (INC-241 ↔ LEAK-170). 사건 번호뿐이라 조직 이름은 안 든다. 이 표에 없는 줄은
+#: 조직 이름 전체나 도메인 이름이 같을 때만 같은 사고로 본다 (`same_org_keys`)
+SAME_AS_COLLECT = {
+    "INC-199": "LEAK-13", "INC-200": "LEAK-10", "INC-201": "LEAK-11", "INC-202": "LEAK-12",
+    "INC-203": "LEAK-14", "INC-204": "LEAK-8", "INC-205": "LEAK-9", "INC-206": "LEAK-3",
+    "INC-208": "LEAK-30", "INC-209": "LEAK-27", "INC-211": "LEAK-181", "INC-215": "LEAK-64",
+    "INC-216": "LEAK-53", "INC-217": "LEAK-69", "INC-218": "LEAK-98", "INC-220": "LEAK-102",
+    "INC-241": "LEAK-170",
+}
+
+
+def same_org_keys(values: set[str]) -> set[str]:
+    """같은 조직인지 가를 열쇠 — 이름 전체(법인 꼬리 · 괄호 · 빈칸 · 기호를 뗀 것)와
+    도메인 등록 이름(네 글자 이상).
+
+    `org_tokens` 처럼 조각마다 쓰면 짧은 조각(세 글자 약칭)끼리 겹쳐 다른 사고를 같은
+    사고로 뺀다 (INC-230 · INC-234 가 그렇게 빠졌다). 여기서는 이름 전체만 견준다.
+    """
+    out: set[str] = set()
+    for v in values:
+        v = re.sub(r"https?://", " ", v.casefold())
+        whole = re.sub(r"\([^)]*\)", " ", v)
+        for x in (v, whole, RE_LEGAL.sub(" ", whole)):
+            k = re.sub(r"[\s.,·/\-_:'\"]+", "", x)
+            if len(k) >= 3 and k not in ORG_STOP:
+                out.add(k)
+        for dom in re.findall(r"[a-z0-9-]+(?:\.[a-z0-9-]+)+", v):
+            lab = registrable_label(re.sub(r"^www\.", "", dom))
+            if len(lab) >= 4 and lab not in ORG_STOP:
+                out.add(lab)
+    return out
+
+
+def _looks_bad(text: str) -> bool:
+    """값 훑기(`scan_strings`)에 걸리는 글인가."""
+    bad: list[str] = []
+    scan_strings(text, "x", bad)
+    return bool(bad)
+
+
+def actor_info(c: dict, org_tok: set[str]) -> tuple[dict, int]:
+    """행위자 패널 [개요] 재료 (설계서 4.3.8, 2026-09-26 최현서). 버린 자유 글 수도 돌려준다.
+
+    역할 · 국가는 선택지라 표에 있는 것만, 처음 본 날은 날짜만 싣는다. 사람이 쓰는
+    두 칸은 더 거른다.
+
+    - 「다루는 것」 — 한 줄 80자 이하이고, 수집 DB · 유출 사고 DB 조직 이름과 겹치지
+      않고, 값 훑기(@ · 긴 숫자 · 도메인 · 전화 모양)를 통과해야 싣는다
+    - 「다른 이름」 — 핸들 모양(글자 · 숫자 · _ · -, 2~32자)이고 조직 이름과 겹치지
+      않는 것만. 9/23 검토가 별칭을 막은 까닭(메모 · 자리표시가 섞임)을 모양으로 거른다
+    """
+    info = c.get("info") or {}
+    out: dict = {}
+    dropped = 0
+    roles = [r for r in info.get("roles", []) if r in ROLE_VALUES]
+    if roles:
+        out["roles"] = roles
+    countries = [x for x in info.get("countries", []) if x not in PLACEHOLDERS and RE_ACTOR_COUNTRY.match(x)]
+    if countries:
+        out["countries"] = countries
+    fs = info.get("firstSeen")
+    if fs and RE_ISO_DAY.match(fs):
+        out["firstSeen"] = fs[:10]
+    deals = re.sub(r"\s*\n\s*", " · ", (info.get("deals") or "").strip())
+    if deals and deals not in PLACEHOLDERS:
+        if len(deals) <= DEALS_MAX and not mentions_org(deals, org_tok) and not _looks_bad(deals):
+            out["deals"] = deals
+        else:
+            dropped += 1
+    names: list[str] = []
+    for a in c.get("aliases", []):
+        h = clean_handle(a)
+        if (h and RE_HANDLE_SHAPE.match(h) and h.casefold() != c["rawName"].casefold()
+                and not mentions_org(h, org_tok) and h not in names):
+            names.append(h)
+        else:
+            dropped += 1
+    if names:
+        out["otherNames"] = names
+    return out, dropped
 
 
 def bake(n, sources: dict[str, str], log) -> dict:
@@ -1450,10 +1680,82 @@ def bake(n, sources: dict[str, str], log) -> dict:
             "claim": claim_size(col(read, p, "주장 규모")),
         })
 
+    # 3b) 유출 사고 DB — 공식 발표 사고 (설계서 2.4 · 2.5 · 3.2, 2026-09-26 최현서).
+    #
+    # 한 줄이 사건 하나다. 공표 시점이 게시 시각, 보도된 유출 위치가 영토다. 판정은
+    # 확인됨(신뢰 1.0, 3.2), 규모는 유출 규모 칸에서 읽는다. 빼는 것은 셋이다 (2.5) —
+    # 위치가 지도 영토와 안 맞음, 공표 시점 없음, 수집 DB 에 같은 조직 사건이 있음.
+    # **조직명은 어디에도 안 싣는다.** 같은 사고 가르기와 조직명 거르기에만 쓴다
+    inc_why: dict[str, int] = {}
+    inc_gate = 0
+    inc_n = 0
+    if sources.get("incident"):
+        irows = n.query_all(sources["incident"])
+        collect_keys = same_org_keys(org_names)
+        # 관계선 원문 · 행위자 글의 조직명 거르기에 보탠다. 관문과 무관하게 모두 모은다
+        for row in irows:
+            org = col_match(read, row.get("properties", {}), "조직명")
+            if org:
+                org_names.add(org.casefold())
+        for row in irows:
+            p = row.get("properties", {})
+            if col(read, p, "DB 반영") is not True:
+                inc_gate += 1
+                continue
+            posted = col(read, p, "공표 시점")
+            cand = incident_place(index, col_match(read, p, "보도된 유출 위치"))
+            org = col_match(read, p, "조직명")
+            iid = unique_id(col_prop(p, "사건 ID"))
+            reason = None
+            if not cand:
+                reason = "위치가 영토와 안 맞음"
+            elif not posted:
+                reason = "공표 시점 없음"
+            elif iid in SAME_AS_COLLECT or (org and same_org_keys({org.casefold()}) & collect_keys):
+                reason = "수집 DB 와 같은 사고"
+            if reason:
+                inc_why[reason] = inc_why.get(reason, 0) + 1
+                continue
+            handle = None
+            if cand["island"] != "RANSOMWARE":
+                handle = clean_handle(col_match(read, p, "보도된 행위자"))
+            nation = col(read, p, "국가")
+            raw_events.append({
+                "id": iid or f"inc-{inc_n + 1}",
+                "cand": cand,
+                "handle": handle,
+                "actor": None,
+                "postedAt": posted,
+                "verdict": "confirmed",
+                "size": size_grade(col(read, p, "유출 규모")),
+                "repost": False,
+                "substituted": False,
+                "kind": "official",
+                "country": COUNTRY_CODE.get(nation or ""),
+                "industry": INDUSTRY_OF_SECTOR.get(col(read, p, "업종") or ""),
+                "industryRaw": False,
+                "claim": claim_size(col(read, p, "유출 규모")),
+                # 랜섬웨어 그룹을 남기는 「한국 관련 사건」은 국가가 한국인 사고만이다
+                "korea": nation == "한국",
+                "official": {
+                    "occurredAt": col(read, p, "사고 시점"),
+                    "leakItems": [x for x in (col(read, p, "유출 항목") or []) if x in LEAK_ITEMS],
+                    "confirm": col(read, p, "외부 확인"),
+                    "sourceKind": col(read, p, "출처"),
+                },
+            })
+            inc_n += 1
+        log(f"유출 사고 DB {len(irows)}줄 → 공식 발표 사고 {inc_n}건 · 뺀 줄 — DB 반영 꺼짐 {inc_gate} · "
+            + " · ".join(f"{k} {v}" for k, v in sorted(inc_why.items())))
+    else:
+        log("유출 사고 DB 를 안 알려 줘서 공식 발표 사고를 건너뜁니다 "
+            f"(DC_MAP_INCIDENT_DS 또는 {SOURCES_FILE.name} 의 incident)")
+    org_tok = org_tokens(org_names)
+
     # 4) 영토 거르기 (설계서 2.5, 정본 영토 탭에서 되짚은 규칙)
     counted = {id(c): 0 for c in cands}
     for e in raw_events:
-        if e["verdict"] != "false":
+        if e["verdict"] != "false" and e.get("korea", True):
             counted[id(e["cand"])] += 1
 
     def keep_place(c: dict) -> bool:
@@ -1534,6 +1836,8 @@ def bake(n, sources: dict[str, str], log) -> dict:
     seen_slug: dict[str, str] = {}
     tid_of: dict[int, str] = {}
     out_terr = []
+    actor_info_n = 0
+    actor_dropped = 0
     for it in items:
         c = it["_c"]
         tid = slug(f"{c['island'].lower()} {it['name']}", seen_slug)
@@ -1545,6 +1849,12 @@ def bake(n, sources: dict[str, str], log) -> dict:
                 t[k] = c[k]
         if it["_since"]:
             t["since"] = it["_since"]
+        if c["island"] == "ACTOR":
+            info, dropped = actor_info(c, org_tok)
+            actor_dropped += dropped
+            if info:
+                t["actor"] = info
+                actor_info_n += 1
         out_terr.append(t)
 
     events = []
@@ -1568,6 +1878,16 @@ def bake(n, sources: dict[str, str], log) -> dict:
                 ev[k] = e[k]
         if e["claim"]:
             ev["sizeValue"], ev["sizeUnit"] = e["claim"]
+        o = e.get("official")
+        if o:
+            if o.get("occurredAt") and RE_ISO_DAY.match(o["occurredAt"]):
+                ev["occurredAt"] = o["occurredAt"][:10]
+            if o.get("leakItems"):
+                ev["leakItems"] = o["leakItems"]
+            if o.get("confirm") in CONFIRM_VALUES:
+                ev["confirm"] = o["confirm"]
+            if o.get("sourceKind") in SOURCE_KINDS:
+                ev["sourceKind"] = o["sourceKind"]
         events.append(ev)
 
     log("관문에서 뺀 줄 — " + " · ".join(f"{k} {v}" for k, v in gate.items()))
@@ -1580,7 +1900,9 @@ def bake(n, sources: dict[str, str], log) -> dict:
     for t in out_terr:
         by_island[t["islandId"]] = by_island.get(t["islandId"], 0) + 1
     log(f"영토 {len(out_terr)}곳 — " + " · ".join(f"{k} {by_island.get(k, 0)}" for k in ISLAND_ORDER))
-    log(f"사건 {len(events)}건 · 행위자 영토에도 붙은 사건 "
+    # 값은 안 찍는다. 행위자 글은 사람이 쓴 것이다
+    log(f"행위자 정보 — {actor_info_n}곳에 실음 · 조직명 · 모양 검사로 뺀 글 {actor_dropped}개")
+    log(f"사건 {len(events)}건 (공식 발표 {sum(1 for e in events if e.get('kind') == 'official')}건) · 행위자 영토에도 붙은 사건 "
         f"{sum(1 for e in events if 'actorTerritoryId' in e)}건 · "
         f"날짜를 대신 넣은 사건 {sum(1 for e in events if e.get('dateSubstituted'))}건")
 
@@ -1607,7 +1929,6 @@ def bake(n, sources: dict[str, str], log) -> dict:
             for short in {clean_name(c["rawName"])[0].casefold(), display_name(c["rawName"]).casefold()}:
                 short_count[short] = short_count.get(short, 0) + 1
         ambiguous = frozenset(k for k, v in short_count.items() if v > 1)
-        org_tok = org_tokens(org_names)
 
         def note_for(a: str, b: str) -> str | None:
             ca, cb = cand_of.get(a), cand_of.get(b)

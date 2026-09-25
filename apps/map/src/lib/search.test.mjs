@@ -126,6 +126,16 @@ test('행위자는 엔티티와 행위자 묶음 둘 다에 나오고, 올린 �
   assert.deepEqual(ids(r.rel, (h) => h.r.rel.id), ['R5']);
 });
 
+test('행위자 다른 이름으로도 찾는다 (4.2.2 「행위자 핸들과 다른 이름」)', () => {
+  const ix = buildIndex({
+    territories: [{ id: 'a', name: 'hexbreaker', islandId: 'ACTOR', actor: { otherNames: ['hx_old'] } }],
+    events: [], relations: [], seen: new Set(['a']), today: TODAY,
+  });
+  const r = search(ix, 'hx_o', NO_FILTER);
+  assert.deepEqual(ids(r.actor, (h) => h.e.id), ['a']);
+  assert.equal(r.actor[0].m.via, 'hx_old');
+});
+
 test('검색어가 비면 아무것도 없다', () => {
   assert.equal(total(search(IX, '  ', NO_FILTER)), 0);
 });
