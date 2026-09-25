@@ -48,6 +48,28 @@ function pickTerritory(t: Territory): Territory {
   };
 }
 
+/** 사건 종류 칩 값 (설계서 2.3). 굽기가 이것 밖의 값을 내면 안 받는다 */
+const EV_KINDS = new Set<string>(["data_post", "claim", "sale", "access_sale", "repost", "official"]);
+/** 규모 단위. 굽기의 `claim_size` 가 내는 값뿐이다 */
+const SIZE_UNITS = new Set(["TB", "GB", "MB", "KB", "만", "천", "억", "K", "M", "건"]);
+
+/**
+ * 제목 재료 (2026-09-25 최현서 결정). **분류 값만 받는다** — 국가는 두 글자
+ * 부호, 산업 분야는 짧은 한국어 낱말, 규모는 숫자와 정해진 단위다. 모양이
+ * 다르면 굽기를 안 거친 값일 수 있어 버린다.
+ */
+function pickTitleBits(e: Ev): Partial<Ev> {
+  const out: Partial<Ev> = {};
+  if (e.kind && EV_KINDS.has(e.kind)) out.kind = e.kind;
+  if (typeof e.country === "string" && /^[A-Z]{2}$/.test(e.country)) out.country = e.country;
+  if (typeof e.industry === "string" && /^[가-힣A-Za-z]{1,12}$/.test(e.industry)) out.industry = e.industry;
+  if (typeof e.sizeValue === "number" && Number.isFinite(e.sizeValue) && e.sizeUnit && SIZE_UNITS.has(e.sizeUnit)) {
+    out.sizeValue = e.sizeValue;
+    out.sizeUnit = e.sizeUnit;
+  }
+  return out;
+}
+
 function pickEv(e: Ev): Ev {
   return {
     id: e.id,
@@ -59,6 +81,7 @@ function pickEv(e: Ev): Ev {
     excluded: e.excluded,
     ...(e.actorTerritoryId ? { actorTerritoryId: e.actorTerritoryId } : {}),
     ...(e.dateSubstituted ? { dateSubstituted: true } : {}),
+    ...pickTitleBits(e),
   };
 }
 

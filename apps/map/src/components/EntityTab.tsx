@@ -4,18 +4,19 @@
  * 섬 필터로 한 번에 섬 하나만 본다. 위에 KPI 카드 넷, 가운데 표, 아래 최근
  * 주요 이벤트다.
  *
- * **「최근 주요 이벤트」는 안 만들었다.** 사건마다 제목과 종류 칩이 필요한데
- * (피그마 `⑦-7` 아래쪽), 우리 사건 타입에는 게시일 · 판정 · 규모 · 재게시뿐이다.
- * 제목은 게시글 본문에서 와야 하고 그 길에 반출 관문이 있다. 굽기가 무엇을
- * 실어 올지 정해지면 그때 붙인다.
+ * 「최근 주요 이벤트」는 고른 섬의 최신 사건 셋이다 (설계서 4.3.5, 피그마 ⑦-7).
+ * 사건 제목은 분류 칸으로 새로 지은 것이다 — 자료 제목에 피해 조직 이름이
+ * 들어 있어 굽기가 안 싣는다 (2026-09-25 최현서 결정, `events.ts`).
  */
 
 "use client";
 
 import { useMemo, useState } from "react";
 
+import EventRow from "./EventRow";
+import { eventsIn } from "@/lib/events";
 import type { MapLayout, TerritoryShape } from "@/lib/layout";
-import { countInWindow } from "@/lib/panel";
+import { belongsTo, countInWindow } from "@/lib/panel";
 import type { Status } from "@/lib/score";
 import type { Ev } from "@/lib/types";
 
@@ -58,6 +59,7 @@ export default function EntityTab({
 }: EntityTabProps) {
   const [sort, setSort] = useState<SortKey>("activity");
   const [asc, setAsc] = useState(false);
+  const [pickedEv, setPickedEv] = useState<string | null>(null);
 
   // 섬을 안 고른 채 들어오면 첫 섬을 연다. 설계서는 「기본 포럼」인데
   // 포럼이 0건인 기준일도 있으므로 목록 첫 섬으로 둔다
@@ -297,11 +299,57 @@ export default function EntityTab({
         </table>
       </div>
 
-      <p className="shrink-0 rounded-[14px] border border-edge bg-card px-s5 py-s4 text-[12px] text-label">
-        최근 주요 이벤트는 사건 제목이 있어야 만들 수 있습니다. 지금 사건에는
-        게시일과 검증 판정만 있습니다.
-      </p>
+      <RecentEvents
+        title={`최근 주요 이벤트 · ${island.name}`}
+        list={eventsIn(events, d, { kind: "all" }, (e) => belongsTo(e, mine)).slice(0, 3)}
+        nameOf={(id) => layout.territories.find((t) => t.territoryId === id)?.name ?? ""}
+        picked={pickedEv}
+        onPick={setPickedEv}
+      />
     </div>
+  );
+}
+
+/**
+ * 「최근 주요 이벤트」 — 고른 섬의 최신 사건 셋, 날짜순 (설계서 4.3.5).
+ * 더블클릭 보고서 팝업(4.3.4)은 아직 없다
+ */
+function RecentEvents({
+  title,
+  list,
+  nameOf,
+  picked,
+  onPick,
+}: {
+  title: string;
+  list: Ev[];
+  nameOf: (territoryId: string) => string;
+  picked: string | null;
+  onPick: (id: string | null) => void;
+}) {
+  return (
+    <section className="flex shrink-0 flex-col gap-s3 rounded-[14px] border border-edge px-s5 py-s4">
+      <h3 className="text-[12px] text-label">{title}</h3>
+      {list.length === 0 ? (
+        <p className="text-[12px] text-label">이 기준일까지 이 섬에 올라온 사건이 없습니다.</p>
+      ) : (
+        <div className="grid grid-cols-3 gap-s4">
+          {list.map((e) => (
+            <EventRow
+              key={e.id}
+              e={e}
+              where={
+                e.actorTerritoryId && nameOf(e.actorTerritoryId)
+                  ? `${nameOf(e.actorTerritoryId)} → ${nameOf(e.territoryId)}`
+                  : nameOf(e.territoryId)
+              }
+              on={picked === e.id}
+              onClick={() => onPick(picked === e.id ? null : e.id)}
+            />
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 

@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AppHeader from "@/components/AppHeader";
 import DetailPanel, { type PanelTabKey } from "@/components/DetailPanel";
 import EntityTab from "@/components/EntityTab";
+import EventsTab from "@/components/EventsTab";
 import Legend from "@/components/Legend";
 import LinksTab, { type LinkSel } from "@/components/LinksTab";
 import MapCanvas, { MAP_VIEW_HOME, type MapSelection, type MapView } from "@/components/MapCanvas";
@@ -25,7 +26,9 @@ import ViewTabs, { type ViewTabKey } from "@/components/ViewTabs";
 import { DARK_ISLANDS } from "@/lib/islands";
 import { layoutMap } from "@/lib/layout";
 import { MAP, isBaked } from "@/lib/mapData";
-import { ecosystemView, islandView, territoryView } from "@/lib/panel";
+import { DEFAULT_PERIOD, eventsIn, type Period } from "@/lib/events";
+import { belongsTo, ecosystemView, islandView, territoryView } from "@/lib/panel";
+import type { Ev } from "@/lib/types";
 import {
   defaultCenter,
   islandPairs,
@@ -96,6 +99,8 @@ export default function Page() {
   const [panelOpen, setPanelOpen] = useState(true);
   const [panelTab, setPanelTab] = useState<PanelTabKey>("overview");
   const [linkSel, setLinkSel] = useState<LinkSel>(null);
+  // 패널 [사건] 탭 기간. 다른 영토를 골라도 그대로 둔다 (설계서 4.3.2)
+  const [period, setPeriod] = useState<Period>(DEFAULT_PERIOD);
   const [mapView, setMapView] = useState<MapView>(MAP_VIEW_HOME);
   const [tab, setTab] = useState<ViewTabKey>("map");
   const [playing, setPlaying] = useState(false);
@@ -402,6 +407,25 @@ export default function Page() {
       : `중심 엔티티 ${terrName(relCenter)} · 관계 0`;
   };
 
+  /**
+   * 패널 [사건] 탭 (설계서 4.3.1 · 4.3.2 · 4.3.8). 영토는 그 영토, 행위자는 그
+   * 행위자가 올린 사건, 섬은 소속 영토 전부다 — `belongsTo` 가 셋을 같이 가른다
+   */
+  const eventIds: Set<string> | null =
+    selection.kind === "territory"
+      ? new Set([selection.id])
+      : selection.kind === "island"
+        ? new Set(layout.territories.filter((t) => t.islandKey === selection.key).map((t) => t.territoryId))
+        : null;
+  const eventList = eventIds ? eventsIn(MAP.events, d, period, (e) => belongsTo(e, eventIds)) : [];
+  const whereOf = (e: Ev) =>
+    e.actorTerritoryId && terr.has(e.actorTerritoryId)
+      ? `${terrName(e.actorTerritoryId)} → ${terrName(e.territoryId)}`
+      : terrName(e.territoryId);
+  const eventsBody = eventIds ? (
+    <EventsTab list={eventList} d={d} period={period} onPeriod={setPeriod} whereOf={whereOf} />
+  ) : null;
+
   /** 패널 [연결] 탭 본문. 선택이 없으면 없다 */
   const links = (() => {
     if (selection.kind === "none") return null;
@@ -625,6 +649,8 @@ export default function Page() {
               tab={panelTab}
               onTab={setPanelTab}
               links={links}
+              events={eventsBody}
+              eventBadge={eventIds ? eventList.length : null}
             />
           )}
         </div>
