@@ -127,6 +127,13 @@ class 명부:
 
     # ── 읽기 ────────────────────────────────────────────────────────
     def 줄들(self) -> list[줄]:
+        """명부를 읽습니다.
+
+        **두드릴 주소(주소 · 어니언)는 `[.]` 를 점으로 읽습니다.** 사람이 주소를
+        `abc[.]onion` 처럼 적어 둔 줄이 있습니다. 그대로 넘기면 urllib 이 대괄호를
+        IPv6 로 읽다 ValueError 를 내고 그 줄을 못 봅니다(랜섬 2줄, 9/22 판부터).
+        `현재` 는 노션 글자 그대로 둡니다 — 사람 값을 고쳐 쓰지 않습니다.
+        """
         out = []
         for page in self.n.query_all(self.ds):
             props = page.get("properties", {})
@@ -134,8 +141,8 @@ class 명부:
             out.append(줄(
                 page_id=page["id"],
                 이름=_글자(props.get(self.제목칸)),
-                주소=_글자(props.get("주소")),
-                어니언=_글자(props.get("어니언 주소")),
+                주소=_점살리기(_글자(props.get("주소"))),
+                어니언=_점살리기(_글자(props.get("어니언 주소"))),
                 규모=_글자(props.get("규모")),
                 상태=_글자(props.get("상태")),
                 현재=현재,
@@ -348,9 +355,18 @@ def _빈값(값: str) -> bool:
     return not s or s in 자리표시자 or s == "없음"
 
 
+def _점살리기(주소: str) -> str:
+    """`abc[.]onion` 처럼 점을 대괄호로 감싼 주소를 점으로 되돌립니다."""
+    return (주소 or "").replace("[.]", ".")
+
+
 def _주소열쇠(조각: str) -> str:
-    """같은 주소인지 가를 열쇠. 앞의 http:// · 뒤의 / · 대소문자를 뗍니다."""
-    s = (조각 or "").strip().lower()
+    """같은 주소인지 가를 열쇠. 앞의 http:// · 뒤의 / · 대소문자를 뗍니다.
+
+    `[.]` 도 점으로 봅니다. 사람이 `abc[.]onion` 으로 적은 주소와 기계가 본
+    `abc.onion` 은 같은 주소입니다.
+    """
+    s = _점살리기((조각 or "").strip().lower())
     s = re.sub(r"^[a-z][a-z0-9+.-]*://", "", s)
     return s.rstrip("/")
 

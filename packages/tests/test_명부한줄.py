@@ -227,6 +227,32 @@ def test_미러가_섞여_와도_없던_것만_이전_주소에_붙인다():
     assert _글자값(쓴것["이전 주소"]) == "http://z.example\nhttp://m.example", 쓴것
 
 
+# ── [.] 로 적은 주소 ───────────────────────────────────────────────
+def test_괄호점_주소는_점으로_읽고_노션_값은_둔다():
+    """사람이 `abc[.]onion` 으로 적은 줄. urllib 이 대괄호를 IPv6 로 읽다 멈췄다."""
+    from urllib.parse import urlparse
+    try:
+        urlparse("http://a[.]example").hostname
+        raise AssertionError("urllib 이 괄호점 주소를 받는다 — 이 시험의 전제가 바뀌었다")
+    except ValueError:
+        pass
+    m = _명부(_가짜노션([_쪽(주소="http://a[.]example", 어니언="b[.]onion")]))
+    r = m.줄들()[0]
+    assert r.주소 == "http://a.example" and r.어니언 == "b.onion", (r.주소, r.어니언)
+    assert urlparse(r.주소).hostname == "a.example"
+    assert r.현재["주소"] == "http://a[.]example", "사람 값을 바꿔 읽었다"
+
+
+def test_괄호점_사람_주소는_같은_주소로_보고_안_쓴다():
+    r, 가짜, 쓴것 = _돌려(_쪽(주소="http://a[.]example"), _본것(주소="http://a.example"))
+    assert "주소" not in 쓴것 and "이전 주소" not in 쓴것, 쓴것
+
+
+def test_주소열쇠는_괄호점을_점으로_본다():
+    assert write._주소열쇠("http://A[.]example/") == write._주소열쇠("a.example")
+    assert write._이어붙이기("http://a[.]onion", "http://a.onion") == "http://a[.]onion"
+
+
 # ── 규모: 숫자가 같고 날짜만 다르면 안 쓴다 ─────────────────────────
 def _규모본것(게시물: int = 821000) -> Place:
     return _본것(회원수=349000, 게시물수=게시물)
