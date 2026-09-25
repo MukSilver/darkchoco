@@ -229,8 +229,9 @@ export default function SearchOverlay({
     <>
       <div className="fixed inset-0 z-40" aria-hidden onClick={onClose} />
       <div className="absolute inset-0 z-50">
+        {/* 닫힌 검색창(`AppHeader`)과 같은 8px 네모. 테두리만 강조색이다 (피그마 ⑦-10a) */}
         <div
-          className="flex h-full items-center gap-s2 rounded-full border bg-input px-s4"
+          className="flex h-full items-center gap-s2 rounded-[8px] border bg-input px-s4"
           style={{
             borderColor: "var(--t-accent)",
             boxShadow: "0 0 0 3px color-mix(in srgb, var(--t-accent) 20%, transparent)",

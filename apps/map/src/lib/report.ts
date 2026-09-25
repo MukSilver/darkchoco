@@ -73,6 +73,25 @@ const GRADE_WORD: Record<Ev["size"], string | null> = {
 };
 
 /**
+ * 국가 부호 → 이름. 설명 문장에 「한국(KR)」 으로 쓴다.
+ *
+ * `tools/bake.py` 의 `COUNTRY_CODE` 를 거꾸로 옮긴 것이다. 굽기가 그 표 밖 부호를
+ * 막으므로 여기 없는 부호는 없어야 하지만, 들어오면 부호만 쓴다
+ */
+const COUNTRY_NAME: Record<string, string> = {
+  KR: "한국", US: "미국", JP: "일본", CN: "중국", TW: "대만",
+  VN: "베트남", IN: "인도", RU: "러시아", GB: "영국", DE: "독일",
+  FR: "프랑스", CA: "캐나다", AU: "호주", TH: "태국", ID: "인도네시아",
+  TR: "터키", BR: "브라질",
+};
+
+/** `KR` → `한국(KR)`. 모르는 부호는 그대로 */
+function countryText(code: string): string {
+  const name = COUNTRY_NAME[code];
+  return name ? `${name}(${code})` : code;
+}
+
+/**
  * 외부 확인 칩 색. 조직 · 규제기관이 스스로 밝힌 것만 success 로 두고 나머지(언론
  * 보도 · 연구자 발견 · 게시글만)는 neutral 이다. 시안에 이 칩이 없어 정한 값이다
  */
@@ -125,8 +144,13 @@ export function eventSummary(e: Ev, names: ReportNames): string {
     }
   }
 
-  const target = [e.country, e.industry].filter((x): x is string => !!x).join(" · ");
-  if (target) parts.push(`대상 분류는 ${target}입니다.`);
+  // 국가와 산업 분야를 제 이름으로 말한다. 전에는 「대상 분류는 KR · 유통입니다」라
+  // 부호가 분류 이름처럼 읽혔다. 둘을 쉼표로 이어 받침에 기대는 조사를 안 쓴다
+  const target = [
+    e.country ? `대상 국가는 ${countryText(e.country)}` : null,
+    e.industry ? `${e.country ? "" : "대상 "}산업 분야는 ${e.industry}` : null,
+  ].filter((x): x is string => !!x);
+  if (target.length) parts.push(`${target.join(", ")}입니다.`);
 
   const size = sizeText(e);
   const grade = GRADE_WORD[e.size];

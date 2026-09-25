@@ -24,9 +24,9 @@ import type { ReactNode } from "react";
 export type PanelHeader = {
   /** 눈표 앞쪽 글씨. `TERRITORY` 처럼 대문자로 낸다 */
   kindLabel: string;
-  /** 눈표 앞쪽 글씨 색 토큰. 섬 색이거나 null(회색) */
+  /** 눈표 글씨 색 토큰. 섬 색이거나 null(회색). 눈표 앞뒤가 이 한 색이다 */
   kindToken: string | null;
-  /** 눈표 앞쪽 글씨를 강조색으로 칠한다. 관계 탭의 `RELATION · 선택됨` 이 그렇다 */
+  /** 눈표를 강조색으로 칠한다. 관계 탭의 `RELATION · 선택됨` 이 그렇다 */
   kindAccent?: boolean;
   stateLabel: string;
   title: string;
@@ -120,12 +120,13 @@ export default function PanelShell({
 
       <aside className="absolute inset-0 flex flex-col overflow-y-auto border-l border-divider bg-panel">
         <header className="flex shrink-0 flex-col gap-s1 border-b border-divider px-s5 py-s3">
-          <p className="font-mono text-[10px] tracking-[0.16em]">
-            <span style={{ color: kindColor }}>{header.kindLabel}</span>
-            <span style={{ color: header.kindAccent ? kindColor : "var(--t-text-label)" }}>
-              {" "}
-              · {header.stateLabel}
-            </span>
+          {/*
+            눈표는 앞뒤가 한 색이다. 피그마 ⑦-2 「ISLAND · 선택됨」 · ⑦-11b 「TERRITORY ·
+            선택됨」 이 통째로 칠해져 있다 — 전에는 뒤쪽(「· 선택됨」)만 회색이었다.
+            아무것도 안 고른 「ECOSYSTEM · 선택 없음」(⑦-1)은 `kindColor` 가 회색이라 그대로다
+          */}
+          <p className="font-mono text-[10px] tracking-[0.16em]" style={{ color: kindColor }}>
+            {header.kindLabel} · {header.stateLabel}
           </p>
           <h2 className="text-[20px] font-semibold leading-tight text-title">{header.title}</h2>
           <p className="text-[12px] text-label">{header.subtitle}</p>
