@@ -10,7 +10,7 @@
     "start": "next start",
     "lint": "eslint",
     "pretest": "node tools/ensure_map.mjs",
-    "test": "npm run bake:check && node --experimental-strip-types --test src/lib/*.test.mjs",
+    "test": "npm run bake:check && python tools/bake_test.py && node --experimental-strip-types --test src/lib/*.test.mjs",
     "bake": "python tools/bake.py --out src/data/map.json",
     "bake:check": "python tools/bake.py --check-only --out src/data/map.json",
     "predeploy": "node tools/ensure_map.mjs --baked",
