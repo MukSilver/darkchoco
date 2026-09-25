@@ -414,6 +414,41 @@
 }
 
 /*
+ * 영토 상태 — 마우스 올림 · 떠오름 (설계서 4.2.3, 피그마 컴포넌트 시트
+ * `11 / 06 DW/Hex v2` 의 Hover · Selected · Linked).
+ *
+ *     side    떠오른 영토의 옆면. 윗면 테두리도 이 색이다
+ *     hover   마우스를 올린 영토와 고른 영토의 윗면. 채움보다 한 단계 진하다
+ *
+ * **라이트 블랙 옆면 넷은 화면 픽셀이다.** `03_⑦-11b 영토 선택 · 개요 패널 (Qilin)`
+ * 에서 고른 Qilin 과 이어진 셋의 아랫면을 읽었다. 행위자 옆면은 바탕과 거의 같아
+ * 윗면이 떠 있는 것처럼만 보이는데 시안이 그렇다. 다른 판은 컴포넌트 시트 색
+ * (원색 `side`)을 대비책으로 둔다.
+ *
+ * **hover 는 규칙으로 만든 값이다.** 라이트 블랙 시안에서 진한 윗면이 보이는 것은
+ * 고른 Qilin(#ff5d5d) 하나뿐이라, 그것을 「채움 90% + 옆면 10%」로 맞춰(#f75d5d)
+ * 네 섬에 같이 쓴다. 시안에 다른 섬의 진한 윗면이 그려지면 그 값으로 바꾼다.
+ */
+:root {
+  --t-island-forum-side: var(--p-forum-side);
+  --t-island-ransomware-side: var(--p-ransomware-side);
+  --t-island-telegram-side: var(--p-telegram-side);
+  --t-island-actor-side: var(--p-etc-side);
+}
+[data-mode="black"] {
+  --t-island-forum-side: #4331ca; /* BreachForums */
+  --t-island-ransomware-side: #b00909; /* Qilin */
+  --t-island-telegram-side: #105e7f; /* 랜섬웨어 공지 채널 */
+  --t-island-actor-side: #26282a; /* Initial Access Brokers */
+}
+:root {
+  --t-island-forum-hover: color-mix(in srgb, var(--t-island-forum) 90%, var(--t-island-forum-side));
+  --t-island-ransomware-hover: color-mix(in srgb, var(--t-island-ransomware) 90%, var(--t-island-ransomware-side));
+  --t-island-telegram-hover: color-mix(in srgb, var(--t-island-telegram) 90%, var(--t-island-telegram-side));
+  --t-island-actor-hover: color-mix(in srgb, var(--t-island-actor) 90%, var(--t-island-actor-side));
+}
+
+/*
  * 원색 팔레트. 모드가 없다.
  *
  * 다크웹 섬은 네 갈래 값을 쓴다.

@@ -9,8 +9,6 @@
  * 한 경로에 담으면 칸 경계가 안 보이므로, 채움용 경로와 격자용 경로를 나눈다.
  */
 
-import { Fragment } from "react";
-
 import { cellToXY, hexPoints } from "@/lib/hex";
 import type { MapLayout, TerritoryShape } from "@/lib/layout";
 import { CONF_DASH, KIND_NAME, type RelView } from "@/lib/relations";
@@ -26,6 +24,18 @@ function hexPath(col: number, row: number, size: number): string {
 function cellsPath(t: TerritoryShape, size: number): string {
   return t.cells.map(([c, r]) => hexPath(c, r, size)).join("");
 }
+
+/**
+ * 떠오른 영토의 입체 (설계서 4.2.3 「영토가 떠오르고」, 피그마 ⑦-11b · ⑦-3).
+ *
+ * 윗면을 `LIFT` 만큼 올리고, 같은 칸을 `DEPTH` 만큼 내려 옆면 색으로 먼저 깐다.
+ * 둘 사이로 옆면이 드러난다. 피그마 ⑦-11b 에서 옆면 두께가 칸 반지름의 절반쯤
+ * (Qilin 칸 반지름 21px 에 옆면 11~13px)이라 합을 5 로 둔다 — viewBox 칸 반지름이
+ * 10 이다 (`layout.ts` HEX). 윗면만 올리면 옆면이 얇아 입체로 안 읽히고, 옆면만
+ * 내리면 아래 칸을 너무 덮는다
+ */
+const LIFT = 2;
+const DEPTH = 3;
 
 /**
  * 알약 폭을 재려고 글자 너비를 어림한다.
@@ -75,13 +85,17 @@ export type HexMapProps = {
   selectedTerritory?: string;
   /** 고른 섬. 그 섬 전체가 진하다 */
   selectedIsland?: string;
+  /** 마우스를 올린 영토. 진하게 칠한다 (설계서 4.2.3 「영토 진하게」) */
+  hovered?: string | null;
   onHoverTerritory?: (id: string | null) => void;
   /**
    * 진하게 남길 영토. 영토를 고르면 그 영토와 관계로 이어진 영토다
-   * (설계서 4.2.3 「연결된 영토만 표시 중」). 없으면 위 두 값으로 가른다
+   * (설계서 4.2.3 「연결된 영토만 표시 중」). 없으면 위 두 값으로 가른다.
+   * **이 영토들은 떠오른다** — 피그마 ⑦-11b · ⑦-3 에서 고른 영토와 이어진 영토가
+   * 같이 입체로 떠 있다
    */
   lit?: ReadonlySet<string>;
-  /** 테두리를 그어 떠오르게 할 영토. [연결] 행을 고르면 상대 영토도 뜬다 (4.3.3) */
+  /** 떠오르게 할 영토. [연결] 행을 고르면 상대 영토도 뜬다 (4.3.3) */
   raised?: ReadonlySet<string>;
   /** 이어진 섬. 여기 없는 섬은 이름표와 번짐을 흐리게 한다 (4.2.3 「연결 없는 섬은 흐리게」) */
   litIslands?: ReadonlySet<string>;
@@ -136,6 +150,7 @@ export default function HexMap({
   layout,
   selectedTerritory,
   selectedIsland,
+  hovered,
   onHoverTerritory,
   lit,
   raised,
@@ -143,6 +158,29 @@ export default function HexMap({
   lines = [],
 }: HexMapProps) {
   const hasSelection = Boolean(selectedTerritory || selectedIsland);
+
+  /** 떠오르는가 — 고른 영토, 이어진 영토, [연결] 행의 상대 영토 */
+  const isUp = (t: TerritoryShape) =>
+    t.territoryId === selectedTerritory ||
+    Boolean(lit?.has(t.territoryId)) ||
+    Boolean(raised?.has(t.territoryId));
+  const flat = layout.territories.filter((t) => !isUp(t));
+  // 고른 영토를 맨 뒤에 그린다. 떠오른 이웃과 맞닿은 테두리가 고른 쪽 색으로 남는다
+  const up = layout.territories
+    .filter(isUp)
+    .sort(
+      (a, b) =>
+        Number(a.territoryId === selectedTerritory) -
+        Number(b.territoryId === selectedTerritory),
+    );
+  const hoveredFlat = flat.find((t) => t.territoryId === hovered);
+  /** 이름표와 관계선 끝 자리. 떠오른 영토는 윗면이 올라간 만큼 같이 올린다 */
+  const anchor = (t: TerritoryShape) =>
+    isUp(t) ? { x: t.label.x, y: t.label.y - LIFT } : t.label;
+  const hoverProps = (id: string) => ({
+    onMouseEnter: () => onHoverTerritory?.(id),
+    onMouseLeave: () => onHoverTerritory?.(null),
+  });
 
   /** 고른 것이 있으면 나머지는 흐리다. 없으면 다 같은 진하기다 */
   const dim = (t: TerritoryShape) => {
@@ -170,7 +208,7 @@ export default function HexMap({
     const key = [v.rel.from, v.rel.to].sort().join("|");
     const k = pairSeen.get(key) ?? 0;
     pairSeen.set(key, k + 1);
-    return [{ v, ...curve(a.label, b.label, k) }];
+    return [{ v, ...curve(anchor(a), anchor(b), k) }];
   });
 
   return (
@@ -198,6 +236,10 @@ export default function HexMap({
             </feMerge>
           </filter>
         ))}
+        {/* 떠오른 영토 아래 그림자. 피그마 ⑦-11b 에서 떠오른 덩어리 아래가 어둡다 */}
+        <filter id="raise-shadow" x="-10%" y="-10%" width="120%" height="130%">
+          <feDropShadow dx={0} dy={2.5} stdDeviation={2} floodOpacity={0.45} />
+        </filter>
       </defs>
 
       {/* 1층 — 번짐. 섬 테두리를 제 색으로 흐리게 한 번 더 그린다 */}
@@ -215,43 +257,87 @@ export default function HexMap({
         ))}
       </g>
 
-      {/* 2층 — 영토 채움. 이것이 지도의 본체다 */}
+      {/* 2층 — 영토 채움. 이것이 지도의 본체다. 떠오른 영토는 3층이 그린다 */}
       <g>
-        {layout.territories.map((t) => (
-          <Fragment key={t.territoryId}>
-            <path
-              data-pick="territory"
-              data-id={t.territoryId}
-              d={cellsPath(t, layout.size)}
-              fill={`var(--t-island-${t.token})`}
-              stroke="var(--t-border-hex)"
-              strokeWidth={1}
-              opacity={dim(t) ? 0.25 : 1}
-              className="cursor-pointer transition-opacity"
-              onMouseEnter={() => onHoverTerritory?.(t.territoryId)}
-              onMouseLeave={() => onHoverTerritory?.(null)}
-            />
-          </Fragment>
+        {flat.map((t) => (
+          <path
+            key={t.territoryId}
+            data-pick="territory"
+            data-id={t.territoryId}
+            d={cellsPath(t, layout.size)}
+            fill={`var(--t-island-${t.token})`}
+            stroke="var(--t-border-hex)"
+            strokeWidth={1}
+            opacity={dim(t) ? 0.25 : 1}
+            className="cursor-pointer transition-opacity"
+            {...hoverProps(t.territoryId)}
+          />
         ))}
+        {/*
+          마우스를 올린 영토 (설계서 4.2.3 「영토 진하게」, 컴포넌트 시트 `DW/Hex v2`
+          Hover — 한 단계 진한 채움에 옆면 색 테두리). 흐려진 영토도 올리면 진하다.
+
+          **제자리 경로의 색을 바꾸지 않고 위에 한 겹 덮는다.** 이웃 영토가 뒤에
+          그려져 테두리 반쪽을 덮기 때문이다. 덮는 겹은 포인터를 안 받는다 — 받으면
+          올린 순간 아래 경로에서 `mouseleave` 가 나서 호버가 깜박인다
+        */}
+        {hoveredFlat && (
+          <path
+            aria-hidden
+            d={cellsPath(hoveredFlat, layout.size)}
+            fill={`var(--t-island-${hoveredFlat.token}-hover)`}
+            stroke={`var(--t-island-${hoveredFlat.token}-side)`}
+            strokeWidth={1.2}
+            className="pointer-events-none"
+          />
+        )}
       </g>
 
       {/*
-        3층 — 고른 영토의 테두리를 한 번 더 그어 떠오르게 한다.
-        [연결] 행을 고르면 상대 영토도 같이 뜬다 (설계서 4.3.3)
+        3층 — 떠오른 영토 (설계서 4.2.3 · 4.3.3, 피그마 ⑦-11b · ⑦-3, `DW/Hex v2`
+        Selected · Linked). 고른 영토와 이어진 영토, [연결] 행의 상대 영토다.
+
+        **옆면을 다 깐 뒤 윗면을 다 올린다.** 떠오른 영토끼리 맞닿으면 위쪽 영토의
+        옆면이 아래쪽 영토 윗면을 덮지 않아야 한다. 고른 영토의 윗면은 마우스를
+        올린 것처럼 한 단계 진하다 — 시트에서 Selected 윗면이 Hover 색이다.
+        클릭은 두 겹 다 받는다. 옆면도 그 영토로 보이기 때문이다
       */}
-      {(selectedTerritory || raised) && (
-        <g aria-hidden>
-          {layout.territories
-            .filter((t) => t.territoryId === selectedTerritory || raised?.has(t.territoryId))
-            .map((t) => (
+      {up.length > 0 && (
+        <g>
+          <g filter="url(#raise-shadow)">
+            {up.map((t) => (
               <path
                 key={t.territoryId}
-                d={t.outline}
-                fill="none"
-                stroke="var(--t-text-title)"
-                strokeWidth={2}
+                data-pick="territory"
+                data-id={t.territoryId}
+                d={cellsPath(t, layout.size)}
+                transform={`translate(0 ${DEPTH})`}
+                fill={`var(--t-island-${t.token}-side)`}
+                stroke={`var(--t-island-${t.token}-side)`}
+                strokeWidth={1}
+                className="cursor-pointer"
+                {...hoverProps(t.territoryId)}
               />
             ))}
+          </g>
+          {up.map((t) => (
+            <path
+              key={t.territoryId}
+              data-pick="territory"
+              data-id={t.territoryId}
+              d={cellsPath(t, layout.size)}
+              transform={`translate(0 ${-LIFT})`}
+              fill={
+                t.territoryId === selectedTerritory || t.territoryId === hovered
+                  ? `var(--t-island-${t.token}-hover)`
+                  : `var(--t-island-${t.token})`
+              }
+              stroke={`var(--t-island-${t.token}-side)`}
+              strokeWidth={1}
+              className="cursor-pointer"
+              {...hoverProps(t.territoryId)}
+            />
+          ))}
         </g>
       )}
 
@@ -336,10 +422,11 @@ export default function HexMap({
           .filter((t) => !dim(t))
           .map((t) => {
             const w = textWidth(t.name, 8) + 12;
+            const at = anchor(t);
             return (
               <g
                 key={t.territoryId}
-                transform={`translate(${t.label.x - w / 2} ${t.label.y - 7})`}
+                transform={`translate(${at.x - w / 2} ${at.y - 7})`}
               >
                 <rect
                   width={w}

@@ -139,6 +139,15 @@ test('섬 · 생태계 패널에는 공식 발표 · 행위자 절이 없다', (
   assert.equal(isl.actor, null);
 });
 
+test('지나간 분기면 생태계 머리글이 「스냅샷 · 사건」 이다 (⑦-1a · ⑦-1b)', () => {
+  const eco = ecosystemView(I);
+  assert.match(eco.subtitle, /^섬 \d+ · 엔티티 \d+ · 연결 \d+$/);
+  const past = ecosystemView({ ...I, snapshot: '2025 Q3' });
+  assert.equal(past.subtitle, `2025 Q3 스냅샷 · 사건 ${eco.eventCount}건`);
+  // 머리글만 바뀌고 숫자는 그대로다
+  assert.deepEqual(past.stats, eco.stats);
+});
+
 test('섬 고정 설명은 네 섬 모두 있다 (포럼 확정, 나머지 초안)', () => {
   for (const isl of I.layout.islands) {
     const v = islandView(I, isl.islandKey);
