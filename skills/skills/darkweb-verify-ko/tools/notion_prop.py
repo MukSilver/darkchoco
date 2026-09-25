@@ -37,16 +37,33 @@ def res(db_id: str) -> str:
 
     **`SystemExit` 도 잡는다.** `notion._call` 은 노션 오류를 `SystemExit` 로 바꿔 던진다.
     `except Exception` 만 두면 첫 경로가 404 일 때 둘째 경로를 안 보고 끝났다.
-    둘 다 실패하면 마지막 까닭을 같이 낸다. 토큰이 없을 때도 그 말이 보인다."""
-    까닭 = ""
-    for path in ("/data_sources/" + db_id, "/databases/" + db_id):
-        try:
-            notion._call(path)
-            return path
-        except (Exception, SystemExit) as e:  # noqa: BLE001
-            까닭 = str(e)
-            continue
-    raise SystemExit("DB 를 찾지 못했다: %s\n%s" % (db_id, 까닭))
+
+    **database id 면 그 data_source 경로를 돌려준다** (2026-09-25 검토). 우리가 박아 둔 판
+    (2025-09-03)에서 GET /databases 는 제목과 data_sources 목록만 주고 칸이 없다. 그 경로를 그대로
+    쓰면 show 가 「칸 0개」 를 내고 add 가 있는 칸을 못 본 채 PATCH 를 보냈다. data_source 가
+    여럿이면 고르지 않고 멈춘다. 옛 꼴처럼 칸이 딸려 오면 그 경로를 쓴다.
+
+    둘 다 실패하면 두 까닭을 다 낸다. 첫 경로의 서버 오류가 둘째 경로의 404 에 가려지지 않는다.
+    토큰이 없을 때도 그 말이 보인다."""
+    try:
+        notion._call("/data_sources/" + db_id)
+        return "/data_sources/" + db_id
+    except (Exception, SystemExit) as e:  # noqa: BLE001
+        첫까닭 = str(e)
+    try:
+        d = notion._call("/databases/" + db_id)
+    except (Exception, SystemExit) as e:  # noqa: BLE001
+        raise SystemExit("DB 를 찾지 못했다: %s\n  data_sources: %s\n  databases: %s"
+                         % (db_id, 첫까닭, e)) from None
+    if isinstance(d.get("properties"), dict) and d["properties"]:
+        return "/databases/" + db_id
+    dss = d.get("data_sources") or []
+    if len(dss) == 1:
+        return "/data_sources/" + dss[0]["id"]
+    if not dss:
+        raise SystemExit("DB 는 열었는데 data_source 가 없다: %s" % db_id)
+    raise SystemExit("이 DB 에 data_source 가 %d 개다. 하나를 골라 그 id 를 준다: %s"
+                     % (len(dss), ", ".join("%s (%s)" % (x.get("id"), x.get("name", "")) for x in dss)))
 
 
 def db(db_id: str) -> dict:
