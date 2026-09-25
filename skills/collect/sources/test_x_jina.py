@@ -247,4 +247,4 @@ if fails:
     for f_ in fails:
         print("  - %s" % f_)
     sys.exit(1)
-print("통과. 시험 10 묶음")
+print("통과. 시험 11 묶음")
