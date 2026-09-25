@@ -27,6 +27,7 @@ import { useCallback, useRef, useState } from "react";
 import HexMap from "./HexMap";
 import HoverTip from "./HoverTip";
 import type { MapLayout } from "@/lib/layout";
+import type { RelView } from "@/lib/relations";
 
 /** 설계서 4.2.3 — 50%~200%, 25% 단위 */
 const ZOOM_MIN = 50;
@@ -55,12 +56,24 @@ function hintText(sel: MapSelection): string {
   return "섬 이름 클릭 → 섬 정보 · 영토 클릭 → 관계선";
 }
 
+/** 줌과 이동. 관계 탭에서 돌아올 때 그대로 되살리려고 부모가 들고 있는다 (설계서 4.3.3) */
+export type MapView = { zoom: number; pan: { x: number; y: number } };
+
+export const MAP_VIEW_HOME: MapView = { zoom: 100, pan: { x: 0, y: 0 } };
+
 export type MapCanvasProps = {
   layout: MapLayout;
   selection: MapSelection;
   onSelect: (sel: MapSelection) => void;
   /** 영토 id → 최근 관측일 `MM-DD`. 툴팁 다섯째 줄에 쓴다 */
   lastSeen: Record<string, string>;
+  view: MapView;
+  onView: (v: MapView) => void;
+  /** 관계선과 진하기. `HexMap` 에 그대로 넘긴다 (설계서 4.2.3 · 4.3.3) */
+  lines?: readonly RelView[];
+  lit?: ReadonlySet<string>;
+  raised?: ReadonlySet<string>;
+  litIslands?: ReadonlySet<string>;
 };
 
 export default function MapCanvas({
@@ -68,9 +81,15 @@ export default function MapCanvas({
   selection,
   onSelect,
   lastSeen,
+  view,
+  onView,
+  lines,
+  lit,
+  raised,
+  litIslands,
 }: MapCanvasProps) {
-  const [zoom, setZoom] = useState(100);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const { zoom, pan } = view;
+  const setPan = (p: MapView["pan"]) => onView({ zoom, pan: p });
   const [hover, setHover] = useState<{ id: string; x: number; y: number } | null>(
     null,
   );
@@ -94,13 +113,10 @@ export default function MapCanvas({
     ? layout.islands.find((i) => i.islandKey === hovered.islandKey)
     : undefined;
 
-  const reset = useCallback(() => {
-    setZoom(100);
-    setPan({ x: 0, y: 0 });
-  }, []);
+  const reset = useCallback(() => onView(MAP_VIEW_HOME), [onView]);
 
   const step = (by: number) =>
-    setZoom((z) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z + by)));
+    onView({ pan, zoom: Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom + by)) });
 
   return (
     <div
@@ -199,6 +215,10 @@ export default function MapCanvas({
             onHoverTerritory={(id) =>
               setHover(id ? { id, ...at.current } : null)
             }
+            lines={lines}
+            lit={lit}
+            raised={raised}
+            litIslands={litIslands}
           />
         </div>
       </div>

@@ -7,6 +7,7 @@
  */
 
 import type { MapLayout } from "./layout.ts";
+import { connectedIslandCount, islandPairs, partnerCount, type RelView } from "./relations.ts";
 import type { MapResult, TerritoryMetrics } from "./score.ts";
 import type { Ev } from "./types.ts";
 
@@ -218,15 +219,23 @@ export type BuildInput = {
   result: MapResult;
   events: readonly Ev[];
   d: Date;
-  linkCount: number;
+  /** 기준일에 그릴 관계 (`relationsAt`). [연결] 탭 배지와 머리글 연결 수가 여기서 나온다 */
+  rels: readonly RelView[];
   /** 영토 id → 최근 관측일 `MM-DD` */
   lastSeen: Record<string, string>;
 };
 
+function islandOfFn(layout: MapLayout): (id: string) => string | undefined {
+  const m = new Map(layout.territories.map((t) => [t.territoryId, t.islandKey]));
+  return (id) => m.get(id);
+}
+
 /** 선택 없음 — 다크웹 생태계 전체 (피그마 ⑦-1) */
 export function ecosystemView(i: BuildInput): PanelView {
-  const { layout, result, events, d, linkCount } = i;
+  const { layout, result, events, d } = i;
   const live = layout.islands;
+  // 생태계의 연결 수는 이 기준일에 그릴 관계선 수다 (설계서 6.4 「연결 수」)
+  const linkCount = i.rels.length;
   const ts = result.territories.filter((t) => t.cells > 0);
   // 영토 사건 수를 더하지 않는다. 행위자 섬이 같은 사건을 한 번 더 세서
   // 그 몫이 두 번 들어간다 (정본 요약 탭의 217 = 실제 170 + 행위자 47)
@@ -271,6 +280,8 @@ export function islandView(i: BuildInput, islandKey: string): PanelView | null {
   const { layout, result, events, d } = i;
   const isl = layout.islands.find((x) => x.islandKey === islandKey);
   if (!isl) return null;
+  // 섬 [연결] 탭은 이 섬과 다른 섬 사이 요약만 보인다 (설계서 4.3.1)
+  const linkCount = islandPairs(i.rels, islandOfFn(layout), islandKey).length;
 
   const mine = result.territories.filter((t) => t.islandKey === islandKey);
   const names = new Map(
@@ -296,7 +307,7 @@ export function islandView(i: BuildInput, islandKey: string): PanelView | null {
     stateLabel: "선택됨",
     kindToken: isl.token,
     title: isl.name,
-    subtitle: `엔티티 ${rows.length} · 사건 ${eventCount}건`,
+    subtitle: `엔티티 ${rows.length} · 사건 ${eventCount}건 · 연결 ${linkCount}`,
     stats: [
       { label: "활동도 (평균)", value: String(avg) },
       {
@@ -312,7 +323,7 @@ export function islandView(i: BuildInput, islandKey: string): PanelView | null {
     barToken: isl.token,
     months: monthlyCounts(events, d, (e) => belongsTo(e, ids)),
     eventCount,
-    linkCount: 0,
+    linkCount,
   };
 }
 
@@ -326,6 +337,9 @@ export function territoryView(
   if (!t) return null;
   const isl = layout.islands.find((x) => x.islandKey === t.islandKey);
   const m = t.metrics;
+  // 탭 배지는 연결된 엔티티 수, 머리글은 연결된 섬 수다 (설계서 4.3.2)
+  const linkCount = partnerCount(i.rels, territoryId);
+  const islandsLinked = connectedIslandCount(i.rels, territoryId, islandOfFn(layout));
 
   // 자동 문장. **설계서에도 피그마에도 예시가 없어 우리가 정한 꼴이다.**
   // 갖고 있는 값(섬 이름 · 비중 · 상태)만으로 만들고 없는 말은 안 붙인다
@@ -339,7 +353,7 @@ export function territoryView(
     kindToken: t.token,
     title: t.name,
     subtitle:
-      `${isl?.name ?? ""} · 사건 ${m.eventCount}건 · 활동도 ${m.activity}`.trim(),
+      `${isl?.name ?? ""} · 사건 ${m.eventCount}건 · 활동도 ${m.activity} · 연결된 섬 ${islandsLinked}`.trim(),
     stats: [
       {
         // 활동도 옆 ▲▼ 는 사건 수 변화율이다 (설계서 3.7, 판 1.2)
@@ -362,7 +376,7 @@ export function territoryView(
     barToken: t.token,
     months: monthlyCounts(events, d, (e) => belongsTo(e, new Set([territoryId]))),
     eventCount: m.eventCount,
-    linkCount: 0,
+    linkCount,
   };
 }
 
