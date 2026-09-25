@@ -363,6 +363,33 @@ def test_랜섬_한_달을_못_받은_판은_피해로_센_네_칸을_안_쓴다
     assert p.피해기업수 == 1 and p.최근활동 == "2026-08-20", p
 
 
+def test_랜섬_연속_실패로_멈추면_안_물은_달도_못_받은_달로_센다():
+    """여섯 달 중 앞의 셋이 실패해 멈추면 뒤의 셋은 안 묻는다. 「6달 중 6달」 이어야 한다.
+    전에는 실패한 셋만 세어 「6달 중 3달」 로 찍혀, 하나도 못 받은 판이 반쯤 받은 판으로 보였다."""
+    import contextlib
+    import io
+    그룹 = [{"name": "G", "locations": [{"available": True, "slug": "http://g.onion"}]}]
+    물은수 = [0]
+
+    def 받기(url, m, op=None):
+        if url.endswith("/groups"):
+            return 그룹
+        물은수[0] += 1
+        raise OSError("못 받음")
+
+    옛, 옛오프너 = ransom._받기, _안나가게(ransom)
+    ransom._받기 = 받기
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf):
+            p = next(iter(ransom.조사(개월수=6)))
+    finally:
+        ransom._받기, ransom.오프너 = 옛, 옛오프너
+    assert 물은수[0] == ransom.연속실패_상한, 물은수
+    assert "피해 목록 6달 중 6달을 못 받아" in buf.getvalue(), buf.getvalue()
+    assert p.피해기업수 is None, p
+
+
 def test_랜섬_목록을_못_받으면_이유가_남는다():
     옛, 옛오프너 = ransom._받기, _안나가게(ransom)
     def 터짐(url, m, op=None):
