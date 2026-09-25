@@ -14,9 +14,10 @@
 import { useMemo, useState } from "react";
 
 import EventRow from "./EventRow";
+import { recentKpi } from "@/lib/entity";
 import { eventsIn } from "@/lib/events";
 import type { MapLayout, TerritoryShape } from "@/lib/layout";
-import { belongsTo, countInWindow } from "@/lib/panel";
+import { belongsTo } from "@/lib/panel";
 import type { Status } from "@/lib/score";
 import type { Ev } from "@/lib/types";
 
@@ -34,8 +35,10 @@ export type EntityTabProps = {
   events: readonly Ev[];
   /** 기준일 D */
   d: Date;
-  /** 영토 id → 최근 관측일 `MM-DD` */
+  /** 영토 id → 최근 관측일 `MM-DD`. 화면에 적는 값이다 */
   lastSeen: Record<string, string>;
+  /** 영토 id → 최근 관측 시각 (ms). 「최근 관측」 열 정렬이 이것을 쓴다 (설계서 L737-739) */
+  seenAt: Record<string, number>;
   /** 고른 섬. 지도에서 섬을 고른 채 넘어오면 그 섬으로 연다 (설계서 4.3.5) */
   islandKey?: string;
   onPickIsland: (key: string) => void;
@@ -51,6 +54,7 @@ export default function EntityTab({
   events,
   d,
   lastSeen,
+  seenAt,
   islandKey,
   onPickIsland,
   selectedTerritory,
@@ -80,18 +84,19 @@ export default function EntityTab({
         case "events":
           return t.metrics.eventCount;
         case "lastSeen":
-          // `MM-DD` 문자열이라 사전순이 곧 날짜순이다. 해가 바뀌면 틀리지만
-          // 이 열은 한 해 안에서 견주는 용도다
-          return lastSeen[t.territoryId] ?? "";
+          // 화면 글자 `MM-DD` 가 아니라 시각으로 견준다. 데이터가 2021 년부터라
+          // 글자로 견주면 해가 바뀌는 자리에서 차례가 뒤집힌다 (설계서 L737-739)
+          return seenAt[t.territoryId] ?? -Infinity;
       }
     };
     return [...mine].sort((a, b) => {
       const x = val(a);
       const y = val(b);
-      const c = typeof x === "string" ? x.localeCompare(y as string) : x - (y as number);
+      // -Infinity 끼리 빼면 NaN 이라 크기로만 가른다
+      const c = x === y ? 0 : x < y ? -1 : 1;
       return asc ? c : -c;
     });
-  }, [layout, island, sort, asc, lastSeen]);
+  }, [layout, island, sort, asc, seenAt]);
 
   if (!island) {
     return (
@@ -101,9 +106,11 @@ export default function EntityTab({
     );
   }
 
-  // 이 섬에 속한 영토 id. 30일 사건 수를 셀 때 쓴다
+  // 이 섬에 속한 영토 id. 최근 주요 이벤트를 고를 때 쓴다
   const mine = new Set(rows.map((t) => t.territoryId));
   const live = rows.filter((t) => t.metrics.status === "활성");
+  // 최근 30일 사건과 전월 대비 (설계서 4.3.5 L725). 행위자 섬도 제 몫이 잡힌다
+  const recent = recentKpi(rows);
   const avg = rows.length
     ? Math.round(rows.reduce((a, t) => a + t.metrics.activity, 0) / rows.length)
     : 0;
@@ -172,12 +179,18 @@ export default function EntityTab({
           value={`${live.length} / ${rows.length}`}
           note="전체 엔티티 대비"
         />
+        {/* 피그마 ⑦-7 「▲ 4 · 전월 대비」. 직전 30일이 0건이면 견줄 것이 없어 기간만 적는다 */}
         <Kpi
           label="최근 30일 사건"
-          value={String(
-            countInWindow(events, d, 30, (e) => mine.has(e.territoryId)),
-          )}
-          note="지난 30일"
+          value={String(recent.count)}
+          trend={recent.trend ?? undefined}
+          note={
+            recent.trend === null
+              ? "지난 30일"
+              : recent.trend === 0
+                ? "전월과 같음"
+                : "전월 대비"
+          }
         />
         <Kpi
           label="최고 활동도"
