@@ -150,6 +150,58 @@ def test_새_칸도_반출_검사가_모양까지_본다():
     assert len(bake.check(bad)) == 4, bake.check(bad)
 
 
+def test_랜섬_유출은_파일_공개가_확인돼야_데이터_게시다():
+    ek = bake.event_kind
+    assert ek("랜섬웨어 유출", False, False) == "claim", "정본 — 공개가 확인 안 되면 피해 주장"
+    assert ek("랜섬웨어 유출", False, False, True) == "data_post"
+    assert ek("랜섬웨어 유출", True, False, True) == "claim", "카운트다운 중이면 공개 전"
+    assert ek("DB 판매", False, True) == "repost", "재게시가 앞선다"
+    assert ek("사기 의심", False, False) is None, "사기 의심은 칩이 없다"
+
+
+def test_위험도는_악용_가능성과_유출_항목으로_가른다():
+    rl = bake.risk_level
+    assert rl("가능", []) == "high"
+    assert rl("조건부", ["주민번호"]) == "high", "높음 줄을 먼저 본다"
+    assert rl(None, ["카드금융"]) == "high"
+    assert rl("조건부", ["이메일"]) == "medium"
+    assert rl("불가", None) == "low" and rl(None, []) == "low"
+
+
+def test_손_고침_표는_번호로_사건을_고치고_지운다():
+    import tempfile
+    q, f = _cand("RANSOMWARE", "Qilin"), _cand("FORUM", "Altenen")
+    ix = bake.RegistryIndex([q, f])
+    evs = [{"id": "LEAK-1", "cand": q, "kind": "claim", "postedAt": "2026-01-01"},
+           {"id": "LEAK-2", "cand": q, "kind": "claim", "postedAt": "2026-01-02"},
+           {"id": "LEAK-3", "cand": q, "kind": "claim", "postedAt": "2026-01-03"}]
+    old = bake.OVERRIDES_FILE
+    with tempfile.TemporaryDirectory() as d:
+        bake.OVERRIDES_FILE = Path(d) / "overrides.json"
+        bake.OVERRIDES_FILE.write_text(
+            '{"events": {"LEAK-1": {"drop": true}, "LEAK-2": {"kind": "sale", "postedAt": "2026-02-02",'
+            ' "territory": ["FORUM", "Altenen"]}, "LEAK-3": {"kind": "없는 칩"}}}', encoding="utf-8")
+        out = bake.apply_overrides(evs, ix, lambda m: None)
+    bake.OVERRIDES_FILE = old
+    assert [e["id"] for e in out] == ["LEAK-2", "LEAK-3"]
+    assert out[0]["kind"] == "sale" and out[0]["postedAt"] == "2026-02-02" and out[0]["cand"] is f
+    assert out[1]["kind"] == "claim", "표 밖 칩은 안 쓴다"
+    assert bake.apply_overrides(evs, ix, lambda m: None) == evs, "파일이 없으면 그대로다"
+
+
+def test_연결된_사건은_목록_안_사건끼리만():
+    base = {"territories": [{"id": "f1", "name": "F", "islandId": "FORUM", "web": "dark"}],
+            "events": [{"id": "LEAK-1", "territoryId": "f1", "postedAt": "2026-01-01", "verdict": "high",
+                        "size": "unknown", "repost": False, "excluded": False, "risk": "low", "linked": ["LEAK-2"]},
+                       {"id": "LEAK-2", "territoryId": "f1", "postedAt": "2026-01-02", "verdict": "high",
+                        "size": "unknown", "repost": False, "excluded": False, "risk": "high", "scam": True}],
+            "relations": [], "links": []}
+    assert bake.check(base) == []
+    base["events"][0]["linked"] = ["LEAK-9", "LEAK-1"]
+    base["events"][1]["risk"] = "위험"
+    assert len(bake.check(base)) == 2, bake.check(base)
+
+
 def json_copy(x):
     import json
     return json.loads(json.dumps(x))
