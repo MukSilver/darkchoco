@@ -72,17 +72,25 @@ const EV_KINDS = new Set<string>(["data_post", "claim", "sale", "access_sale", "
 /** 규모 단위. 굽기의 `claim_size` 가 내는 값뿐이다 */
 const SIZE_UNITS = new Set(["TB", "GB", "MB", "KB", "억", "만", "건"]);
 /** 공식 발표 사고 선택지 (굽기 `LEAK_ITEMS` · `CONFIRM_VALUES` · `SOURCE_KINDS` 와 같게) */
-const LEAK_ITEMS = new Set(["이름", "이메일", "전화", "계정", "주소", "카드금융", "주민번호", "기타"]);
+const LEAK_ITEMS = new Set(["이름", "이메일", "전화", "계정", "주소", "카드금융", "주민번호", "기타", "회사 내부 자료"]);
+const RISKS = new Set(["high", "medium", "low"]);
 const CONFIRMS = new Set(["조직 공식 발표", "게시글만", "언론 보도", "규제기관 확정", "연구자 발견"]);
 const SOURCE_KINDS = new Set(["언론 보도", "보안업체", "기타", "기업 공지", "개인정보보호위원회", "한국인터넷진흥원"]);
 
-/** 공식 발표 사고 칸 (설계서 4.3.4). 공식 발표 사건에만 받는다 */
+/**
+ * 보고서 팝업 재료 (설계서 3.10 · 4.3.4). 유출 항목 · 위험도 · 연결된 사건 · 사기 의심은
+ * 모든 사건에, 사고 시점 · 외부 확인 · 출처 종류는 공식 발표 사건에만 받는다.
+ * 연결된 사건은 목록 안 사건 번호만 남긴다 (`MAP` 을 만들 때 거른다)
+ */
 function pickOfficial(e: Ev): Partial<Ev> {
-  if (e.kind !== "official") return {};
   const out: Partial<Ev> = {};
-  if (typeof e.occurredAt === "string" && /^\d{4}-\d{2}-\d{2}$/.test(e.occurredAt)) out.occurredAt = e.occurredAt;
   const items = (e.leakItems ?? []).filter((x) => LEAK_ITEMS.has(x));
   if (items.length) out.leakItems = items;
+  if (e.risk && RISKS.has(e.risk)) out.risk = e.risk;
+  if (Array.isArray(e.linked) && e.linked.length) out.linked = e.linked.filter((x) => typeof x === "string");
+  if (e.scam === true) out.scam = true;
+  if (e.kind !== "official") return out;
+  if (typeof e.occurredAt === "string" && /^\d{4}-\d{2}-\d{2}$/.test(e.occurredAt)) out.occurredAt = e.occurredAt;
   if (e.confirm && CONFIRMS.has(e.confirm)) out.confirm = e.confirm;
   if (e.sourceKind && SOURCE_KINDS.has(e.sourceKind)) out.sourceKind = e.sourceKind;
   return out;
@@ -152,7 +160,19 @@ function pickRelations(
 export const isBaked = (baked.events?.length ?? 0) > 0;
 
 const territories = isBaked ? baked.territories.map(pickTerritory) : [];
-const events = isBaked ? baked.events.map(pickEv) : [];
+const events = (() => {
+  if (!isBaked) return [];
+  const list = baked.events.map(pickEv);
+  // 연결된 사건은 목록 안 사건끼리만 (굽기 검사와 같은 규칙)
+  const ids = new Set(list.map((e) => e.id));
+  return list.map((e) => {
+    if (!e.linked) return e;
+    const linked = e.linked.filter((x) => ids.has(x) && x !== e.id);
+    const { linked: _drop, ...rest } = e;
+    void _drop;
+    return linked.length ? { ...rest, linked } : rest;
+  });
+})();
 
 export const MAP: MapData = isBaked
   ? {

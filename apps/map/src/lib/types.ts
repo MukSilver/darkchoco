@@ -174,10 +174,23 @@ export type Ev = {
    * 출처 종류. 넷 다 날짜나 선택지다. **조직명과 출처 링크는 안 싣는다** (2026-09-26)
    */
   occurredAt?: string;
-  leakItems?: string[];
   confirm?: string;
   sourceKind?: string;
+  /** 유출 항목 (수집 DB · 유출 사고 DB 선택지). 보고서 팝업과 위험도 재료 */
+  leakItems?: string[];
+  /**
+   * 위험도 (설계서 3.10). 재료(검증 DB 즉시 악용 가능성)를 안 싣고 굽기가 매긴다 —
+   * 규칙은 `score.ts` 의 `riskLevel` 과 같다 (`bake.py` `risk_level`)
+   */
+  risk?: EvRisk;
+  /** 연결된 사건 번호 — 수집 DB 「같은 사건」 (설계서 4.3.4). 지도에 오른 사건끼리만 */
+  linked?: string[];
+  /** 게시 성격 「사기 의심」. 칩 없이 필터에서만 쓴다 (설계서 2.3) */
+  scam?: boolean;
 };
+
+/** 위험도 (설계서 3.10, 제안). 화면 이름은 `events.ts` 의 `RISK_LABEL` */
+export type EvRisk = "high" | "medium" | "low";
 
 /**
  * 사건 종류 칩 (설계서 2.3).
