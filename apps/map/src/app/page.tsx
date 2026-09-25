@@ -29,7 +29,7 @@ import { DARK_ISLANDS, islandToken } from "@/lib/islands";
 import { layoutMap } from "@/lib/layout";
 import { MAP, isBaked } from "@/lib/mapData";
 import { DEFAULT_PERIOD, eventTitle, eventsIn, type Period } from "@/lib/events";
-import { belongsTo, ecosystemView, islandView, territoryView } from "@/lib/panel";
+import { allIslandPairs, belongsTo, ecosystemView, islandView, territoryView } from "@/lib/panel";
 import type { Ev } from "@/lib/types";
 import {
   defaultCenter,
@@ -87,6 +87,13 @@ const TO: QuarterKey = LAST > quarterOfDate(TODAY) ? LAST : quarterOfDate(TODAY)
 
 /** 관계 전부. 활동 관계(행위자 → 영토)는 사건에서 만든다 (설계서 3.9 · 4.3.8) */
 const ALL_RELS = withActivity(MAP.relations, MAP.events);
+
+/**
+ * 영토 id → 명부 칸. 패널 [개요]가 활동도 원자료(4.3.2)와 행위자 정보(4.3.8)를
+ * 여기서 읽는다 — 배치 결과(`layout`)에는 계산 값만 있다
+ */
+const REGISTRY = new Map(MAP.territories.map((t) => [t.id, t]));
+const registryOf = (id: string) => REGISTRY.get(id);
 
 /**
  * [연결] 탭에서 관계 탭으로 넘어갈 때 적어 두는 출발 화면 (설계서 4.3.3
@@ -203,7 +210,7 @@ export default function Page() {
   }, [d]);
 
   const view = useMemo(() => {
-    const input = { layout, result, events: MAP.events, d, rels, lastSeen };
+    const input = { layout, result, events: MAP.events, d, rels, lastSeen, registry: registryOf };
     if (selection.kind === "island") {
       return islandView(input, selection.key) ?? ecosystemView(input);
     }
@@ -640,27 +647,27 @@ export default function Page() {
 
   /**
    * 패널 [사건] 탭 (설계서 4.3.1 · 4.3.2 · 4.3.8). 영토는 그 영토, 행위자는 그
-   * 행위자가 올린 사건, 섬은 소속 영토 전부다 — `belongsTo` 가 셋을 같이 가른다
+   * 행위자가 올린 사건, 섬은 소속 영토 전부다 — `belongsTo` 가 셋을 같이 가른다.
+   * 선택이 없으면 지도에 있는 영토 전부다 (피그마 ⑦-1 탭 「사건 N」). 행마다 영토
+   * 이름이 붙는 것은 섬과 같다
    */
-  const eventIds: Set<string> | null =
+  const eventIds: Set<string> =
     selection.kind === "territory"
       ? new Set([selection.id])
       : selection.kind === "island"
         ? new Set(layout.territories.filter((t) => t.islandKey === selection.key).map((t) => t.territoryId))
-        : null;
-  const eventList = eventIds
-    ? eventsIn(
-        MAP.events,
-        d,
-        period,
-        (e) => belongsTo(e, eventIds) && (!actorFilter || e.actorTerritoryId === actorFilter),
-      )
-    : [];
+        : present;
+  const eventList = eventsIn(
+    MAP.events,
+    d,
+    period,
+    (e) => belongsTo(e, eventIds) && (!actorFilter || e.actorTerritoryId === actorFilter),
+  );
   const whereOf = (e: Ev) =>
     e.actorTerritoryId && terr.has(e.actorTerritoryId)
       ? `${terrName(e.actorTerritoryId)} → ${terrName(e.territoryId)}`
       : terrName(e.territoryId);
-  const eventsBody = eventIds ? (
+  const eventsBody = (
     <EventsTab
       key={focusEvent ?? ""}
       list={eventList}
@@ -672,11 +679,29 @@ export default function Page() {
       onClearActor={() => setActorFilter(null)}
       focus={focusEvent}
     />
-  ) : null;
+  );
 
-  /** 패널 [연결] 탭 본문. 선택이 없으면 없다 */
+  /**
+   * 패널 [연결] 탭 본문. 선택이 없으면 섬 쌍 요약 전부다 (피그마 ⑦-1 탭 「연결 N」).
+   * 섬 [연결] 탭과 같은 줄이라 행 동작(4.3.3)도 같다
+   */
   const links = (() => {
-    if (selection.kind === "none") return null;
+    if (selection.kind === "none") {
+      return (
+        <LinksTab
+          mode="island"
+          rows={[]}
+          pairs={allIslandPairs(rels, islandOf, layout.islands.map((i) => i.islandKey))}
+          nameOf={terrName}
+          islandOf={islandOf}
+          islandInfo={islandInfo}
+          selected={liveLinkSel}
+          onSelect={setLinkSel}
+          onOpenRel={openRel}
+          onOpenPair={openPair}
+        />
+      );
+    }
     if (selection.kind === "island") {
       return (
         <LinksTab
@@ -885,7 +910,9 @@ export default function Page() {
                     ? { id: origin.selection.id, name: origin.selection.name }
                     : origin && origin.selection.kind === "island"
                       ? { id: "", name: origin.selection.name }
-                      : null
+                      : origin
+                        ? { id: "", name: "다크웹 생태계" }
+                        : null
                 }
                 onBack={back}
                 moveTo={moveTo}
@@ -971,7 +998,11 @@ export default function Page() {
               onTab={setPanelTab}
               links={links}
               events={eventsBody}
-              eventBadge={eventIds ? eventList.length : null}
+              eventBadge={eventList.length}
+              onPickTerritory={(id) => {
+                const t = terr.get(id);
+                if (t) select({ kind: "territory", id, name: t.name });
+              }}
             />
           )}
         </div>
