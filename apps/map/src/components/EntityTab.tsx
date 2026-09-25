@@ -47,6 +47,8 @@ export type EntityTabProps = {
   onPickTerritory: (id: string) => void;
   /** 「지도에서 보기」 */
   onGoToMap: (id: string) => void;
+  /** 「최근 주요 이벤트」 사건 더블클릭 — 보고서 팝업 (설계서 4.3.5 L745 · 4.3.4) */
+  onOpenEvent?: (id: string) => void;
 };
 
 export default function EntityTab({
@@ -60,6 +62,7 @@ export default function EntityTab({
   selectedTerritory,
   onPickTerritory,
   onGoToMap,
+  onOpenEvent,
 }: EntityTabProps) {
   const [sort, setSort] = useState<SortKey>("activity");
   const [asc, setAsc] = useState(false);
@@ -318,6 +321,7 @@ export default function EntityTab({
         nameOf={(id) => layout.territories.find((t) => t.territoryId === id)?.name ?? ""}
         picked={pickedEv}
         onPick={setPickedEv}
+        onOpen={onOpenEvent}
       />
     </div>
   );
@@ -325,7 +329,7 @@ export default function EntityTab({
 
 /**
  * 「최근 주요 이벤트」 — 고른 섬의 최신 사건 셋, 날짜순 (설계서 4.3.5).
- * 더블클릭 보고서 팝업(4.3.4)은 아직 없다
+ * 더블클릭하면 보고서 팝업(4.3.4)이 열린다. 카드 오른쪽 위 안내 문구는 피그마 ⑦-7 그대로다
  */
 function RecentEvents({
   title,
@@ -333,16 +337,21 @@ function RecentEvents({
   nameOf,
   picked,
   onPick,
+  onOpen,
 }: {
   title: string;
   list: Ev[];
   nameOf: (territoryId: string) => string;
   picked: string | null;
   onPick: (id: string | null) => void;
+  onOpen?: (id: string) => void;
 }) {
   return (
     <section className="flex shrink-0 flex-col gap-s3 rounded-[14px] border border-edge px-s5 py-s4">
-      <h3 className="text-[12px] text-label">{title}</h3>
+      <div className="flex items-baseline justify-between gap-s3">
+        <h3 className="text-[12px] text-label">{title}</h3>
+        {onOpen && list.length > 0 && <span className="text-[11px] text-label">사건 더블클릭 → 상세 팝업</span>}
+      </div>
       {list.length === 0 ? (
         <p className="text-[12px] text-label">이 기준일까지 이 섬에 올라온 사건이 없습니다.</p>
       ) : (
@@ -358,6 +367,7 @@ function RecentEvents({
               }
               on={picked === e.id}
               onClick={() => onPick(picked === e.id ? null : e.id)}
+              onOpen={onOpen && (() => onOpen(e.id))}
             />
           ))}
         </div>

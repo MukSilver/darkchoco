@@ -1,7 +1,8 @@
 /**
  * 사건 목록 — 설계서 4.3.1 · 4.3.2 · 4.3.5 · 4.3.8.
  *
- * 패널 [사건] 탭과 엔티티 탭 「최근 주요 이벤트」가 쓴다.
+ * 패널 [사건] 탭과 엔티티 탭 「최근 주요 이벤트」가 쓴다. 보고서 팝업(4.3.4)은
+ * 이 조각들로 `report.ts` 가 한 장을 짓는다.
  *
  * **사건 제목은 새로 짓는다** (2026-09-25 최현서 결정). 노션 자료 제목에 피해
  * 조직 이름이 들어 있어 굽기가 안 싣는다. 대신 분류 칸으로 만든다.
@@ -13,7 +14,7 @@
  */
 
 import { inScope } from "./score.ts";
-import type { Ev, EvKind } from "./types.ts";
+import type { Ev, EvKind, EvRisk, Relation } from "./types.ts";
 
 /** 사건 종류 칩 이름 (설계서 2.3) */
 export const EV_KIND_LABEL: Record<EvKind, string> = {
@@ -37,6 +38,52 @@ export const EV_KIND_TONE: Record<EvKind, string> = {
   repost: "violet",
   official: "info",
 };
+
+/** 위험도 칩 이름 (설계서 3.10). 칩에는 「위험도 높음」 처럼 앞에 붙여 쓴다 */
+export const RISK_LABEL: Record<EvRisk, string> = {
+  high: "높음",
+  medium: "중간",
+  low: "낮음",
+};
+
+/**
+ * 위험도 칩 색. 피그마 ⑦-4 하단 사건 상세 모달의 「위험도 높음」 이 danger 칩이다.
+ * 중간 · 낮음은 시안에 없어 warning · neutral 로 한 단씩 내렸다
+ */
+export const RISK_TONE: Record<EvRisk, string> = {
+  high: "danger",
+  medium: "warning",
+  low: "neutral",
+};
+
+/**
+ * 보고서 팝업의 게시 시각 `2026-09-10 12:40 UTC` (피그마 ⑦-4 하단 모달 머리 줄).
+ *
+ * 목록 줄(`stampOf`)은 노션이 적은 시각 그대로인데 팝업은 **UTC 로 옮겨 적는다** —
+ * 시안이 「UTC」 를 붙였고, 포럼 · 텔레그램 시각이 섞인 자료라 한 기준이 있어야
+ * 견줄 수 있다. 시각 없이 날짜만 적힌 사건은 날짜만 낸다 (옮길 시각이 없다)
+ */
+export function utcStamp(postedAt: string): string {
+  const t = Date.parse(postedAt);
+  if (!/T\d{2}:\d{2}/.test(postedAt) || Number.isNaN(t)) return postedAt.slice(0, 10);
+  const iso = new Date(t).toISOString();
+  return `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`;
+}
+
+/**
+ * 이 사건이 근거인 관계인가 — [사건] 행 선택 때 지도 선(피그마 ⑦-4 「선택한 사건의
+ * 관계선만 표시 중」)과 보고서 팝업 「연결된 사건 · 관계」가 같이 쓴다.
+ *
+ * 근거 사건 목록에 든 관계, 그리고 행위자 사건이면 그 행위자 → 영토 활동 관계다.
+ * 활동 관계는 `withActivity` 가 이미 사건을 근거로 넣지만, 노션 관계선 DB 의 활동
+ * 줄만 있고 사건 쪽이 안 합쳐진 경우에도 선이 빠지지 않게 쌍으로 한 번 더 본다
+ */
+export function touchesEvent(r: Relation, e: Ev): boolean {
+  if (r.evidence.includes(e.id)) return true;
+  return (
+    r.kind === "activity" && !!e.actorTerritoryId && r.from === e.actorTerritoryId && r.to === e.territoryId
+  );
+}
 
 /** `255GB` · `1.2TB` · `120만` · `3,400,000건` */
 export function sizeText(e: Pick<Ev, "sizeValue" | "sizeUnit">): string | null {
