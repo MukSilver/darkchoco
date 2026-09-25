@@ -1,5 +1,5 @@
 /**
- * src/lib/events.ts 시험 — 사건 제목, 기간 거르기, 월별 묶음.
+ * src/lib/events.ts 시험 — 사건 제목, 기간 거르기, 월별 묶음, 위험도 칩, UTC 시각, 사건이 근거인 관계.
  *
  *   node --experimental-strip-types --test src/lib/events.test.mjs
  */
@@ -7,7 +7,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { byMonth, eventTitle, eventsIn, periodBounds, periodDays, sizeText, stampOf } from './events.ts';
+import {
+  RISK_LABEL,
+  RISK_TONE,
+  byMonth,
+  eventTitle,
+  eventsIn,
+  periodBounds,
+  periodDays,
+  sizeText,
+  stampOf,
+  touchesEvent,
+  utcStamp,
+} from './events.ts';
 
 let seq = 0;
 function ev(postedAt, extra = {}) {
@@ -100,4 +112,32 @@ test('월별 묶음은 노션 날짜 글자 차례라 같은 달 머리글이 �
     () => true,
   );
   assert.deepEqual(byMonth(list).map((g) => g.month), ['2026-06', '2026-05']);
+});
+
+test('위험도 칩 이름과 색 (설계서 3.10, 피그마 ⑦-4 하단 모달 「위험도 높음」 은 danger)', () => {
+  assert.deepEqual(RISK_LABEL, { high: '높음', medium: '중간', low: '낮음' });
+  assert.equal(RISK_TONE.high, 'danger');
+  assert.deepEqual(Object.keys(RISK_TONE).sort(), Object.keys(RISK_LABEL).sort(), '세 등급 모두 색이 있다');
+});
+
+test('보고서 팝업 게시 시각은 UTC 로 옮긴다 — 시각이 없으면 날짜만', () => {
+  assert.equal(utcStamp('2026-05-14T06:58:00.000+09:00'), '2026-05-13 21:58 UTC', '+09:00 새벽은 UTC 로 전날이다');
+  assert.equal(utcStamp('2026-09-10T21:40:00Z'), '2026-09-10 21:40 UTC');
+  assert.equal(utcStamp('2026-05-27'), '2026-05-27', '날짜만 적힌 사건은 옮길 시각이 없다');
+  assert.equal(utcStamp('2026-05-27Tbroken'), '2026-05-27', '깨진 시각은 날짜로 물러선다');
+});
+
+test('사건이 근거인 관계 — 근거 목록, 또는 행위자 → 영토 활동 관계', () => {
+  const e = ev('2026-09-01T00:00:00Z', { territoryId: 'forum', actorTerritoryId: 'actor' });
+  const rel = (extra) => ({ id: 'R', from: 'a', to: 'b', kind: 'leak', confidence: 'high', evidence: [], ...extra });
+  assert.ok(touchesEvent(rel({ evidence: ['x', e.id] }), e), '근거 목록에 있으면 잇는다');
+  assert.ok(!touchesEvent(rel({ evidence: ['x'] }), e));
+  assert.ok(
+    touchesEvent(rel({ kind: 'activity', from: 'actor', to: 'forum' }), e),
+    '근거가 안 합쳐진 활동 줄도 행위자 → 영토 쌍이면 잇는다',
+  );
+  assert.ok(!touchesEvent(rel({ kind: 'activity', from: 'actor', to: 'other' }), e), '다른 영토의 활동 관계는 아니다');
+  assert.ok(!touchesEvent(rel({ kind: 'leak', from: 'actor', to: 'forum' }), e), '활동 관계가 아니면 쌍만으로는 안 잇는다');
+  const plain = ev('2026-09-01T00:00:00Z', { territoryId: 'forum' });
+  assert.ok(!touchesEvent(rel({ kind: 'activity', from: 'actor', to: 'forum' }), plain), '행위자가 없는 사건');
 });
