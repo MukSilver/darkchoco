@@ -20,18 +20,21 @@ import MapCanvas, { MAP_VIEW_HOME, type MapSelection, type MapView } from "@/com
 import RelationPanel from "@/components/RelationPanel";
 import RelationTab, { type RelPair } from "@/components/RelationTab";
 import SearchOverlay from "@/components/SearchOverlay";
+import SearchResults from "@/components/SearchResults";
+import { recentOf, type SearchCtx } from "@/components/SearchRows";
 import SnapshotBar from "@/components/SnapshotBar";
 import TimelineTab from "@/components/TimelineTab";
 import ViewTabs, { type ViewTabKey } from "@/components/ViewTabs";
-import { DARK_ISLANDS } from "@/lib/islands";
+import { DARK_ISLANDS, islandToken } from "@/lib/islands";
 import { layoutMap } from "@/lib/layout";
 import { MAP, isBaked } from "@/lib/mapData";
-import { DEFAULT_PERIOD, eventsIn, type Period } from "@/lib/events";
+import { DEFAULT_PERIOD, eventTitle, eventsIn, type Period } from "@/lib/events";
 import { belongsTo, ecosystemView, islandView, territoryView } from "@/lib/panel";
 import type { Ev } from "@/lib/types";
 import {
   defaultCenter,
   islandPairs,
+  josa,
   linkRows,
   linksOf,
   pairViews,
@@ -43,6 +46,18 @@ import {
   type RelView,
 } from "@/lib/relations";
 import { computeMap } from "@/lib/score";
+import {
+  EMPTY,
+  NO_FILTER,
+  buildIndex,
+  pushRecent,
+  quarterFor,
+  search,
+  total,
+  type Hit,
+  type Recent,
+  type SearchFilter,
+} from "@/lib/search";
 import { quarterEnd, quarterOfDate, spanOf, type QuarterKey } from "@/lib/quarter";
 import { chipQuarter, quartersOf, snapshots } from "@/lib/timeline";
 
@@ -115,9 +130,18 @@ export default function Page() {
   const [tab, setTab] = useState<ViewTabKey>("map");
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
-  const [searching, setSearching] = useState(false);
-  // 최근 검색. 검색 부품은 닫으면 사라지므로 여기서 들고 있는다
-  const [recent, setRecent] = useState<string[]>([]);
+  // 검색 창. null 이면 닫힘, 글이면 그 검색어를 채워 연다 (설계서 4.2.2)
+  const [searchQ, setSearchQ] = useState<string | null>(null);
+  // 최근 검색과 필터. 검색 부품은 닫으면 사라지므로 여기서 들고 있는다
+  const [recent, setRecent] = useState<Recent[]>([]);
+  const [filter, setFilter] = useState<SearchFilter>(NO_FILTER);
+  // 전체 결과 화면(⑦-10d)의 검색어. 있으면 가운데 화면이 결과 목록으로 바뀐다
+  const [results, setResults] = useState<string | null>(null);
+  // 「검색 결과 'X'로 이동했어요 · 검색으로 돌아가기」 (⑦-10b)
+  const [toast, setToast] = useState<{ label: string; q: string; moved: QuarterKey | null } | null>(null);
+  // 검색에서 고른 행위자 · 사건. 패널 [사건]이 그 행위자로 거르고 그 사건을 강조한다 (4.2.2)
+  const [actorFilter, setActorFilter] = useState<string | null>(null);
+  const [focusEvent, setFocusEvent] = useState<string | null>(null);
   // 관계 탭 (설계서 4.3.6)
   const [relCenter, setRelCenter] = useState<string | null>(null);
   const [relSel, setRelSel] = useState<string | null>(null);
@@ -257,6 +281,9 @@ export default function Page() {
     setSelection(s);
     // 다른 영토를 골라도 열려 있던 패널 탭은 그대로 둔다 (4.2.3). 행 선택만 푼다
     setLinkSel(null);
+    // 검색에서 건 행위자 필터와 사건 강조도 푼다. 검색 결과를 고를 때는 이 뒤에 다시 건다
+    setActorFilter(null);
+    setFocusEvent(null);
     if (s.kind !== "none") setPanelOpen(true);
   };
 
@@ -420,16 +447,21 @@ export default function Page() {
    *
    * 검색이 열려 있으면 Esc 는 검색이 받는다 — 거기서 `stopPropagation` 을
    * 안 걸고 여기서 가른다. 검색을 닫는 것과 선택을 푸는 것이 한 번에
-   * 일어나면 사람이 무엇이 닫힌 것인지 모른다.
+   * 일어나면 사람이 무엇이 닫힌 것인지 모른다. 전체 결과 화면이 떠 있으면
+   * Esc 는 그것을 닫는다.
    */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        setSearching(true);
+        setSearchQ((v) => v ?? "");
         return;
       }
-      if (e.key !== "Escape" || searching) return;
+      if (e.key !== "Escape" || searchQ !== null) return;
+      if (results !== null) {
+        setResults(null);
+        return;
+      }
       if (tab === "relation") setRelSel(null);
       else {
         setSelection({ kind: "none" });
@@ -438,7 +470,14 @@ export default function Page() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [searching, tab]);
+  }, [searchQ, results, tab]);
+
+  // 이동 안내는 잠깐 띄우고 걷는다
+  useEffect(() => {
+    if (!toast) return;
+    const t = window.setTimeout(() => setToast(null), 8000);
+    return () => window.clearTimeout(t);
+  }, [toast]);
 
   // 영토 사건 수를 더하지 않는다. 행위자 섬이 같은 사건을 한 번 더 세서
   // 그 몫이 두 번 들어간다 (score.ts MapResult.eventCount)
@@ -464,6 +503,127 @@ export default function Page() {
     return (id: string) => m.get(id) ?? id;
   }, []);
 
+  /* ── 검색 (설계서 4.2.2) ─────────────────────────────── */
+
+  /** 분기마다 지도에 든 영토. 검색 결과를 고를 때 기준일을 옮길지 가른다 */
+  const presentBy = useMemo(
+    () => new Map(snaps.map((s) => [s.ym, new Set(s.layout.territories.map((t) => t.territoryId))])),
+    [snaps],
+  );
+  const presentAt = useCallback(
+    (q: QuarterKey) => presentBy.get(q) ?? presentIn(quarterEnd(q, TODAY)),
+    [presentBy],
+  );
+  /** 검색 색인. **기준일과 무관하게 전체 기간이다** — 한 번이라도 지도에 나온 영토가 대상이다 */
+  const ix = useMemo(
+    () =>
+      buildIndex({
+        territories: MAP.territories,
+        events: MAP.events,
+        relations: ALL_RELS,
+        seen: new Set([...presentBy.values()].flatMap((x) => [...x])),
+        today: TODAY,
+      }),
+    [presentBy],
+  );
+  /** 같은 일치 단계 안의 차례 — 기준일 활동도 (4.2.2 「가중치 점수 높은 순」) */
+  const weightOf = useCallback((id: string) => terr.get(id)?.metrics.activity ?? 0, [terr]);
+  const searchCtx: SearchCtx = useMemo(
+    () => ({
+      ix,
+      islandName: (id) => nameOf(id),
+      token: islandToken,
+      activityOf: (id) => terr.get(id)?.metrics.activity ?? null,
+    }),
+    [ix, terr, nameOf],
+  );
+  const allResults = useMemo(
+    () => (results === null ? EMPTY : search(ix, results, filter, weightOf)),
+    [ix, results, filter, weightOf],
+  );
+
+  /** 고른 대상이 기준일에 안 보이면 기준일을 옮긴다 (4.2.2). 옮긴 분기를 돌려준다 */
+  const moveFor = (visible: (q: QuarterKey) => boolean): QuarterKey | null => {
+    const to = quarterFor(quarters, ym, visible);
+    if (to) setYm(to);
+    return to;
+  };
+
+  /**
+   * 검색 결과 고르기 — 설계서 4.2.2 「결과 선택」.
+   *
+   *   엔티티   지도로 가서 그 영토를 고르고 패널 [개요]. 관계 탭에서 찾았으면 관계 탭 중심을 바꾼다
+   *   행위자   주 활동 영토로 가서 패널 [사건]을 그 행위자 사건만으로 거른다 (칩 「행위자: X ×」)
+   *   사건     지도로 가서 올라온 영토를 고르고 패널 [사건]에서 그 사건을 강조 · 스크롤
+   *   관계     관계 탭 ① 상태 (4.3.3) — 중심은 검색어에 걸린 쪽의 상대 영토다
+   *
+   * 그 대상이 기준일에 안 보이면 기준일을 옮기고 안내에 적는다. 사건이 [사건] 탭 기간
+   * 밖이면 기간을 전체로 넓힌다 — 강조할 줄이 목록에 있어야 한다.
+   */
+  const pickHit = (h: Hit, q: string) => {
+    setRecent((r) => pushRecent(r, recentOf(searchCtx, h, Date.now())));
+    setSearchQ(null);
+    setResults(null);
+    setActorFilter(null);
+    setFocusEvent(null);
+    const name = (id: string) => ix.byId.get(id)?.name ?? id;
+    let label: string;
+    let moved: QuarterKey | null;
+
+    if (h.kind === "entity") {
+      const id = h.e.id;
+      label = h.e.name;
+      moved = moveFor((qq) => presentAt(qq).has(id));
+      if (tab === "relation") {
+        setRelCenter(id);
+        setRelSel(null);
+        setRelPair(null);
+      } else {
+        goTab("map");
+        select({ kind: "territory", id, name: h.e.name });
+        setPanelTab("overview");
+      }
+    } else if (h.kind === "actor" || h.kind === "event") {
+      const where = h.kind === "actor" ? (h.main ?? h.e.id) : h.ev.territoryId;
+      const keep =
+        h.kind === "actor"
+          ? (e: Ev) => e.actorTerritoryId === h.e.id && belongsTo(e, new Set([where]))
+          : (e: Ev) => e.id === h.ev.id;
+      label = h.kind === "actor" ? h.e.name : eventTitle(h.ev);
+      moved = moveFor(
+        (qq) =>
+          presentAt(qq).has(where) && eventsIn(MAP.events, quarterEnd(qq, TODAY), { kind: "all" }, keep).length > 0,
+      );
+      // 관계 탭에서 왔으면 탭을 먼저 옮긴다. 탭을 옮기며 중심 영토를 고르는 것을 아래 선택이 덮는다
+      goTab("map");
+      select({ kind: "territory", id: where, name: name(where) });
+      setPanelTab("events");
+      if (h.kind === "actor") setActorFilter(h.e.id);
+      else setFocusEvent(h.ev.id);
+      if (eventsIn(MAP.events, moved ? quarterEnd(moved, TODAY) : d, period, keep).length === 0) {
+        setPeriod({ kind: "all" });
+      }
+    } else {
+      const rel = h.r.rel;
+      label = `${name(rel.from)} → ${name(rel.to)}`;
+      const center = rel.from === h.via ? rel.to : rel.from;
+      // 기준일은 관계 탭으로 옮긴 뒤에 바꾼다 — 돌아가기가 옮기기 전 기준일로 돌아온다
+      const to = quarterFor(quarters, ym, (qq) =>
+        relationsAt([rel], MAP.events, quarterEnd(qq, TODAY), presentAt(qq)).length > 0,
+      );
+      if (tab === "relation") {
+        setRelCenter(center);
+        setRelSel(rel.id);
+        setRelPair(null);
+      } else {
+        enterFromLinks({ center, sel: rel.id, pair: null });
+      }
+      if (to) setYm(to);
+      moved = to;
+    }
+    setToast({ label, q, moved });
+  };
+
   /** 관계 탭 제목 옆 설명 (피그마 ⑦-8 · ⑦-8e · ⑦-8g, 설계서 4.3.3 ②) */
   const relSubtitle = () => {
     if (relPair) {
@@ -488,13 +648,30 @@ export default function Page() {
       : selection.kind === "island"
         ? new Set(layout.territories.filter((t) => t.islandKey === selection.key).map((t) => t.territoryId))
         : null;
-  const eventList = eventIds ? eventsIn(MAP.events, d, period, (e) => belongsTo(e, eventIds)) : [];
+  const eventList = eventIds
+    ? eventsIn(
+        MAP.events,
+        d,
+        period,
+        (e) => belongsTo(e, eventIds) && (!actorFilter || e.actorTerritoryId === actorFilter),
+      )
+    : [];
   const whereOf = (e: Ev) =>
     e.actorTerritoryId && terr.has(e.actorTerritoryId)
       ? `${terrName(e.actorTerritoryId)} → ${terrName(e.territoryId)}`
       : terrName(e.territoryId);
   const eventsBody = eventIds ? (
-    <EventsTab list={eventList} d={d} period={period} onPeriod={setPeriod} whereOf={whereOf} />
+    <EventsTab
+      key={focusEvent ?? ""}
+      list={eventList}
+      d={d}
+      period={period}
+      onPeriod={setPeriod}
+      whereOf={whereOf}
+      actor={actorFilter ? (ix.byId.get(actorFilter)?.name ?? actorFilter) : null}
+      onClearActor={() => setActorFilter(null)}
+      focus={focusEvent}
+    />
   ) : null;
 
   /** 패널 [연결] 탭 본문. 선택이 없으면 없다 */
@@ -542,13 +719,60 @@ export default function Page() {
         <AppHeader
           current="dark"
           generatedAt={MAP.generatedAt}
-          onSearch={() => setSearching(true)}
-        />
+          onSearch={() => setSearchQ(results ?? toast?.q ?? "")}
+          query={results ?? toast?.q}
+        >
+          {searchQ !== null && (
+            <SearchOverlay
+              ctx={searchCtx}
+              layout={layout}
+              initialQ={searchQ}
+              filter={filter}
+              onFilter={setFilter}
+              recent={recent}
+              onClearRecent={() => setRecent([])}
+              onClose={() => setSearchQ(null)}
+              onPick={pickHit}
+              onAll={(q) => {
+                setResults(q);
+                setSearchQ(null);
+              }}
+              weightOf={weightOf}
+            />
+          )}
+        </AppHeader>
 
         <div className="flex min-h-0 flex-1">
           <Legend />
 
-          <main className="flex min-h-0 flex-1 flex-col gap-s4 px-s5 py-s5">
+          <main className="relative flex min-h-0 flex-1 flex-col gap-s4 px-s5 py-s5">
+            {toast && results === null && (
+              // 지도 위쪽에 띄운다 (⑦-10b). 관계 탭은 위쪽에 돌아가기 줄과 칩 줄이 있어 아래쪽이다
+              <div
+                role="status"
+                className={
+                  "absolute left-1/2 z-20 flex w-max max-w-[90%] -translate-x-1/2 items-center gap-s3 rounded-[12px] px-s4 py-s2 text-[12px] shadow-xl " +
+                  (tab === "relation" ? "bottom-[76px]" : "top-[76px]")
+                }
+                style={{ background: "var(--t-text-title)", color: "var(--t-surface-panel)" }}
+              >
+                <span>
+                  검색 결과 &apos;{toast.label}&apos;{josa(toast.label, "으로", "로")} 이동했어요
+                  {toast.moved && ` · 기준일을 ${toast.moved}로 옮겼어요`}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQ(toast.q);
+                    setToast(null);
+                  }}
+                  className="rounded-[8px] border px-s2 py-[2px] font-semibold"
+                  style={{ borderColor: "color-mix(in srgb, var(--t-surface-panel) 50%, transparent)" }}
+                >
+                  검색으로 돌아가기
+                </button>
+              </div>
+            )}
             <div className="flex shrink-0 items-center gap-s4">
               <h1 className="text-[20px] font-semibold leading-none text-title">
                 다크웹 생태계
@@ -567,7 +791,9 @@ export default function Page() {
                 </span>
               )}
               <p className="text-[12px] tabular-nums text-label">
-                {tab === "map"
+                {results !== null
+                  ? `'${results}' 검색 결과 ${total(allResults)}건`
+                  : tab === "map"
                   ? `섬 유형 ${layout.islands.length} · 엔티티 ${activeTerritories.length} · 사건 ${eventCount}건`
                   : tab === "entity"
                     ? `엔티티 ${activeTerritories.length} · 유형별 목록 · 활동도 순`
@@ -578,10 +804,29 @@ export default function Page() {
                         : `누적 · ${quarters[0]} → ${quarters[quarters.length - 1]}`}
               </p>
               <div className="flex-1" />
-              <ViewTabs current={tab} onChange={goTab} />
+              {results !== null ? (
+                <button
+                  type="button"
+                  onClick={() => setResults(null)}
+                  className="rounded-[10px] border border-edge px-s3 py-s2 text-[12px] text-body hover:text-title"
+                >
+                  검색 결과 닫기 ×
+                </button>
+              ) : (
+                <ViewTabs current={tab} onChange={goTab} />
+              )}
             </div>
 
-            {tab === "timeline" ? (
+            {results !== null ? (
+              <SearchResults
+                ctx={searchCtx}
+                q={results}
+                results={allResults}
+                filter={filter}
+                onFilter={setFilter}
+                onPick={(h) => pickHit(h, results)}
+              />
+            ) : tab === "timeline" ? (
               <TimelineTab
                 snaps={snaps}
                 current={ym}
@@ -605,6 +850,11 @@ export default function Page() {
                 lit={mapRel?.lit}
                 raised={mapRel?.raised}
                 litIslands={mapRel?.litIslands}
+                hint={
+                  toast && selection.kind === "territory"
+                    ? `검색 결과 영토 자동 선택 · 관련 섬 ${mapRel?.litIslands.size ?? 1}곳 표시`
+                    : undefined
+                }
               />
             ) : tab === "relation" ? (
               <RelationTab
@@ -684,7 +934,7 @@ export default function Page() {
               스냅샷 바를 같이 두면 같은 값을 두 군데서 조작하게 된다.
               관계 탭에도 없다 (피그마 ⑦-8) — 기준일은 「기준일 옮기기」로만 바꾼다
             */}
-            {tab !== "timeline" && tab !== "relation" && (
+            {results === null && tab !== "timeline" && tab !== "relation" && (
               <SnapshotBar
                 from={FROM}
                 to={TO}
@@ -727,27 +977,6 @@ export default function Page() {
         </div>
       </div>
 
-      {searching && (
-        <SearchOverlay
-          layout={layout}
-          recent={recent}
-          onRecent={setRecent}
-          onClose={() => setSearching(false)}
-          onPick={(id) => {
-            const t = layout.territories.find((x) => x.territoryId === id);
-            if (!t) return;
-            // 관계 탭에서 검색하면 관계 탭 중심을 그 영토로 바꾼다 (설계서 4.2.2 · 4.3.6)
-            if (tab === "relation") {
-              setRelCenter(id);
-              setRelSel(null);
-              setRelPair(null);
-              return;
-            }
-            select({ kind: "territory", id, name: t.name });
-            goTab("map");
-          }}
-        />
-      )}
     </div>
   );
 }
