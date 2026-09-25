@@ -35,8 +35,12 @@ import re
       ("텔레", "df4c98250f7e4b4f938c10fe3851618b", "채널 이름"))
 주소칸 = ("주소", "이전 주소", "어니언 주소")
 
-HOST = re.compile(r"\b[a-z0-9][a-z0-9-]*(?:\.[a-z0-9-]+)+\b", re.I)
+# **re.A 로 \b 를 ASCII 에 맞춘다.** worker.js 의 같은 꼴(u 플래그 없음)이 그렇다. 없으면 파이썬은
+# 한글을 낱말 글자로 봐서 「examplefor.st로 이전」 에서 주소를 못 뽑고, JS 는 뽑아 두 벌이 갈렸다
+HOST = re.compile(r"\b[a-z0-9][a-z0-9-]*(?:\.[a-z0-9-]+)+\b", re.I | re.A)
 안쓰는호스트 = frozenset({"t.me", "telegram.me", "ransomware.live", "wordpress.com"})
+# 핸들 자리에 적힌 「없음」 표시. 게시처 선택지로 만들지 않는다
+자리표시 = frozenset({"-", "--", "?", "n/a", "na", "none", "null", "unknown", "없음", "미상", "해당 없음"})
 
 
 def 글자(p: dict, 이름: str) -> str:
@@ -53,7 +57,8 @@ def 글자(p: dict, 이름: str) -> str:
 
 def 호스트들(s: str) -> list[str]:
     out = []
-    for m in HOST.finditer(s or ""):
+    # 사람이 명부에 `abc[.]onion` 처럼 적은 주소가 있다. 명부 조사기(write.py)처럼 점으로 읽는다
+    for m in HOST.finditer((s or "").replace("[.]", ".")):
         h = m.group(0).lower().removeprefix("www.")
         if "." in h and h not in 안쓰는호스트 and h not in out:
             out.append(h)
@@ -119,6 +124,8 @@ class 명부표:
 def 고르기(표: 명부표, 소스: str, 표기: str, 핸들: str) -> tuple[str, str, bool]:
     """(게시처, 어떻게, 명부에 있나). 못 고르면 ("", 까닭, True)."""
     표기, 핸들 = (표기 or "").strip(), (핸들 or "").strip()
+    if 핸들.lower() in 자리표시:
+        핸들 = ""
     if 소스 == "텔레그램":
         if not 핸들:
             return "", "핸들 없음", True
@@ -136,20 +143,36 @@ def 고르기(표: 명부표, 소스: str, 표기: str, 핸들: str) -> tuple[st
 
 
 def 선택지맞춤(이름: str, 선택지: list[str]) -> str:
-    """이미 있는 선택지 중 열쇠가 같은 것이 있으면 그 이름을 쓴다."""
+    """이미 있는 선택지 중 열쇠가 같은 것이 있으면 그 이름을 쓴다.
+
+    **열쇠가 네 글자보다 짧으면 대소문자만 무시하고 통째로 견준다.** 민키는 한글 · 키릴을
+    지워서 한글 이름끼리 열쇠가 모두 빈 글자가 되고, 아무 한글 선택지에나 붙었다
+    (2026-09-25 검토). 명부 찾기 표의 네 글자 문턱과 같다.
+    """
     if not 이름 or 이름 in 선택지:
         return 이름
     k = 민키(이름)
+    if len(k) < 4:
+        낮춤 = 이름.strip().lower()
+        return next((o for o in 선택지 if o.strip().lower() == 낮춤), 이름)
     for o in 선택지:
         if 민키(o) == k:
             return o
     return 이름
 
 
+def 선택지글(s: str) -> str:
+    """노션 선택지 이름에는 쉼표가 못 들어간다. 넣으면 줄을 만드는 요청 전체가 거부된다.
+
+    핸들 「GroupA, GroupB」 가 그대로 가서 그 수집 줄이 판마다 못 올라갔다(2026-09-25 검토).
+    """
+    return re.sub(r"\s*,\s*", " · ", s or "").strip()
+
+
 def 속성(표: 명부표, 선택지: list[str], 소스: str, 표기: str, 핸들: str) -> dict:
     """노션에 더할 속성. 못 고르면 빈 dict — 칸을 비워 둔다."""
     이름, _, 있나 = 고르기(표, 소스, 표기, 핸들)
-    이름 = 선택지맞춤(이름, 선택지)[:100]
+    이름 = 선택지맞춤(선택지글(이름), 선택지)[:100]
     if not 이름:
         return {}
     p = {칸: {"select": {"name": 이름}}}

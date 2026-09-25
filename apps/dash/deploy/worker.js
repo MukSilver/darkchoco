@@ -778,7 +778,8 @@ const 안쓰는호스트 = new Set(["t.me", "telegram.me", "ransomware.live", "w
 
 function 호스트들(s) {
   const 밖 = [];
-  for (const m of String(s || "").matchAll(게시처호스트꼴)) {
+  // 사람이 명부에 `abc[.]onion` 처럼 적은 주소를 점으로 읽습니다. 파이썬 쪽과 같습니다
+  for (const m of String(s || "").split("[.]").join(".").matchAll(게시처호스트꼴)) {
     let h = m[0].toLowerCase();
     if (h.startsWith("www.")) h = h.slice(4);
     if (h.includes(".") && !안쓰는호스트.has(h) && !밖.includes(h)) 밖.push(h);
@@ -821,7 +822,17 @@ function 포럼명부표(페이지들) {
 function 선택지맞춤(이름, 선택지) {
   if (!이름 || 선택지.includes(이름)) return 이름;
   const k = 민키(이름);
+  // 열쇠가 네 글자보다 짧으면(한글 이름은 빈 글자) 대소문자만 무시하고 통째로 견줍니다
+  if (k.length < 4) {
+    const 낮춤 = 이름.trim().toLowerCase();
+    return 선택지.find((o) => o.trim().toLowerCase() === 낮춤) || 이름;
+  }
   return 선택지.find((o) => 민키(o) === k) || 이름;
+}
+
+/** 노션 선택지 이름에는 쉼표가 못 들어갑니다. 넣으면 줄 만들기 전체가 거부됩니다 */
+function 선택지글(s) {
+  return String(s || "").replace(/\s*,\s*/g, " · ").trim();
 }
 
 function 포럼게시처칸(표기, 표, 선택지) {
@@ -833,7 +844,7 @@ function 포럼게시처칸(표기, 표, 선택지) {
   const t = String(표기 || "").trim();
   if (!이름 && 표.이름.has(t.toLowerCase())) 이름 = 표.이름.get(t.toLowerCase());
   if (!이름) 이름 = 표.민.get(민키(t.replace(/\(.*?\)/g, " "))) || "";
-  이름 = 앞글자(선택지맞춤(이름, 선택지), 100);
+  이름 = 앞글자(선택지맞춤(선택지글(이름), 선택지), 100);
   return 이름 ? { 게시처: { select: { name: 이름 } } } : {};
 }
 
