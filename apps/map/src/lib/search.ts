@@ -20,6 +20,7 @@
  * 사건과, 그런 사건만 근거인 관계도 뺀다.
  */
 
+import { activityTerritories, mainTerritory } from "./actors.ts";
 import { CONF_LABEL } from "./relations.ts";
 import { relationCount, relationSpan } from "./score.ts";
 import type { QuarterKey } from "./quarter.ts";
@@ -185,29 +186,12 @@ export function buildIndex(i: IndexInput): SearchIndex {
     rels.push({ rel, count: n, last: relationSpan(rel, events, FAR).last });
   }
 
-  // 주 활동 영토 — 그 행위자가 사건을 가장 많이 올린 곳. 같으면 늦게 올린 곳
+  // 주 활동 영토 — 그 행위자가 사건을 가장 많이 올린 곳. 같으면 늦게 올린 곳.
+  // 행위자 패널 [개요](4.3.8)와 같은 규칙이라 `actors.ts` 하나로 센다. 여기는 전체 기간이다
   const main = new Map<string, string | null>();
   for (const a of entries) {
     if (a.islandId !== "ACTOR") continue;
-    const tally = new Map<string, { n: number; at: string }>();
-    for (const e of events) {
-      if (e.actorTerritoryId !== a.id || e.territoryId === a.id) continue;
-      const t = tally.get(e.territoryId) ?? { n: 0, at: e.postedAt };
-      t.n += 1;
-      if (newer(t.at, e.postedAt) > 0) t.at = e.postedAt;
-      tally.set(e.territoryId, t);
-    }
-    let best: string | null = null;
-    let bn = 0;
-    let bat = "";
-    for (const [id, t] of tally) {
-      if (t.n > bn || (t.n === bn && newer(bat, t.at) > 0)) {
-        best = id;
-        bn = t.n;
-        bat = t.at;
-      }
-    }
-    main.set(a.id, best);
+    main.set(a.id, mainTerritory(activityTerritories(events, a.id)));
   }
 
   return { entries, byId, events, rels, main, today: i.today };
