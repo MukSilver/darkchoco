@@ -22,7 +22,7 @@ import re
 import sys
 from pathlib import Path
 
-from notion import _call, search, title_of
+from notion import _call, db_from_env, search, title_of
 
 READONLY = {"formula", "created_time", "last_edited_time", "unique_id",
             "created_by", "last_edited_by", "rollup"}
@@ -31,6 +31,10 @@ TRUE = {"예", "true", "True", "1", "O", "o", "체크"}
 
 def find_db(name: str) -> tuple[str, str]:
     """이름으로 data_source 를 찾는다. 토큰마다 워크스페이스가 달라 ID를 박지 않는다."""
+    # 환경변수에 id 가 있으면 검색을 건너뛴다 (2026-09-25). notion.db_from_env 를 본다
+    hit = db_from_env(name)
+    if hit:
+        return hit
     hits = [r for r in search(name) if r.get("object") == "data_source"]
     if not hits:
         raise SystemExit(f"'{name}' 이름의 DB를 못 찾았다. notion.py search 로 확인할 것")

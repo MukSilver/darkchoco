@@ -17,7 +17,7 @@ import datetime
 import re
 import time
 
-from notion import _call, search, title_of
+from notion import _call, db_from_env, search, title_of
 
 PAGE = 100
 MAX_ROWS = 1000
@@ -25,6 +25,10 @@ TEXTY = {"title", "rich_text", "select", "multi_select", "url", "number", "uniqu
 
 
 def find_db(name: str) -> tuple[str, str]:
+    # 환경변수에 id 가 있으면 검색을 건너뛴다 (2026-09-25). notion.db_from_env 를 본다
+    hit = db_from_env(name)
+    if hit:
+        return hit
     hits = [r for r in search(name) if r.get("object") == "data_source"]
     if not hits:
         raise SystemExit(f"'{name}' 이름의 DB를 못 찾았다. notion.py search 로 확인할 것")
