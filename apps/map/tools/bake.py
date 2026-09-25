@@ -11,8 +11,7 @@
 
   1. 줄 관문      「DB 반영」이 꺼졌거나 「검토 여부」가 미검토·사건 X 면 뺀다
   2. 읽는 칸      `ALLOWED_COLS` 에 없는 칸을 읽으려 하면 멈춘다. 원문 URL ·
-                 자료 제목 · 대상 조직 · 다크웹 주소는 `DENY_COLS` 다.
-                 게시자 핸들은 `MATCH_ONLY_COLS` 라 행위자 영토를 찾는 데만 쓴다
+                 자료 제목 · 대상 조직 · 다크웹 주소는 `DENY_COLS` 다
   3. 나가는 키    `TERRITORY_KEYS` · `EV_KEYS` · `RELATION_KEYS` 에 없는 키가
                  있으면 멈춘다
   4. 값 훑기      다 만든 뒤 JSON 에서 도메인 · `@` · 긴 숫자열을 찾는다
@@ -27,9 +26,13 @@
 **DB id 를 이 파일에 박지 않는다.** 이 저장소는 공개될 수 있다. 환경변수나
 `~/.config/darkchoco/map_sources.json` 에서 읽는다.
 
-**영토는 명부 DB 넷에서 만든다** (설계서 2.4 · 2.5, 2026-09-23 최현서 결정).
-포럼 · 텔레그램 · 랜섬웨어 · 행위자 DB 의 줄이 영토이고, 사건이 없어도 싣는다.
-사건은 게시처 · 게시 플랫폼 · 핸들로 명부 줄에 맞춘다.
+**영토는 명부 DB 셋과 게시자 핸들에서 만든다** (설계서 2.4 · 2.5).
+포럼 · 텔레그램 · 랜섬웨어 DB 의 줄이 영토이고, 사건이 없어도 싣는다
+(2026-09-23 최현서 결정). 사건은 게시처 · 게시 플랫폼으로 명부 줄에 맞춘다.
+
+**행위자 섬은 수집 DB 「게시자 핸들」에서 만든다** (2026-09-25 최현서 결정).
+관문을 지난 사건에 적힌 핸들 하나가 행위자 영토 하나다. 행위자 DB 는 지도가
+안 읽는다 — 행위자 탭을 따로 만들게 되면 그때 쓴다.
 """
 
 from __future__ import annotations
@@ -70,9 +73,10 @@ def _load_dc_notion():
 SOURCES_FILE = Path.home() / ".config" / "darkchoco" / "map_sources.json"
 
 
-#: 꼭 있어야 하는 DB. 명부 넷(포럼 · 텔레그램 · 랜섬웨어 · 행위자)이 영토가 된다
-#: (설계서 2.4 · 2.5, 2026-09-23 최현서 결정)
-REQUIRED_SOURCES = ("collect", "verify", "forum", "telegram", "ransomware", "actor")
+#: 꼭 있어야 하는 DB. 명부 셋(포럼 · 텔레그램 · 랜섬웨어)이 영토가 된다
+#: (설계서 2.4 · 2.5, 2026-09-23 최현서 결정). 행위자 DB 는 안 읽는다 —
+#: 행위자 섬은 수집 DB 게시자 핸들에서 만든다 (2026-09-25 최현서 결정)
+REQUIRED_SOURCES = ("collect", "verify", "forum", "telegram", "ransomware")
 
 
 def load_sources() -> dict[str, str]:
@@ -115,7 +119,6 @@ REGISTRY = {
     "forum": ("FORUM", "포럼 이름"),
     "ransomware": ("RANSOMWARE", "그룹 이름"),
     "telegram": ("TELEGRAM", "채널 이름"),
-    "actor": ("ACTOR", "핸들"),
 }
 
 #: 섬 차례. 영토 목록도 이 차례로 싣는다 (정본 영토 탭과 같다)
@@ -204,20 +207,22 @@ ALLOWED_COLS = frozenset({
     "포럼 이름",
     "채널 이름",
     "그룹 이름",
-    "핸들",          # 행위자 DB. 행위자 DB 에 등록된 줄만 영토가 된다 (2026-09-23 최현서)
     "상태",
     "규모",
     "이전 이름·별칭",  # 사건을 영토에 맞추는 데만 쓴다. 밖에 안 낸다
-    "다른 이름",       # 행위자 DB. 위와 같다
+    # ↓ 수집 DB. **행위자 영토 이름이 된다** (2026-09-25 최현서 결정). 전에는
+    #   맞추기 전용이라 밖에 안 냈다. 관문을 지난 사건의 핸들만 쓰고, 값 훑기
+    #   (`scan_strings`)가 @ · 주소 · 긴 숫자열을 한 번 더 막는다
+    "게시자 핸들",
 })
 
 #: **맞추는 데만 쓰는 칸.** 값을 읽되 구운 파일에 절대 안 싣는다.
 #:
-#: 「게시자 핸들」은 행위자 섬 영토를 찾는 데 필요하다. 행위자 DB 에 등록된
-#: 핸들과 같을 때만 그 영토 id 를 사건에 붙이고, 핸들 글자는 버린다.
-#: 등록되지 않은 핸들은 검증 안 된 개인 계정이 섞여 있어 어디에도 안 남긴다.
-#: 나가는 키 검사(`EV_KEYS`)가 이 칸이 새어 나가는 것을 한 번 더 막는다.
-MATCH_ONLY_COLS = frozenset({"게시자 핸들"})
+#: 지금은 없다. 「게시자 핸들」이 여기 있었는데 2026-09-25 에 행위자 영토
+#: 이름으로 내기로 해서 `ALLOWED_COLS` 로 옮겼다. 그때 핸들 모양을 셌다 —
+#: 관문을 지난 사건(랜섬웨어 섬 제외)의 핸들 22개에 @ · 주소 · 긴 숫자 ·
+#: 한글 · 빈칸 섞임이 하나도 없었다.
+MATCH_ONLY_COLS: frozenset[str] = frozenset()
 
 #: **절대 읽지 않는 칸.** 값에 개인정보나 피해 조직 이름이 들어 있다.
 #:
@@ -817,6 +822,24 @@ def read_registry(n, sources: dict[str, str], read, log) -> list[dict]:
     return out
 
 
+#: 핸들 자리에 적힌 자리표시. 이런 값은 사람이 아니다
+HANDLE_PLACEHOLDERS = PLACEHOLDERS | {"unknown", "anonymous", "익명", "n/a"}
+
+
+def clean_handle(raw) -> str | None:
+    """게시자 핸들을 행위자 영토 이름으로 다듬는다. 자리표시와 빈칸은 None.
+
+    앞의 `@` 는 뗀다 — 텔레그램식 표기다. 남기면 값 훑기(`scan_strings`)가
+    이메일로 보고 굽기를 멈춘다.
+    """
+    if not isinstance(raw, str):
+        return None
+    h = raw.strip().lstrip("@").strip()
+    if not h or h.casefold() in {x.casefold() for x in HANDLE_PLACEHOLDERS}:
+        return None
+    return h
+
+
 class RegistryIndex:
     """사건의 게시처 · 게시 플랫폼 · 핸들을 명부 후보에 맞춘다.
 
@@ -966,17 +989,17 @@ def bake(n, sources: dict[str, str], log) -> dict:
                 m = RE_TME.search(plat or "")
                 cand = index.find("TELEGRAM", m.group(1)) if m else None
                 if not cand:
-                    cand = index.find("TELEGRAM", col_match(read, p, "게시자 핸들"))
+                    cand = index.find("TELEGRAM", col(read, p, "게시자 핸들"))
             else:
                 cand = index.find(island, place) or index.find(island, plat)
             if not cand:
                 reason = "영토를 정할 수 없음"
 
-        # 행위자 — 행위자 DB 에 등록된 핸들만 (2026-09-23 최현서). 랜섬웨어 섬
-        # 사건의 핸들은 그룹 이름이라 행위자로 안 본다 (설계서 2.4)
-        actor = None
+        # 행위자 — 게시자 핸들 (2026-09-25 최현서). 랜섬웨어 섬 사건의 핸들은
+        # 그룹 이름이라 행위자로 안 본다 (설계서 2.4). 영토는 아래 4) 에서 만든다
+        handle = None
         if not reason and island != "RANSOMWARE":
-            actor = index.find("ACTOR", col_match(read, p, "게시자 핸들"))
+            handle = clean_handle(col(read, p, "게시자 핸들"))
 
         if reason:
             why[reason] = why.get(reason, 0) + 1
@@ -985,7 +1008,8 @@ def bake(n, sources: dict[str, str], log) -> dict:
         raw_events.append({
             "id": unique_id(col_prop(p, "사건 ID")) or f"row-{len(raw_events) + 1}",
             "cand": cand,
-            "actor": actor,
+            "handle": handle,
+            "actor": None,
             "postedAt": posted,
             "verdict": verdict_of.get(row["id"], UNVERIFIED),
             # 「규모 등급」 칸이 채워져 있으면 그것을 쓰고, 비어 있으면
@@ -1018,18 +1042,38 @@ def bake(n, sources: dict[str, str], log) -> dict:
 
     places = {id(c) for c in cands if c["island"] != "ACTOR" and keep_place(c)}
 
-    # 행위자는 영토를 거른 뒤에 본다. 행위자 DB 에 등록되고 켜진 줄 가운데,
-    # 지도에 남은 영토에 올라온 사건이 하나라도 있는 곳이다. 허위도 센다
-    # (정본에 사건이 모두 허위인 행위자 3곳이 있다). 상태로는 거르지 않는다
-    # (정본에 미확인 6곳이 들어 있다)
-    linked = {id(c): 0 for c in cands}
+    # 행위자는 영토를 거른 뒤에 만든다 (2026-09-25 최현서). 지도에 남은 영토에
+    # 올라온 사건의 게시자 핸들 하나가 행위자 영토 하나다. 허위도 센다 (정본에
+    # 사건이 모두 허위인 행위자가 있다). 대소문자만 다른 핸들은 한 사람으로 본다.
+    #
+    # **랜섬웨어 그룹 이름과 같은 핸들은 뺀다.** 랜섬웨어 그룹은 행위자가 아니라
+    # 영토다 (설계서 2.4 · 4.3.8 「랜섬웨어 그룹은 넣지 않음」)
+    group_names = set()
+    for c in cands:
+        if c["island"] == "RANSOMWARE":
+            group_names.add(c["rawName"].casefold())
+            group_names.add(display_name(c["rawName"]).casefold())
+    actor_of: dict[str, dict] = {}
+    as_group = set()
     for e in raw_events:
-        if e["actor"] is not None and id(e["cand"]) in places:
-            linked[id(e["actor"])] += 1
-    actors = {id(c) for c in cands if c["island"] == "ACTOR" and c["on"] and linked[id(c)] > 0}
+        h = e["handle"]
+        if not h or id(e["cand"]) not in places:
+            continue
+        k = h.casefold()
+        if k in group_names:
+            as_group.add(k)
+            continue
+        if k not in actor_of:
+            actor_of[k] = {
+                "island": "ACTOR", "rawName": h, "aliases": [], "on": True,
+                "online": True, "order": len(actor_of),
+            }
+        e["actor"] = actor_of[k]
+    actor_cands = list(actor_of.values())
+    log(f"행위자 — 게시자 핸들에서 {len(actor_cands)}곳 · 랜섬 그룹 이름과 같아 뺀 핸들 {len(as_group)}개")
 
-    kept = [c for c in cands if id(c) in places or id(c) in actors]
-    kept_ids = places | actors
+    kept = [c for c in cands if id(c) in places] + actor_cands
+    kept_ids = places | {id(c) for c in actor_cands}
 
     events_out = []
     since: dict[int, str] = {}
@@ -1103,7 +1147,12 @@ def bake(n, sources: dict[str, str], log) -> dict:
         # 걸러지기 전 명부 전체로 찾는다. 걸러진 클론을 가리키는 관계선이 남은
         # 클론에 붙지 않고 「양 끝 영토가 지도에 없음」으로 빠지게 하려는 것이다
         def find_tid(isl: str, nm: str | None) -> str | None:
-            c = index.find(isl, nm)
+            if isl == "ACTOR":
+                # 행위자는 명부가 아니라 핸들에서 만들었다. 정확히 같은 핸들만 (대소문자 무시)
+                h = clean_handle(nm)
+                c = actor_of.get(h.casefold()) if h else None
+            else:
+                c = index.find(isl, nm)
             return tid_of.get(id(c)) if c else None
 
         relations = bake_relations(n, sources["relations"], find_tid, events, read, log)
