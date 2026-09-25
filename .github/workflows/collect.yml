@@ -86,6 +86,8 @@ jobs:
           # **셸 변수 이름에도 한글을 안 씁니다.** bash 는 영문·숫자·_ 만 받습니다.
           TOKEN_VALUE: ${{ secrets.NOTION_TOKEN }}
           CHANNELS_VALUE: ${{ secrets.DARKCHOCO_CHANNELS }}
+          JINA_VALUE: ${{ secrets.JINA_API_KEY }}
+          X_ACCOUNTS_VALUE: ${{ secrets.DARKCHOCO_X_ACCOUNTS }}
         run: |
           set -e
           mkdir -p "$RUNNER_TEMP/cfg"
@@ -100,6 +102,15 @@ jobs:
             echo "채널 $(grep -cve '^\s*$' -e '^#' "$RUNNER_TEMP/cfg/telegram_channels" || true) 개"
           else
             echo "::warning::DARKCHOCO_CHANNELS 가 없습니다. 텔레그램을 건너뜁니다"
+          fi
+          # X (2026-09-26). 키와 계정 목록이 둘 다 있을 때만 파일로 둡니다. 계정 이름은 안 찍습니다
+          if [ -n "$JINA_VALUE" ] && [ -n "$X_ACCOUNTS_VALUE" ]; then
+            printf '%s' "$JINA_VALUE" > "$RUNNER_TEMP/cfg/jina_key"
+            printf '%s\n' "$X_ACCOUNTS_VALUE" > "$RUNNER_TEMP/cfg/x_accounts"
+            chmod 600 "$RUNNER_TEMP/cfg/jina_key" "$RUNNER_TEMP/cfg/x_accounts"
+            echo "X 계정 $(grep -cve '^\s*$' -e '^#' "$RUNNER_TEMP/cfg/x_accounts" || true) 개"
+          else
+            echo "JINA_API_KEY · DARKCHOCO_X_ACCOUNTS 가 없어 X 를 건너뜁니다"
           fi
 
       - name: 랜섬웨어 집계처
@@ -133,6 +144,25 @@ jobs:
             python -m collect.main --db "$RUNNER_TEMP/darkchoco.db" --ransom ""
           else
             echo "채널 목록이 없어 건너뜁니다"
+          fi
+
+      - name: X (Jina Reader)
+        # 2026-09-26 최현서 결정. 코드와 까닭은 skills/collect/sources/x_jina.py 에 있습니다.
+        # **로그에는 건수와 오류 이름만 나옵니다.** 계정 이름 · 글 제목 · Jina 오류 문구(제3자 계정
+        # 주소가 들어 있음)를 찍는 줄을 더하지 마십시오. 레포가 공개라 이 로그를 누구나 봅니다.
+        # 입력(do_x)을 따로 두지 않습니다 — 비밀값이 있으면 돌고 없으면 건너뜁니다
+        continue-on-error: true
+        working-directory: skills
+        env:
+          PYTHONUTF8: "1"
+          PYTHONIOENCODING: utf-8
+          DARKCHOCO_JINA_KEY_FILE: ${{ runner.temp }}/cfg/jina_key
+          DARKCHOCO_X_ACCOUNTS: ${{ runner.temp }}/cfg/x_accounts
+        run: |
+          if [ -f "$DARKCHOCO_JINA_KEY_FILE" ] && [ -f "$DARKCHOCO_X_ACCOUNTS" ]; then
+            python -m collect.sources.x_jina --db "$RUNNER_TEMP/darkchoco.db"
+          else
+            echo "X 키나 계정 목록이 없어 건너뜁니다"
           fi
 
       - name: 긁은 것 세기
@@ -202,4 +232,4 @@ jobs:
       - name: 표를 안 남긴다
         # 게시글 본문이 든 파일입니다. 아티팩트로도 안 남깁니다.
         if: always()
-        run: rm -f "$RUNNER_TEMP/darkchoco.db" "$RUNNER_TEMP/cfg/notion_token"
+        run: rm -f "$RUNNER_TEMP/darkchoco.db" "$RUNNER_TEMP/cfg/notion_token" "$RUNNER_TEMP/cfg/jina_key" "$RUNNER_TEMP/cfg/x_accounts"
