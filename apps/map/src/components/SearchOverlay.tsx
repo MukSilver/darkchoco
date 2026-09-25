@@ -160,8 +160,15 @@ export default function SearchOverlay({
     listRef.current?.querySelector(`[data-row="${at}"]`)?.scrollIntoView({ block: "nearest" });
   }, [at]);
 
+  /** 칩을 눌러도 입력칸에 포커스를 둔다 — 입력 · 화살표 · Enter · Esc 가 계속 입력칸에서 먹는다 */
+  const keepFocus = (e: React.MouseEvent) => e.preventDefault();
+
   const onKey = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") {
+      // 창 쪽 Esc(선택 해제 · 전체 결과 닫기)까지 가지 않게 여기서 멈춘다. 안 멈추면 React 가
+      // 이 키에서 상태를 바로 반영해, 새로 걸린 창 듣개가 같은 Esc 를 한 번 더 받는다
+      e.stopPropagation();
+      e.preventDefault();
       onClose();
       return;
     }
@@ -268,6 +275,7 @@ export default function SearchOverlay({
                           key={s.key}
                           type="button"
                           aria-pressed={on}
+                          onMouseDown={keepFocus}
                           onClick={() => onFilter({ ...filter, scope: s.key })}
                           className={
                             "rounded-full px-s3 py-[3px] text-[12px] " +
@@ -287,6 +295,7 @@ export default function SearchOverlay({
                           key={isl.id}
                           type="button"
                           aria-pressed={on}
+                          onMouseDown={keepFocus}
                           onClick={() => toggleIsland(isl.id)}
                           className={
                             "flex items-center gap-s1 rounded-full border px-s3 py-[2px] text-[12px] " +
@@ -410,6 +419,7 @@ export default function SearchOverlay({
                 {(narrowed(filter) || filter.scope !== "all") && (
                   <button
                     type="button"
+                    onMouseDown={keepFocus}
                     onClick={() => onFilter({ ...NO_FILTER, sort: filter.sort })}
                     className="shrink-0 hover:text-title"
                   >

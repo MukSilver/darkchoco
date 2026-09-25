@@ -29,7 +29,7 @@ import ViewTabs, { type ViewTabKey } from "@/components/ViewTabs";
 import { DARK_ISLANDS, islandToken } from "@/lib/islands";
 import { layoutMap } from "@/lib/layout";
 import { MAP, isBaked } from "@/lib/mapData";
-import { latestSeen, monthDay } from "@/lib/entity";
+import { latestSeen, seenDays } from "@/lib/entity";
 import { DEFAULT_PERIOD, eventTitle, eventsIn, touchesEvent, type Period } from "@/lib/events";
 import { pastSnapshot } from "@/lib/mapui";
 import { allIslandPairs, belongsTo, ecosystemView, islandView, territoryView } from "@/lib/panel";
@@ -133,6 +133,8 @@ type Origin = {
   linkSel: LinkSel;
   mapView: MapView;
   ym: QuarterKey;
+  /** 패널이 펼쳐져 있었나. 엔티티 · 타임라인 탭은 접혀 있다 (goTab) — 돌아갈 때 그대로 되살린다 */
+  panelOpen: boolean;
 };
 
 /** 뒤로 가기 기록에 우리가 넣은 칸이라는 표시 */
@@ -228,10 +230,8 @@ export default function Page() {
    * 정렬에 쓰고, 화면에는 `MM-DD` 만 적는다 (설계서 4.3.5)
    */
   const seenAt = useMemo(() => latestSeen(MAP.events, d), [d]);
-  const lastSeen = useMemo(
-    () => Object.fromEntries(Object.entries(seenAt).map(([id, ms]) => [id, monthDay(ms)])),
-    [seenAt],
-  );
+  // 화면 글자는 노션 날짜 글자다 — 사건 줄과 같게 (`seenDays`). 정렬은 위 `seenAt`(밀리초)으로 한다
+  const lastSeen = useMemo(() => seenDays(MAP.events, d), [d]);
 
   const view = useMemo(() => {
     const input = { layout, result, events: MAP.events, d, rels, lastSeen, registry: registryOf, snapshot: past };
@@ -381,6 +381,8 @@ export default function Page() {
     setFocusEvent(null);
     // [사건] 행 선택도 푼다 — 다른 영토의 목록에는 그 사건이 없다
     setPickedEvent(null);
+    // 「검색 결과로 이동했어요」 안내도 걷는다. 검색 결과를 고를 때는 이 뒤에 다시 띄운다
+    setToast(null);
     if (s.kind !== "none") setPanelOpen(true);
   };
 
@@ -413,6 +415,8 @@ export default function Page() {
     setLinkSel(o.linkSel);
     setMapView(o.mapView);
     setYm(o.ym);
+    setPanelOpen(o.panelOpen);
+    setToast(null);
     setRelSel(null);
     setRelHi(null);
     setRelPair(null);
@@ -445,7 +449,11 @@ export default function Page() {
   const enterFromLinks = (next: { center: string | null; hi: string | null; pair: RelPair | null }) => {
     seqRef.current += 1;
     const seq = `${OPENED_AT}-${seqRef.current}`;
-    setOrigin({ seq, tab, selection, panelTab, linkSel, mapView, ym });
+    setOrigin({ seq, tab, selection, panelTab, linkSel, mapView, ym, panelOpen });
+    // goTab 을 안 거치고 관계 탭으로 가므로 탭별 정리를 여기서 한다 — 관계 탭은 패널을 펼치고
+    // (연혁 강조가 보여야 한다), 타임라인을 떠나면 시점 비교를 푼다
+    setPanelOpen(true);
+    if (tab === "timeline") setCompare(null);
     setRelCenter(next.center);
     setRelSel(null);
     setRelHi(next.hi);
@@ -566,6 +574,7 @@ export default function Page() {
     setMapView(MAP_VIEW_HOME);
     setYm(TO);
     setPlaying(false);
+    setCompare(null);
     setSearchQ(null);
     setResults(null);
     setToast(null);
@@ -649,9 +658,13 @@ export default function Page() {
         setRelSel(null);
         setRelHi(null);
       } else {
+        // 빈 곳을 누른 것과 같게 푼다 — 검색에서 건 행위자 필터 · 사건 강조도 같이 푼다
         setSelection({ kind: "none" });
         setLinkSel(null);
         setPickedEvent(null);
+        setActorFilter(null);
+        setFocusEvent(null);
+        setToast(null);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -712,8 +725,11 @@ export default function Page() {
       }),
     [presentBy],
   );
-  /** 같은 일치 단계 안의 차례 — 기준일 활동도 (4.2.2 「가중치 점수 높은 순」) */
-  const weightOf = useCallback((id: string) => terr.get(id)?.metrics.activity ?? 0, [terr]);
+  /**
+   * 같은 일치 단계 안의 차례 — 기준일 영토 점수 (4.2.2 「가중치 점수 높은 순」, 3.4 S(T,D)).
+   * 전에는 활동도로 세웠다. 활동도는 규모 원자료라 사건 가중치가 안 든다
+   */
+  const weightOf = useCallback((id: string) => terr.get(id)?.metrics.score ?? 0, [terr]);
   const searchCtx: SearchCtx = useMemo(
     () => ({
       ix,
