@@ -1767,6 +1767,11 @@ def bake(n, sources: dict[str, str], log) -> dict:
                     cand = index.find("TELEGRAM", col_match(read, p, "게시자 핸들"))
             else:
                 cand = index.find(island, place) or index.find(island, plat)
+                # 랜섬웨어 사건의 게시자 핸들은 그룹 이름이다. 게시처 · 게시 플랫폼으로 못
+                # 찾으면 핸들을 랜섬 그룹 이름 · 별칭과 맞춘다 (설계서 2.4 L152). 핸들은
+                # 맞추기 전용이라 안 싣는다
+                if not cand and island == "RANSOMWARE":
+                    cand = index.find("RANSOMWARE", col_match(read, p, "게시자 핸들"))
             if not cand:
                 reason = "영토를 정할 수 없음"
 
