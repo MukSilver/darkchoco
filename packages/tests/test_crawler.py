@@ -42,6 +42,11 @@ def _안나가게(mod):
 for _m in (telegram, ransom, forum):
     _m.오프너 = lambda 프록시=None, 갈래="": _가짜오프너()
 
+# 랜섬 규모는 「오늘부터 180일」 을 셉니다 (2026-09-25). 가짜 피해 목록의 날짜가 고정이라
+# 오늘도 고정합니다. 안 그러면 몇 달 뒤 그 날짜가 창 밖으로 밀려 검사가 저절로 떨어집니다
+from datetime import date as _date  # noqa: E402
+ransom._오늘 = lambda: _date(2026, 9, 25)
+
 사람글 = ("멤버 수·게시물 수 못 셈. 하루 새 글 수도 못 셈 — 2026-08-01 접속 시 "
         "첫 화면 최신 글 목록이 '방금 전'·'1분 전'이었습니다")
 
@@ -284,7 +289,8 @@ def test_랜섬_그룹_목록을_읽는다():
     assert b.상태 == "offline" and b.형식 == "포럼·마켓"
 
     값 = a.노션값()
-    assert "피해 기업 3" in 값["규모"]
+    # 180일 건수 3 ÷ 6 = 0.5. 누적처럼 읽히던 「피해 기업 N」 대신 월평균입니다 (2026-09-25)
+    assert "피해 월평균 0.5건 (최근 180일)" in 값["규모"], 값["규모"]
     assert 값["출처"] == ["ransomware.live"]
 
 
@@ -1848,3 +1854,47 @@ if __name__ == "__main__":
         if k.startswith("test_"):
             v(); print(f"  OK  {k}"); n += 1
     print(f"\n{n}개 통과")
+
+
+# ── 랜섬 규모: 최근 180일 월평균 (2026-09-25, 인계 A) ─────────────────────
+def test_랜섬_규모는_최근_180일만_센다():
+    """달력 여섯 달 합계는 매달 1일에 뚝 떨어지는 톱니였다. 오늘부터 거슬러 180일만 센다."""
+    그룹 = [{"name": "G", "locations": [{"available": True, "slug": "http://g.onion"}]}]
+    # 오늘(2026-09-25) 기준 창의 첫날은 2026-03-30 이다
+    달 = [{"group": "G", "country": "KR", "activity": "Health", "attackdate": "2026-09-01T00:00:00+00:00"},
+          {"group": "G", "country": "US", "activity": "Health", "attackdate": "2026-03-30T00:00:00+00:00"},
+          {"group": "G", "country": "KR", "activity": "Retail", "attackdate": "2026-03-29T00:00:00+00:00"},
+          {"group": "G", "country": "US", "activity": "Retail", "discovered": "2026-06-10"},
+          {"group": "G", "country": "US", "activity": "Retail"}]
+    옛, 옛오프너 = ransom._받기, _안나가게(ransom)
+    ransom._받기 = lambda url, m, op=None: 그룹 if url.endswith("/groups") else 달
+    try:
+        p = next(iter(ransom.조사(개월수=1)))
+    finally:
+        ransom._받기, ransom.오프너 = 옛, 옛오프너
+    # 창 안 셋(09-01 · 03-30 · 06-10 discovered). 03-29 는 창 밖, 날짜 없는 것은 안 센다
+    assert p.피해기업수 == 3, p.피해기업수
+    assert p.피해월평균 == 0.5 and p.피해기간 == "최근 180일", (p.피해월평균, p.피해기간)
+    assert p.최근활동 == "2026-09-01"
+    assert "한국 피해 1건" in p.한국유출 and p.한국유출.startswith("최근 180일"), p.한국유출
+    assert p.피해대상.startswith("최근 180일 ") and "Health 2" in p.피해대상, p.피해대상
+    assert p.규모줄() == "피해 월평균 0.5건 (최근 180일) (%s 기준)" % p.확인일[:10], p.규모줄()
+
+
+def test_랜섬_기본은_일곱_달을_받는다():
+    """180일을 덮으려면 달력으로 일곱 달이다. 여섯이면 첫 달 앞쪽이 빈다."""
+    assert ransom.개월 == 7 and ransom.창 == 180
+    달들 = ransom._달들(ransom.개월)
+    assert 달들[0] == (2026, 9) and 달들[-1] == (2026, 3), 달들
+
+
+def test_옛_규모_줄은_갈아_끼우고_사람_글은_남긴다():
+    """꼴이 바뀌어 첫 판에 규모가 있는 랜섬 줄 대부분이 한 번 바뀐다. 옛 기계 줄만 바뀌어야 한다."""
+    p = Place(갈래="ransom", 이름="G", 상태="online", 두드림=True, 확인일="2026-09-25T00:00:00",
+              피해기업수=30, 피해월평균=5.0, 피해기간="최근 180일")
+    기존 = "피해 기업 40 (2026-08-30 기준)\n사람이 적은 메모 — 2026-05 부터 게시 늘어남"
+    새 = p.노션값({"규모": 기존})["규모"]
+    assert "피해 기업 40" not in 새, 새
+    assert "피해 월평균 5.0건 (최근 180일) (2026-09-25 기준)" in 새, 새
+    assert "사람이 적은 메모" in 새, "사람 글이 사라졌다"
+    assert 기계가_쓴_줄("피해 월평균 5.0건 (최근 180일) (2026-09-25 기준)")
