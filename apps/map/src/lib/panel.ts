@@ -435,6 +435,11 @@ export type BuildInput = {
    * `layout` 에는 계산 결과만 있어 이 둘이 없다. 없으면 두 자리를 비워 둔다
    */
   registry?: (id: string) => Pick<Territory, "raw" | "actor"> | undefined;
+  /**
+   * 지나간 분기 스냅샷 이름(`2025 Q3`). 가장 최근 분기면 없다. 생태계 머리글이
+   * 「2025 Q3 스냅샷 · 사건 N건」으로 바뀐다 (피그마 ⑦-1a · ⑦-1b)
+   */
+  snapshot?: string | null;
 };
 
 function islandOfFn(layout: MapLayout): (id: string) => string | undefined {
@@ -458,7 +463,10 @@ export function ecosystemView(i: BuildInput): PanelView {
     stateLabel: "선택 없음",
     kindToken: null,
     title: "다크웹 생태계",
-    subtitle: `섬 ${live.length} · 엔티티 ${ts.length} · 연결 ${linkCount}`,
+    // 지나간 분기를 보고 있으면 무엇을 보는지부터 적는다 (피그마 ⑦-1a · ⑦-1b)
+    subtitle: i.snapshot
+      ? `${i.snapshot} 스냅샷 · 사건 ${eventCount}건`
+      : `섬 ${live.length} · 엔티티 ${ts.length} · 연결 ${linkCount}`,
     stats: [
       // 평균 활동도에 30일 변화를 안 붙인다 (판 1.2 에서 뜻을 잃었다).
       // 섬마다 뜻이 다른 값이라 섬 평균을 다시 평균하지 않고 영토 평균을 낸다
