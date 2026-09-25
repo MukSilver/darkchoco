@@ -135,7 +135,13 @@ def _키(s: str) -> str:
 
 
 def _조각(s: str) -> list[str]:
-    return [x.strip() for x in re.split(r"[/·,()\n]", s or "") if x.strip()]
+    """다른 이름을 이름 조각으로. **괄호 안(어디서 쓰는 닉인지)은 이름이 아니라 떼고 자른다.**
+
+    괄호까지 세면 「(Signal)」 · 「(breached.st)」 가 별칭이 되어 남의 줄과 맞았다(2026-09-25 검토).
+    `hub/events/actor.py` 의 `조각()` 과 같아야 한다.
+    """
+    s = re.sub(r"\([^)]*\)", " ", s or "")
+    return [x.strip(" .'\"") for x in re.split(r"[,·/|;\n]|\s+또는\s+", s) if x.strip(" .'\"")]
 
 
 def _보낼글(v: dict) -> str:
@@ -165,19 +171,24 @@ def _비었나(v: dict) -> bool:
     return x in (None, "", [], {})
 
 
-def 행위자_기존줄(ds_id: str, props: dict, body: dict) -> dict | None:
-    """행위자 DB 에서 같은 핸들(또는 다른 이름)을 가진 줄. 없으면 None."""
+def 행위자_기존줄(ds_id: str, props: dict, body: dict) -> list[dict]:
+    """행위자 DB 에서 같은 핸들(또는 다른 이름)을 가진 줄 **전부.** 없으면 빈 목록.
+
+    첫 줄만 돌려주면 줄 차례에 따라 사람 줄에서 멈추기도 하고 기계 줄을 고치기도 했다
+    (2026-09-25 검토). 여럿이면 부르는 쪽이 멈춘다.
+    """
     제목 = next((k for k, v in props.items() if v["type"] == "title"), "")
     내것 = [_보낼글(body.get(제목) or {})] + _조각(_보낼글(body.get("다른 이름") or {}))
     내키 = {_키(x) for x in 내것 if _키(x)}
     if not 내키:
-        return None
+        return []
+    맞음 = []
     for r in _모든줄(ds_id):
         pr = r.get("properties") or {}
         그쪽 = [_읽은글(pr.get(제목))] + _조각(_읽은글(pr.get("다른 이름")))
         if 내키 & {_키(x) for x in 그쪽 if _키(x)}:
-            return r
-    return None
+            맞음.append(r)
+    return 맞음
 
 
 def 빈칸만(기존: dict, body: dict, 오늘: str) -> tuple[dict, list[str]]:
@@ -521,12 +532,21 @@ def main() -> None:
     # 행위자 DB 는 같은 핸들이 있는지 본다. ⑨-3 을 돌리는 자리다 (2026-09-25).
     기존 = None
     if "행위자" in dbname or args.db.strip() == "행위자":
-        기존 = 행위자_기존줄(ds_id, props, body)
-        if 기존 is not None and 자동표지 not in _읽은글((기존.get("properties") or {}).get("비고")):
+        맞음 = 행위자_기존줄(ds_id, props, body)
+        사람줄 = [r for r in 맞음 if 자동표지 not in _읽은글((r.get("properties") or {}).get("비고"))]
+        if 사람줄:
             show(dbname, props, body, skipped, warn, excluded, blocks)
             print("\n**사람이 만든 줄이 이미 있다.** ⑨-3 은 그 줄을 건드리지 않는다.")
-            print(기존.get("url") or 기존["id"])
+            for r in 사람줄:
+                print(r.get("url") or r["id"])
             raise SystemExit(1)
+        if len(맞음) > 1:
+            show(dbname, props, body, skipped, warn, excluded, blocks)
+            print("\n**기계가 만든 줄이 여럿 맞는다.** 어느 줄에 채울지 사람이 정한다. 아무것도 안 쓴다.")
+            for r in 맞음:
+                print(r.get("url") or r["id"])
+            raise SystemExit(1)
+        기존 = 맞음[0] if 맞음 else None
         if 기존 is not None:
             오늘 = datetime.now(timezone(timedelta(hours=9))).date().isoformat()
             body, 안씀 = 빈칸만(기존, body, 오늘)

@@ -36,6 +36,9 @@
 (`skills/.../references/stage9-db.md`). 9/25 소급 줄도 같은 표지를 달고 있다.
 
 **로그에는 핸들을 안 찍는다.** 레포가 공개라 Actions 로그도 누구나 본다. 건수만 낸다.
+
+**자동 줄을 지우지 말고 「DB 반영」 을 끈다.** 노션 조회는 지운 줄을 안 돌려줘서, 지우면 그 핸들의
+판매 글이 수집 DB 에 남아 있는 한 다음 판에 같은 줄이 다시 생긴다(2026-09-25 검토).
 """
 from __future__ import annotations
 
@@ -64,7 +67,14 @@ def 키(s: str) -> str:
 
 
 def 조각(s: str) -> list[str]:
-    return [x.strip() for x in re.split(r"[/·,()\n]", s or "") if x.strip()]
+    """다른 이름 · 별칭 칸을 이름 조각으로 자른다. **괄호 안은 이름이 아니다.**
+
+    「Max98 (breached.st) · Max (Signal)」 의 괄호는 어디서 쓰는 닉인지 적은 것이다(⑨-3 형식).
+    괄호 안까지 조각으로 세면 signal · breachedst 같은 플랫폼 이름이 별칭이 되어 남의 줄과
+    맞았다(2026-09-25 검토). 괄호를 먼저 떼고 자른다. notion_find.split_aliases 와 같은 규칙이다.
+    """
+    s = re.sub(r"\([^)]*\)", " ", s or "")
+    return [x.strip(" .'\"") for x in re.split(r"[,·/|;\n]|\s+또는\s+", s) if x.strip(" .'\"")]
 
 
 def 글(p: dict, k: str) -> str:
@@ -119,14 +129,29 @@ def _한국줄(p: dict) -> bool:
     return 글(p, "국가") == "한국" or 글(p, "한국 관련") in ("직접", "공급망")
 
 
+def _kst날(s: str) -> str:
+    """시각을 KST 날짜로. 텔레그램 · 집계처 시각은 UTC 라 그대로 자르면 15시 이후가 하루 앞선다.
+
+    push.py 의 _발견일 · skills/collect/stats.py 의 _kst 와 같은 까닭이다(2026-09-25 검토).
+    """
+    s = (s or "").strip()
+    if len(s) <= 10:
+        return s
+    try:
+        d = datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except ValueError:
+        return s[:10]
+    return (d.astimezone(KST) if d.tzinfo else d).date().isoformat()
+
+
 def _날(p: dict) -> str:
-    return (글(p, "게시 시각") or 글(p, "발견일") or "")[:10]
+    return _kst날(글(p, "게시 시각") or 글(p, "발견일"))
 
 
 def 속성(표기: str, 줄들: list[dict], 오늘: str, 까닭: str = "자동 등록") -> dict:
     """행위자 DB 새 줄의 속성. 피해 조직 이름이 들어갈 칸이 없다."""
     곳 = sorted({글(p, "게시처") for p in 줄들 if 글(p, "게시처")})
-    처음 = sorted(x for x in (글(p, "게시 시각")[:10] for p in 줄들) if x)
+    처음 = sorted(x for x in (_kst날(글(p, "게시 시각")) for p in 줄들) if x)
     출처 = sorted({출처맞춤[글(p, "소스")] for p in 줄들 if 글(p, "소스") in 출처맞춤})
     역할 = "판매자" if any(글(p, "게시 성격") == "DB 판매" for p in 줄들) else "미확인"
     달셈 = collections.Counter(_날(p)[:7] for p in 줄들 if _한국줄(p) and _날(p))

@@ -64,9 +64,20 @@ class 기존줄찾기(unittest.TestCase):
 
     def test_핸들과_다른_이름과_0o_로_찾는다(self):
         notion_row._모든줄 = lambda ds: [기존줄("Seller0ne", 표지비고, 다른="alt_nick (forum)")]
-        self.assertIsNotNone(notion_row.행위자_기존줄("ds", 스키마, 보낼것("sellerone")))
-        self.assertIsNotNone(notion_row.행위자_기존줄("ds", 스키마, 보낼것("New", 다른_이름="AltNick")))
-        self.assertIsNone(notion_row.행위자_기존줄("ds", 스키마, 보낼것("Someone")))
+        self.assertEqual(len(notion_row.행위자_기존줄("ds", 스키마, 보낼것("sellerone"))), 1)
+        self.assertEqual(len(notion_row.행위자_기존줄("ds", 스키마, 보낼것("New", 다른_이름="AltNick"))), 1)
+        self.assertEqual(notion_row.행위자_기존줄("ds", 스키마, 보낼것("Someone")), [])
+
+    def test_괄호_속_플랫폼_이름으로는_안_맞춘다(self):
+        """「(Signal)」 · 「(breached.st)」 가 별칭으로 세어져 남의 줄과 맞았다(2026-09-25 검토)."""
+        notion_row._모든줄 = lambda ds: [기존줄("SellerA", 표지비고, 다른="sa2 (breached.st) · sa3 (Signal)")]
+        self.assertEqual(notion_row.행위자_기존줄(
+            "ds", 스키마, 보낼것("OtherGuy", 다른_이름="og (breached.st) · og2 (Signal)")), [])
+        self.assertEqual(len(notion_row.행위자_기존줄("ds", 스키마, 보낼것("New", 다른_이름="sa3 (Signal)"))), 1)
+
+    def test_표지가_세_곳에서_같다(self):
+        import notion_find
+        self.assertEqual(notion_find.자동표지, notion_row.자동표지)
 
     def test_열쇠가_actor_py_와_같다(self):
         root = Path(__file__).resolve().parents[4]
@@ -153,6 +164,22 @@ class 도구로돌리기(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("빈 칸만 채운다", out)
         self.assertEqual(self.보낸것, [])
+
+    def test_기계_줄이_여럿_맞으면_멈춘다(self):
+        code, out = self._돌리기([기존줄("SellerA", 표지비고), 기존줄("sellera", 표지비고)],
+                               "핸들: SellerA\n지갑 주소: bc1-x\n", "--commit")
+        self.assertEqual(code, 1)
+        self.assertIn("기계가 만든 줄이 여럿 맞는다", out)
+        self.assertEqual(self.보낸것, [])
+
+    def test_사람_줄과_기계_줄이_같이_맞으면_차례와_상관없이_멈춘다(self):
+        for 줄들 in ([기존줄("SellerA", 표지비고), 기존줄("sellera", "검증하며 넣음")],
+                   [기존줄("sellera", "검증하며 넣음"), 기존줄("SellerA", 표지비고)]):
+            self.보낸것.clear()
+            code, out = self._돌리기(줄들, "핸들: SellerA\n지갑 주소: bc1-x\n", "--commit")
+            self.assertEqual(code, 1)
+            self.assertIn("사람이 만든 줄이 이미 있다", out)
+            self.assertEqual(self.보낸것, [])
 
     def test_없으면_지금처럼_새_줄을_만든다(self):
         code, _ = self._돌리기([기존줄("Other", 표지비고)], "핸들: SellerA\n", "--commit")

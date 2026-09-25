@@ -216,7 +216,27 @@ def test_열쇠가_소급_도구와_같다():
     # 9/25 소급(D-2)과 인계가 쓴 열쇠. 한글은 남기고 0 은 o
     assert actor.키("Cl0p Team!") == "clopteam"
     assert actor.키("다크 초코_0") == "다크초코o"
-    assert collections.Counter(actor.조각("a / b · c, d (e)")) == collections.Counter("abcde")
+    # 괄호 안은 어디서 쓰는 닉인지 적은 것이라 이름이 아니다(2026-09-25 검토)
+    assert collections.Counter(actor.조각("a / b · c, d (e)")) == collections.Counter("abcd")
+    assert actor.조각("Max98 (breached.st, 둘째) · Max (Signal)") == ["Max98", "Max"]
+
+
+def test_괄호_속_플랫폼_이름은_있는_핸들로_안_센다():
+    """「(Signal)」 이 별칭으로 세어져 핸들 Signal 이 이미 있는 것으로 보였다."""
+    있음 = actor.있는키([행위자줄("Someone", "max98 (breached.st) · Max (Signal)")], [])
+    assert "signal" not in 있음 and "breachedst" not in 있음, 있음
+    assert {"someone", "max98", "max"} <= 있음, 있음
+
+
+def test_UTC_시각은_KST_날짜로_자른다():
+    """15시 이후 UTC 글이 하루 · 한 달 앞선 날로 세어졌다(2026-09-25 검토)."""
+    p = actor.속성("SellerA", [수집줄("SellerA", "DB 판매", 시각="2026-07-31T16:00:00+00:00", 국가="한국")],
+                 "2026-09-25")
+    assert p["처음 본 날"] == {"date": {"start": "2026-08-01"}}, p["처음 본 날"]
+    assert p["한국 관련 유출"]["rich_text"][0]["text"]["content"] == "2026-08 한국 1건"
+    assert actor._kst날("2026-07-31") == "2026-07-31"
+    assert actor._kst날("2026-07-31T10:00:00") == "2026-07-31"      # 시간대가 없으면 그대로
+    assert actor._kst날("2026-07-31T16:00:00Z") == "2026-08-01"
 
 
 if __name__ == "__main__":
