@@ -109,6 +109,16 @@ export const SIZE_LABEL: Record<Ev["size"], string> = {
   unknown: "규모 모름",
 };
 
+/**
+ * 사건 판정 → 화면 신뢰도 3단계 (설계서 2.3 신뢰도 표). 허위는 표시 안 함(null)
+ */
+export function confOfVerdict(v: Ev["verdict"]): Confidence | null {
+  if (v === "confirmed") return "confirmed";
+  if (v === "high") return "high";
+  if (v === "false") return null;
+  return "estimated";
+}
+
 /* ────────────────────────────────────────────────────────────────
  * 활동 관계
  * ──────────────────────────────────────────────────────────────── */
