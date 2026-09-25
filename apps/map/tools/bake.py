@@ -184,7 +184,9 @@ _NUM = r"(\d{1,3}(?:[ ,]\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)"
 #: 바이트 단위
 RE_CLAIM_BYTES = re.compile(_NUM + r"\s*(TB|GB|MB|KB)(?![A-Za-z])", re.IGNORECASE)
 #: 건수 단위 (영문). K · M 은 천 · 백만으로 읽는다
-RE_CLAIM_COUNT = re.compile(_NUM + r"\s*(K|M|건|명|개|rows?|records?|lines?)(?![A-Za-z])", re.IGNORECASE)
+#: 개 · lines 는 안 읽는다 — 「파일 5개」 · 「테이블 12개」 · 「5 lines sample」 은
+#: 레코드 수가 아니다
+RE_CLAIM_COUNT = re.compile(_NUM + r"\s*(K|M|건|명|rows?|records?)(?![A-Za-z])", re.IGNORECASE)
 #: 한국어 수 단위가 이어진 덩어리 — `5천만` · `1억 2천만` · `120만`
 RE_CLAIM_KO = re.compile(r"\d[\d,.]*\s*(?:억|만|천|백)(?:\s*\d[\d,.]*\s*(?:억|만|천|백)|\s*(?:억|만))*")
 
@@ -486,26 +488,28 @@ def claim_size(raw: str | None) -> tuple[float, str] | None:
     **원문은 안 싣는다.** 자유 글이라 조직명이 섞일 수 있다. 숫자와 정해진
     단위만 남기면 조직명이 들어갈 틈이 없다.
 
-    글에서 가장 먼저 나오는 규모 하나를 쓴다. 바이트는 그대로(`255GB`), 건수는
-    억 · 만 · 건으로 맞춘다 — `5천만 건` → `5000만`, `20 000 000 rows` → `2000만`,
-    `1.2M records` → `120만`.
+    **레코드 수가 있으면 그것을, 없으면 바이트를 쓴다.** 레코드 수가 여럿이면
+    가장 큰 것이다 — 「관리자 3명 포함 120만 건」은 120만이다. 바이트는 그대로
+    (`255GB`), 건수는 억 · 만 · 건으로 맞춘다 — `5천만 건` → `5000만`,
+    `20 000 000 rows` → `2000만`, `1.2M records` → `120만`.
     """
     if not raw:
         return None
-    found: list[tuple[int, tuple[float, str]]] = []
+    counts: list[float] = []
+    for m in RE_CLAIM_KO.finditer(raw):
+        t = _korean_count(m.group(0))
+        if t:
+            counts.append(t)
+    for m in RE_CLAIM_COUNT.finditer(raw):
+        v = _to_float(m.group(1))
+        if v:
+            counts.append(v * {"k": 1_000, "m": 1_000_000}.get(m.group(2).lower(), 1))
+    if counts:
+        return _count_value(max(counts))
     m = RE_CLAIM_BYTES.search(raw)
     if m and (v := _to_float(m.group(1))) is not None:
-        found.append((m.start(), (v, m.group(2).upper())))
-    m = RE_CLAIM_KO.search(raw)
-    if m and (t := _korean_count(m.group(0))) is not None:
-        found.append((m.start(), _count_value(t)))
-    m = RE_CLAIM_COUNT.search(raw)
-    if m and (v := _to_float(m.group(1))) is not None:
-        mult = {"k": 1_000, "m": 1_000_000}.get(m.group(2).lower(), 1)
-        found.append((m.start(), _count_value(v * mult)))
-    if not found:
-        return None
-    return min(found, key=lambda x: x[0])[1]
+        return v, m.group(2).upper()
+    return None
 
 
 def size_grade(raw: str | None) -> str:
@@ -700,16 +704,16 @@ def number_duplicates(items: list[dict]) -> None:
 
 # ── 반출 검사 ───────────────────────────────────────────────────────────────
 
-RE_AT = re.compile(r"@")
+RE_AT = re.compile(r"[@＠]")
 RE_DIGITS = re.compile(r"\d{11,}")
 #: 점을 낀 낱말. 아는 TLD 만 막으면 모르는 TLD 로 샌다 —
 #: 2026-09-03 에 `.at` 도메인이 그렇게 빠져나갔다
 RE_DOTTED = re.compile(r"[A-Za-z0-9가-힣_-]+\.[A-Za-z0-9가-힣_-]{2,}")
 #: 끊어 적은 전화번호와 주민번호 모양. 11자리 연속 숫자 검사는 `010-1234-5678` ·
 #: `900101-1234567` 을 못 잡는다. 사람이 쓴 글(관계선 원문)이 나가면서 더했다
-RE_PII = re.compile(r"(?<!\d)(?:\d{2,4}[-. ]\d{3,4}[-. ]\d{4}|\d{6}\s*-\s*[1-8]\d{6})(?!\d)")
+RE_PII = re.compile(r"(?<!\d)(?:\d{2,4}[-.–— _]\d{3,4}[-.–— _]\d{4}|\d{6}\s*[-–—]\s*[1-8]\d{6})(?!\d)")
 #: 가려 적은 이메일 — `name [at] host` · `name(at)host`
-RE_AT_WORD = re.compile(r"[\[(]\s*at\s*[\])]|\s+at\s+\S+\s*(?:\.|\bdot\b)", re.IGNORECASE)
+RE_AT_WORD = re.compile(r"[\[({]\s*at\s*[\]})]|_at_|\s+at\s+\S+\s*(?:\.|\bdot\b)", re.IGNORECASE)
 
 
 def scan_strings(node, path: str, bad: list[str]) -> None:
@@ -901,6 +905,8 @@ def split_links(raw) -> list[str]:
         elif ch in ")]）":
             depth = max(0, depth - 1)
         cut = ch in "\n;" or (ch == "," and depth == 0)
+        if ch == "\n":
+            depth = 0  # 한 줄에서 안 닫힌 괄호가 다음 줄 항목까지 삼키지 않게
         if not cut and depth == 0 and raw.startswith(" · ", i):
             cut = True
             i += 2
@@ -921,7 +927,25 @@ RE_LEGAL = re.compile(
     re.IGNORECASE,
 )
 #: 조직 이름으로 보지 않을 낱말. 이런 값과 겹친다고 원문을 버리지 않는다
-ORG_STOP = {"기타", "미상", "미확인", "없음", "모름", "unknown", "n/a", "한국", "korea", "대한민국"}
+ORG_STOP = {
+    "기타", "미상", "미확인", "없음", "모름", "unknown", "n/a", "한국", "korea", "대한민국",
+    # 법인 꼬리 · 주소 조각만 남은 것. 이것과 겹친다고 원문을 버리면 가해 쪽 URL 이 든
+    # 원문까지 다 빠진다 (URL 은 싣기로 했다, 2026-09-25)
+    "ltd", "inc", "corp", "co", "llc", "plc", "gmbh", "company", "corporation",
+    "주식회사", "유한회사", "www", "http", "https", "com", "net", "org",
+}
+
+
+#: 도메인 끝의 공통 꼬리. 등록 이름은 이것들 바로 앞 조각이다
+DOMAIN_TAILS = {"com", "net", "org", "kr", "co", "or", "go", "ac", "ne", "re", "pe", "gov", "edu", "io", "jp", "cn"}
+
+
+def registrable_label(dom: str) -> str:
+    """`shop.lamaba.com` → `lamaba` · `ganada.co.kr` → `ganada`. 첫 조각(`shop` · `www`)은 흔한 낱말이라 안 쓴다."""
+    labels = [x for x in dom.split(".") if x]
+    while len(labels) > 1 and labels[-1] in DOMAIN_TAILS:
+        labels.pop()
+    return labels[-1] if labels else ""
 
 
 def org_tokens(values: set[str]) -> set[str]:
@@ -936,7 +960,7 @@ def org_tokens(values: set[str]) -> set[str]:
     out: set[str] = set()
 
     def add(x: str) -> None:
-        x = x.strip(" .,·/-_'\"").casefold()
+        x = x.strip(" .,·/-_:'\"").casefold()
         if not x or x in ORG_STOP or x.isdigit():
             return
         out.add(x)
@@ -947,15 +971,17 @@ def org_tokens(values: set[str]) -> set[str]:
             out.add(re.sub(r"\s+", "", bare))
 
     for v in values:
+        v = re.sub(r"https?://", " ", v, flags=re.IGNORECASE)
         add(v)
         for part in re.split(r"[,/·;|]|\s+[-–]\s+|\n", v):
             add(part)
             for inner in re.findall(r"\(([^)]*)\)", part):
                 add(inner)
             add(re.sub(r"\([^)]*\)", " ", part))
-        for dom in re.findall(r"[a-z0-9-]+(?:\.[a-z0-9-]+)+", v.casefold()):
+        for dom in re.findall(r"[a-z0-9-]+(?:\.[a-z0-9-]+)+", re.sub(r"https?://", " ", v.casefold())):
+            dom = re.sub(r"^www\.", "", dom)
             add(dom)
-            add(dom.split(".", 1)[0])
+            add(registrable_label(dom))
     # 한글은 두 글자부터, 라틴 글자는 세 글자부터 쓴다. 두 글자 라틴 약칭(`SK`)은
     # 아래에서 낱말 경계로만 대조한다
     return {t for t in out if len(t) >= 2}
@@ -1002,7 +1028,9 @@ def relation_note(
                 out.add(short)
         if paren and "." in paren:
             out.add(paren.casefold())
-        out |= {a.casefold() for a in c.get("aliases", [])}
+        for a in c.get("aliases", []):
+            if a.casefold() not in ambiguous and clean_name(a)[0].casefold() not in ambiguous:
+                out.add(a.casefold())
         return {x for x in out if len(x) >= 3}
 
     picked: list[str] = []
@@ -1190,7 +1218,12 @@ def clean_handle(raw) -> str | None:
         return None
     # 값 훑기에 걸릴 모양이면 행위자로 안 만든다. 남기면 핸들 하나 때문에 하루
     # 굽기가 통째로 멈춘다 (`scan_strings`)
-    if RE_AT.search(h) or RE_DIGITS.search(h) or RE_DOTTED.search(h) or RE_PII.search(h):
+    if RE_AT.search(h) or RE_DIGITS.search(h) or RE_DOTTED.search(h) or RE_PII.search(h) or RE_AT_WORD.search(h):
+        return None
+    # 영토 id 는 핸들을 `-` 로 이어 붙인 모양이다(`slug`). `user_010_1234_5678` 은
+    # id 가 되면서 전화번호 모양이 된다
+    as_id = re.sub(r"[^a-z0-9]+", "-", h.lower())
+    if RE_PII.search(as_id) or RE_DIGITS.search(as_id.replace("-", "")):
         return None
     return h
 
@@ -1422,10 +1455,14 @@ def bake(n, sources: dict[str, str], log) -> dict:
     # 영토다 (설계서 2.4 · 4.3.8 「랜섬웨어 그룹은 넣지 않음」). 텔레그램 사건은
     # 핸들로 채널을 찾으므로 그 핸들이 곧 채널 이름이다 — 행위자로 만들면 같은
     # 곳이 채널과 행위자로 두 번 선다. 포럼도 같게 본다
+    # 랜섬웨어 그룹은 꺼졌거나 offline 이어도 행위자가 아니다. 포럼 · 채널은 지도에
+    # 남은 곳과 같은 이름만 뺀다 — 꺼진 명부 줄 이름과 우연히 같은 핸들까지 지우면
+    # 실제 행위자와 그 관계가 사라진다
     group_names = set()
     for c in cands:
-        group_names.add(c["rawName"].casefold())
-        group_names.add(display_name(c["rawName"]).casefold())
+        if c["island"] == "RANSOMWARE" or id(c) in places:
+            group_names.add(c["rawName"].casefold())
+            group_names.add(display_name(c["rawName"]).casefold())
     actor_of: dict[str, dict] = {}
     as_group = set()
     for e in raw_events:
@@ -1540,9 +1577,11 @@ def bake(n, sources: dict[str, str], log) -> dict:
 
         cand_of = {tid: c for c in kept for tid in [tid_of.get(id(c))] if tid}
         dropped_notes = {"조직명": 0, "@ · 긴 숫자": 0}
-        # 괄호를 떼면 둘 이상이 같아지는 이름 (`relation_note` 의 `ambiguous`)
+        # 괄호를 떼면 둘 이상이 같아지는 이름 (`relation_note` 의 `ambiguous`).
+        # **명부 전체로 센다** — 한 클론이 offline 이라 지도에서 빠져도 그 클론의
+        # 원문이 남은 클론 관계선에 붙으면 안 된다
         short_count: dict[str, int] = {}
-        for c in kept:
+        for c in cands + actor_cands:
             for short in {clean_name(c["rawName"])[0].casefold(), display_name(c["rawName"]).casefold()}:
                 short_count[short] = short_count.get(short, 0) + 1
         ambiguous = frozenset(k for k, v in short_count.items() if v > 1)

@@ -55,16 +55,23 @@ export default function EventsTab({
 }) {
   const [picked, setPicked] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
-  // 화면에 적는 기간은 거르기와 같은 규칙으로 낸다 (`periodDays`). 전체면 가장 이른 사건 날짜다
-  const [start, toDay] = periodDays(period, d);
-  const fromDay = start ?? (list.length ? list[list.length - 1].postedAt.slice(0, 10) : toDay);
+  // 화면에 적는 기간은 거르기와 같은 규칙으로 낸다 (`periodDays`). 전체면 가장 이른 사건 날짜다.
+  // 끝은 기준일이지만, 노션이 적은 날짜로는 기준일 다음 날인 사건(분기 끝 새벽 +09:00)이
+  // 목록에 들 수 있어 그 날까지 넓혀 적는다 — 머리글이 목록과 어긋나지 않게
+  const [start, end] = periodDays(period, d);
+  const latest = list.length ? list[0].postedAt.slice(0, 10) : end;
+  const toDay = latest > end ? latest : end;
+  const earliest = list.length ? list[list.length - 1].postedAt.slice(0, 10) : toDay;
+  const fromDay = start ?? (earliest < toDay ? earliest : toDay);
+  const [fromIn, setFromIn] = useState(fromDay);
+  const [toIn, setToIn] = useState(end);
 
   return (
     <section className="flex flex-col gap-s3">
       <div className="flex items-baseline justify-between">
         <h3 className="text-[12px] text-label">사건 타임라인</h3>
         <span className="text-[11px] tabular-nums text-label">
-          {periodLabel(period)} · {list.length}건
+          {periodLabel(period, d)} · {list.length}건
         </span>
       </div>
 
@@ -97,7 +104,12 @@ export default function EventsTab({
           <button
             type="button"
             aria-expanded={editing}
-            onClick={() => setEditing((v) => !v)}
+            onClick={() => {
+              // 열 때마다 지금 기간으로 채운다
+              setFromIn(fromDay);
+              setToIn(end);
+              setEditing((v) => !v);
+            }}
             className="text-[11px] text-label hover:text-title"
           >
             변경 {editing ? "▲" : "▼"}
@@ -108,9 +120,8 @@ export default function EventsTab({
             className="flex items-center gap-s2"
             onSubmit={(ev) => {
               ev.preventDefault();
-              const f = new FormData(ev.currentTarget);
-              const from = String(f.get("from") || fromDay);
-              const to = String(f.get("to") || toDay);
+              const from = fromIn || fromDay;
+              const to = toIn || end;
               onPeriod({ kind: "range", from: from <= to ? from : to, to: from <= to ? to : from });
               setEditing(false);
             }}
@@ -118,8 +129,9 @@ export default function EventsTab({
             <input
               name="from"
               type="date"
-              defaultValue={fromDay}
-              max={toDay}
+              value={fromIn}
+              onChange={(ev) => setFromIn(ev.target.value)}
+              max={toIn || end}
               aria-label="시작일"
               className="min-w-0 flex-1 rounded-[6px] border border-edge-input bg-input px-s2 py-[2px] text-[12px] text-body"
             />
@@ -127,7 +139,9 @@ export default function EventsTab({
             <input
               name="to"
               type="date"
-              defaultValue={toDay}
+              value={toIn}
+              onChange={(ev) => setToIn(ev.target.value)}
+              min={fromIn || undefined}
               max={isoDay(d.getTime())}
               aria-label="끝날"
               className="min-w-0 flex-1 rounded-[6px] border border-edge-input bg-input px-s2 py-[2px] text-[12px] text-body"
