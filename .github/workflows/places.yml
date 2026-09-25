@@ -210,7 +210,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: hub/data/backoff.db
-          key: places-backoff-tor-${{ github.run_id }}
+          key: places-backoff-tor-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: places-backoff-tor-
 
       - name: 명부 조사
@@ -246,7 +246,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: hub/data/backoff.db
-          key: places-backoff-tor-${{ github.run_id }}
+          key: places-backoff-tor-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: 뒷정리
         if: always()
@@ -295,7 +295,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: hub/data/backoff.db
-          key: places-backoff-telegram-${{ github.run_id }}
+          key: places-backoff-telegram-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: places-backoff-telegram-
 
       - name: 명부 조사
@@ -323,7 +323,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: hub/data/backoff.db
-          key: places-backoff-telegram-${{ github.run_id }}
+          key: places-backoff-telegram-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: 뒷정리
         if: always()

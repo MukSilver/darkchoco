@@ -81,7 +81,8 @@ def test_옛_파일이_없어도_죽지_않는다():
 
 def test_조사기가_기본으로_쉬기_파일을_쓴다():
     글 = (ROOT / "hub" / "places" / "run.py").read_text(encoding="utf-8")
-    assert "두드림기록(db or 기본_두드림())" in 글, "한갈래() 가 아직 places.db 에 두드림을 쓴다"
+    assert "자취파일 = Path(db or 기본_두드림())" in 글 and "두드림기록(자취파일)" in 글, \
+        "한갈래() 가 아직 places.db 에 두드림을 쓴다"
     assert 'return ROOT / "hub" / "data" / "backoff.db"' in 글
 
 
@@ -114,13 +115,46 @@ def test_워크플로가_쉬기_파일만_캐시로_이어_받는다():
             # **places.db 를 캐시에 넣으면 안 된다.** 규모 표에 명부 이름이 있다
             assert re.findall(r"path: (\S+)", s) == ["hub/data/backoff.db"], s
         # 캐시는 한 번 넣으면 못 덮어쓴다. 판마다 새 열쇠로 넣고, 잡마다 열쇠를 가른다
-        열쇠 = "places-backoff-%s-${{ github.run_id }}" % 이름
+        열쇠 = "places-backoff-%s-${{ github.run_id }}-${{ github.run_attempt }}" % 이름
         assert "key: " + 열쇠 in 넣음 and "key: " + 열쇠 in 꺼냄, 넣음
         assert "restore-keys: places-backoff-%s-\n" % 이름 in 꺼냄, 꺼냄
         assert re.search(r"if: always\(\)", 넣음), "조사가 실패하면 기록을 안 넣는다"
         열쇠들.append(열쇠)
     assert len(set(열쇠들)) == 2, "두 잡이 같은 열쇠를 쓴다"
     assert "places.db" not in "".join(re.findall(r"path: (\S+)", 글)), "places.db 가 캐시 경로에 있다"
+
+
+def test_깨진_쉬기_파일은_연결을_닫고_올린다():
+    """못 여는 파일이면 DatabaseError 를 올리되 연결은 닫는다. 부르는 쪽이 파일을 치울 수 있어야 한다."""
+    with tempfile.TemporaryDirectory() as d:
+        f = Path(d) / "backoff.db"
+        f.write_bytes(b"x" * 5000)
+        try:
+            backoff.기록(f)
+        except sqlite3.DatabaseError:
+            pass
+        else:
+            raise AssertionError("깨진 파일을 열었다")
+        f.replace(f.with_name("backoff.db.깨짐"))        # 연결이 남아 있으면 윈도에서 여기서 죽는다
+        새 = backoff.기록(f)
+        새.close()
+
+
+def test_조사기가_깨진_쉬기_파일을_치우고_새로_시작한다():
+    # 캐시로 이어 받은 파일이 깨졌으면 판마다 죽고 같은 파일을 또 캐시에 넣었다(2026-09-25 검토)
+    글 = (ROOT / "hub" / "places" / "run.py").read_text(encoding="utf-8")
+    자리 = 글[글.index("자취파일 = Path(db or 기본_두드림())"):]
+    자리 = 자리[:자리.index("if not db:")]
+    assert "except sqlite3.DatabaseError" in 자리, 자리
+    assert "자취파일.replace(" in 자리 and "r.문제.append(" in 자리, 자리
+    assert 자리.count("두드림기록(자취파일)") == 2, "치운 뒤에 새로 안 연다"
+
+
+def test_재실행한_판의_쉬기_기록도_캐시에_남는다():
+    # 캐시는 한 번 넣으면 못 덮어쓴다. 같은 run_id 로 다시 돌린 판(run_attempt 2)이 넣을 자리가 없었다
+    글 = (ROOT / ".github" / "workflows" / "places.yml").read_text(encoding="utf-8")
+    넣음 = re.findall(r"(?m)key: (places-backoff-.+?)\s*$", 글)
+    assert 넣음 and all(k.endswith("-${{ github.run_attempt }}") for k in 넣음), 넣음
 
 
 if __name__ == "__main__":

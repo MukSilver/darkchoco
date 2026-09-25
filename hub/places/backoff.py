@@ -73,8 +73,13 @@ class 기록:
         self.db = Path(db)
         self.db.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(str(self.db))
-        self.conn.executescript(_표)
-        self.conn.commit()
+        try:
+            self.conn.executescript(_표)
+            self.conn.commit()
+        except sqlite3.DatabaseError:
+            # 못 여는 파일이면 연결을 닫고 올립니다. 안 닫으면 윈도에서 부르는 쪽이 파일을 못 치웁니다
+            self.conn.close()
+            raise
 
     def close(self) -> None:
         self.conn.close()
