@@ -451,8 +451,11 @@ export function topSurges(result: MapResult, limit = 3): { territoryId: string; 
  * 3.9 관계 건수
  * ──────────────────────────────────────────────────────────────── */
 
-/** 관계 R 의 근거 사건 가운데 기준일 D 에 지도에 든 것 — E(R,D) (설계서 3.9) */
-function evidenceInScope(relation: Relation, events: readonly Ev[], d: Date): Ev[] {
+/**
+ * 관계 R 의 근거 사건 가운데 기준일 D 에 지도에 든 것 — E(R,D) (설계서 3.9).
+ * 관계 탭 근거 목록(4.3.6 ⑦-8e)이 이 목록을 그대로 보인다
+ */
+export function evidenceInScope(relation: Relation, events: readonly Ev[], d: Date): Ev[] {
   const byId = new Map(events.map((e) => [e.id, e]));
   const out: Ev[] = [];
   for (const id of relation.evidence) {
