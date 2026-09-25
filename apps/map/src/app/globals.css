@@ -98,3 +98,70 @@ body {
   background: var(--t-surface-app);
   color: var(--t-text-body);
 }
+
+/*
+ * 기준일 슬라이더 — 피그마 컴포넌트 시트 `11 / 06 Snapshot bar` 「트랙(노브 16)」.
+ *
+ * 지나온 쪽은 강조색, 남은 쪽은 막대 바탕색인 4px 줄이고, 노브는 16px 링이다
+ * (테두리 3px 강조색, 속은 패널색). 값은 ⑦-1 · ⑦-1a 픽셀에서 읽었다. 브라우저
+ * 기본 모양은 브라우저마다 달라서 쓰지 않는다.
+ *
+ * **채운 쪽을 CSS 만으로 칠한다.** 크롬에는 채운 쪽을 가리키는 의사 요소가 없다.
+ * 그래서 노브에 `border-image` 를 걸어 노브 왼쪽으로 강조색 줄, 오른쪽으로 바탕색
+ * 줄을 100vw 씩 뻗고, 입력 칸의 `overflow: hidden` 으로 칸 밖을 자른다. 값을
+ * 부품에서 따로 넘기지 않아도 노브가 움직이면 경계가 같이 움직인다.
+ *
+ * 스냅샷 바와 타임라인 탭(⑦-9b)의 슬라이더가 같은 모양이라 둘 다 이것을 탄다.
+ * `@layer base` 에 둔 것은 부품의 Tailwind 클래스(`w-full` 따위)가 이기게 하려는 것이다.
+ */
+@layer base {
+  input[type="range"] {
+    --range-line: 4px;
+    --range-knob: 16px;
+    display: block;
+    height: var(--range-knob);
+    overflow: hidden;
+    /* 노브 지름의 반. 양 끝 노브가 이 둥근 끝에 꼭 맞아 잘리지 않고, 초점 테두리도 둥글다 */
+    border-radius: calc(var(--range-knob) / 2);
+    background: none;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    width: var(--range-knob);
+    height: var(--range-knob);
+    border: none;
+    border-radius: 50%;
+    background: var(--t-surface-panel);
+    box-shadow: inset 0 0 0 3px var(--t-accent);
+    border-image: linear-gradient(90deg, var(--t-accent) 50%, var(--t-surface-bar-track) 0) 0 1 /
+      calc(50% - var(--range-line) / 2) 100vw / 0 100vw;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  input[type="range"]::-moz-range-thumb {
+    box-sizing: border-box;
+    width: var(--range-knob);
+    height: var(--range-knob);
+    border: none;
+    border-radius: 50%;
+    background: var(--t-surface-panel);
+    box-shadow: inset 0 0 0 3px var(--t-accent);
+    border-image: linear-gradient(90deg, var(--t-accent) 50%, var(--t-surface-bar-track) 0) 0 1 /
+      calc(50% - var(--range-line) / 2) 100vw / 0 100vw;
+  }
+
+  /* 파이어폭스는 줄을 따로 그린다. 위 노브가 줄을 대신하므로 지운다 */
+  input[type="range"]::-moz-range-track,
+  input[type="range"]::-moz-range-progress {
+    background: none;
+  }
+
+  input[type="range"]:focus-visible {
+    outline: 2px solid var(--t-accent-muted);
+    outline-offset: 2px;
+  }
+}
