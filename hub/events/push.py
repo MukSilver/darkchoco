@@ -49,6 +49,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sqlite3
 import sys
 from datetime import datetime, timedelta, timezone
@@ -393,8 +394,12 @@ def _열쇠들(줄) -> tuple[str, str]:
     return _값(줄, "uid").strip(), _열쇠(_값(줄, "post_url"), _값(줄, "title"), _값(줄, "venue"))
 
 
+# 글 번호 꼴. 텔레그램 `채널/번호` 와 포럼 킷 `포럼/번호` 가 이렇습니다
+_글번호 = re.compile(r"[A-Za-z0-9_.\-]+/\d+")
+
+
 def _자취(줄) -> str:
-    """뺀 줄을 로그에 남길 때 쓸 표시. **값이 아니라 표시입니다.**
+    """줄을 로그에 남길 때 쓸 표시. **값이 아니라 표시입니다.**
 
     UID 와 글 번호뿐이라 개인정보 규칙에 안 걸립니다. 제목이나 본문은 안 넣습니다.
 
@@ -402,10 +407,29 @@ def _자취(줄) -> str:
     표가 사라지면 그것만으로는 무엇이었는지 되짚을 길이 없습니다. CI 는 실행마다
     표를 지웁니다 (`collect.yml`). `breachdetect/1270060` 이면 채널과 글이 그대로
     남아 90일치 실행 로그에서 원문을 다시 볼 수 있습니다.
+
+    **글 번호 꼴일 때만 붙입니다** (2026-09-26). 랜섬 줄의 src_id 는 `그룹|피해 조직`
+    이고, 포럼 킷은 글 번호를 못 뽑으면 주소를 통째로 씁니다. 둘 다 붙이면 피해 조직
+    이름이 Actions 로그에 그대로 나갑니다.
     """
     uid = _값(줄, "uid").strip() or "uid없음"
     src = _값(줄, "src_id").strip()
-    return "%s %s" % (uid, src) if src else uid
+    return "%s %s" % (uid, src) if _글번호.fullmatch(src) else uid
+
+
+def _가린오류(e: Exception, 줄) -> str:
+    """못 올린 까닭. **노션이 받은 값을 되읊으면 제목과 대상 조직을 가립니다.**
+
+    노션 검증 오류는 `instead was ...` 처럼 보낸 값을 돌려줄 때가 있습니다. 칸 이름과
+    까닭은 있어야 고치므로 오류를 통째로 버리지 않고 값만 가립니다. 자르기 전에
+    가립니다. 자른 뒤에 가리면 잘린 이름 조각이 남습니다.
+    """
+    m = str(e)
+    for v in sorted({_값(줄, "title").strip(), _값(줄, "target_org").strip()},
+                    key=len, reverse=True):
+        if v:
+            m = m.replace(v, "(가림)")
+    return m[:120]
 
 
 def _뺀줄찍기(뺀: list, 한줄에: int = 3) -> None:
@@ -565,10 +589,12 @@ def main(argv: list[str] | None = None) -> int:
         print("  안 올라가는 것")
         print("    body · raw · clues · sample_path — 수집 DB 에 그 칸이 없습니다")
         print()
+        # **제목을 안 찍습니다.** 제목이 곧 피해 조직 이름이고, 레포를 공개로
+        # 돌리면 Actions 로그를 누구나 봅니다. 어느 줄인지는 자취(UID · 글 번호)로 가립니다.
         for r in 새것[:5]:
             p = 만들기(r)
-            print("    %-46s %s · %s · 한국 관련 %s" % (
-                (r["title"] or "")[:46],
+            print("    %-40s %s · %s · 한국 관련 %s" % (
+                _자취(r),
                 (p.get("소스") or {}).get("select", {}).get("name", "-"),
                 r["country"] or "-",
                 p["한국 관련"]["select"]["name"]))
@@ -585,7 +611,7 @@ def main(argv: list[str] | None = None) -> int:
             })
             쓴것 += 1
         except Exception as e:  # noqa: BLE001
-            못쓴것.append("%s: %s" % ((r["title"] or "")[:40], str(e)[:120]))
+            못쓴것.append("%s: %s" % (_자취(r), _가린오류(e, r)))
         if i % 25 == 0:
             print("    %d/%d" % (i, len(새것)), flush=True)
 

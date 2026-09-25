@@ -417,6 +417,92 @@ def test_뺀_줄_로그에_제목도_본문도_안_나간다():
     assert "제목" not in 글 and "본문" not in 글
 
 
+# ── Actions 로그에 피해 조직이 안 나가는지 (2026-09-26) ──
+#
+# collect.yml 이 여섯 시간마다 push.py 를 돌립니다. **레포를 공개로 돌리면 Actions
+# 로그를 90일 동안 누구나 봅니다.** 제목과 대상 조직은 피해 조직 이름입니다.
+
+_가짜제목 = "가짜제목-QZX-시험용"
+_가짜조직 = "가짜조직-QZX-시험용"
+
+
+def test_랜섬_줄의_자취에는_피해_조직이_안_나간다():
+    """ransomlive 의 src_id 는 `그룹|피해 조직` 입니다. 글 번호 꼴이 아니면 UID 만 씁니다."""
+    assert push._자취(_기본(uid="u-1", src_id="어떤그룹|" + _가짜조직)) == "u-1"
+    # 포럼 킷은 글 번호를 못 뽑으면 주소를 통째로 씁니다. 주소에 제목이 들 수 있습니다
+    assert push._자취(_기본(uid="u-1", src_id="http://forum.invalid/Thread-" + _가짜조직)) == "u-1"
+
+
+class _가짜노션:
+    """노션에 안 붙습니다. 비어 있는 수집 DB 를 흉내 냅니다. `오류` 를 주면 쓰기가 실패합니다."""
+    오류: Exception | None = None
+
+    def __init__(self, *a, **k):
+        pass
+
+    def query_all(self, _ds):
+        return []
+
+    def request(self, method, path, body=None):
+        if _가짜노션.오류:
+            raise _가짜노션.오류
+        return {}
+
+
+def _돌리기(*인자) -> tuple[int, str, str]:
+    """CI 와 같은 꼴의 SQLite 에 랜섬 줄 하나를 넣고 push.main 을 돌립니다. (반환값, 출력, uid)"""
+    import contextlib
+    import io
+    import tempfile
+
+    from dc_store import Item, Store
+
+    it = Item(source="ransom", venue="leak.invalid", venue_kind="dls",
+              src_id="어떤그룹|" + _가짜조직, actor="어떤그룹",
+              target_org=_가짜조직, title=_가짜제목, country="KR", kind="랜섬웨어 유출")
+    원래 = push.Notion
+    push.Notion = _가짜노션
+    버퍼 = io.StringIO()
+    try:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
+            db = Path(d) / "darkchoco.db"
+            s = Store(db)
+            s.put(it, "2026-09-26")
+            s.close()
+            with contextlib.redirect_stdout(버퍼):
+                rc = push.main(["--db", str(db), *인자])
+    finally:
+        push.Notion = 원래
+    return rc, 버퍼.getvalue(), it.uid()
+
+
+def test_미리보기_로그에_제목도_대상_조직도_안_나간다():
+    rc, 글, uid = _돌리기()
+    assert rc == 0, 글
+    # 무엇이 올라갈지는 UID 로 보입니다
+    assert uid in 글, 글
+    assert _가짜제목 not in 글 and _가짜조직 not in 글
+
+
+def test_못_올린_줄_로그에도_제목과_대상_조직이_안_나간다():
+    """노션 검증 오류는 보낸 값을 되돌려 줄 때가 있습니다. 그것도 가립니다."""
+    from dc_notion import NotionError
+
+    _가짜노션.오류 = NotionError(
+        "Notion API 400 POST /pages\n  body.properties 자료 제목 instead was `%s` · %s"
+        % (_가짜제목, _가짜조직), 400, "validation_error")
+    try:
+        rc, 글, uid = _돌리기("--apply")
+    finally:
+        _가짜노션.오류 = None
+    assert rc == 1, 글
+    assert "못 올린 것 1줄" in 글, 글
+    assert uid in 글, 글
+    # 까닭은 남습니다. 값만 가립니다
+    assert "400" in 글 and "자료 제목" in 글, 글
+    assert _가짜제목 not in 글 and _가짜조직 not in 글
+
+
 if __name__ == "__main__":
     시험 = [(k, v) for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     실패 = 0
