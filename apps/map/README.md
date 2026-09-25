@@ -25,11 +25,19 @@ npm test             # 반출 검사 + 시험
 npm run build        # out/ 에 정적 파일
 ```
 
+**새 클론은 예시 데이터로 뜬다.** 구운 파일(`src/data/map.json`)이 저장소에 없어서,
+`dev` · `build` · `test` 앞에 `tools/ensure_map.mjs` 가 빈 파일을 만든다. 실제 지도를 보려면
+아래 「굽기」를 먼저 돌린다.
+
 ## 자료가 흐르는 길
 
     노션 (사람이 판정 · 검토 · DB 반영을 찍는다)
       └ tools/bake.py  ── 반출 검사 ──→  src/data/map.json  ──→  화면
-                                          (저장소에 들어간다)
+                                          (저장소에 안 들어간다)
+
+**구운 파일은 저장소에 넣지 않는다** (2026-09-25). 공개 지도가 내보내는 것과 같은 자료지만,
+공개 저장소의 git 기록에 한 번 들어가면 못 지우고 검색 엔진에 색인된다. 루트 `.gitignore` 의
+`data/` 규칙이 막는다.
 
 **화면은 노션을 직접 부르지 않는다.** 구운 파일만 읽는다. 화면에서 노션을 부르면 반출 관문이
 사라진다. 원천은 Supabase(`darkchoco-data` 의 `core` · `map`)로 옮길 예정이다 —
@@ -93,6 +101,9 @@ NOTION_TOKEN_FILE=~/.config/darkchoco/NOTION_TOKEN_산출물.txt npm run bake
 npx wrangler login      # 한 번만
 npm run deploy          # 시험 → 빌드 → out/ 을 Cloudflare 에 올린다
 ```
+
+**굽지 않았으면 배포가 멈춘다.** 빈 파일로 물러서면 예시 데이터가 실제 사이트에 올라가므로
+`predeploy` 가 구운 파일인지 먼저 본다.
 
 코드가 도는 Worker 가 아니라 자산만 올리는 배포다. `out/` 밖의 것은 못 올라간다.
 
