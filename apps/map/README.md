@@ -165,6 +165,13 @@ NOTION_TOKEN_FILE=~/.config/darkchoco/NOTION_TOKEN_산출물.txt npm run bake
 
 ## 배포
 
+**자동으로 된다.** 레포의 `.github/workflows/map.yml` 이 하루 두 번(KST 14:30 · 02:30) 노션에서 굽고
+반출 검사 · 시험 · 빌드를 거쳐 배포한다. 한 단계라도 실패하면 배포하지 않는다. Actions 탭에서
+「지도 갱신」을 손으로 돌릴 수도 있다. 비밀값 열 개(노션 토큰 · Cloudflare 둘 · DB id 일곱)는
+워크플로 머리 주석에 적었다.
+
+손으로 배포할 때는 이렇게 한다.
+
 ```
 npx wrangler login      # 한 번만
 npm run deploy          # 시험 → 빌드 → out/ 을 Cloudflare 에 올린다
