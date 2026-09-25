@@ -9,13 +9,15 @@
  * 날짜 범위도 정할 수 있다. **끝은 기준일이다** — 기준일을 옮긴 상태면 그
  * 날짜까지의 90일이다. 헤더 오른쪽과 탭 배지에 지금 기간의 건수를 적는다.
  *
- * 안 만든 것: 공식 발표 사고(유출 사고 DB 를 안 읽는다), 행위자 필터 칩
- * (검색에 행위자 묶음이 없다), 더블클릭 보고서 팝업(4.3.4).
+ * 검색에서 행위자를 고르면 그 행위자 사건만 남기고 「행위자: 핸들 ×」 칩을 단다.
+ * 사건을 고르면 그 사건을 강조하고 그 자리로 굴린다 (설계서 4.2.2 결과 선택).
+ *
+ * 안 만든 것: 공식 발표 사고(유출 사고 DB 를 안 읽는다), 더블클릭 보고서 팝업(4.3.4).
  */
 
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import EventRow from "./EventRow";
 import { byMonth, periodDays, periodLabel, type Period } from "@/lib/events";
@@ -44,6 +46,9 @@ export default function EventsTab({
   period,
   onPeriod,
   whereOf,
+  actor,
+  onClearActor,
+  focus,
 }: {
   /** 지금 기간의 사건. 최신순 (`eventsIn`) */
   list: Ev[];
@@ -52,8 +57,20 @@ export default function EventsTab({
   onPeriod: (p: Period) => void;
   /** 행 아래 「올라온 곳」 글씨 */
   whereOf: (e: Ev) => string;
+  /** 검색에서 고른 행위자 핸들. 있으면 칩을 단다 (목록은 부르는 쪽이 이미 걸렀다) */
+  actor?: string | null;
+  onClearActor?: () => void;
+  /**
+   * 검색에서 고른 사건. 처음부터 강조하고 그 줄로 굴린다. **부르는 쪽이 이 값을
+   * `key` 로도 넘긴다** — 바뀌면 새로 마운트돼 강조가 새 사건으로 옮겨 간다
+   */
+  focus?: string | null;
 }) {
-  const [picked, setPicked] = useState<string | null>(null);
+  const [picked, setPicked] = useState<string | null>(focus ?? null);
+  useEffect(() => {
+    if (!focus) return;
+    document.querySelector(`[data-ev="${CSS.escape(focus)}"]`)?.scrollIntoView({ block: "center" });
+  }, [focus]);
   const [editing, setEditing] = useState(false);
   // 화면에 적는 기간은 거르기와 같은 규칙으로 낸다 (`periodDays`). 전체면 가장 이른 사건 날짜다.
   // 끝은 기준일이지만, 노션이 적은 날짜로는 기준일 다음 날인 사건(분기 끝 새벽 +09:00)이
@@ -74,6 +91,22 @@ export default function EventsTab({
           {periodLabel(period, d)} · {list.length}건
         </span>
       </div>
+
+      {actor && (
+        <div>
+          <button
+            type="button"
+            onClick={onClearActor}
+            aria-label={`행위자 필터 ${actor} 풀기`}
+            className="inline-flex items-center gap-s1 rounded-full border border-accent-edge bg-accent-subtle px-s3 py-[2px] text-[12px] text-title"
+          >
+            행위자: {actor}
+            <span aria-hidden className="text-label">
+              ×
+            </span>
+          </button>
+        </div>
+      )}
 
       <div role="group" aria-label="기간" className="flex rounded-[10px] bg-track p-[3px]">
         {CHOICES.map((c) => {

@@ -30,6 +30,7 @@ export default function EventRow({
   return (
     <button
       type="button"
+      data-ev={e.id}
       onClick={onClick}
       aria-pressed={on}
       className={[
