@@ -76,18 +76,47 @@ export const DEFAULT_PERIOD: Period = { kind: "days", days: 90 };
 
 const DAY = 24 * 60 * 60 * 1000;
 
+/** 기준일의 날짜 `2026-09-30` */
+function dayOfDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * 날짜 범위를 기준일 안으로 맞춘다. **끝은 기준일을 넘지 않는다** (설계서 4.3.2).
+ * 기준일을 옮겨 범위 전체가 기준일 뒤로 가면 뒤집힌다 — 그때는 기본 90일로
+ * 물러선다. 빈 목록에 거꾸로 된 날짜를 보이는 것보다 낫다.
+ */
+function clampRange(p: { from: string; to: string }, d: Date): { from: string; to: string } | null {
+  const dd = dayOfDate(d);
+  const to = p.to < dd ? p.to : dd;
+  return p.from <= to ? { from: p.from, to } : null;
+}
+
 /**
  * 기간의 양 끝 (UTC 밀리초). **끝은 기준일 D 다** — 「기준일을 옮긴 상태면 그
- * 날짜까지의 90일」(설계서 4.3.2). 날짜 범위는 그 날 하루를 다 넣는다.
+ * 날짜까지의 90일」(설계서 4.3.2). 날짜 범위는 화면 표시용 어림이다 — 거르기는
+ * `eventsIn` 이 노션이 적은 날짜 글자로 한다.
  */
 export function periodBounds(p: Period, d: Date): { from: number; to: number } {
   const to = d.getTime();
   if (p.kind === "days") return { from: to - p.days * DAY, to };
   if (p.kind === "all") return { from: -Infinity, to };
-  const f = Date.parse(`${p.from}T00:00:00Z`);
-  const t = Date.parse(`${p.to}T23:59:59Z`);
-  // 거르기는 `from` 을 안 넣는다(`t > from`). 시작일 0시 정각 사건도 들도록 1밀리초 당긴다
-  return { from: Number.isNaN(f) ? -Infinity : f - 1, to: Math.min(to, Number.isNaN(t) ? to : t) };
+  const r = clampRange(p, d);
+  if (!r) return { from: to - 90 * DAY, to };
+  // 거르기는 `from` 을 안 넣는다(`t > from`). 시작일 0시 정각도 들도록 1밀리초 당긴다
+  return { from: Date.parse(`${r.from}T00:00:00Z`) - 1, to: Math.min(to, Date.parse(`${r.to}T23:59:59Z`)) };
+}
+
+/** 화면에 적을 기간 양 끝 날짜 `[시작, 끝]`. 전체는 시작이 null */
+export function periodDays(p: Period, d: Date): [string | null, string] {
+  const dd = dayOfDate(d);
+  if (p.kind === "all") return [null, dd];
+  if (p.kind === "range") {
+    const r = clampRange(p, d);
+    if (r) return [r.from, r.to];
+  }
+  const days = p.kind === "days" ? p.days : 90;
+  return [dayOfDate(new Date(d.getTime() - days * DAY + 1)), dd];
 }
 
 /**
@@ -101,13 +130,27 @@ export function eventsIn(
   keep: (e: Ev) => boolean,
 ): Ev[] {
   const { from, to } = periodBounds(p, d);
+  // 날짜 범위는 **노션이 적은 날짜 글자**로 거른다. 목록이 보이는 날짜가 그것이라
+  // 시각으로 거르면 `+09:00` 이 붙은 새벽 사건이 전날로 빠진다
+  const range = p.kind === "range" ? clampRange(p, d) : null;
   return events
     .filter((e) => keep(e) && inScope(e, d))
     .filter((e) => {
+      if (range) {
+        const day = dayOf(e);
+        return day >= range.from && day <= range.to;
+      }
       const t = Date.parse(e.postedAt);
       return t > from && t <= to;
     })
-    .sort((a, b) => Date.parse(b.postedAt) - Date.parse(a.postedAt) || a.id.localeCompare(b.id));
+    // 최신순. 노션이 적은 날짜 · 시각 글자로 세운다 — 월별 묶음이 그 글자로
+    // 끊으므로, 절대 시각으로 세우면 같은 달 머리글이 두 번 나올 수 있다
+    .sort(
+      (a, b) =>
+        b.postedAt.slice(0, 16).localeCompare(a.postedAt.slice(0, 16)) ||
+        Date.parse(b.postedAt) - Date.parse(a.postedAt) ||
+        a.id.localeCompare(b.id),
+    );
 }
 
 /** 월별 묶음 `2026-09` (설계서 4.3.2). 들어온 차례(최신순)를 지킨다 */
@@ -122,9 +165,9 @@ export function byMonth(events: readonly Ev[]): { month: string; items: Ev[] }[]
   return out;
 }
 
-/** 기간 이름 — 헤더 오른쪽 `90일 · 5건` */
-export function periodLabel(p: Period): string {
+/** 기간 이름 — 헤더 오른쪽 `90일 · 5건`. 날짜 범위가 기준일 뒤로 가 90일로 물러섰으면 그렇게 적는다 */
+export function periodLabel(p: Period, d: Date): string {
   if (p.kind === "days") return `${p.days}일`;
   if (p.kind === "all") return "전체";
-  return "기간 지정";
+  return clampRange(p, d) ? "기간 지정" : "90일";
 }

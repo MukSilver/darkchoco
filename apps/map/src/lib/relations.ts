@@ -208,6 +208,15 @@ export function touching(views: readonly RelView[], id: string): RelView[] {
   return views.filter((v) => v.rel.from === id || v.rel.to === id);
 }
 
+/**
+ * 영토의 [연결] 목록 · 배지 · 지도 선이 쓰는 관계. **행위자는 활동 관계만**이다
+ * (설계서 4.3.8 「활동한 영토 목록」). 셋이 같은 목록을 써야 건수가 맞는다 (3.9)
+ */
+export function linksOf(views: readonly RelView[], id: string, actor: boolean): RelView[] {
+  const t = touching(views, id);
+  return actor ? t.filter((v) => v.rel.kind === "activity") : t;
+}
+
 /** 관계에서 이 영토의 상대 */
 export function partnerOf(v: RelView, id: string): string {
   return v.rel.from === id ? v.rel.to : v.rel.from;
