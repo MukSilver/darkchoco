@@ -34,7 +34,7 @@
 
 "use client";
 
-import { useMemo, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, type MouseEvent, type ReactNode } from "react";
 
 import { Chip, KindDot, TeamMark, hexPoints } from "./RelBits";
 import type { MapLayout, TerritoryShape } from "@/lib/layout";
@@ -194,16 +194,20 @@ function Toggle({
   onClick,
   disabled,
   title,
+  est,
   children,
 }: {
   on: boolean;
   onClick: () => void;
   disabled?: boolean;
   title?: string;
+  /** 「추정 관계 포함」 스위치 표시. 바뀌어 붙은 뒤 초점을 옮길 자리를 찾는 데 쓴다 */
+  est?: boolean;
   children: ReactNode;
 }) {
   return (
     <button
+      data-est-toggle={est ? "" : undefined}
       type="button"
       role="switch"
       aria-checked={on}
@@ -228,6 +232,18 @@ function Toggle({
 }
 
 export default function RelationTab(p: RelationTabProps) {
+  // 「추정 관계 포함」을 누르면 관계가 비거나 다시 생겨 판 위 스위치와 안내 상자 스위치가 서로
+  // 바뀌어 붙는다. 누른 스위치가 사라지면 초점이 문서 맨 앞으로 빠지므로 새 스위치로 옮긴다
+  const estFocus = useRef(false);
+  const toggleEst = () => {
+    estFocus.current = true;
+    p.onEst(!p.est);
+  };
+  useEffect(() => {
+    if (!estFocus.current) return;
+    estFocus.current = false;
+    document.querySelector<HTMLElement>("[data-est-toggle]")?.focus();
+  }, [p.est]);
   const byId = useMemo(() => new Map(p.layout.territories.map((t) => [t.territoryId, t])), [p.layout]);
   const islandById = useMemo(() => new Map(p.layout.islands.map((i) => [i.islandKey, i])), [p.layout]);
   const nameOf = (id: string) => byId.get(id)?.name ?? id;
@@ -604,7 +620,7 @@ export default function RelationTab(p: RelationTabProps) {
         */}
         {!empty && !p.pair && (
           <div className="absolute right-s4 top-s4 flex items-center gap-s2">
-            <Toggle on={p.est} onClick={() => p.onEst(!p.est)}>
+            <Toggle on={p.est} onClick={toggleEst} est>
               추정 관계 포함
             </Toggle>
             <Toggle on={p.depth === 2} onClick={() => p.onDepth(p.depth === 2 ? 1 : 2)}>
@@ -663,7 +679,7 @@ export default function RelationTab(p: RelationTabProps) {
             <div className="flex flex-wrap items-center justify-center gap-s2">
               {p.center && (
                 <>
-                  <Toggle on={p.est} onClick={() => p.onEst(!p.est)}>
+                  <Toggle on={p.est} onClick={toggleEst} est>
                     추정 관계 포함
                   </Toggle>
                   <Toggle

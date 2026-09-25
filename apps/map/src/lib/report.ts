@@ -14,7 +14,7 @@
  *   활동도 영향 줄     없다 (설계서 L697, 5.3 ⑦-5)
  */
 
-import { EV_KIND_LABEL, EV_KIND_TONE, RISK_LABEL, RISK_TONE, dayOf, eventTitle, sizeText, utcStamp } from "./events.ts";
+import { EV_KIND_LABEL, EV_KIND_TONE, RISK_LABEL, RISK_TONE, eventTitle, sizeText, utcStamp } from "./events.ts";
 import { CONF_CHIP, CONF_LABEL, KIND_LABEL, KIND_ORDER, SIZE_LABEL, VERDICT_LABEL, confOfVerdict, josa } from "./relations.ts";
 import type { Confidence, Ev, Relation } from "./types.ts";
 
@@ -249,8 +249,9 @@ export function eventReport(
         conf: r.confidence,
       })),
     source: official
-      ? { type: `출처 종류 · ${e.sourceKind ?? "기록 없음"}`, meta: `공표 ${dayOf(e)}` }
-      : { type: `수집 소스 · ${island} 섬`, meta: `게시 ${dayOf(e)} · 판정 ${VERDICT_LABEL[e.verdict]}` },
+      // 날짜는 머리 · 표와 같은 UTC 날짜다. 노션 날짜(+09:00)를 그대로 쓰면 새벽 사건이 하루 어긋난다
+      ? { type: `출처 종류 · ${e.sourceKind ?? "기록 없음"}`, meta: `공표 ${posted.slice(0, 10)}` }
+      : { type: `수집 소스 · ${island} 섬`, meta: `게시 ${posted.slice(0, 10)} · 판정 ${VERDICT_LABEL[e.verdict]}` },
   };
 }
 

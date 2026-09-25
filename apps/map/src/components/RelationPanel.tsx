@@ -242,13 +242,22 @@ export default function RelationPanel(p: RelationPanelProps) {
                   key={e.id}
                   className="relative"
                   title={p.onOpenEvent ? "두 번 누르면 사건 보고서" : undefined}
-                  onDoubleClick={() => p.onOpenEvent?.(e.id)}
                 >
+                  {/* 더블클릭 · Enter 는 EventRow 가 받는다 — 키보드로도 팝업이 열린다. 열 때 그 줄을
+                      강조해 둔다 (이미 강조된 줄을 두 번 누르면 첫 click 이 강조를 풀기 때문) */}
                   <EventRow
                     e={e}
                     where={whereOf(e)}
                     on={evOn === e.id}
                     onClick={() => setEvPick(evOn === e.id ? null : { rel: sel.rel.id, ev: e.id })}
+                    onOpen={
+                      p.onOpenEvent
+                        ? () => {
+                            setEvPick({ rel: sel.rel.id, ev: e.id });
+                            p.onOpenEvent?.(e.id);
+                          }
+                        : undefined
+                    }
                   />
                   {conf && (
                     <span className="pointer-events-none absolute right-s3 top-s3">

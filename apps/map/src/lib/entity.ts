@@ -64,7 +64,29 @@ export function latestSeen(events: readonly Ev[], d: Date): Record<string, numbe
   return out;
 }
 
-/** 화면에 적는 최근 관측일 `MM-DD` (UTC). 설계서 4.3.5 「월-일」 */
+/**
+ * 화면에 적는 최근 관측일 `MM-DD` — 가장 늦은 사건의 **노션이 적은 날짜 글자**다 (설계서 4.3.5
+ * 「월-일」). 사건 줄(`stampOf`)도 그 글자를 쓰므로 둘이 같아진다. UTC 로 옮기면 +09:00 새벽
+ * 사건이 전날로 보여 같은 패널의 사건 줄과 어긋났다
+ */
+export function seenDays(events: readonly Ev[], d: Date): Record<string, string> {
+  const at: Record<string, number> = {};
+  const out: Record<string, string> = {};
+  for (const e of events) {
+    if (!inScope(e, d)) continue;
+    const t = Date.parse(e.postedAt);
+    for (const id of [e.territoryId, e.actorTerritoryId]) {
+      if (!id) continue;
+      if (!(id in at) || t > at[id]) {
+        at[id] = t;
+        out[id] = e.postedAt.slice(5, 10);
+      }
+    }
+  }
+  return out;
+}
+
+/** 밀리초를 `MM-DD` (UTC). 시각만 있을 때 쓴다 — 사건이 있으면 `seenDays` 를 쓴다 */
 export function monthDay(ms: number): string {
   const dt = new Date(ms);
   const p = (n: number) => String(n).padStart(2, "0");
