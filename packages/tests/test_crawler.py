@@ -363,6 +363,30 @@ def test_랜섬_한_달을_못_받은_판은_피해로_센_네_칸을_안_쓴다
     assert p.피해기업수 == 1 and p.최근활동 == "2026-08-20", p
 
 
+def test_랜섬_응답이_잘리면_그_달만_못_받은_달로_센다():
+    """IncompleteRead 는 OSError 가 아니라 빠져나가 랜섬 갈래 하나를 통째로 죽였다(2026-09-25 검토)."""
+    import http.client
+    그룹 = [{"name": "G", "locations": [{"available": True, "slug": "http://g.onion"}]}]
+    불린 = [0]
+
+    def 받기(url, m, op=None):
+        if url.endswith("/groups"):
+            return 그룹
+        불린[0] += 1
+        if 불린[0] == 1:
+            raise http.client.IncompleteRead(b"")
+        return [{"group": "G", "attackdate": "2026-09-20T00:00:00+00:00"}]
+
+    옛, 옛오프너 = ransom._받기, _안나가게(ransom)
+    ransom._받기 = 받기
+    try:
+        p = next(iter(ransom.조사(개월수=2)))
+    finally:
+        ransom._받기, ransom.오프너 = 옛, 옛오프너
+    assert 불린[0] == 2, "잘린 달 뒤의 달을 안 물었다"
+    assert p.이름 == "G" and p.피해기업수 is None, p
+
+
 def test_랜섬_연속_실패로_멈추면_안_물은_달도_못_받은_달로_센다():
     """여섯 달 중 앞의 셋이 실패해 멈추면 뒤의 셋은 안 묻는다. 「6달 중 6달」 이어야 한다.
     전에는 실패한 셋만 세어 「6달 중 3달」 로 찍혀, 하나도 못 받은 판이 반쯤 받은 판으로 보였다."""
