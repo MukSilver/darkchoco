@@ -31,6 +31,7 @@ import { layoutMap } from "@/lib/layout";
 import { MAP, isBaked } from "@/lib/mapData";
 import { latestSeen, monthDay } from "@/lib/entity";
 import { DEFAULT_PERIOD, eventTitle, eventsIn, touchesEvent, type Period } from "@/lib/events";
+import { pastSnapshot } from "@/lib/mapui";
 import { allIslandPairs, belongsTo, ecosystemView, islandView, territoryView } from "@/lib/panel";
 import { eventReport, linkedOf, type ReportNames } from "@/lib/report";
 import type { Ev, Relation } from "@/lib/types";
@@ -154,6 +155,8 @@ export default function Page() {
   // 패널 [사건] 탭 기간. 다른 영토를 골라도 그대로 둔다 (설계서 4.3.2)
   const [period, setPeriod] = useState<Period>(DEFAULT_PERIOD);
   const [mapView, setMapView] = useState<MapView>(MAP_VIEW_HOME);
+  // 화면 밖이면 보이게 옮길 영토. 고를 때 채우고 지도가 보고 나면 비운다 (설계서 4.2.3)
+  const [reveal, setReveal] = useState<string | null>(null);
   const [tab, setTab] = useState<ViewTabKey>("map");
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
@@ -189,6 +192,8 @@ export default function Page() {
   const [origin, setOrigin] = useState<Origin | null>(null);
 
   const d = useMemo(() => quarterEnd(ym, TODAY), [ym]);
+  // 지나간 분기면 「2025 Q3」. 제목 옆 · 패널 머리글 · 지도 힌트가 적는다 (피그마 ⑦-1a · ⑦-1b)
+  const past = pastSnapshot(ym, TO);
   // 오늘을 넘겨야 사건이 없는 명부 영토가 이번 분기에만 나온다 (score.ts presentAt)
   const result = useMemo(() => computeMap({ ...MAP, today: TODAY }, d), [d]);
   const layout = useMemo(
@@ -229,7 +234,7 @@ export default function Page() {
   );
 
   const view = useMemo(() => {
-    const input = { layout, result, events: MAP.events, d, rels, lastSeen, registry: registryOf };
+    const input = { layout, result, events: MAP.events, d, rels, lastSeen, registry: registryOf, snapshot: past };
     if (selection.kind === "island") {
       return islandView(input, selection.key) ?? ecosystemView(input);
     }
@@ -237,7 +242,7 @@ export default function Page() {
       return territoryView(input, selection.id) ?? ecosystemView(input);
     }
     return ecosystemView(input);
-  }, [layout, result, d, rels, lastSeen, selection]);
+  }, [layout, result, d, rels, lastSeen, selection, past]);
 
   /**
    * 지도 위 관계선 (설계서 4.2.3 · 4.3.3).
@@ -364,7 +369,12 @@ export default function Page() {
   /** 설계서 4.2.4 — 섬이나 영토를 고르면 패널이 자동으로 펼쳐진다 */
   const select = (s: MapSelection) => {
     setSelection(s);
-    // 다른 영토를 골라도 열려 있던 패널 탭은 그대로 둔다 (4.2.3). 행 선택만 푼다
+    // 다른 영토를 골라도 열려 있던 패널 탭은 그대로 둔다 (4.2.3). 행 선택만 푼다.
+    // **아무것도 안 고른 데서 처음 고르면 [개요]로 연다** (4.2.3 「영토 클릭 → 패널
+    // [개요] 열림」). 전에는 선택을 풀기 전 탭이 남아 새로 고른 영토가 [사건]으로 열렸다
+    if (selection.kind === "none" && s.kind !== "none") setPanelTab("overview");
+    // 화면 밖이면 지도가 옮긴다 (4.2.3 「화면 밖이면 보이는 위치로 이동」)
+    setReveal(s.kind === "territory" ? s.id : null);
     setLinkSel(null);
     // 검색에서 건 행위자 필터와 사건 강조도 푼다. 검색 결과를 고를 때는 이 뒤에 다시 건다
     setActorFilter(null);
@@ -1053,7 +1063,7 @@ export default function Page() {
                 {results !== null
                   ? `'${results}' 검색 결과 ${total(allResults)}건`
                   : tab === "map"
-                  ? `섬 유형 ${layout.islands.length} · 엔티티 ${activeTerritories.length} · 사건 ${eventCount}건`
+                  ? `섬 유형 ${layout.islands.length} · 엔티티 ${activeTerritories.length} · 사건 ${eventCount}건${past ? ` · ${past} 스냅샷` : ""}`
                   : tab === "entity"
                     ? `엔티티 ${activeTerritories.length} · 유형별 목록 · 활동도 순`
                     : tab === "relation"
@@ -1122,6 +1132,12 @@ export default function Page() {
                         : "선택한 사건에 이어진 관계선이 없습니다"
                       : undefined
                 }
+                snapshot={past}
+                reveal={reveal}
+                onRevealed={(v) => {
+                  if (v) setMapView(v);
+                  setReveal(null);
+                }}
               />
             ) : tab === "relation" ? (
               <RelationTab
