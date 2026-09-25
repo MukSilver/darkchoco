@@ -13,6 +13,7 @@ import { Fragment } from "react";
 
 import { cellToXY, hexPoints } from "@/lib/hex";
 import type { MapLayout, TerritoryShape } from "@/lib/layout";
+import { CONF_DASH, KIND_NAME, type RelView } from "@/lib/relations";
 
 /** 칸 하나의 육각 경로 */
 function hexPath(col: number, row: number, size: number): string {
@@ -75,7 +76,55 @@ export type HexMapProps = {
   /** 고른 섬. 그 섬 전체가 진하다 */
   selectedIsland?: string;
   onHoverTerritory?: (id: string | null) => void;
+  /**
+   * 진하게 남길 영토. 영토를 고르면 그 영토와 관계로 이어진 영토다
+   * (설계서 4.2.3 「연결된 영토만 표시 중」). 없으면 위 두 값으로 가른다
+   */
+  lit?: ReadonlySet<string>;
+  /** 테두리를 그어 떠오르게 할 영토. [연결] 행을 고르면 상대 영토도 뜬다 (4.3.3) */
+  raised?: ReadonlySet<string>;
+  /** 이어진 섬. 여기 없는 섬은 이름표와 번짐을 흐리게 한다 (4.2.3 「연결 없는 섬은 흐리게」) */
+  litIslands?: ReadonlySet<string>;
+  /** 그릴 관계선. 영토를 골랐을 때만 온다 */
+  lines?: readonly RelView[];
 };
+
+/**
+ * 관계선 곡선. 두 영토 이름표 자리를 잇고 가운데를 옆으로 민다.
+ *
+ * 같은 두 영토 사이에 관계가 여럿이면(종류가 다르면 관계도 다르다) `k` 번째
+ * 선을 조금씩 더 밀어 겹치지 않게 한다. 라벨은 곡선의 한가운데(t = 0.5)에 앉는다.
+ */
+function curve(
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  k: number,
+): { d: string; mid: { x: number; y: number } } {
+  const mx = (a.x + b.x) / 2;
+  const my = (a.y + b.y) / 2;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const bend = len * 0.12 + k * 22;
+  const cx = mx - (dy / len) * bend;
+  const cy = my + (dx / len) * bend;
+  return {
+    d: `M${a.x.toFixed(1)},${a.y.toFixed(1)}Q${cx.toFixed(1)},${cy.toFixed(1)} ${b.x.toFixed(1)},${b.y.toFixed(1)}`,
+    mid: { x: 0.25 * a.x + 0.5 * cx + 0.25 * b.x, y: 0.25 * a.y + 0.5 * cy + 0.25 * b.y },
+  };
+}
+
+/**
+ * 지도 위 선의 점선 간격. 범례(`CONF_DASH`)는 화면 픽셀 기준인데 지도는
+ * viewBox 단위라(칸 반지름 10) 그대로 쓰면 점이 너무 굵다. 줄여서 쓴다
+ */
+function mapDash(dash: string): string | undefined {
+  if (!dash) return undefined;
+  return dash
+    .split(" ")
+    .map((n) => String(Number(n) * 0.6))
+    .join(" ");
+}
 
 /**
  * **고르는 일은 여기서 안 한다.** 각 도형에 `data-pick` 과 `data-id` 만 달고
@@ -88,16 +137,41 @@ export default function HexMap({
   selectedTerritory,
   selectedIsland,
   onHoverTerritory,
+  lit,
+  raised,
+  litIslands,
+  lines = [],
 }: HexMapProps) {
   const hasSelection = Boolean(selectedTerritory || selectedIsland);
-  const labelled = pickLabels(layout, selectedIsland);
 
   /** 고른 것이 있으면 나머지는 흐리다. 없으면 다 같은 진하기다 */
   const dim = (t: TerritoryShape) => {
+    if (lit) return !lit.has(t.territoryId);
     if (!hasSelection) return false;
     if (selectedTerritory) return t.territoryId !== selectedTerritory;
     return t.islandKey !== selectedIsland;
   };
+  const dimIsland = (key: string) => (litIslands ? !litIslands.has(key) : false);
+
+  // 이름표는 섬마다 둘씩이다. 관계로 이어진 영토는 그 밖이어도 이름을 단다 —
+  // 선 끝에 이름이 없으면 어디로 이어졌는지 모른다 (피그마 ⑦-3)
+  const picked = pickLabels(layout, selectedIsland);
+  const labelled = [
+    ...picked,
+    ...layout.territories.filter((t) => lit?.has(t.territoryId) && !picked.includes(t)),
+  ];
+
+  const byId = new Map(layout.territories.map((t) => [t.territoryId, t]));
+  const pairSeen = new Map<string, number>();
+  const drawn = lines.flatMap((v) => {
+    const a = byId.get(v.rel.from);
+    const b = byId.get(v.rel.to);
+    if (!a || !b) return [];
+    const key = [v.rel.from, v.rel.to].sort().join("|");
+    const k = pairSeen.get(key) ?? 0;
+    pairSeen.set(key, k + 1);
+    return [{ v, ...curve(a.label, b.label, k) }];
+  });
 
   return (
     <svg
@@ -135,7 +209,7 @@ export default function HexMap({
             fill="none"
             stroke={`var(--t-island-${i.token})`}
             strokeWidth={6}
-            opacity={0.28}
+            opacity={dimIsland(i.islandKey) ? 0.08 : 0.28}
             filter={`url(#glow-${i.token})`}
           />
         ))}
@@ -161,11 +235,14 @@ export default function HexMap({
         ))}
       </g>
 
-      {/* 3층 — 고른 영토의 테두리를 한 번 더 그어 떠오르게 한다 */}
-      {selectedTerritory && (
+      {/*
+        3층 — 고른 영토의 테두리를 한 번 더 그어 떠오르게 한다.
+        [연결] 행을 고르면 상대 영토도 같이 뜬다 (설계서 4.3.3)
+      */}
+      {(selectedTerritory || raised) && (
         <g aria-hidden>
           {layout.territories
-            .filter((t) => t.territoryId === selectedTerritory)
+            .filter((t) => t.territoryId === selectedTerritory || raised?.has(t.territoryId))
             .map((t) => (
               <path
                 key={t.territoryId}
@@ -175,6 +252,43 @@ export default function HexMap({
                 strokeWidth={2}
               />
             ))}
+        </g>
+      )}
+
+      {/*
+        관계선 층. 영토를 골랐을 때 그 영토의 선만 그린다 (설계서 4.2.3). 피그마
+        ⑦-3 처럼 옅은 회색 선에 신뢰도별 모양이고, 라벨은 「종류 건수」 알약이다.
+        클릭은 안 받는다 — 선 위를 눌러도 아래 영토가 골라진다
+      */}
+      {drawn.length > 0 && (
+        <g aria-hidden className="pointer-events-none">
+          {drawn.map(({ v, d }) => (
+            <path
+              key={v.rel.id}
+              d={d}
+              fill="none"
+              stroke="var(--t-text-body)"
+              strokeWidth={1.1}
+              strokeDasharray={mapDash(CONF_DASH[v.rel.confidence])}
+              strokeLinecap="round"
+              opacity={0.85}
+            />
+          ))}
+          {drawn.map(({ v, mid }) => {
+            const name = KIND_NAME[v.rel.kind];
+            const w = textWidth(name, 8) + textWidth(`${v.count}건`, 7) + 18;
+            return (
+              <g key={`l-${v.rel.id}`} transform={`translate(${mid.x - w / 2} ${mid.y - 8})`}>
+                <rect width={w} height={16} rx={4} fill="var(--t-surface-panel)" stroke="var(--t-border-card)" strokeWidth={0.8} />
+                <text x={7} y={11} fontSize={8} fontWeight={600}>
+                  <tspan fill="var(--t-text-title)">{name}</tspan>
+                  <tspan dx={4} fontSize={7} fill="var(--t-text-label)">
+                    {v.count}건
+                  </tspan>
+                </text>
+              </g>
+            );
+          })}
         </g>
       )}
 
@@ -188,6 +302,7 @@ export default function HexMap({
               data-pick="island"
               data-id={i.islandKey}
               transform={`translate(${i.label.x - w / 2} ${i.label.y - 9})`}
+              opacity={dimIsland(i.islandKey) ? 0.4 : 1}
               className="cursor-pointer"
             >
               <rect

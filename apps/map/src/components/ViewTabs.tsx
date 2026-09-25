@@ -1,10 +1,10 @@
 /**
  * 가운데 화면 탭 넷 — 지도 · 엔티티 · 관계 · 타임라인.
  *
- * 설계서 4.3.5 · 4.3.6 · 4.3.7 이 나머지 셋을 정의한다. 지도와 엔티티는 열린다.
+ * 설계서 4.3.5 · 4.3.6 · 4.3.7 이 나머지 셋을 정의한다.
  *
- * **관계 탭만 못 만든다.** 관계선 DB 가 노션에 아직 없다 (설계서 5.1-4).
- * 눌리지 않게 두고 까닭을 `title` 로 적었다.
+ * 관계 탭은 2026-09-22 에 노션 관계선 DB 가 생긴 뒤 굽기가 관계선을 싣게 되어
+ * 열었다 (2026-09-25). 전에는 「관계선 DB 없음」으로 막아 두었다.
  */
 
 export type ViewTabKey = "map" | "entity" | "relation" | "timeline";
@@ -12,16 +12,12 @@ export type ViewTabKey = "map" | "entity" | "relation" | "timeline";
 const TABS: { key: ViewTabKey; name: string; why?: string }[] = [
   { key: "map", name: "지도" },
   { key: "entity", name: "엔티티" },
-  {
-    key: "relation",
-    name: "관계",
-    why: "관계선 DB 가 노션에 아직 없습니다 (설계서 5.1-4)",
-  },
+  { key: "relation", name: "관계" },
   { key: "timeline", name: "타임라인" },
 ];
 
-/** 아직 못 만든 탭. 눌러도 안 열린다 */
-const LOCKED = new Set<ViewTabKey>(["relation"]);
+/** 아직 못 만든 탭. 눌러도 안 열린다. 지금은 없다 */
+const LOCKED = new Set<ViewTabKey>();
 
 export default function ViewTabs({
   current,
