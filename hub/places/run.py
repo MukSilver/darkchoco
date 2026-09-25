@@ -584,7 +584,12 @@ def 한갈래(갈래: str, *, apply: bool = False, limit: int = 0,
     # **랜섬 그룹 × 달 피해 건수를 쌓습니다** (2026-09-25 인계 B). 조사기가 이번 판에 받은
     # 달 목록으로 이번 달과 지난달만 고칩니다. 미리보기에서는 셈만 냅니다. 못 써도 명부
     # 조사는 그대로 둡니다 — 월별 DB 는 곁가지입니다. 로그에는 건수만 찍습니다
-    if 갈래 == "ransom" and ransom.마지막달별:
+    # **--limit 판에서는 안 씁니다.** 조사기는 limit 과 상관없이 달 목록을 통째로 받아서, 세 줄만
+    # 시험하려던 판이 모든 그룹의 월별 줄을 썼다(2026-09-25 검토)
+    if 갈래 == "ransom" and ransom.마지막달별 and limit:
+        if not 조용히:
+            print("  월별 피해 — --limit 판이라 안 씁니다", flush=True)
+    elif 갈래 == "ransom" and ransom.마지막달별:
         try:
             from hub.places import monthly
             셈 = monthly.판마다(m.n, ransom.마지막달별, 줄들, 오늘=ransom._오늘(), apply=apply)

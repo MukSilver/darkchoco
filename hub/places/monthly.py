@@ -109,7 +109,12 @@ class 월별표:
                 p = 속성(그룹, 연월, d, 그룹쪽.get(그룹.lower(), ""), 연월 < 이번달, 받은때)
                 k = (그룹.lower(), 연월)
                 있음 = self.있는것.get(k)
-                if 있음 and 있음[1] == _견줄값(p):
+                새값 = _견줄값(p)
+                if 있음 and 있음[1] is not None and "그룹" not in p:
+                    # 명부에서 그룹을 못 찾으면 관계를 안 보낸다. 그때는 관계를 안 견준다 —
+                    # 안 그러면 보내지도 않는 관계가 다르다고 판마다 고친다(2026-09-25 검토)
+                    새값 = 새값[:-1] + (있음[1][-1],)
+                if 있음 and 있음[1] == 새값:
                     셈["그대로"] += 1
                     continue
                 셈["고침" if 있음 else "새로"] += 1
@@ -161,38 +166,62 @@ def 판마다(n, 달별: dict, 줄들, *, 오늘: date, apply: bool) -> collecti
 
 
 def 소급(달수: int, *, apply: bool, 프록시: str | None) -> int:
-    """지난 `달수` 달을 받아 채웁니다. **Tor 가 필요합니다.** 요청 사이 62초."""
-    from dc_notion import Notion
+    """지난 `달수` 달을 받아 채웁니다. **Tor 가 필요합니다.** 요청 사이 62초.
+
+    2026-09-25 머지 전 검토로 고친 것 넷.
+
+        관문      요청 전에 Tor 출구를 묻습니다. 명부 조사(run.py)와 같은 둘째 관문입니다
+        노션 먼저  명부 · 월별 DB 를 먼저 읽습니다. 권한이 없으면 한 시간 받은 뒤가 아니라 바로 멈춥니다
+        달마다 씀  받은 달은 바로 씁니다. 중간에 끊겨도(90분 상한 등) 받은 달은 남습니다
+        멈춤      연속 세 번 실패하면 멈춥니다(조사기와 같은 상한). 못 받은 달이 있으면 1 로 끝냅니다
+    """
+    import http.client
+
     from dc_ransomfeed import rl_victims
+    from hub.places import egress
     from hub.places.egress import 오프너
     from hub.places.probe import ransom
     from hub.places.write import 명부
 
     op = 오프너(프록시, 갈래="ransom")         # Tor 가 없으면 여기서 보호없음 이 납니다
+    확인 = egress.출구확인(프록시)
+    print("  " + 확인["말"], flush=True)
+    if not 확인["된다"]:
+        print("  Tor 로 안 나갑니다. 요청을 하나도 안 보내고 멈춥니다", flush=True)
+        return 1
+
+    m = 명부("ransom")
+    표, 그룹쪽 = 월별표(m.n), 그룹쪽표(m.줄들())
     오늘 = ransom._오늘()
     달들 = ransom._달들(달수)
     print(f"    집계처에서 피해 {len(달들)}달치를 받습니다 "
           f"(요청 사이 {ransom.간격:.0f}초라 {len(달들) * ransom.간격 / 60:.0f}분쯤 걸립니다)", flush=True)
-    달별, 못본, 마지막 = {}, [], [0.0]
+    셈, 못본, 마지막, 받은달, 실패 = collections.Counter(), [], [0.0], 0, 0
     for i, (년, 월) in enumerate(달들, 1):
+        연월 = f"{년}-{월:02d}"
         try:
             건들 = ransom._받기(rl_victims(년, 월), 마지막, op)
-        except (urllib.error.URLError, OSError, ValueError) as e:
-            못본.append(f"{년}-{월:02d}({type(e).__name__})")
+        except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException) as e:
+            못본.append(f"{연월}({type(e).__name__})")
+            실패 += 1
+            if 실패 >= ransom.연속실패_상한:
+                못본 += [f"{y}-{mm:02d}(안 물음)" for y, mm in 달들[i:]]
+                print(f"  연속 {실패}번 실패해 멈춥니다. 막힌 채 계속 두드리면 더 오래 막힙니다", flush=True)
+                break
             continue
+        실패 = 0
         if not isinstance(건들, list):
-            못본.append(f"{년}-{월:02d}(꼴이 바뀜)")
+            못본.append(f"{연월}(꼴이 바뀜)")
             continue
-        달별[f"{년}-{월:02d}"] = ransom.달별세기(건들)
-        print(f"      {i}/{len(달들)}  {년}-{월:02d}  {len(건들)}건", flush=True)
+        받은달 += 1
+        셈 += 표.반영({연월: ransom.달별세기(건들)}, 그룹쪽, 오늘=오늘, apply=apply)
+        print(f"      {i}/{len(달들)}  {연월}  {len(건들)}건", flush=True)
 
-    m = 명부("ransom")
-    셈 = 월별표(m.n).반영(달별, 그룹쪽표(m.줄들()), 오늘=오늘, apply=apply)
-    print(요약(셈, f"소급 {len(달별)}달"), flush=True)
+    print(요약(셈, f"소급 {받은달}달"), flush=True)
     if 못본:
-        print(f"  못 받은 달 {len(못본)} — {' · '.join(못본[:6])}", flush=True)
+        print(f"  못 받은 달 {len([x for x in 못본 if '(' in x])} — {' · '.join(못본[:6])}", flush=True)
     print("  " + ("썼습니다" if apply else "미리보기입니다. --apply 를 주면 씁니다"), flush=True)
-    return 1 if 셈["실패"] else 0
+    return 1 if (셈["실패"] or 못본) else 0
 
 
 def main(argv: list[str] | None = None) -> int:
