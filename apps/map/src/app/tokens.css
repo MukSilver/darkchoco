@@ -1,0 +1,455 @@
+/*
+ * 색 토큰. 피그마 「Final · Theme」 보드를 그대로 옮긴 것이다.
+ *
+ * **층을 둘로 나눈다.** 보드 머리글이 그렇게 정해 두었다.
+ *
+ *     의미 토큰   --t-*      모드 셋을 탄다.  부품은 이것만 쓴다
+ *     원색        --p-*      모드가 없다.    지도 섬 색과 3D 판넬 색
+ *
+ * **부품에 원색을 직접 박으면 모드 전환이 깨진다.** 보드가 경고해 둔 것이다.
+ *
+ * 모드는 `data-mode` 로 바꾼다.
+ *
+ *     data-mode="open"    오픈웹        화이트
+ *     data-mode="dark"    다크웹        라이트 블랙  ← 우리 화면
+ *     data-mode="neon"    다크웹 네온
+ *
+ * 값은 보드 스와치에서 읽은 것이다. 글자로 적힌 원색표와 대조해
+ * `accent/subtle` 다크웹 한 곳만 어긋났고 그쪽은 글자 표를 따랐다.
+ */
+
+:root,
+[data-mode="open"] {
+  /* 글자 */
+  --t-text-title: #0a0c10;
+  --t-text-strong: #0a0c10;
+  --t-text-body: #5a6170;
+  --t-text-sub: #7a8394;
+  --t-text-label: #a3abb8;
+  --t-text-disabled: #c9d1dc;
+  --t-text-on-accent: #ffffff;
+
+  /* 표면 */
+  --t-surface-panel: #ffffff;
+  --t-surface-card: #f7f8fa;
+  --t-surface-canvas: #f6f8fb;
+  --t-surface-input: #f7f8fa;
+  --t-surface-track: #ebeef2;
+  --t-surface-selected: #ffffff;
+  --t-surface-kbd: #ebeef2;
+  --t-surface-bar-track: #ebeef2;
+  /*
+   * 아래 둘은 라이트 블랙 판에서만 값을 확인했다. 여기 값은 그 판이 아닐 때
+   * 화면이 깨지지 않게 두는 대비책이다. 오픈웹 화면을 만들 때 실제 값으로
+   * 바꾼다 — 지금 지어내면 나중에 확인한 척이 된다
+   */
+  --t-surface-app: #f6f8fb;
+  --t-border-hex: #e1e5eb;
+
+  /* 테두리 */
+  --t-border-card: #e1e5eb;
+  --t-border-divider: #ebeef2;
+  --t-border-input: #e1e5eb;
+  --t-border-strong: #c9d1dc;
+
+  /* 강조 */
+  --t-accent: #1677ff;
+  --t-accent-subtle: #e6f4ff;
+  --t-accent-border: #91caff;
+  --t-accent-muted: #afd0ff;
+
+  /* 추세 */
+  --t-trend-up: #15803d;
+  --t-trend-down: #b91c1c;
+
+  /* 섬 */
+  --t-island-forum: #6d5ef0;
+  --t-island-ransomware: #ef4444;
+  --t-island-telegram: #2fa8dd;
+  --t-island-actor: #64748b;
+
+  /* 상태 — 글자 */
+  --t-success: #15803d;
+  --t-success-text: #15803d;
+  --t-warning: #c2410c;
+  --t-warning-text: #c2410c;
+  --t-caution: #854d0e;
+  --t-caution-text: #854d0e;
+  --t-danger: #b91c1c;
+  --t-danger-text: #b91c1c;
+  --t-info: #0369a1;
+  --t-info-text: #0369a1;
+  --t-violet: #6d28d9;
+  --t-violet-text: #6d28d9;
+  --t-neutral: #475569;
+  --t-neutral-text: #475569;
+
+  /* 상태 — 바탕과 테두리. 칩 = 글자색 + 채움 10% + 테두리 22% */
+  --t-success-bg: #e7f2eb;
+  --t-success-border: #cce3d4;
+  --t-warning-bg: #f8ece6;
+  --t-warning-border: #f2d5ca;
+  --t-caution-bg: #f2ede6;
+  --t-caution-border: #e4d8ca;
+  --t-danger-bg: #f7e8e8;
+  --t-danger-border: #f0cdcd;
+  --t-info-bg: #e5eff5;
+  --t-info-border: #c8deea;
+  --t-violet-bg: #f0e9fb;
+  --t-violet-border: #dfd0f7;
+  --t-neutral-bg: #eceDef;
+  --t-neutral-border: #d7dade;
+  --t-forum-bg: #f0eefc;
+  --t-forum-border: #dfdcfc;
+  --t-ransomware-bg: #fcecec;
+  --t-ransomware-border: #fcd6d6;
+  --t-telegram-bg: #eaf6fb;
+  --t-telegram-border: #d1ecf8;
+  --t-etc-bg: #eff1f3;
+  --t-etc-border: #dde1e6;
+  --t-accent-bg: #e7f1ff;
+  --t-accent-bg-border: #cce1ff;
+}
+
+/*
+ * ⑦ 화이트 판.
+ *
+ * **2026-09-22 까지 이 블록 이름이 `dark` 였다. 틀린 이름이었다.**
+ * 값이 전부 흰 바탕인데 다크웹 화면을 가리키는 것처럼 보였다. 피그마
+ * `02_⑦ 다크웹 플로우` 화면의 픽셀과 대조해 이 블록이 화이트 판임을
+ * 확인했다 — 바탕 `#ffffff`, 카드 `#fbfcfe`, 섬 `#877bf3` 이 그대로 나온다.
+ *
+ * **설계서 4.2.6 은 화이트 판을 참고용으로만 보관하라고 적었다.**
+ * 실제 다크웹 화면은 라이트 블랙이고 그것이 아래 `black` 블록이다.
+ */
+[data-mode="white"] {
+  --t-text-title: #0f1726;
+  --t-text-strong: #26324a;
+  --t-text-body: #556174;
+  --t-text-sub: #66738a;
+  --t-text-label: #8794a8;
+  --t-text-disabled: #94a1b4;
+  --t-text-on-accent: #ffffff;
+
+  --t-surface-panel: #ffffff;
+  --t-surface-card: #fbfcfe;
+  --t-surface-canvas: #f2f5fa;
+  --t-surface-input: #f7f9fc;
+  --t-surface-track: #f2f5fa;
+  --t-surface-selected: #ffffff;
+  --t-surface-kbd: #eaeff6;
+  --t-surface-bar-track: #edf1f7;
+
+  --t-border-card: #e4e9f1;
+  --t-border-divider: #e9edf4;
+  --t-border-input: #e0e6ef;
+  --t-border-strong: #cbd4e1;
+
+  --t-accent: #ef4444;
+  --t-accent-subtle: #fdecec;
+  --t-accent-border: #fcdada;
+  --t-accent-muted: #f9bfbf;
+
+  --t-accent-bg: #fcecec;
+  --t-accent-bg-border: #fcd6d6;
+}
+
+/*
+ * ⑦ 라이트 블랙 판 — **다크웹 화면이 실제로 쓰는 판이다** (설계서 4.2.6).
+ *
+ * **이 블록은 피그마 보드가 아니라 화면 픽셀에서 뽑았다.** 보드에서 옮긴
+ * 토큰에 이 판이 아예 없었다. 보드에는 화이트와 네온만 있었는데, 정작
+ * 설계서가 쓰라고 한 것은 이 판이다. 그래서
+ * `07_⑦ 라이트 블랙 _ 다크웹 플로우 / 01_⑦-1 섬 지도 (기본).png` 에서
+ * 자리별로 색을 읽어 채웠다. 읽은 자리를 값 옆에 적어 둔다.
+ *
+ * **상태색은 이 화면에 안 나와서 다른 화면에서 뽑았다.** 아래 「상태 칩」
+ * 블록이 `12_⑦-8e 관계 탭` 에서 뽑은 넷이고, 주의 · 경고 · 보라 셋은 어느
+ * 시안에도 안 나와서 그 넷에서 규칙을 역산해 지은 값이다.
+ */
+[data-mode="black"] {
+  --t-text-title: #e3e4e6; /* 제목 「다크웹 생태계」 */
+  --t-text-strong: #e3e4e6;
+  --t-text-body: #c4c6ca; /* 범례 항목 「포럼」 */
+  --t-text-sub: #666970;
+  --t-text-label: #666970; /* 부제 「섬 유형 4 · …」, 비선택 탭 */
+  --t-text-disabled: #4e5156; /* 검색창 안내 글 */
+  --t-text-on-accent: #ffffff;
+
+  --t-surface-panel: #27292c; /* 머리띠 · 좌 범례 · 우 패널 */
+  --t-surface-card: #292b2e; /* 패널 안 카드 · 스냅샷 바 */
+  --t-surface-canvas: #292a2d; /* 지도 캔버스 */
+  --t-surface-input: #3c3f43; /* 검색창 */
+  --t-surface-track: #37393d; /* 웹 전환 탭 통 · 화면 탭 통 */
+  --t-surface-selected: #323538; /* 고른 탭 알약 — 통보다 어둡다 */
+  --t-surface-kbd: #37393d;
+  --t-surface-bar-track: #37393d;
+  /* 바깥 여백. 실제로는 왼쪽 위가 밝은 옅은 그라데이션이라 가운뎃값을 쓴다 */
+  --t-surface-app: #313336;
+
+  --t-border-card: #4e5156;
+  --t-border-divider: #37393d;
+  --t-border-input: #4e5156;
+  --t-border-strong: #666970;
+  /* 육각 칸 테두리. 다른 판보다 훨씬 진하다 */
+  --t-border-hex: #171819;
+
+  --t-accent: #ff5d5d; /* 재생 단추 · 스냅샷 슬라이더 */
+  --t-accent-subtle: #3a1a2a;
+  --t-accent-border: #6b2438;
+  --t-accent-muted: #ffc8c8;
+
+  --t-trend-up: #70ffa6;
+  --t-trend-down: #ff3333;
+
+  --t-island-forum: #7666ff;
+  --t-island-ransomware: #ff6666;
+  --t-island-telegram: #61cfff;
+  --t-island-actor: #a5a8ae; /* 네온 판(#90a4c3)과 다르다. 푸른 기가 없다 */
+  /* 범례 아이콘은 채움색과 미묘하게 다르다 (설계서 2.3 이 둘을 나눠 적었다) */
+  --t-island-actor-legend: #8c8f97;
+  /* 미분류 섬 토큰은 2026-09-23 에 섬과 함께 지웠다 (`islands.ts`) */
+
+  /*
+   * 상태 칩. `12_⑦-8e 관계 탭` 화면에서 뽑았다.
+   *
+   * **글자색은 네온 판과 같다.** `#70ffa6` · `#70ccff` · `#ff3333` 이 네온
+   * 토큰의 `*-text` 와 한 글자도 안 다르다. 바탕과 테두리만 이 판이 따로
+   * 갖는다 — 네온 쪽은 밝은 값이 들어가 있는데 어두운 바탕에 밝은 칩이라
+   * 그쪽이 잘못 옮겨졌을 수 있다. 참고용 판이라 건드리지 않았다.
+   *
+   * 화면에 안 나온 것은 안 채웠다. 주의(warning)와 경고(caution)가 그렇다.
+   */
+  --t-success: #70ffa6;
+  --t-success-text: #70ffa6; /* 「확인됨」 칩 */
+  --t-success-bg: #24352e;
+  --t-success-border: #1e4b32;
+  --t-danger: #ff3333;
+  --t-danger-text: #ff3333; /* 「제휴자 모집」 칩 */
+  --t-danger-bg: #3d2a2d;
+  --t-danger-border: #682c2e;
+  --t-info: #70ccff;
+  --t-info-text: #70ccff; /* 「공지·연락」 칩 */
+  --t-info-bg: #242b38;
+  --t-info-border: #1e2f50;
+  --t-neutral: #a3a5ab;
+  --t-neutral-text: #a3a5ab; /* 「추정」 칩 */
+  --t-neutral-bg: #37393d;
+  --t-neutral-border: #4e5156;
+
+  /*
+   * 주의 · 경고 · 보라 — **화면에서 못 뽑아 우리가 만든 값이다.**
+   *
+   * 이 셋이 붙은 칩이 어느 시안에도 안 나온다. 그래서 위 넷에서 규칙을
+   * 역산해 같은 얼개로 맞췄다. 넷을 HSL 로 풀면 이렇다.
+   *
+   *     글자    색조 그대로 · 채도 100 · 밝기 60~72
+   *     바탕    색조 그대로 · 채도  20  · 밝기 19
+   *     테두리  색조 그대로 · 채도  42  · 밝기 25
+   *
+   * 글자색은 네온 판의 `*-text` 를 가져왔다. 확인된 넷이 네온 판과 글자색이
+   * 한 글자도 안 달랐으므로 나머지도 같을 것으로 본다 — **추정이다.**
+   * 보라만 네온 값(`#8333ff`)이 포럼 섬 색(`#7666ff`)과 너무 닮아 밝게 옮겼다.
+   *
+   * 시안에 이 칩이 그려지면 그때 실제 값으로 바꾼다.
+   */
+  --t-warning: #ff6e33;
+  --t-warning-text: #ff6e33;
+  --t-warning-bg: #3a2c27;
+  --t-warning-border: #5b3425;
+  --t-caution: #ffbc70;
+  --t-caution-text: #ffbc70;
+  --t-caution-bg: #3a3127;
+  --t-caution-border: #5b4125;
+  --t-violet: #a07bff;
+  --t-violet-text: #a07bff;
+  --t-violet-bg: #2c273a;
+  --t-violet-border: #34255b;
+
+  /*
+   * 엔티티 탭 표. `07_⑦-7 엔티티 탭 (포럼)` 에서 뽑았다.
+   *
+   * **활동도 막대가 강조색이 아니라 파랑이다.** 이 판의 강조색은 `#ff5d5d`
+   * 인데 막대는 `#1d38c9` 다. 섬 색도 아니다. 표에서 길이를 견주는 것은
+   * 강조가 아니라 지표라서 따로 둔 것으로 보인다
+   */
+  --t-bar-fill: #1d38c9;
+  --t-surface-row-selected: #4c1616;
+}
+
+[data-mode="neon"] {
+  --t-text-title: #dde2ec;
+  --t-text-strong: #dde2ec;
+  --t-text-body: #b7c2d7;
+  --t-text-sub: #7e91b7;
+  --t-text-label: #7e91b7;
+  --t-text-disabled: #4d6289;
+  --t-text-on-accent: #ffffff;
+
+  --t-surface-panel: #0e1729;
+  --t-surface-card: #16284c;
+  --t-surface-canvas: #101b31;
+  --t-surface-input: #101b31;
+  --t-surface-track: #0e1729;
+  --t-surface-selected: #16284c;
+  --t-surface-kbd: #16284c;
+  --t-surface-bar-track: #16284c;
+
+  --t-border-card: #1d3b76;
+  --t-border-divider: #1d3b76;
+  --t-border-input: #1d3b76;
+  --t-border-strong: #5e7ca8;
+
+  --t-accent: #ff5d5d;
+  --t-accent-subtle: #3a1a2a;
+  --t-accent-border: #6b2438;
+  --t-accent-muted: #ffc8c8;
+
+  --t-trend-up: #70ffa6;
+  --t-trend-down: #ff3333;
+
+  --t-island-forum: #7666ff;
+  --t-island-ransomware: #ff6666;
+  --t-island-telegram: #61cfff;
+  --t-island-actor: #90a4c3;
+
+  --t-success: #089b3f;
+  --t-success-text: #70ffa6;
+  --t-warning: #ff6e33;
+  --t-warning-text: #ff6e33;
+  --t-caution: #9b5608;
+  --t-caution-text: #ffbc70;
+  --t-danger: #ff3333;
+  --t-danger-text: #ff3333;
+  --t-info: #093ca3;
+  --t-info-text: #70ccff;
+  --t-violet: #8333ff;
+  --t-violet-text: #8333ff;
+  --t-neutral: #a2b1cd;
+  --t-neutral-text: #8e9fc0;
+
+  --t-success-bg: #e6f5eb;
+  --t-success-border: #c4e7d1;
+  --t-warning-bg: #fff0ea;
+  --t-warning-border: #ffdcce;
+  --t-caution-bg: #f5eee6;
+  --t-caution-border: #e7d7c4;
+  --t-danger-bg: #ffeaea;
+  --t-danger-border: #ffcece;
+  --t-info-bg: #e6ebf5;
+  --t-info-border: #c4d0e9;
+  --t-violet-bg: #f2eaff;
+  --t-violet-border: #e1ceff;
+  --t-neutral-bg: #f5f7f9;
+  --t-neutral-border: #e9ecf3;
+  --t-forum-bg: #f1efff;
+  --t-forum-border: #dedaff;
+  --t-ransomware-bg: #ffefef;
+  --t-ransomware-border: #ffdada;
+  --t-telegram-bg: #eaf8ff;
+  --t-telegram-border: #cff1ff;
+  --t-etc-bg: #f0f3f7;
+  --t-etc-border: #dde3ed;
+  --t-accent-bg: #ffeeee;
+  --t-accent-bg-border: #ffdbdb;
+}
+
+/*
+ * 웹 점 셋은 모드를 안 탄다. 헤더의 스코프 점이 어느 모드에서나 같아야
+ * 하기 때문이라고 보드가 적어 두었다. 다만 다크웹 점만 모드별로 다르다.
+ */
+:root {
+  --t-web-open: #1677ff;
+  --t-web-connection: #7c5cff;
+  --t-web-inactive: #c3cbd8;
+  --t-web-dark: #e5364a;
+}
+[data-mode="white"] {
+  --t-web-dark: #dc2626;
+}
+[data-mode="black"] {
+  --t-web-dark: #ff5d5d;
+  --t-web-inactive: #666970;
+}
+[data-mode="neon"] {
+  --t-web-dark: #ff5d5d;
+  --t-web-inactive: #4d6289;
+}
+
+/*
+ * 원색 팔레트. 모드가 없다.
+ *
+ * 다크웹 섬은 네 갈래 값을 쓴다.
+ *     fill  헥사 채움 · dot 범례 점 · dim 비선택 흐림 · side 입체 측면
+ */
+:root {
+  --p-forum-fill: #877bf3;
+  --p-forum-dot: #6d5ef0;
+  --p-forum-dim: #e2dffc;
+  --p-forum-side: #3b2bb0;
+
+  --p-ransomware-fill: #f26666;
+  --p-ransomware-dot: #ef4444;
+  --p-ransomware-dim: #fcdada;
+  --p-ransomware-side: #991b1b;
+
+  --p-telegram-fill: #54b8e3;
+  --p-telegram-dot: #2fa8dd;
+  --p-telegram-dim: #d5eef8;
+  --p-telegram-side: #0b5d80;
+
+  --p-etc-fill: #808da0;
+  --p-etc-dot: #64748b;
+  --p-etc-dim: #e0e3e8;
+  --p-etc-side: #27303d;
+
+  /* 오픈웹 섬 여덟. 지금은 안 쓰지만 설계서 2.3 에 있어 같이 둔다 */
+  --p-code-repository-fill: #447aff;
+  --p-code-repository-legend: #2f6bff;
+  --p-text-hosting-fill: #2cbfaf;
+  --p-text-hosting-legend: #14b8a6;
+  --p-community-fill: #fa812d;
+  --p-community-legend: #f97316;
+  --p-cloud-storage-fill: #4cc4f9;
+  --p-cloud-storage-legend: #38bdf8;
+  --p-file-sharing-fill: #976cf7;
+  --p-file-sharing-legend: #8b5cf6;
+  --p-backend-service-fill: #38cb6e;
+  --p-backend-service-legend: #22c55e;
+  --p-research-source-fill: #ecbb21;
+  --p-research-source-legend: #eab308;
+  --p-open-other-fill: #d0d9e4;
+  --p-open-other-legend: #cbd5e1;
+}
+
+/*
+ * 치수. 피그마 「Final · Layout」 과 설계서에서 숫자로 적힌 것만 옮겼다.
+ * 없는 것은 안 지어냈다 — 로고 크기 · 검색창 폭 · 모서리 반지름 · 글꼴 크기다.
+ */
+:root {
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px; /* Base */
+  --s-5: 24px;
+  --s-6: 32px; /* 컴포넌트 사이 */
+  --s-7: 48px;
+  --s-8: 64px; /* 섹션 사이 */
+
+  --h-header: 54px;
+  --w-panel: 312px;
+  --w-panel-rail: 48px; /* 접힘 레일 */
+  --w-legend: 206px; /* 다크웹 좌측 범례 */
+  --w-modal: 620px;
+  --h-modal: 803px;
+  --w-snapshot: 768px;
+  --h-snapshot: 60px;
+  --w-tooltip: 255px;
+  --h-tooltip: 141px;
+  --w-hint: 225px;
+  --h-hint: 32px;
+  --w-zoom: 184px;
+  --h-zoom: 30px;
+  --w-tabs: 235px;
+  --h-tabs: 39px;
+}
