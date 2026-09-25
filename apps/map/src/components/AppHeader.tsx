@@ -163,11 +163,15 @@ export default function AppHeader({
         {utcLabel(generatedAt)}
       </time>
 
+      {/*
+        검색창은 모서리 8px 네모다 (피그마 ⑦-1 · ⑦-10a, 시트 `07 / 01 Search Input`).
+        전에는 알약이었다. 열린 입력칸(`SearchOverlay`)도 같은 모양이라 열 때 안 튄다
+      */}
       <div className="relative h-[34px] w-[320px]">
         <button
           type="button"
           onClick={onSearch}
-          className="flex size-full items-center gap-s2 rounded-full border border-edge-input bg-input px-s4 text-left"
+          className="flex size-full items-center gap-s2 rounded-[8px] border border-edge-input bg-input px-s4 text-left"
         >
           <span aria-hidden className="text-[12px] text-disabled">
             ⌕

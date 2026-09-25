@@ -2,7 +2,7 @@
  * 영토 호버 툴팁 — 설계서 4.2.3 의 여섯 줄, 피그마 `13_⑦-1 하단` 툴팁 ·
  * 컴포넌트 시트 `11 / 02 Map Tooltip`. 폭 255, 높이 141.
  *
- *     줄 1   섬 색 육각 · 영토 이름 · 상태 알약      ⬢ Qilin (활성)
+ *     줄 1   섬 색 육각 · 영토 이름 · 상태 알약      ⬢ Qilin (ACTIVE)
  *     줄 2   섬 이름, 섬 안 비중 (3.6)              랜섬웨어 섬 · 섬 안 비중 23%
  *     줄 3~5 활동도 · 사건 · 최근 관측 세 칸         활동도 / 93 ▲12%   사건 / 38건   최근 관측 / 09-14
  *     줄 6   안내                                   클릭: 선택 (떠오름 · 관계선)
@@ -32,16 +32,20 @@ const HEX_ICON = `M${hexPoints(0, 0, 8)
   .join("L")}Z`;
 
 /**
- * 상태 알약. 값은 설계서 3.7 의 두 값(`활성` · `관측 중`) 그대로다.
+ * 상태 알약. 글씨는 **`ACTIVE` · `QUIET` 영문이다** (2026-09-26 다시 바꿈).
  *
- * **전에는 `ACTIVE` · `QUIET` 영문 글자였다.** 4.2.3 의 표 예시가 「Qilin · ACTIVE」
- * 라서 그랬는데, 같은 상태를 엔티티 탭 표(⑦-7)는 한글 칩으로 적는다. 한 화면 안에서
- * 같은 값이 두 말로 보이지 않게 엔티티 탭 칩과 같은 말 · 같은 색으로 맞췄다.
- * 피그마 툴팁은 알약을 채운 모양이라 채운 칩으로 둔다.
+ * 피그마를 따랐다. 컴포넌트 시트 `02 · Map Tooltip` 의 알약 글씨가 「ACTIVE」 이고,
+ * 설계서 4.2.3 표 1번 줄 예시도 「Qilin · ACTIVE」 다. 화면 시안 `13_⑦-1 하단` 의
+ * 알약은 글씨가 채움색과 같아 안 읽혀 근거로 쓰지 않았다. 관측 중 쪽은 어느 시안에도
+ * 없어 처음 판(aa88112)이 쓰던 「QUIET」 을 짝으로 둔다.
+ *
+ * 한동안 엔티티 탭 칩(⑦-7)에 맞춰 한글(`활성` · `관측 중`)로 적었다. 엔티티 탭은
+ * 설계서 4.3.5 가 「활성 / 관측 중 (3.7)」 으로 적어 한글 그대로 두고, 툴팁만 피그마
+ * 글씨를 쓴다. 데이터 값(`Status`)은 3.7 대로 한글이다. 색은 엔티티 탭 칩과 같다.
  */
-const STATUS_PILL: Record<Status, string> = {
-  활성: "bg-success-bg text-success border-success-edge",
-  "관측 중": "bg-neutral-bg text-neutral border-neutral-edge",
+const STATUS_PILL: Record<Status, { text: string; className: string }> = {
+  활성: { text: "ACTIVE", className: "bg-success-bg text-success border-success-edge" },
+  "관측 중": { text: "QUIET", className: "bg-neutral-bg text-neutral border-neutral-edge" },
 };
 
 export type HoverTipProps = {
@@ -85,11 +89,11 @@ export default function HoverTip({
         <span className="min-w-0 truncate text-[14px] font-semibold text-title">{t.name}</span>
         <span
           className={
-            "shrink-0 rounded-full border px-s2 py-[1px] text-[10px] font-semibold " +
-            STATUS_PILL[m.status]
+            "shrink-0 rounded-full border px-s2 py-[1px] text-[10px] font-semibold tracking-[0.04em] " +
+            STATUS_PILL[m.status].className
           }
         >
-          {m.status}
+          {STATUS_PILL[m.status].text}
         </span>
       </div>
 
