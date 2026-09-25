@@ -79,7 +79,7 @@ SOURCES_FILE = Path.home() / ".config" / "darkchoco" / "map_sources.json"
 #: 영토가 된다 (설계서 2.4 · 2.5, 2026-09-23 결정 6 · 2026-09-25 22시 최현서)
 REQUIRED_SOURCES = ("collect", "verify", "forum", "telegram", "ransomware", "actor")
 #: 없어도 굽는 DB. 자동 갱신 워크플로에 비밀값을 넣기 전에도 굽기가 멈추지 않게 한다
-OPTIONAL_SOURCES = ("relations", "incident")
+OPTIONAL_SOURCES = ("relations", "incident", "address")
 
 
 def load_sources() -> dict[str, str]:
@@ -90,8 +90,8 @@ def load_sources() -> dict[str, str]:
     실제로는 이 혼동이었다. 여기서 받는 것은 data_source id 다.
 
     환경변수 `DC_MAP_<KEY>_DS`(예: `DC_MAP_FORUM_DS`)가 파일보다 앞선다.
-    관계선 DB(`relations`)와 유출 사고 DB(`incident`)는 없어도 굽는다. 없으면
-    관계선 · 공식 발표 사고가 비고 로그에 남는다.
+    관계선 DB(`relations`) · 유출 사고 DB(`incident`) · 주소 변경 이력 DB(`address`)는
+    없어도 굽는다. 없으면 관계선 · 공식 발표 사고 · 주소 별칭이 비고 로그에 남는다.
     """
     got: dict[str, str] = {}
     if SOURCES_FILE.is_file():
@@ -191,7 +191,10 @@ INDUSTRY_OF_SECTOR = {
 
 #: 유출 사고 DB 선택지 (2026-09-26 에 있던 것 전부). **표 밖 값은 싣지 않는다** —
 #: 노션 선택지는 누구나 새로 칠 수 있다
-LEAK_ITEMS = {"이름", "이메일", "전화", "계정", "주소", "카드금융", "주민번호", "기타"}
+LEAK_ITEMS = {"이름", "이메일", "전화", "계정", "주소", "카드금융", "주민번호", "기타", "회사 내부 자료"}
+#: 위험도 높음 유출 항목 (설계서 3.10)
+RISK_ITEMS = {"주민번호", "카드금융"}
+RISK_VALUES = {"high", "medium", "low"}
 CONFIRM_VALUES = {"조직 공식 발표", "게시글만", "언론 보도", "규제기관 확정", "연구자 발견"}
 SOURCE_KINDS = {"언론 보도", "보안업체", "기타", "기업 공지", "개인정보보호위원회", "한국인터넷진흥원"}
 
@@ -309,6 +312,12 @@ ALLOWED_COLS = frozenset({
     "유출 항목",
     "외부 확인",
     "출처",
+    # ↓ 수집 DB · 검증 DB. 위험도 (설계서 3.10), 연결된 사건 (4.3.4), 랜섬 유출 칩 (2.3).
+    #   즉시 악용 가능성은 선택지, 같은 사건은 페이지 연결이라 사건 번호로만 바꿔 싣는다
+    "즉시 악용 가능성",
+    "같은 사건",
+    "같은 사건 (역방향)",
+    "공개된 파일 수",
 })
 
 #: **맞추는 데만 쓰는 칸.** 값을 읽되 구운 파일에 절대 안 싣는다.
@@ -327,6 +336,11 @@ MATCH_ONLY_COLS: frozenset[str] = frozenset({
     "조직명",
     "보도된 유출 위치",
     "보도된 행위자",
+    # ↓ 주소 변경 이력 DB (설계서 2.4 · 3.12). 포럼 이름과 옛 · 새 주소를 사건 맞추기
+    #   별칭으로만 쓴다. 주소는 안 싣는다
+    "대상 이름",
+    "옛 주소",
+    "새 주소",
 })
 
 #: **절대 읽지 않는 칸.** 값에 개인정보나 피해 조직 이름이 들어 있다.
@@ -365,6 +379,16 @@ DENY_COLS = frozenset({
     # ↓ 사람 이름이다 (팀원)
     "기록자",
     "담당자",
+    # ↓ 검증 DB. 사람이 쓴 검증 글이라 피해 조직 이름과 표본 값이 든다 (보고서 팝업 「설명」
+    #   원천이지만 싣지 않는다 — 2026-09-26, 조직명은 지도 어디에도 안 낸다)
+    "검증 요약",
+    "검증 자료",
+    "권고",
+    "판정 변경 조건",
+    "한계",
+    "자산 민감도",
+    # ↓ 주소 변경 이력 DB. 사람이 쓴 설명
+    "옛 주소 상태 설명",
 })
 
 
@@ -375,6 +399,17 @@ def col_prop(props: dict, name: str):
     """
     col(lambda _p: None, props, name)  # 이름만 검사한다
     return props.get(name)
+
+
+#: 지금 읽는 DB 이름과, 줄에 없던 칸 (설계서 3.12 「어떤 DB 의 어떤 칸이 없었는지
+#: 계산 로그에 남김」). 칸이 지워지거나 이름이 바뀌면 빈 값으로 읽고 멈추지 않는다
+_DB = ["?"]
+_MISSING: dict[str, set[str]] = {}
+
+
+def _note_missing(props: dict, name: str) -> None:
+    if props and name not in props:
+        _MISSING.setdefault(_DB[0], set()).add(name)
 
 
 def col(read, props: dict, name: str):
@@ -393,6 +428,7 @@ def col(read, props: dict, name: str):
             "tools/bake.py 의 ALLOWED_COLS 에 더하세요. "
             "더하기 전에 그 칸 값이 밖에 나가도 되는지 보세요."
         )
+    _note_missing(props, name)
     return read(props.get(name))
 
 
@@ -400,6 +436,7 @@ def col_match(read, props: dict, name: str) -> str | None:
     """맞추기 전용 칸을 읽는다. 돌려준 값은 비교에만 쓰고 어디에도 담지 않는다."""
     if name not in MATCH_ONLY_COLS:
         raise SystemExit(f"맞추기 전용 칸이 아닙니다: {name}")
+    _note_missing(props, name)
     v = read(props.get(name))
     return v.strip() if isinstance(v, str) and v.strip() else None
 
@@ -430,6 +467,9 @@ EV_KEYS = frozenset({
     # 공식 발표 사고만 (유출 사고 DB, 설계서 4.3.4). 사고 시점 · 유출 항목 · 외부 확인 ·
     # 출처 종류. 넷 다 날짜나 선택지다. 조직명과 출처 링크는 싣지 않는다
     "occurredAt", "leakItems", "confirm", "sourceKind",
+    # 위험도 (설계서 3.10, high · medium · low), 연결된 사건 번호 (수집 DB 같은 사건,
+    # 4.3.4), 사기 의심 표시 (칩 없이 필터에서만, 2.3)
+    "risk", "linked", "scam",
 })
 #: 행위자 정보의 속 키 (설계서 4.3.8). 역할 · 국가 · 처음 본 날 · 다루는 것 · 다른 이름
 ACTOR_INFO_KEYS = frozenset({"roles", "countries", "firstSeen", "deals", "otherNames"})
@@ -485,18 +525,30 @@ def _num(s: str) -> float | None:
         return None
 
 
-def event_kind(post: str | None, countdown: bool, repost: bool) -> str | None:
+def event_kind(post: str | None, countdown: bool, repost: bool, files_open: bool = False) -> str | None:
     """사건 종류 칩 (설계서 2.3). 칩이 없는 사건은 None.
 
-    「랜섬웨어 유출」은 파일이 공개되면 데이터 게시, 카운트다운 중이면 피해
-    주장이다. 수집 DB 「공개된 파일 수」가 비어 있어(2026-09-25 에 0줄) 「카운트다운
-    표기」가 있는지로 가른다. 재게시는 게시 성격보다 앞선다.
+    「랜섬웨어 유출」은 **파일 공개가 확인돼야** 데이터 게시, 아니면 피해 주장이다
+    (정본 코드값 탭 22 · 23행, 정본 사건 탭은 141건 모두 피해 주장). 수집 DB
+    「공개된 파일 수」가 1 이상이면 공개로 본다. 카운트다운 표기가 있으면 공개 전이다.
+    9/25 판은 카운트다운 표기가 없으면 데이터 게시로 봐서 정본과 반대였다.
+    재게시는 게시 성격보다 앞선다.
     """
     if repost:
         return "repost"
     if post == "랜섬웨어 유출":
-        return "claim" if countdown else "data_post"
+        return "data_post" if files_open and not countdown else "claim"
     return KIND_OF_POST.get(post or "")
+
+
+def risk_level(exploit: str | None, items: list[str] | None) -> str:
+    """위험도 (설계서 3.10, 제안). 높음 — 즉시 악용 가능성 「가능」이거나 유출 항목에
+    주민번호 · 카드금융. 중간 — 즉시 악용 가능성 「조건부」. 낮음 — 그 밖."""
+    if exploit == "가능" or RISK_ITEMS & set(items or []):
+        return "high"
+    if exploit == "조건부":
+        return "medium"
+    return "low"
 
 
 def industry_short(raw: str | None) -> str | None:
@@ -877,8 +929,8 @@ def check(data: dict) -> list[str]:
             "sizeUnit" in e and e["sizeUnit"] not in SIZE_UNITS
         ):
             bad.append(f"사건 {e['id']} 의 규모 단위가 틀렸습니다")
-        # 공식 발표 칸은 공식 발표 사건에만, 모양까지 본다
-        if any(k in e for k in ("occurredAt", "leakItems", "confirm", "sourceKind")) and e.get("kind") != "official":
+        # 공식 발표 칸은 공식 발표 사건에만, 모양까지 본다. 유출 항목은 수집 DB 사건에도 있다
+        if any(k in e for k in ("occurredAt", "confirm", "sourceKind")) and e.get("kind") != "official":
             bad.append(f"사건 {e['id']} 는 공식 발표가 아닌데 공식 발표 칸이 있습니다")
         if "occurredAt" in e and not RE_ISO_DAY.match(str(e["occurredAt"])):
             bad.append(f"사건 {e['id']} 의 사고 시점이 날짜가 아닙니다")
@@ -888,10 +940,18 @@ def check(data: dict) -> list[str]:
             bad.append(f"사건 {e['id']} 의 외부 확인이 선택지 밖입니다")
         if "sourceKind" in e and e["sourceKind"] not in SOURCE_KINDS:
             bad.append(f"사건 {e['id']} 의 출처 종류가 선택지 밖입니다")
+        if "risk" in e and e["risk"] not in RISK_VALUES:
+            bad.append(f"사건 {e['id']} 의 위험도가 설계서 3.10 에 없습니다")
+        if "scam" in e and e["scam"] is not True:
+            bad.append(f"사건 {e['id']} 의 사기 의심 표시가 참이 아닙니다")
 
     # 관계선은 양 끝이 목록 안 영토여야 하고, 근거는 목록 안 사건이어야 한다.
     # 목록 밖을 가리키면 굽기가 이름을 잘못 맞췄거나 어디선가 지어낸 것이다
     evs = {e["id"] for e in data["events"]}
+    for e in data["events"]:
+        lk = e.get("linked")
+        if lk is not None and (not isinstance(lk, list) or any(x not in evs or x == e["id"] for x in lk)):
+            bad.append(f"사건 {e['id']} 의 연결된 사건이 사건 목록 밖이거나 자기 자신입니다")
     for r in data["relations"]:
         extra = set(r) - RELATION_KEYS
         if extra:
@@ -1259,6 +1319,7 @@ def read_registry(n, sources: dict[str, str], read, log) -> list[dict]:
     merged = 0
     skipped_actor = 0
     for key, (island, title_col) in REGISTRY.items():
+        _DB[0] = f"게시처 DB {key}"
         rows = n.query_all(sources[key])
         alias_col = "다른 이름" if island == "ACTOR" else "이전 이름·별칭"
         for i, row in enumerate(rows):
@@ -1413,6 +1474,44 @@ class RegistryIndex:
         return None
 
 
+#: 사람이 작업판에서 손으로 고친 사건 값 (설계서 3.12). 노션 값보다 먼저 쓴다.
+#:
+#:     {"events": {"LEAK-12": {"drop": true},
+#:                 "LEAK-40": {"kind": "sale", "postedAt": "2026-05-01",
+#:                             "territory": ["FORUM", "Darkforums"]}}}
+#:
+#: 사건 번호 · 사건 종류 · 날짜 · 게시처 이름(가해 쪽)만 적는다. **조직명을 적지 않는다** —
+#: 공개 레포다. 파일이 없으면 아무 일도 안 한다
+OVERRIDES_FILE = Path(__file__).with_name("overrides.json")
+
+
+def apply_overrides(raw_events: list[dict], index: "RegistryIndex", log) -> list[dict]:
+    if not OVERRIDES_FILE.is_file():
+        return raw_events
+    table = json.loads(OVERRIDES_FILE.read_text(encoding="utf-8")).get("events", {})
+    out, used = [], 0
+    for e in raw_events:
+        o = table.get(e["id"])
+        if not o:
+            out.append(e)
+            continue
+        used += 1
+        if o.get("drop"):
+            continue
+        if o.get("kind") in EV_KIND_VALUES:
+            e["kind"] = o["kind"]
+        if isinstance(o.get("postedAt"), str) and RE_ISO_DAY.match(o["postedAt"]):
+            e["postedAt"] = o["postedAt"]
+        t = o.get("territory")
+        if isinstance(t, list) and len(t) == 2:
+            c = index.find(t[0], t[1])
+            if c:
+                e["cand"] = c
+        out.append(e)
+    log(f"손 고침 표 {OVERRIDES_FILE.name} — {used}건에 썼습니다")
+    return out
+
+
 RE_TME = re.compile(r"t\.me/(?:s/)?([A-Za-z0-9_]{3,64})", re.IGNORECASE)
 
 #: 보도된 유출 위치에서 떼어 낼 낱말 — 「Qilin 랜섬웨어 유출 사이트」 → 「Qilin」
@@ -1552,6 +1651,8 @@ def bake(n, sources: dict[str, str], log) -> dict:
     # 1) 검증 DB 를 먼저 읽어 「수집 페이지 id → 판정」 표를 만든다.
     #    「수집 줄」 relation 이 채워져 있어 조인 키가 이미 있다
     verdict_of: dict[str, str] = {}
+    exploit_of: dict[str, str] = {}
+    _DB[0] = "검증 DB"
     vrows = n.query_all(sources["verify"])
     for row in vrows:
         p = row.get("properties", {})
@@ -1560,21 +1661,47 @@ def bake(n, sources: dict[str, str], log) -> dict:
         v = VERDICT_OF.get(col(read, p, "진위 판정") or "")
         if not v:
             continue
+        ex = col(read, p, "즉시 악용 가능성")
         for pid in rel_ids(col_prop(p, "수집 줄")):
             verdict_of[pid] = v
+            if ex:
+                exploit_of[pid] = ex
     log(f"검증 DB {len(vrows)}줄 → 판정 {len(verdict_of)}건")
 
     # 2) 명부 넷 — 영토 후보 (설계서 2.4)
     cands = read_registry(n, sources, read, log)
+
+    # 2b) 주소 변경 이력 DB — 포럼의 옛 · 새 주소를 사건 맞추기 별칭으로 (설계서 2.4 · 3.12).
+    #     주소는 안 싣는다. 후속 관계선은 관계선 DB 가 따로 적는다
+    if sources.get("address"):
+        _DB[0] = "주소 변경 이력 DB"
+        arows = n.query_all(sources["address"])
+        by_forum = {c["rawName"].casefold(): c for c in cands if c["island"] == "FORUM"}
+        added = 0
+        for row in arows:
+            p = row.get("properties", {})
+            c = by_forum.get((col_match(read, p, "대상 이름") or "").casefold())
+            if not c:
+                continue
+            for raw in (col_match(read, p, "옛 주소"), col_match(read, p, "새 주소")):
+                for host in re.findall(r"(?:https?://)?([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)", raw or ""):
+                    host = re.sub(r"^www\.", "", host.lower())
+                    if host not in c["aliases"]:
+                        c["aliases"].append(host)
+                        added += 1
+        log(f"주소 변경 이력 DB {len(arows)}줄 → 포럼 별칭 {added}개 (맞추기 전용)")
     index = RegistryIndex(cands)
 
     # 3) 수집 DB — 사건
+    _DB[0] = "수집 DB"
     rows = n.query_all(sources["collect"])
     log(f"수집 DB {len(rows)}줄")
 
     gate = {"DB 반영 꺼짐": 0, "검토 여부": 0}
     why: dict[str, int] = {}
     raw_events: list[dict] = []
+    # 확인필요 목록 (설계서 3.12 「못 찾으면 확인필요 탭에 올라감」). 사건 번호만 찍는다
+    review: list[str] = []
 
     # 관계선 원문 대조용 조직 이름. 관문과 무관하게 모든 줄에서 모은다 —
     # 지도에 안 오른 사건의 조직도 원문에 적혀 있으면 안 된다
@@ -1652,10 +1779,19 @@ def bake(n, sources: dict[str, str], log) -> dict:
 
         if reason:
             why[reason] = why.get(reason, 0) + 1
+            if reason == "영토를 정할 수 없음":
+                review.append(unique_id(col_prop(p, "사건 ID")) or row["id"][:8])
             continue
 
+        items = [x for x in (col(read, p, "유출 항목") or []) if x in LEAK_ITEMS]
         raw_events.append({
             "id": unique_id(col_prop(p, "사건 ID")) or f"row-{len(raw_events) + 1}",
+            "pid": row["id"],
+            # 수집 DB 「같은 사건」 두 칸의 페이지 id. 내보낼 때 사건 번호로 바꾼다
+            "same": rel_ids(col_prop(p, "같은 사건")) + rel_ids(col_prop(p, "같은 사건 (역방향)")),
+            "risk": risk_level(exploit_of.get(row["id"]), items),
+            "items": items,
+            "scam": col(read, p, "게시 성격") == "사기 의심",
             "cand": cand,
             "handle": handle,
             "actor": None,
@@ -1673,6 +1809,7 @@ def bake(n, sources: dict[str, str], log) -> dict:
                 col(read, p, "게시 성격"),
                 bool(col(read, p, "카운트다운 표기")),
                 (col(read, p, "중복 관계") or "") in REPOST_VALUES,
+                (col(read, p, "공개된 파일 수") or 0) > 0,
             ),
             "country": COUNTRY_CODE.get(col(read, p, "국가") or ""),
             "industry": industry_short(col(read, p, "산업 분야")),
@@ -1690,6 +1827,7 @@ def bake(n, sources: dict[str, str], log) -> dict:
     inc_gate = 0
     inc_n = 0
     if sources.get("incident"):
+        _DB[0] = "유출 사고 DB"
         irows = n.query_all(sources["incident"])
         collect_keys = same_org_keys(org_names)
         # 관계선 원문 · 행위자 글의 조직명 거르기에 보탠다. 관문과 무관하게 모두 모은다
@@ -1720,8 +1858,15 @@ def bake(n, sources: dict[str, str], log) -> dict:
             if cand["island"] != "RANSOMWARE":
                 handle = clean_handle(col_match(read, p, "보도된 행위자"))
             nation = col(read, p, "국가")
+            items = [x for x in (col(read, p, "유출 항목") or []) if x in LEAK_ITEMS]
             raw_events.append({
                 "id": iid or f"inc-{inc_n + 1}",
+                "pid": row["id"],
+                "same": [],
+                # 유출 사고 DB 에는 즉시 악용 가능성이 없다. 유출 항목만으로 가른다
+                "risk": risk_level(None, items),
+                "items": items,
+                "scam": False,
                 "cand": cand,
                 "handle": handle,
                 "actor": None,
@@ -1739,7 +1884,6 @@ def bake(n, sources: dict[str, str], log) -> dict:
                 "korea": nation == "한국",
                 "official": {
                     "occurredAt": col(read, p, "사고 시점"),
-                    "leakItems": [x for x in (col(read, p, "유출 항목") or []) if x in LEAK_ITEMS],
                     "confirm": col(read, p, "외부 확인"),
                     "sourceKind": col(read, p, "출처"),
                 },
@@ -1751,6 +1895,7 @@ def bake(n, sources: dict[str, str], log) -> dict:
         log("유출 사고 DB 를 안 알려 줘서 공식 발표 사고를 건너뜁니다 "
             f"(DC_MAP_INCIDENT_DS 또는 {SOURCES_FILE.name} 의 incident)")
     org_tok = org_tokens(org_names)
+    raw_events = apply_overrides(raw_events, index, log)
 
     # 4) 영토 거르기 (설계서 2.5, 정본 영토 탭에서 되짚은 규칙)
     counted = {id(c): 0 for c in cands}
@@ -1857,6 +2002,8 @@ def bake(n, sources: dict[str, str], log) -> dict:
                 actor_info_n += 1
         out_terr.append(t)
 
+    # 페이지 id → 사건 번호. 연결된 사건은 지도에 오른 사건끼리만 잇는다
+    eid_of_pid = {e["pid"]: e["id"] for e, _a in events_out if e.get("pid")}
     events = []
     for e, a in events_out:
         ev = {
@@ -1878,12 +2025,18 @@ def bake(n, sources: dict[str, str], log) -> dict:
                 ev[k] = e[k]
         if e["claim"]:
             ev["sizeValue"], ev["sizeUnit"] = e["claim"]
+        ev["risk"] = e["risk"]
+        if e["items"]:
+            ev["leakItems"] = e["items"]
+        if e["scam"]:
+            ev["scam"] = True
+        linked = sorted({eid_of_pid[x] for x in e["same"] if x in eid_of_pid and eid_of_pid[x] != e["id"]})
+        if linked:
+            ev["linked"] = linked
         o = e.get("official")
         if o:
             if o.get("occurredAt") and RE_ISO_DAY.match(o["occurredAt"]):
                 ev["occurredAt"] = o["occurredAt"][:10]
-            if o.get("leakItems"):
-                ev["leakItems"] = o["leakItems"]
             if o.get("confirm") in CONFIRM_VALUES:
                 ev["confirm"] = o["confirm"]
             if o.get("sourceKind") in SOURCE_KINDS:
@@ -1891,6 +2044,9 @@ def bake(n, sources: dict[str, str], log) -> dict:
         events.append(ev)
 
     log("관문에서 뺀 줄 — " + " · ".join(f"{k} {v}" for k, v in gate.items()))
+    if review:
+        # 사건 번호만. 제목 · 조직명은 안 찍는다 (공개 레포 Actions 로그)
+        log(f"확인필요 — 영토를 정할 수 없는 사건 {len(review)}건: {', '.join(sorted(review))}")
     log("지도에서 뺀 사건 — " + (" · ".join(f"{k} {v}" for k, v in sorted(why.items())) or "없음"))
     odd_industry = sum(1 for e in raw_events if e["industryRaw"] and not e["industry"])
     if odd_industry:
@@ -1902,6 +2058,9 @@ def bake(n, sources: dict[str, str], log) -> dict:
     log(f"영토 {len(out_terr)}곳 — " + " · ".join(f"{k} {by_island.get(k, 0)}" for k in ISLAND_ORDER))
     # 값은 안 찍는다. 행위자 글은 사람이 쓴 것이다
     log(f"행위자 정보 — {actor_info_n}곳에 실음 · 조직명 · 모양 검사로 뺀 글 {actor_dropped}개")
+    log("위험도 — " + " · ".join(f"{k} {sum(1 for e in events if e.get('risk') == k)}" for k in ("high", "medium", "low"))
+        + f" · 연결된 사건이 있는 사건 {sum(1 for e in events if e.get('linked'))}건"
+        + f" · 사기 의심 {sum(1 for e in events if e.get('scam'))}건")
     log(f"사건 {len(events)}건 (공식 발표 {sum(1 for e in events if e.get('kind') == 'official')}건) · 행위자 영토에도 붙은 사건 "
         f"{sum(1 for e in events if 'actorTerritoryId' in e)}건 · "
         f"날짜를 대신 넣은 사건 {sum(1 for e in events if e.get('dateSubstituted'))}건")
@@ -1939,12 +2098,19 @@ def bake(n, sources: dict[str, str], log) -> dict:
                 dropped_notes[why] += 1
             return note
 
+        _DB[0] = "관계선 DB"
         relations = bake_relations(n, sources["relations"], find_tid, events, read, log, note_for)
         log(f"관계선 원문 {sum(1 for r in relations if 'note' in r)}줄 · 뺀 항목 — "
             + " · ".join(f"{k} {v}" for k, v in dropped_notes.items()))
     else:
         log("관계선 DB 를 안 알려 줘서 관계선을 비웁니다 "
             f"(DC_MAP_RELATIONS_DS 또는 {SOURCES_FILE.name} 의 relations)")
+
+    # 노션에서 없어진 칸 (설계서 3.12). 칸 이름만 찍는다
+    if _MISSING:
+        log("노션 줄에 없던 칸 — " + " · ".join(f"{db}: {', '.join(sorted(v))}" for db, v in sorted(_MISSING.items())))
+    else:
+        log("노션 줄에 없던 칸 — 없음")
 
     return {
         "generatedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
