@@ -200,6 +200,96 @@ def test_소급_워크플로는_손으로만_기본은_미리보기다():
         assert 이름.isascii(), "입력 이름이 한글이면 워크플로가 거부된다: " + 이름
 
 
+# ── 2026-09-25 머지 전 검토로 고친 것 ────────────────────────────────
+def test_명부에서_그룹을_못_찾으면_관계를_안_견준다():
+    # 관계를 보내지도 않으면서 다르다고 판마다 고치던 것
+    있는 = _노션줄("있던줄", "GroupA", "2026-09", 3, 1, "Manufacturing 1 · Healthcare 1", False, ["old-page"])
+    가짜 = _가짜노션([있는])
+    셈 = monthly.월별표(가짜).반영({"2026-09": {"GroupA": ransom.달별세기(목록)["GroupA"]}}, {},
+                                  오늘=오늘, apply=True)
+    assert 셈["그대로"] == 1 and not 가짜.고친것, (셈, 가짜.고친것)
+
+
+def test_limit_판에서는_월별을_안_쓴다():
+    글 = (ROOT / "hub" / "places" / "run.py").read_text(encoding="utf-8")
+    assert 'if 갈래 == "ransom" and ransom.마지막달별 and limit:' in 글
+    assert 글.index("ransom.마지막달별 and limit") < 글.index("monthly.판마다(")
+
+
+class _가짜명부:
+    def __init__(self, 노션, 차례):
+        self.n, self._차례 = 노션, 차례
+        차례.append("명부")
+
+    def 줄들(self):
+        return []
+
+
+def _소급돌리기(받기, *, 된다=True, apply=True):
+    """소급()을 밖에 안 나가게 돌린다. (돌려준 값, 차례, 가짜 노션)."""
+    import contextlib
+    import io
+    from hub.places import egress, write
+    가짜, 차례 = _가짜노션(), []
+    옛 = (egress.출구확인, egress.오프너, write.명부, ransom._받기, ransom._오늘)
+    egress.출구확인 = lambda 프록시=None, timeout=30: {"된다": 된다, "말": "출구 확인 (가짜)"}
+    egress.오프너 = lambda 프록시=None, 갈래="": object()
+    write.명부 = lambda 갈래: _가짜명부(가짜, 차례)
+
+    def 받기_기록(url, m, op=None):
+        차례.append("받기")
+        return 받기(url, 가짜)
+
+    ransom._받기, ransom._오늘 = 받기_기록, (lambda: 오늘)
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):
+            rc = monthly.소급(3, apply=apply, 프록시="http://127.0.0.1:9080")
+    finally:
+        egress.출구확인, egress.오프너, write.명부, ransom._받기, ransom._오늘 = 옛
+    return rc, 차례, 가짜
+
+
+def test_소급은_Tor_출구가_아니면_하나도_안_보낸다():
+    rc, 차례, 가짜 = _소급돌리기(lambda url, n: 목록, 된다=False)
+    assert rc == 1 and 차례 == [] and not 가짜.만든것, (rc, 차례)
+
+
+def test_소급은_노션을_먼저_읽고_달마다_바로_쓴다():
+    만든수 = []
+
+    def 받기(url, 가짜):
+        만든수.append(len(가짜.만든것))        # 이 달을 받기 전에 이미 쓴 줄 수
+        return 목록
+
+    rc, 차례, 가짜 = _소급돌리기(받기)
+    assert 차례[0] == "명부", 차례
+    assert 만든수 == [0, 2, 4], "받은 달을 바로 안 썼다: %s" % 만든수
+    assert rc == 0 and len(가짜.만든것) == 6
+
+
+def test_소급은_연속_세_번_실패하면_멈추고_실패로_끝난다():
+    def 받기(url, 가짜):
+        raise OSError("막힘")
+
+    rc, 차례, 가짜 = _소급돌리기(받기)
+    assert 차례.count("받기") == ransom.연속실패_상한 and rc == 1, (차례, rc)
+    assert not 가짜.만든것
+
+
+def test_소급은_한_달이라도_못_받으면_실패로_끝난다():
+    불린 = [0]
+
+    def 받기(url, 가짜):
+        불린[0] += 1
+        if 불린[0] == 2:
+            import http.client
+            raise http.client.IncompleteRead(b"")     # OSError 가 아니다. 전에는 소급이 통째로 죽었다
+        return 목록
+
+    rc, 차례, 가짜 = _소급돌리기(받기)
+    assert rc == 1 and len(가짜.만든것) == 4, (rc, len(가짜.만든것))
+
+
 if __name__ == "__main__":
     시험들 = [(k, v) for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     실패 = 0
