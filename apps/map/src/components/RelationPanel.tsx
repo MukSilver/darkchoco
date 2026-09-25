@@ -1,23 +1,29 @@
 /**
  * 관계 탭의 오른쪽 패널 — 설계서 4.3.3 · 4.3.6, 피그마 ⑦-8 · ⑦-8e · ⑦-8g.
  *
- *   머리글        TERRITORY · 선택됨 (관계선을 고르면 RELATION · 선택됨)
+ *   머리글        TERRITORY · 선택됨 (중심이 행위자면 ACTOR, 관계선을 고르면 RELATION)
  *   관계 유형 구성  관계 종류별 근거 사건 수 막대
  *   요약          자동 문장
- *   근거 사건      관계선을 골랐을 때만. 날짜 · 판정 · 규모 · 올라온 곳
- *   관계 연혁      최초 관측 순. 고른 관계는 강조하고 그 자리로 굴린다
+ *   근거 사건      관계선을 골랐을 때만. 사건 줄(종류 칩 · 제목 · 올라온 곳)과 신뢰도 칩
+ *   관계 연혁      최초 관측 순. 강조하거나 고른 관계는 강조하고 그 자리로 굴린다
+ *
+ * **강조와 선택을 가른다** (4.3.3 ①). [연결]에서 넘어와 강조만 된 관계는 연혁에서
+ * 강조되고 그 자리로 굴러가지만, 머리글은 TERRITORY 그대로이고 근거 사건도 안
+ * 뜬다. 「근거 보기」를 눌러야 고른 것(RELATION, ⑦-8e)이 된다.
  *
  * 섬 간 보기(4.3.3 ②)면 섬 쌍의 관계를 건수 순으로 늘어놓는다. 누르면 보통
  * 관계 탭(①)으로 넘어간다.
  *
- * **근거 사건에 제목이 없다.** 사건 제목에 피해 조직 이름이 들어 있어서
- * 굽기가 안 싣는다 (2026-09-23 결정).
+ * **근거 사건 제목은 `eventTitle` 이 분류 칸으로 짓는다** (국가 · 산업 · 날짜 · 규모).
+ * 자료 제목에는 피해 조직 이름이 들어 굽기가 안 싣는다 (2026-09-23 결정).
+ * 사건 줄을 두 번 누르면 `onOpenEvent` 를 부른다 — 보고서 팝업(4.3.4) 자리다.
  */
 
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import EventRow from "./EventRow";
 import PanelShell from "./PanelShell";
 import { Chip, KindDot } from "./RelBits";
 import type { MapLayout } from "@/lib/layout";
@@ -27,18 +33,18 @@ import {
   CONF_LABEL,
   KIND_CHIP,
   KIND_LABEL,
-  SIZE_LABEL,
-  VERDICT_LABEL,
+  confOfVerdict,
   connectedIslandCount,
-  dayText,
   historyOrder,
   historyText,
   kindMix,
+  linksOf,
   partnerCount,
   selectedText,
   summaryText,
   type RelView,
 } from "@/lib/relations";
+import type { Ev } from "@/lib/types";
 import type { RelPair } from "./RelationTab";
 
 export type RelationPanelProps = {
@@ -47,11 +53,22 @@ export type RelationPanelProps = {
   layout: MapLayout;
   /** 중심 영토의 관계 (`touching`). 섬 간 보기면 그 섬 쌍의 관계 */
   views: RelView[];
+  /**
+   * 고른 관계선을 찾을 목록 — 관계 탭이 그리는 관계 전부. 2단계로 넓히면 중심에
+   * 닿지 않은 선도 고를 수 있어서 `views` 만으로는 못 찾는다
+   */
+  pool: RelView[];
   center: string | null;
   selected: string | null;
   onSelect: (relationId: string | null) => void;
+  /** 강조한 관계선 id — [연결] · 검색 · 섬 간 보기에서 넘어온 관계 (4.3.3 ①) */
+  highlight: string | null;
   pair: RelPair | null;
   onPairPick: (v: RelView) => void;
+  /** 「추정 관계 포함」을 꺼서 가린 중심의 관계 수. 관계 없음 요약 문안이 갈린다 (⑦-8g) */
+  hiddenEst: number;
+  /** 근거 사건 더블클릭 — 보고서 팝업 (설계서 4.3.4 · 4.3.6) */
+  onOpenEvent?: (id: string) => void;
 };
 
 function quarterLabel(iso: string): string {
@@ -63,13 +80,18 @@ export default function RelationPanel(p: RelationPanelProps) {
   const islands = new Map(p.layout.islands.map((i) => [i.islandKey, i]));
   const nameOf = (id: string) => byId.get(id)?.name ?? id;
   const islandOf = (id: string) => byId.get(id)?.islandKey;
-  const sel = p.views.find((v) => v.rel.id === p.selected) ?? null;
+  const sel = p.pool.find((v) => v.rel.id === p.selected) ?? null;
 
   const picked = useRef<HTMLLIElement>(null);
   // 설계서 4.3.3 ① 「관계 연혁에서 해당 항목 강조, 그 위치로 스크롤」
   useEffect(() => {
     picked.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [p.selected]);
+  }, [p.selected, p.highlight]);
+
+  // 근거 사건 한 번 누름 — 그 줄을 강조한다 (4.3.3 「한 번은 미리보기」). 고른
+  // 관계선이 바뀌면 저절로 풀리도록 관계선 id 를 같이 적어 둔다
+  const [evPick, setEvPick] = useState<{ rel: string; ev: string } | null>(null);
+  const evOn = evPick && evPick.rel === p.selected ? evPick.ev : null;
 
   /* ── 섬 간 보기 ─────────────────────────────────────── */
 
@@ -125,10 +147,14 @@ export default function RelationPanel(p: RelationPanelProps) {
 
   const c = p.center ? byId.get(p.center) : undefined;
   const cIsl = c ? islands.get(c.islandKey) : undefined;
+  // 행위자 머리글은 설계서 4.3.8 「ACTOR · 선택됨, 핸들, 사건 수·활동도·활동 영토 수」
+  const actor = cIsl?.islandId === "ACTOR";
   const mix = kindMix(p.views);
   const total = mix.reduce((s, m) => s + m.count, 0);
   const partners = p.center ? partnerCount(p.views, p.center) : 0;
   const islandN = p.center ? connectedIslandCount(p.views, p.center, islandOf) : 0;
+  // 활동 영토 수 — 행위자 [연결] 탭과 같게 활동 관계만 센다 (4.3.8)
+  const actorN = p.center && actor ? partnerCount(linksOf(p.views, p.center, true), p.center) : 0;
   const history = historyOrder(p.views);
 
   const header = sel
@@ -141,15 +167,23 @@ export default function RelationPanel(p: RelationPanelProps) {
         subtitle: `선택한 관계 ${nameOf(sel.rel.from)} → ${nameOf(sel.rel.to)} · ${KIND_LABEL[sel.rel.kind]}`,
       }
     : {
-        kindLabel: "TERRITORY",
+        kindLabel: actor ? "ACTOR" : "TERRITORY",
         kindToken: null,
         kindAccent: true,
         stateLabel: c ? "선택됨" : "선택 없음",
         title: c?.name ?? "관계",
-        subtitle: c
-          ? `${cIsl?.name ?? ""} 섬 · 사건 ${c.metrics.eventCount}건 · 활동도 ${c.metrics.activity} · 연결된 섬 ${islandN}`
-          : "이 기준일에 기록된 관계가 없습니다",
+        subtitle: !c
+          ? "이 기준일에 기록된 관계가 없습니다"
+          : actor
+            ? `${cIsl?.name ?? "행위자"} 섬 · 사건 ${c.metrics.eventCount}건 · 활동도 ${c.metrics.activity} · 활동 영토 ${actorN}곳`
+            : `${cIsl?.name ?? ""} 섬 · 사건 ${c.metrics.eventCount}건 · 활동도 ${c.metrics.activity} · 연결된 섬 ${islandN}`,
       };
+
+  /** 올라온 곳. 행위자 사건이면 「행위자 → 영토」 — 패널 [사건] 탭과 같다 */
+  const whereOf = (e: Ev) =>
+    e.actorTerritoryId && byId.has(e.actorTerritoryId)
+      ? `${nameOf(e.actorTerritoryId)} → ${nameOf(e.territoryId)}`
+      : nameOf(e.territoryId);
 
   return (
     <PanelShell open={p.open} onToggle={p.onToggle} header={header}>
@@ -178,7 +212,9 @@ export default function RelationPanel(p: RelationPanelProps) {
 
       {c && (
         <p className="rounded-[12px] border border-edge bg-card px-s4 py-s4 text-[12px] leading-[1.75] text-body">
-          {sel ? selectedText(sel, c.territoryId, p.views, nameOf) : summaryText(c.name, p.views, partners, islandN)}
+          {sel
+            ? selectedText(sel, c.territoryId, p.views, nameOf)
+            : summaryText(c.name, p.views, partners, islandN, p.hiddenEst)}
         </p>
       )}
 
@@ -197,18 +233,31 @@ export default function RelationPanel(p: RelationPanelProps) {
             <h3 className="text-[13px] font-semibold text-strong">근거 사건</h3>
             <span className="text-[11px] tabular-nums text-label">최근 순 · {sel.evidence.length}건</span>
           </div>
-          <ul className="flex flex-col divide-y divide-[var(--t-border-divider)] rounded-[12px] border border-edge bg-card">
-            {sel.evidence.map((e) => (
-              <li key={e.id} className="flex flex-col gap-[2px] px-s4 py-s2 text-[12px]">
-                <span className="flex items-baseline gap-s3">
-                  <span className="font-mono tabular-nums text-title">{dayText(e.postedAt)}</span>
-                  <span className="min-w-0 flex-1 truncate text-right text-body">{nameOf(e.territoryId)}</span>
-                </span>
-                <span className="text-[11px] text-label">
-                  {VERDICT_LABEL[e.verdict]} · {SIZE_LABEL[e.size]}
-                </span>
-              </li>
-            ))}
+          <ul className="flex flex-col gap-s1">
+            {sel.evidence.map((e) => {
+              // 사건 판정을 신뢰도 칩으로 (설계서 2.3). 허위는 칩이 없다
+              const conf = confOfVerdict(e.verdict);
+              return (
+                <li
+                  key={e.id}
+                  className="relative"
+                  title={p.onOpenEvent ? "두 번 누르면 사건 보고서" : undefined}
+                  onDoubleClick={() => p.onOpenEvent?.(e.id)}
+                >
+                  <EventRow
+                    e={e}
+                    where={whereOf(e)}
+                    on={evOn === e.id}
+                    onClick={() => setEvPick(evOn === e.id ? null : { rel: sel.rel.id, ev: e.id })}
+                  />
+                  {conf && (
+                    <span className="pointer-events-none absolute right-s3 top-s3">
+                      <Chip tone={CONF_CHIP[conf]}>{CONF_LABEL[conf]}</Chip>
+                    </span>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}
@@ -227,13 +276,15 @@ export default function RelationPanel(p: RelationPanelProps) {
           <ol className="flex flex-col gap-s3">
             {history.map((v) => {
               const on = v.rel.id === p.selected;
+              // 고른 것이 없을 때만 강조가 산다 — 관계 탭 그래프와 같다
+              const lit = on || (!sel && v.rel.id === p.highlight);
               return (
                 <li
                   key={v.rel.id}
-                  ref={on ? picked : undefined}
+                  ref={lit ? picked : undefined}
                   className={[
                     "flex flex-col gap-s2 rounded-[12px] border px-s4 py-s3",
-                    on ? "border-[var(--t-accent)] bg-row-selected" : "border-transparent",
+                    lit ? "border-[var(--t-accent)] bg-row-selected" : "border-transparent",
                   ].join(" ")}
                 >
                   <div className="flex flex-wrap items-center gap-s2">
@@ -241,8 +292,8 @@ export default function RelationPanel(p: RelationPanelProps) {
                       aria-hidden
                       className="size-[10px] rounded-full border-2"
                       style={{
-                        borderColor: on ? "var(--t-accent)" : "var(--t-info)",
-                        background: on ? "var(--t-accent)" : "transparent",
+                        borderColor: lit ? "var(--t-accent)" : "var(--t-info)",
+                        background: lit ? "var(--t-accent)" : "transparent",
                       }}
                     />
                     <span className="font-mono text-[12px] tabular-nums text-body">
@@ -251,7 +302,7 @@ export default function RelationPanel(p: RelationPanelProps) {
                     <Chip tone={KIND_CHIP[v.rel.kind]}>{KIND_LABEL[v.rel.kind]}</Chip>
                     <Chip tone={CONF_CHIP[v.rel.confidence]}>{CONF_LABEL[v.rel.confidence]}</Chip>
                     <span className="flex-1" />
-                    <span className="text-[13px] font-semibold tabular-nums" style={{ color: on ? "var(--t-accent)" : "var(--t-text-strong)" }}>
+                    <span className="text-[13px] font-semibold tabular-nums" style={{ color: lit ? "var(--t-accent)" : "var(--t-text-strong)" }}>
                       {v.count}건
                     </span>
                   </div>
