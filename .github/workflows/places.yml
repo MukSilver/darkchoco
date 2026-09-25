@@ -32,13 +32,23 @@ name: 명부 조사
 #
 # ## 표를 안 남깁니다
 #
-# 실행마다 새 컨테이너라 `hub/data/places.db` 가 안 남습니다. 잃는 것 둘입니다.
+# 실행마다 새 컨테이너라 `hub/data/places.db` 가 안 남습니다. 잃는 것 하나입니다.
 #
 #   차례표     `--due` 가 못 돕니다. 그래서 안 쓰고 cron 과 `only` 로 정합니다
-#   백오프     죽은 주소를 매 판 다시 기다립니다. 한 판이 길어집니다
 #
-# **그렇다고 캐시나 아티팩트로 남기면 안 됩니다.** 그 표의 `규모` 칸이
+# **그렇다고 places.db 를 캐시나 아티팩트로 남기면 안 됩니다.** 그 표의 `규모` 칸이
 # (갈래, 이름, 본때) 라서 명부 이름이 깃허브에 파일로 남습니다. 위와 같은 문제입니다.
+#
+# ## 죽은 곳 쉬기는 캐시로 이어 받습니다 (2026-09-25)
+#
+# 백오프(두 번 실패 하루 · 세 번 사흘 · 네 번 이레 · 그 뒤 두 주)의 두드림 표만
+# `hub/data/backoff.db` 로 떼었습니다. **열쇠가 노션 page_id 라 이름이 없습니다.**
+# 그 파일만 캐시로 꺼내고 넣습니다. 전에는 매 판 죽은 주소를 다시 기다렸습니다.
+#
+#   캐시는 한 번 저장하면 못 덮어씁니다   판마다 새 열쇠(run_id)로 넣고 가장 최근 것을 꺼냅니다
+#   잡마다 열쇠가 따로입니다             한 파일을 두 잡이 번갈아 넣으면 서로 덮습니다
+#   7일 안 꺼내면 지워집니다             하루 두 번 꺼내므로 이어집니다. 지워져도 처음부터
+#                                      다시 쌓일 뿐 빠뜨리는 줄은 없습니다
 #
 # ## 넣어야 하는 비밀값 하나
 #
@@ -195,6 +205,14 @@ jobs:
           raise SystemExit(1)
           PY
 
+      - name: 죽은 곳 쉬기 기록 꺼내기
+        # 두드림 표만 든 파일입니다(page_id · 실패 수 · 시각 · 걸린 초). 이름이 없습니다
+        uses: actions/cache/restore@v4
+        with:
+          path: hub/data/backoff.db
+          key: places-backoff-tor-${{ github.run_id }}
+          restore-keys: places-backoff-tor-
+
       - name: 명부 조사
         env:
           NOTION_TOKEN_FILE: ${{ runner.temp }}/cfg/notion_token
@@ -221,6 +239,14 @@ jobs:
             # 화면에 두 줄이 나란히 떠서 「두 번 도는 건가」 로 읽힙니다
             python dc.py crawl --only "$ONLY" --요약만 --limit "$LIMIT"
           fi
+
+      - name: 죽은 곳 쉬기 기록 넣어 두기
+        # 조사가 실패해도 넣습니다. 두드린 자취는 미리보기에서도 남습니다
+        if: always() && hashFiles('hub/data/backoff.db') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: hub/data/backoff.db
+          key: places-backoff-tor-${{ github.run_id }}
 
       - name: 뒷정리
         if: always()
@@ -264,6 +290,14 @@ jobs:
           printf '%s' "$TOKEN_VALUE" > "$RUNNER_TEMP/cfg/notion_token"
           chmod 600 "$RUNNER_TEMP/cfg/notion_token"
 
+      - name: 죽은 곳 쉬기 기록 꺼내기
+        # 두드림 표만 든 파일입니다(page_id · 실패 수 · 시각 · 걸린 초). 이름이 없습니다
+        uses: actions/cache/restore@v4
+        with:
+          path: hub/data/backoff.db
+          key: places-backoff-telegram-${{ github.run_id }}
+          restore-keys: places-backoff-telegram-
+
       - name: 명부 조사
         env:
           NOTION_TOKEN_FILE: ${{ runner.temp }}/cfg/notion_token
@@ -282,6 +316,14 @@ jobs:
             # 화면에 두 줄이 나란히 떠서 「두 번 도는 건가」 로 읽힙니다
             python dc.py crawl --only telegram --요약만 --limit "$LIMIT"
           fi
+
+      - name: 죽은 곳 쉬기 기록 넣어 두기
+        # 조사가 실패해도 넣습니다. 두드린 자취는 미리보기에서도 남습니다
+        if: always() && hashFiles('hub/data/backoff.db') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: hub/data/backoff.db
+          key: places-backoff-telegram-${{ github.run_id }}
 
       - name: 뒷정리
         if: always()
