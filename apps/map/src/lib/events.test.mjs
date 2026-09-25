@@ -7,7 +7,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { byMonth, eventTitle, eventsIn, periodBounds, sizeText, stampOf } from './events.ts';
+import { byMonth, eventTitle, eventsIn, periodBounds, periodDays, sizeText, stampOf } from './events.ts';
 
 let seq = 0;
 function ev(postedAt, extra = {}) {
@@ -72,4 +72,32 @@ test('월별 묶음은 최신순을 지킨다', () => {
     byMonth(list).map((g) => [g.month, g.items.length]),
     [['2026-09', 2], ['2026-08', 1]],
   );
+});
+
+test('날짜 범위는 노션이 적은 날짜로 거른다 — +09:00 새벽 사건 (머지 전 검토)', () => {
+  const a = ev('2026-05-01T06:58:00.000+09:00'); // UTC 로는 4월 30일
+  const b = ev('2026-06-01T03:00:00.000+09:00'); // UTC 로는 5월 31일
+  const got = eventsIn([a, b], D, { kind: 'range', from: '2026-05-01', to: '2026-05-31' }, () => true);
+  assert.deepEqual(got.map((e) => e.id), [a.id], '화면에 5월 1일로 보이는 사건이 들고, 6월 1일로 보이는 사건은 빠진다');
+});
+
+test('기준일 뒤로 간 날짜 범위는 뒤집지 않고 기본 90일로 물러선다', () => {
+  const d = new Date('2026-06-30T23:59:59Z');
+  const p = { kind: 'range', from: '2026-07-01', to: '2026-09-20' };
+  const list = [ev('2026-06-15T00:00:00Z'), ev('2026-07-05T00:00:00Z')];
+  assert.deepEqual(eventsIn(list, d, p, () => true).map((e) => e.postedAt.slice(0, 10)), ['2026-06-15']);
+  const [from, to] = periodDays(p, d);
+  assert.ok(from <= to, '화면에 적는 시작일이 끝날보다 늦지 않다');
+  assert.equal(to, '2026-06-30');
+  assert.deepEqual(periodDays({ kind: 'range', from: '2026-06-01', to: '2026-09-20' }, d), ['2026-06-01', '2026-06-30'], '끝날은 기준일로 자른다');
+});
+
+test('월별 묶음은 노션 날짜 글자 차례라 같은 달 머리글이 두 번 안 나온다', () => {
+  const list = eventsIn(
+    [ev('2026-06-01T03:00:00.000+09:00'), ev('2026-05-31T20:00:00Z'), ev('2026-06-02T00:00:00Z')],
+    D,
+    { kind: 'all' },
+    () => true,
+  );
+  assert.deepEqual(byMonth(list).map((g) => g.month), ['2026-06', '2026-05']);
 });

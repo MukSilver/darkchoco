@@ -51,7 +51,7 @@ function pickTerritory(t: Territory): Territory {
 /** 사건 종류 칩 값 (설계서 2.3). 굽기가 이것 밖의 값을 내면 안 받는다 */
 const EV_KINDS = new Set<string>(["data_post", "claim", "sale", "access_sale", "repost", "official"]);
 /** 규모 단위. 굽기의 `claim_size` 가 내는 값뿐이다 */
-const SIZE_UNITS = new Set(["TB", "GB", "MB", "KB", "만", "천", "억", "K", "M", "건"]);
+const SIZE_UNITS = new Set(["TB", "GB", "MB", "KB", "억", "만", "건"]);
 
 /**
  * 제목 재료 (2026-09-25 최현서 결정). **분류 값만 받는다** — 국가는 두 글자
