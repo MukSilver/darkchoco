@@ -5,6 +5,7 @@
 밖에 요청을 보내지 않습니다. 응답을 가로채 미리 만든 것을 돌려줍니다.
 """
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -702,7 +703,9 @@ def test_명부_줄이_어니언을_담는다():
     from hub.places.write import 줄
     assert "어니언" in 줄.__dataclass_fields__
     글 = (ROOT / "hub" / "places" / "write.py").read_text(encoding="utf-8")
-    assert '어니언=_글자(props.get("어니언 주소"))' in 글,         "줄들() 이 어니언 주소를 안 읽는다"
+    # 2026-09-25 부터 `어니언=_점살리기(_글자(...))` 꼴이다. `[.]` 를 점으로 읽는다
+    assert re.search(r'어니언=(_점살리기\()?_글자\(props\.get\("어니언 주소"\)\)', 글), \
+        "줄들() 이 어니언 주소를 안 읽는다"
 
 
 def test_시계열을_못_쌓아도_조사는_산다():
