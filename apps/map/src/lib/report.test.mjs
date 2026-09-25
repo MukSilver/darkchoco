@@ -108,7 +108,7 @@ test('설명은 분류 칸으로만 짓는다 — 자유 글 칸은 섞이지 �
   });
   assert.equal(
     eventSummary(e, NAMES),
-    'Ash_22가 BreachForums에 올린 판매 사건입니다. 대상 분류는 KR · 유통입니다. 주장 규모는 3,400,000건입니다. 검증 판정은 「신뢰성 높음」입니다.',
+    'Ash_22가 BreachForums에 올린 판매 사건입니다. 대상 국가는 한국(KR), 산업 분야는 유통입니다. 주장 규모는 3,400,000건입니다. 검증 판정은 「신뢰성 높음」입니다.',
   );
   assert.equal(
     eventSummary(ev({ size: 'unknown' }), NAMES),
@@ -120,6 +120,18 @@ test('설명은 분류 칸으로만 짓는다 — 자유 글 칸은 섞이지 �
   );
   const json = JSON.stringify(reportJson(eventReport(e, NAMES, [], [])));
   assert.ok(!json.includes('비밀'), '모형 밖 칸은 JSON 에도 없다');
+});
+
+test('설명의 국가는 이름에 부호를 붙여 말하고, 산업 분야만 있으면 그것만 말한다', () => {
+  const lead = 'Qilin에 올라온 사건입니다. ';
+  const tail = ' 규모는 확인되지 않았습니다. 검증 판정은 「확인됨」입니다.';
+  assert.equal(eventSummary(ev({ size: 'unknown', country: 'US' }), NAMES), `${lead}대상 국가는 미국(US)입니다.${tail}`);
+  assert.equal(eventSummary(ev({ size: 'unknown', industry: '의료' }), NAMES), `${lead}대상 산업 분야는 의료입니다.${tail}`);
+  assert.equal(
+    eventSummary(ev({ size: 'unknown', country: 'XX' }), NAMES),
+    `${lead}대상 국가는 XX입니다.${tail}`,
+    '표에 없는 부호는 부호만',
+  );
 });
 
 test('연결된 사건 · 관계 줄 — 신뢰도 칩, 관계는 종류 차례', () => {

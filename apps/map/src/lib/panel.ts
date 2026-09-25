@@ -92,7 +92,7 @@ export type PanelView = {
   kindLabel: string;
   /** 눈표 뒤쪽 글씨 */
   stateLabel: string;
-  /** 눈표 앞쪽 글씨 색 토큰. 섬을 고르면 그 섬 색이다 */
+  /** 눈표 글씨 색 토큰(앞뒤 한 색). 섬을 고르면 그 섬 색이다 (피그마 ⑦-2) */
   kindToken: string | null;
   title: string;
   subtitle: string;
@@ -529,6 +529,8 @@ export function islandView(i: BuildInput, islandKey: string): PanelView | null {
     stateLabel: "선택됨",
     kindToken: isl.token,
     title: isl.name,
+    // 피그마 ⑦-2 머리글에는 부제 줄이 없다. 설계서 4.3.1 표가 헤더에 「섬·엔티티·연결
+    // 수」를 적어 두어 설계서를 따라 남긴다 (설계서가 정본)
     subtitle: `엔티티 ${rows.length} · 사건 ${eventCount}건 · 연결 ${linkCount}`,
     stats: [
       { label: "활동도 (평균)", value: String(avg) },

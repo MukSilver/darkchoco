@@ -26,10 +26,16 @@ export default function ViewTabs({
   current: ViewTabKey;
   onChange: (k: ViewTabKey) => void;
 }) {
+  /*
+    피그마 ⑦-1 보기 탭 · 컴포넌트 시트 `07 / 01 Segmented`: 테두리 있는 통(235 × 39)에
+    고른 탭만 테두리 있는 패널색 칸이다. 머리띠 웹 전환(`AppHeader`)과 같은 얼개라
+    통 · 칸 모서리와 안쪽 3px 도 같게 둔다. 칸 폭은 ⑦-1 「지도」 칸 49px 에서 좌우
+    10px 을 읽었다 — 전에는 좌우 24px 이라 통이 피그마보다 훨씬 넓었다
+  */
   return (
     <nav
       aria-label="화면 전환"
-      className="flex items-center gap-s1 rounded-[10px] bg-track p-[3px]"
+      className="flex items-center rounded-[8px] border border-edge bg-track p-[3px]"
     >
       {TABS.map((t) => {
         const on = t.key === current;
@@ -43,10 +49,10 @@ export default function ViewTabs({
             onClick={() => onChange(t.key)}
             title={t.why}
             className={[
-              "rounded-[8px] px-s5 py-s2 text-[13px]",
+              "rounded-[6px] border px-[10px] py-[5px] text-[13px]",
               on
-                ? "bg-selected font-semibold text-strong"
-                : "text-label disabled:cursor-not-allowed",
+                ? "border-edge bg-panel font-semibold text-strong"
+                : "border-transparent text-label disabled:cursor-not-allowed",
               !on && !locked ? "hover:text-body" : "",
             ].join(" ")}
           >

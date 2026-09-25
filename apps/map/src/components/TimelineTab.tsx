@@ -231,51 +231,69 @@ export default function TimelineTab({
 
           <div className="flex-1" />
 
-          <div className="flex items-center gap-s3">
+          {/*
+            재생 단추 줄 — 피그마 ⑦-9b · ⑦-9c, 시트 `07 / 02 Playback Control`.
+            30px 네모 단추(모서리 8px) 넷을 6px 씩 띄운다. ◀ · ▶▶ 는 테두리 단추,
+            재생은 강조색 채움이다. 꺼진 단추는 통째로 40% 로 흐린다 — ⑦-9c 에서 꺼진
+            ◀ 의 테두리 · 그림이 둘 다 바탕과 40% 로 섞인 색이다
+          */}
+          <div className="flex items-center gap-[6px]">
             <button
               type="button"
               aria-label="1년 전"
               disabled={compare !== null || prevYear === null}
               onClick={() => prevYear && onPick(prevYear)}
-              className="grid size-[30px] place-items-center rounded-full border border-edge text-[11px] text-body disabled:text-disabled"
+              className="grid size-[30px] place-items-center rounded-[8px] border border-edge text-body disabled:opacity-40"
             >
-              ◀
+              <Glyph kind="prev" />
             </button>
             <button
               type="button"
               aria-label={playing ? "정지" : "재생"}
               disabled={compare !== null}
               onClick={() => onPlaying(!playing)}
-              className="grid size-[34px] place-items-center rounded-[10px] bg-accent text-[13px] text-on-accent disabled:opacity-40"
+              className="grid size-[30px] place-items-center rounded-[8px] bg-accent text-on-accent disabled:opacity-40"
             >
-              {playing ? "⏸" : "▶"}
+              <Glyph kind={playing ? "pause" : "play"} />
             </button>
             <button
               type="button"
               aria-label="1년 후"
               disabled={compare !== null || nextYear === null}
               onClick={() => nextYear && onPick(nextYear)}
-              className="grid size-[30px] place-items-center rounded-full border border-edge text-[11px] text-body disabled:text-disabled"
+              className="grid size-[30px] place-items-center rounded-[8px] border border-edge text-body disabled:opacity-40"
             >
-              ▶▶
+              <Glyph kind="next" />
             </button>
+            {/*
+              재생 속도 — 피그마는 세 값을 늘어놓지 않고 「2× ▾」 펼침 하나다. 고르는 값과
+              동작(1× · 2× · 4×)은 그대로라 브라우저 기본 펼침(select)을 쓴다. 테두리는
+              재생 중에만 강조색이다 — ⑦-9b(재생 중)는 붉은 테두리, ⑦-9c(멈춤)는 보통 테두리다
+            */}
             <div
-              className="flex items-center rounded-[10px] border"
-              style={{ borderColor: "var(--t-accent)" }}
+              className={[
+                "relative h-[30px] rounded-[8px] border",
+                playing ? "border-accent" : "border-edge",
+              ].join(" ")}
             >
-              {SPEEDS.map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => onSpeed(v)}
-                  className={
-                    "px-s3 py-[4px] text-[11px] tabular-nums " +
-                    (v === speed ? "font-semibold text-strong" : "text-label")
-                  }
-                >
-                  {v}×
-                </button>
-              ))}
+              <select
+                aria-label="재생 속도"
+                value={speed}
+                onChange={(e) => onSpeed(Number(e.target.value))}
+                className="h-full cursor-pointer appearance-none rounded-[8px] bg-transparent pl-[9px] pr-[20px] text-[12px] tabular-nums text-body"
+              >
+                {SPEEDS.map((v) => (
+                  <option key={v} value={v} className="bg-panel text-body">
+                    {v}×
+                  </option>
+                ))}
+              </select>
+              <span
+                aria-hidden
+                className="pointer-events-none absolute right-[8px] top-1/2 -translate-y-1/2 text-[8px] text-body"
+              >
+                ▾
+              </span>
             </div>
             <button
               type="button"
@@ -493,6 +511,35 @@ export default function TimelineTab({
         )}
       </aside>
     </div>
+  );
+}
+
+/**
+ * 재생 단추 그림 (피그마 ⑦-9b · ⑦-9c).
+ *
+ * **글자(◀ ▶ ⏸)를 쓰지 않는다.** ⏸ · ▶ 는 윈도에서 컬러 이모지로 바뀌어 피그마의
+ * 흰 도형과 달라진다. 크기는 ⑦-9b 에서 읽었다 — 삼각형 폭 6px(▶▶ 는 둘을 3px 띄움),
+ * 일시정지 막대 약 4px 둘을 1.5px 띄움
+ */
+function Glyph({ kind }: { kind: "prev" | "play" | "pause" | "next" }) {
+  const w = kind === "next" ? 16 : 12;
+  return (
+    <svg aria-hidden width={w} height="12" viewBox={`0 0 ${w} 12`} fill="currentColor">
+      {kind === "prev" && <path d="M9 2.5v7L3 6z" />}
+      {kind === "play" && <path d="M3.5 2v8L10 6z" />}
+      {kind === "pause" && (
+        <>
+          <rect x="1.5" y="2" width="3.75" height="8" rx="0.5" />
+          <rect x="6.75" y="2" width="3.75" height="8" rx="0.5" />
+        </>
+      )}
+      {kind === "next" && (
+        <>
+          <path d="M0.5 2.5v7L6.5 6z" />
+          <path d="M9.5 2.5v7L15.5 6z" />
+        </>
+      )}
+    </svg>
   );
 }
 

@@ -257,7 +257,11 @@ export default function HexMap({
         ))}
       </g>
 
-      {/* 2층 — 영토 채움. 이것이 지도의 본체다. 떠오른 영토는 3층이 그린다 */}
+      {/*
+        2층 — 영토 채움. 이것이 지도의 본체다. 떠오른 영토는 3층이 그린다.
+        흐린 칸은 섬마다 정해진 흐림색으로 불투명하게 칠한다 (피그마 ⑦-11b · ⑦-3 ·
+        ⑦-10b, `tokens.css` 「흐린 칸」). 전에는 섬 색을 25% 로 깔아 바탕이 비쳤다
+      */}
       <g>
         {flat.map((t) => (
           <path
@@ -265,11 +269,10 @@ export default function HexMap({
             data-pick="territory"
             data-id={t.territoryId}
             d={cellsPath(t, layout.size)}
-            fill={`var(--t-island-${t.token})`}
+            fill={dim(t) ? `var(--t-island-${t.token}-dim)` : `var(--t-island-${t.token})`}
             stroke="var(--t-border-hex)"
             strokeWidth={1}
-            opacity={dim(t) ? 0.25 : 1}
-            className="cursor-pointer transition-opacity"
+            className="cursor-pointer transition-colors"
             {...hoverProps(t.territoryId)}
           />
         ))}
