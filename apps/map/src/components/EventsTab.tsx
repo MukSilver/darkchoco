@@ -17,7 +17,13 @@
  * 검색에서 행위자를 고르면 그 행위자 사건만 남기고 「행위자: 핸들 ×」 칩을 단다.
  * 사건을 고르면 그 사건을 강조하고 그 자리로 굴린다 (설계서 4.2.2 결과 선택).
  *
- * 안 만든 것: 더블클릭 보고서 팝업(4.3.4).
+ * 행을 한 번 누르면 강조하고 지도에 그 사건의 관계선만 남긴다 (피그마 ⑦-4 「선택한
+ * 사건의 관계선만 표시 중」). **강조는 부르는 쪽이 들고 있다** — 지도가 같은 값을
+ * 봐야 해서다. 두 번 누르면 보고서 팝업(4.3.4)이 열린다 (`EventRow`).
+ *
+ * 「사기 의심」은 칩 없이 여기 거르기로만 쓴다 (설계서 2.3 L98). 기본은 다 보이고,
+ * 이 기간에 사기 의심 사건이 있을 때만 「사기 의심 숨기기」 칸이 건수와 함께 나온다. 거르는
+ * 것도 부르는 쪽이 한다 — 헤더 건수와 탭 배지가 거른 뒤 목록과 같아야 한다.
  */
 
 "use client";
@@ -54,8 +60,14 @@ export default function EventsTab({
   actor,
   onClearActor,
   focus,
+  picked,
+  onPick,
+  onOpen,
+  scamCount,
+  hideScam,
+  onHideScam,
 }: {
-  /** 지금 기간의 사건. 최신순 (`eventsIn`) */
+  /** 지금 기간의 사건. 최신순 (`eventsIn`). 사기 의심을 숨겼으면 뺀 뒤다 */
   list: Ev[];
   d: Date;
   period: Period;
@@ -66,12 +78,20 @@ export default function EventsTab({
   actor?: string | null;
   onClearActor?: () => void;
   /**
-   * 검색에서 고른 사건. 처음부터 강조하고 그 줄로 굴린다. **부르는 쪽이 이 값을
-   * `key` 로도 넘긴다** — 바뀌면 새로 마운트돼 강조가 새 사건으로 옮겨 간다
+   * 검색에서 고른 사건. 그 줄로 굴린다 — 강조는 부르는 쪽이 `picked` 로 같이 건다.
+   * **부르는 쪽이 이 값을 `key` 로도 넘긴다** — 바뀌면 새로 마운트돼 새 사건으로 굴린다
    */
   focus?: string | null;
+  /** 강조한 사건. 지도가 그 사건의 관계선만 그린다 */
+  picked: string | null;
+  onPick: (id: string | null) => void;
+  /** 보고서 팝업 열기 (설계서 4.3.4) */
+  onOpen: (id: string) => void;
+  /** 이 기간의 사기 의심 사건 수 — 숨기기 전 건수다 */
+  scamCount: number;
+  hideScam: boolean;
+  onHideScam: (hide: boolean) => void;
 }) {
-  const [picked, setPicked] = useState<string | null>(focus ?? null);
   useEffect(() => {
     if (!focus) return;
     document.querySelector(`[data-ev="${CSS.escape(focus)}"]`)?.scrollIntoView({ block: "center" });
@@ -91,11 +111,25 @@ export default function EventsTab({
   return (
     <section className="flex flex-col gap-s3">
       <div className="flex items-baseline justify-between">
-        <h3 className="text-[12px] text-label">사건 타임라인</h3>
+        {/* 피그마 ⑦-4 머리글 문안 그대로 */}
+        <h3 className="text-[12px] text-label">사건 타임라인 · 더블클릭 시 상세</h3>
         <span className="text-[11px] tabular-nums text-label">
           {periodLabel(period, d)} · {list.length}건
         </span>
       </div>
+
+      {(scamCount > 0 || hideScam) && (
+        <label className="flex cursor-pointer items-center gap-s2 self-start text-[11px] text-label hover:text-body">
+          <input
+            type="checkbox"
+            checked={hideScam}
+            onChange={(ev) => onHideScam(ev.target.checked)}
+            className="size-[12px] accent-[var(--t-accent)]"
+          />
+          사기 의심 숨기기
+          <span className="tabular-nums">{scamCount}건</span>
+        </label>
+      )}
 
       {actor && (
         <div>
@@ -205,7 +239,8 @@ export default function EventsTab({
                 e={e}
                 where={whereOf(e)}
                 on={picked === e.id}
-                onClick={() => setPicked((x) => (x === e.id ? null : e.id))}
+                onClick={() => onPick(picked === e.id ? null : e.id)}
+                onOpen={() => onOpen(e.id)}
               />
             ))}
           </div>

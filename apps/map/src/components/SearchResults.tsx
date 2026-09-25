@@ -12,8 +12,9 @@
  * 웹 필터는 없다. 지금 찾는 대상이 다크웹 하나뿐이라 거를 것이 없다 — 오픈웹 검색은
  * 오픈웹 팀 몫이다 (피그마 ⑦-10d 에도 없다). 대신 엔티티 · 행위자 줄 아랫줄에 웹을
  * 적는다 (설계서 5.3 「결과 행에 웹 표시」, `SearchRows` `WebTag`). 피해 대상
- * 탭도 없다 (2026-09-23 결정). 사건 「상세」는 보고서 팝업(4.3.4)이 아직 없어
- * 지도로 가서 패널 [사건]에서 그 사건을 강조한다 — 검색 창에서 고를 때와 같다.
+ * 탭도 없다 (2026-09-23 결정). 사건 「상세」는 보고서 팝업(4.3.4)을 이 화면 위에 연다 —
+ * 닫으면 결과 목록으로 돌아온다. 검색 창(자동완성)에서 사건을 고를 때는 팝업을 안 띄우고
+ * 지도로 가서 강조만 한다 (설계서 4.2.2 L462 「보고서 팝업은 자동으로 띄우지 않음」).
  */
 
 "use client";
@@ -32,6 +33,7 @@ import {
   narrowed,
   needleOf,
   total,
+  type EventHit,
   type Hit,
   type Results,
   type Scope,
@@ -120,6 +122,7 @@ export default function SearchResults({
   filter,
   onFilter,
   onPick,
+  onOpenEvent,
 }: {
   ctx: SearchCtx;
   q: string;
@@ -127,6 +130,8 @@ export default function SearchResults({
   filter: SearchFilter;
   onFilter: (f: SearchFilter) => void;
   onPick: (h: Hit) => void;
+  /** 사건 「상세」 — 보고서 팝업. 없으면 다른 줄처럼 `onPick` 으로 간다 */
+  onOpenEvent?: (h: EventHit) => void;
 }) {
   const needle = needleOf(q);
   const count = (s: Scope) => (s === "all" ? total(results) : results[s].length);
@@ -150,7 +155,7 @@ export default function SearchResults({
         {h.kind === "event" && p.side}
         <button
           type="button"
-          onClick={() => onPick(h)}
+          onClick={() => (h.kind === "event" && onOpenEvent ? onOpenEvent(h) : onPick(h))}
           className="shrink-0 rounded-[10px] border border-edge bg-panel px-s3 py-s2 text-[12px] text-body hover:border-accent-edge hover:text-title"
         >
           {BUTTON[h.kind]}

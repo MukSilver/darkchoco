@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AppHeader from "@/components/AppHeader";
 import DetailPanel, { type PanelTabKey } from "@/components/DetailPanel";
 import EntityTab from "@/components/EntityTab";
+import EventReport from "@/components/EventReport";
 import EventsTab from "@/components/EventsTab";
 import Legend from "@/components/Legend";
 import LinksTab, { type LinkSel } from "@/components/LinksTab";
@@ -29,9 +30,10 @@ import { DARK_ISLANDS, islandToken } from "@/lib/islands";
 import { layoutMap } from "@/lib/layout";
 import { MAP, isBaked } from "@/lib/mapData";
 import { latestSeen, monthDay } from "@/lib/entity";
-import { DEFAULT_PERIOD, eventTitle, eventsIn, type Period } from "@/lib/events";
+import { DEFAULT_PERIOD, eventTitle, eventsIn, touchesEvent, type Period } from "@/lib/events";
 import { allIslandPairs, belongsTo, ecosystemView, islandView, territoryView } from "@/lib/panel";
-import type { Ev } from "@/lib/types";
+import { eventReport, linkedOf, type ReportNames } from "@/lib/report";
+import type { Ev, Relation } from "@/lib/types";
 import {
   backLabel,
   defaultCenter,
@@ -58,6 +60,7 @@ import {
   quarterFor,
   search,
   total,
+  type EventHit,
   type Hit,
   type Recent,
   type SearchFilter,
@@ -98,6 +101,19 @@ const ALL_RELS = withActivity(MAP.relations, MAP.events);
  */
 const REGISTRY = new Map(MAP.territories.map((t) => [t.id, t]));
 const registryOf = (id: string) => REGISTRY.get(id);
+
+/** 사건 id → 사건. 보고서 팝업이 쌓아 둔 번호로 사건을 찾는다 */
+const EV_BY_ID = new Map(MAP.events.map((e) => [e.id, e]));
+
+/**
+ * 보고서 팝업의 이름. **기준일과 무관하게 명부에서 찾는다** — 검색 「상세」는 기준일
+ * 밖 사건도 열어서, 기준일 지도(`layout`)에 없는 영토 이름도 나와야 한다
+ */
+const ISLAND_NAME = new Map(DARK_ISLANDS.map((i) => [i.id as string, i.name]));
+const REPORT_NAMES: ReportNames = {
+  nameOf: (id) => REGISTRY.get(id)?.name ?? id,
+  islandOf: (id) => ISLAND_NAME.get(REGISTRY.get(id)?.islandId ?? "") ?? "",
+};
 
 /**
  * [연결] 탭에서 관계 탭으로 넘어갈 때 적어 두는 출발 화면 (설계서 4.3.3
@@ -155,6 +171,12 @@ export default function Page() {
   // 검색에서 고른 행위자 · 사건. 패널 [사건]이 그 행위자로 거르고 그 사건을 강조한다 (4.2.2)
   const [actorFilter, setActorFilter] = useState<string | null>(null);
   const [focusEvent, setFocusEvent] = useState<string | null>(null);
+  // 패널 [사건]에서 한 번 누른 사건. 지도가 그 사건의 관계선만 그린다 (피그마 ⑦-4)
+  const [pickedEvent, setPickedEvent] = useState<string | null>(null);
+  // 패널 [사건] 「사기 의심 숨기기」 (설계서 2.3 L98 — 칩 없이 필터에서만)
+  const [hideScam, setHideScam] = useState(false);
+  // 보고서 팝업 (설계서 4.3.4). 연 사건 번호를 쌓는다 — 맨 뒤가 지금 사건, 앞은 「‹ 이전 사건」 자리
+  const [report, setReport] = useState<string[]>([]);
   // 관계 탭 (설계서 4.3.6)
   const [relCenter, setRelCenter] = useState<string | null>(null);
   // 고른 관계선(근거 화면 ⑦-8e)과 강조한 관계선(4.3.3 ① 이동 직후)은 따로 든다
@@ -223,6 +245,7 @@ export default function Page() {
    *   영토를 고름         그 영토의 관계선만. 이어진 영토만 진하고 연결 없는 섬은 흐리다
    *   [연결] 행을 고름     그 관계선만. 상대 영토도 떠오른다
    *   유형 간 행을 고름    그 섬 쌍의 관계선만
+   *   [사건] 행을 고름     그 사건이 근거인 관계선만 (피그마 ⑦-4, 설계서 4.3.3 L607 「한 번은 미리보기」)
    */
   const isActor = useCallback(
     (id: string) =>
@@ -243,7 +266,61 @@ export default function Page() {
     return rels.some((v) => v.rel.id === linkSel.id) ? linkSel : null;
   }, [linkSel, rels, islandOf]);
 
+  /**
+   * 패널 [사건] 탭 (설계서 4.3.1 · 4.3.2 · 4.3.8). 영토는 그 영토, 행위자는 그
+   * 행위자가 올린 사건, 섬은 소속 영토 전부다 — `belongsTo` 가 셋을 같이 가른다.
+   * 선택이 없으면 지도에 있는 영토 전부다 (피그마 ⑦-1 탭 「사건 N」). 행마다 영토
+   * 이름이 붙는 것은 섬과 같다.
+   *
+   * 「사기 의심 숨기기」를 켜면 여기서 뺀다 — 탭 배지와 헤더 건수가 목록과 같아야 한다.
+   * 지도 선(아래 `mapRel`)이 고른 사건을 이 목록에서 찾으므로 위에 둔다
+   */
+  const eventIds: Set<string> = useMemo(
+    () =>
+      selection.kind === "territory"
+        ? new Set([selection.id])
+        : selection.kind === "island"
+          ? new Set(layout.territories.filter((t) => t.islandKey === selection.key).map((t) => t.territoryId))
+          : present,
+    [selection, layout, present],
+  );
+  const periodList = useMemo(
+    () =>
+      eventsIn(
+        MAP.events,
+        d,
+        period,
+        (e) => belongsTo(e, eventIds) && (!actorFilter || e.actorTerritoryId === actorFilter),
+      ),
+    [d, period, eventIds, actorFilter],
+  );
+  const scamCount = periodList.filter((e) => e.scam).length;
+  const eventList = useMemo(
+    () => (hideScam ? periodList.filter((e) => !e.scam) : periodList),
+    [periodList, hideScam],
+  );
+
+  /**
+   * [사건] 행 선택 (피그마 ⑦-4). **[사건] 탭을 보고 있고 그 사건이 목록에 있을 때만
+   * 산다** — 기간 · 기준일을 옮겨 목록에서 빠졌거나 다른 패널 탭으로 가면 지도는 원래
+   * 선으로 돌아온다. 상태는 그대로 둔다 (`liveLinkSel` 과 같은 규칙)
+   */
+  const liveEvent = useMemo(
+    () => (panelTab === "events" && pickedEvent ? (eventList.find((e) => e.id === pickedEvent) ?? null) : null),
+    [panelTab, pickedEvent, eventList],
+  );
+
   const mapRel = useMemo(() => {
+    // [사건] 행을 고름 — 그 사건이 근거인 관계선만 (행위자 사건이면 행위자 → 영토 활동 관계 포함).
+    // 관계선이 없으면 올라온 영토(와 행위자)만 진하다
+    if (liveEvent) {
+      const ev = liveEvent;
+      const lines = rels.filter((v) => touchesEvent(v.rel, ev));
+      const ends = [ev.territoryId, ev.actorTerritoryId ?? "", ...lines.flatMap((v) => [v.rel.from, v.rel.to])];
+      const lit = new Set(ends.filter((x) => present.has(x)));
+      const litIslands = new Set([...lit].map((x) => islandOf(x)).filter((x): x is string => !!x));
+      return { lines, lit, raised: lit, litIslands };
+    }
     if (liveLinkSel?.type === "pair") {
       const lines = pairViews(rels, islandOf, liveLinkSel.from, liveLinkSel.to);
       const lit = new Set(lines.flatMap((v) => [v.rel.from, v.rel.to]));
@@ -264,7 +341,7 @@ export default function Page() {
     const lit = new Set([id, ...lines.map((v) => partnerOf(v, id))]);
     const litIslands = new Set([...lit].map((x) => islandOf(x)).filter((x): x is string => !!x));
     return { lines, lit, raised, litIslands };
-  }, [rels, selection, liveLinkSel, islandOf, isActor]);
+  }, [rels, selection, liveLinkSel, islandOf, isActor, liveEvent, present]);
 
   /**
    * 관계 탭 중심. 고른 영토가 없거나, 기준일을 옮겨 그 영토가 지도에서 빠졌으면
@@ -292,6 +369,8 @@ export default function Page() {
     // 검색에서 건 행위자 필터와 사건 강조도 푼다. 검색 결과를 고를 때는 이 뒤에 다시 건다
     setActorFilter(null);
     setFocusEvent(null);
+    // [사건] 행 선택도 푼다 — 다른 영토의 목록에는 그 사건이 없다
+    setPickedEvent(null);
     if (s.kind !== "none") setPanelOpen(true);
   };
 
@@ -455,7 +534,8 @@ export default function Page() {
    *
    * 정본의 첫 화면은 연결 3D(③-0)인데 3D 가 보류라 다크웹을 처음 연 상태로 돌린다.
    * 선택 · 화면 탭 · 줌 100% · 기준일(가장 최근 분기) · 패널 [개요]를 연 직후 값으로
-   * 되돌리고 검색 · 전체 결과 · 이동 안내 · 재생을 닫는다. 관계 탭에서 쌓은 뒤로 가기
+   * 되돌리고 검색 · 전체 결과 · 이동 안내 · 재생 · 보고서 팝업을 닫는다. [사건] 행 선택과
+   * 「사기 의심 숨기기」도 기간과 함께 처음 값으로 둔다. 관계 탭에서 쌓은 뒤로 가기
    * 기록도 걷는다. 최근 검색 · 검색 필터 · 재생 속도는 사람이 고른 설정이라 둔다
    */
   const goHome = () => {
@@ -467,9 +547,12 @@ export default function Page() {
     setLinkSel(null);
     setActorFilter(null);
     setFocusEvent(null);
+    setPickedEvent(null);
+    setReport([]);
     setPanelOpen(true);
     setPanelTab("overview");
     setPeriod(DEFAULT_PERIOD);
+    setHideScam(false);
     setMapView(MAP_VIEW_HOME);
     setYm(TO);
     setPlaying(false);
@@ -530,9 +613,18 @@ export default function Page() {
    * 안 걸고 여기서 가른다. 검색을 닫는 것과 선택을 푸는 것이 한 번에
    * 일어나면 사람이 무엇이 닫힌 것인지 모른다. 전체 결과 화면이 떠 있으면
    * Esc 는 그것을 닫는다.
+   *
+   * **보고서 팝업이 떠 있으면 Esc 는 팝업만 닫는다** (설계서 4.3.4 L684). 선택 해제나
+   * 전체 결과 닫기가 같이 일어나지 않게 맨 앞에서 가른다. 팝업이 뒤 화면을 덮고
+   * 있는 동안은 Ctrl+K 도 안 받는다 — 검색 창이 팝업 밑에 열린다
    */
+  const reportOpen = report.length > 0;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (reportOpen) {
+        if (e.key === "Escape") setReport([]);
+        return;
+      }
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setSearchQ((v) => v ?? "");
@@ -549,11 +641,12 @@ export default function Page() {
       } else {
         setSelection({ kind: "none" });
         setLinkSel(null);
+        setPickedEvent(null);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [searchQ, results, tab]);
+  }, [searchQ, results, tab, reportOpen]);
 
   // 이동 안내는 잠깐 띄우고 걷는다
   useEffect(() => {
@@ -633,11 +726,37 @@ export default function Page() {
   };
 
   /**
+   * 관계 탭 ① 상태로 간다 (설계서 4.3.3) — 검색에서 관계를 고를 때와 보고서 팝업의
+   * 관계 줄을 누를 때가 같이 쓴다. 기준일에 그 관계가 없으면 있는 분기로 옮기고 옮긴
+   * 분기를 돌려준다. 기준일은 관계 탭으로 옮긴 뒤에 바꾼다 — 돌아가기가 옮기기 전
+   * 기준일로 돌아온다
+   */
+  const openRelation = (rel: Relation, center: string): QuarterKey | null => {
+    const to = quarterFor(quarters, ym, (qq) =>
+      relationsAt([rel], MAP.events, quarterEnd(qq, TODAY), presentAt(qq)).length > 0,
+    );
+    // 4.3.3 ①과 같은 상태 — 그 관계를 강조만 한다 (4.2.2 「관계」 결과 선택)
+    if (tab === "relation") {
+      setRelCenter(center);
+      setRelSel(null);
+      setRelHi(rel.id);
+      setRelPair(null);
+      // 가려 둔 추정 관계를 골랐으면 다시 보인다. 강조할 선이 판에 있어야 한다
+      if (rel.confidence === "estimated") setRelEst(true);
+    } else {
+      enterFromLinks({ center, hi: rel.id, pair: null });
+    }
+    if (to) setYm(to);
+    return to;
+  };
+
+  /**
    * 검색 결과 고르기 — 설계서 4.2.2 「결과 선택」.
    *
    *   엔티티   지도로 가서 그 영토를 고르고 패널 [개요]. 관계 탭에서 찾았으면 관계 탭 중심을 바꾼다
    *   행위자   주 활동 영토로 가서 패널 [사건]을 그 행위자 사건만으로 거른다 (칩 「행위자: X ×」)
-   *   사건     지도로 가서 올라온 영토를 고르고 패널 [사건]에서 그 사건을 강조 · 스크롤
+   *   사건     지도로 가서 올라온 영토를 고르고 패널 [사건]에서 그 사건을 강조 · 스크롤.
+   *            보고서 팝업은 띄우지 않는다 (L462). 전체 결과 「상세」만 연다 (`openFromSearch`)
    *   관계     관계 탭 ① 상태 (4.3.3) — 중심은 검색어에 걸린 쪽의 상대 영토다
    *
    * 그 대상이 기준일에 안 보이면 기준일을 옮기고 안내에 적는다. 사건이 [사건] 탭 기간
@@ -683,33 +802,73 @@ export default function Page() {
       select({ kind: "territory", id: where, name: name(where) });
       setPanelTab("events");
       if (h.kind === "actor") setActorFilter(h.e.id);
-      else setFocusEvent(h.ev.id);
+      else {
+        // 강조는 [사건] 행 선택과 같은 값이다 — 지도에도 그 사건의 관계선만 남는다.
+        // 사기 의심을 숨겨 두었으면 고른 사건이 목록에 없으므로 푼다
+        setFocusEvent(h.ev.id);
+        setPickedEvent(h.ev.id);
+        if (h.ev.scam) setHideScam(false);
+      }
       if (eventsIn(MAP.events, moved ? quarterEnd(moved, TODAY) : d, period, keep).length === 0) {
         setPeriod({ kind: "all" });
       }
     } else {
       const rel = h.r.rel;
       label = `${name(rel.from)} → ${name(rel.to)}`;
-      const center = rel.from === h.via ? rel.to : rel.from;
-      // 기준일은 관계 탭으로 옮긴 뒤에 바꾼다 — 돌아가기가 옮기기 전 기준일로 돌아온다
-      const to = quarterFor(quarters, ym, (qq) =>
-        relationsAt([rel], MAP.events, quarterEnd(qq, TODAY), presentAt(qq)).length > 0,
-      );
-      // 4.3.3 ①과 같은 상태 — 그 관계를 강조만 한다 (4.2.2 「관계」 결과 선택)
-      if (tab === "relation") {
-        setRelCenter(center);
-        setRelSel(null);
-        setRelHi(rel.id);
-        setRelPair(null);
-        // 가려 둔 추정 관계를 골랐으면 다시 보인다. 강조할 선이 판에 있어야 한다
-        if (rel.confidence === "estimated") setRelEst(true);
-      } else {
-        enterFromLinks({ center, hi: rel.id, pair: null });
-      }
-      if (to) setYm(to);
-      moved = to;
+      moved = openRelation(rel, rel.from === h.via ? rel.to : rel.from);
     }
     setToast({ label, q, moved });
+  };
+
+  /* ── 보고서 팝업 (설계서 4.3.4) ───────────────────────── */
+
+  /**
+   * 팝업 열기. 패널 [사건] · 엔티티 탭 최근 이벤트 · [개요] 공식 발표 사고 · 검색 「상세」 ·
+   * 관계 탭 근거 목록(RelationPanel)이 부른다.
+   * 뒤 화면은 그대로 둔다 — 기준일도 옮기지 않는다
+   */
+  const openReport = (id: string) => setReport([id]);
+
+  /** 검색 전체 결과의 사건 「상세」 — 결과 화면 위에 팝업을 연다. 고른 것은 최근 검색에 남긴다 */
+  const openFromSearch = (h: EventHit) => {
+    setRecent((r) => pushRecent(r, recentOf(searchCtx, h, Date.now())));
+    openReport(h.ev.id);
+  };
+
+  const reportEv = report.length ? (EV_BY_ID.get(report[report.length - 1]) ?? null) : null;
+  const reportModel = useMemo(
+    () =>
+      reportEv
+        ? eventReport(
+            reportEv,
+            REPORT_NAMES,
+            linkedOf(MAP.events, reportEv),
+            ALL_RELS.filter((r) => touchesEvent(r, reportEv)),
+          )
+        : null,
+    [reportEv],
+  );
+
+  /**
+   * 정보 표의 영토 이름 — 팝업을 닫고 지도에서 그 영토를 고른다 (설계서 L704). 검색
+   * 결과 위에서 열었으면 결과 화면도 닫는다. 그 영토가 기준일 지도에 없으면(검색
+   * 「상세」로 기준일 밖 사건을 연 경우) 보이는 분기로 기준일을 옮긴다 (4.2.2 와 같은 규칙)
+   */
+  const pickFromReport = (id: string) => {
+    setReport([]);
+    setResults(null);
+    moveFor((qq) => presentAt(qq).has(id));
+    goTab("map");
+    select({ kind: "territory", id, name: REPORT_NAMES.nameOf(id) });
+  };
+
+  /** 팝업의 관계 줄 — 관계 탭 ① 상태. 중심은 사건이 올라온 영토의 상대 쪽이다 (검색 관계 고르기와 같다) */
+  const relFromReport = (relId: string) => {
+    const rel = ALL_RELS.find((r) => r.id === relId);
+    if (!rel || !reportEv) return;
+    setReport([]);
+    setResults(null);
+    openRelation(rel, rel.from === reportEv.territoryId ? rel.to : rel.from);
   };
 
   /** 관계 탭 제목 옆 설명 (피그마 ⑦-8 · ⑦-8e · ⑦-8g, 설계서 4.3.3 ②) */
@@ -730,24 +889,7 @@ export default function Page() {
     return `중심 엔티티 ${terrName(center)} · 1단계 관계 ${relViews.length}`;
   };
 
-  /**
-   * 패널 [사건] 탭 (설계서 4.3.1 · 4.3.2 · 4.3.8). 영토는 그 영토, 행위자는 그
-   * 행위자가 올린 사건, 섬은 소속 영토 전부다 — `belongsTo` 가 셋을 같이 가른다.
-   * 선택이 없으면 지도에 있는 영토 전부다 (피그마 ⑦-1 탭 「사건 N」). 행마다 영토
-   * 이름이 붙는 것은 섬과 같다
-   */
-  const eventIds: Set<string> =
-    selection.kind === "territory"
-      ? new Set([selection.id])
-      : selection.kind === "island"
-        ? new Set(layout.territories.filter((t) => t.islandKey === selection.key).map((t) => t.territoryId))
-        : present;
-  const eventList = eventsIn(
-    MAP.events,
-    d,
-    period,
-    (e) => belongsTo(e, eventIds) && (!actorFilter || e.actorTerritoryId === actorFilter),
-  );
+  /** 패널 [사건] 탭 본문. 목록(`eventList`)은 지도 선이 같이 보느라 위에서 만든다 */
   const whereOf = (e: Ev) =>
     e.actorTerritoryId && terr.has(e.actorTerritoryId)
       ? `${terrName(e.actorTerritoryId)} → ${terrName(e.territoryId)}`
@@ -763,6 +905,12 @@ export default function Page() {
       actor={actorFilter ? (ix.byId.get(actorFilter)?.name ?? actorFilter) : null}
       onClearActor={() => setActorFilter(null)}
       focus={focusEvent}
+      picked={pickedEvent}
+      onPick={setPickedEvent}
+      onOpen={openReport}
+      scamCount={scamCount}
+      hideScam={hideScam}
+      onHideScam={setHideScam}
     />
   );
 
@@ -938,6 +1086,7 @@ export default function Page() {
                 filter={filter}
                 onFilter={setFilter}
                 onPick={(h) => pickHit(h, results)}
+                onOpenEvent={openFromSearch}
               />
             ) : tab === "timeline" ? (
               <TimelineTab
@@ -967,7 +1116,11 @@ export default function Page() {
                 hint={
                   toast && selection.kind === "territory"
                     ? `검색 결과 영토 자동 선택 · 관련 섬 ${mapRel?.litIslands.size ?? 1}곳 표시`
-                    : undefined
+                    : liveEvent
+                      ? mapRel?.lines.length
+                        ? "선택한 사건의 관계선만 표시 중"
+                        : "선택한 사건에 이어진 관계선이 없습니다"
+                      : undefined
                 }
               />
             ) : tab === "relation" ? (
@@ -1047,6 +1200,7 @@ export default function Page() {
                   if (t) select({ kind: "territory", id, name: t.name });
                   goTab("map");
                 }}
+                onOpenEvent={openReport}
               />
             )}
 
@@ -1081,6 +1235,7 @@ export default function Page() {
               pair={relPair}
               onPairPick={pickFromPair}
               hiddenEst={relHiddenEst}
+              onOpenEvent={openReport}
             />
           ) : (
             <DetailPanel
@@ -1092,6 +1247,7 @@ export default function Page() {
               links={links}
               events={eventsBody}
               eventBadge={eventList.length}
+              onOpenEvent={openReport}
               onPickTerritory={(id) => {
                 const t = terr.get(id);
                 if (t) select({ kind: "territory", id, name: t.name });
@@ -1101,6 +1257,17 @@ export default function Page() {
         </div>
       </div>
 
+      {reportModel && (
+        <EventReport
+          model={reportModel}
+          canBack={report.length > 1}
+          onBack={() => setReport((s) => s.slice(0, -1))}
+          onClose={() => setReport([])}
+          onOpenLinked={(id) => setReport((s) => [...s, id])}
+          onPickTerritory={pickFromReport}
+          onOpenRel={relFromReport}
+        />
+      )}
     </div>
   );
 }
