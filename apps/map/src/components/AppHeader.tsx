@@ -8,9 +8,12 @@
  * 우리 몫이 아니거나 보류라서 갈 곳이 없다 (설계서 1.2, DEV.md 3-1).
  * 눌리지 않는다는 것이 보이게 흐리게 두고 `title` 로 까닭을 적었다.
  *
- * 검색창을 누르면 검색이 열린다 (설계서 4.2.2). 무엇을 찾을 수 있는지는
- * `SearchOverlay` 머리에 적어 두었다 — 지금은 엔티티 하나뿐이다.
+ * 검색창을 누르면 검색이 열린다 (설계서 4.2.2). 열린 검색 창은 `children` 으로
+ * 받아 검색창 자리에 겹쳐 놓는다 — 피그마 ⑦-10 처럼 그 자리에서 입력하고 아래로
+ * 목록이 펼쳐진다. 무엇을 찾을 수 있는지는 `SearchOverlay` 머리에 적어 두었다.
  */
+
+import type { ReactNode } from "react";
 
 import type { Web } from "@/lib/types";
 
@@ -31,6 +34,10 @@ export type AppHeaderProps = {
    * 화면에는 `UTC 2026-09-16 09:30` 꼴로 낸다 (설계서 4.2.1 예시)
    */
   generatedAt: string;
+  /** 검색창에 남겨 둘 글. 검색 결과로 이동했을 때 그 검색어다 (피그마 ⑦-10b) */
+  query?: string;
+  /** 열린 검색 창. 검색창 자리에 겹친다 */
+  children?: ReactNode;
 };
 
 /** ISO 문자열을 `UTC 2026-09-16 09:30` 으로. 설계서 4.2.1 의 예시 형식이다 */
@@ -48,6 +55,8 @@ export default function AppHeader({
   current,
   generatedAt,
   onSearch,
+  query,
+  children,
 }: AppHeaderProps) {
   return (
     <header
@@ -109,21 +118,24 @@ export default function AppHeader({
         {utcLabel(generatedAt)}
       </time>
 
-      <button
-        type="button"
-        onClick={onSearch}
-        className="flex h-[34px] w-[320px] items-center gap-s2 rounded-full border border-edge-input bg-input px-s4 text-left"
-      >
-        <span aria-hidden className="text-[12px] text-disabled">
-          ⌕
-        </span>
-        <span className="flex-1 text-[12px] text-disabled">
-          노드 · 키워드 · 엔티티 검색
-        </span>
-        <kbd className="rounded bg-kbd px-s2 py-[2px] text-[10px] text-label">
-          ⌘K
-        </kbd>
-      </button>
+      <div className="relative h-[34px] w-[320px]">
+        <button
+          type="button"
+          onClick={onSearch}
+          className="flex size-full items-center gap-s2 rounded-full border border-edge-input bg-input px-s4 text-left"
+        >
+          <span aria-hidden className="text-[12px] text-disabled">
+            ⌕
+          </span>
+          <span className={"flex-1 truncate text-[12px] " + (query ? "text-body" : "text-disabled")}>
+            {query || "노드 · 키워드 · 엔티티 검색"}
+          </span>
+          <kbd className="rounded bg-kbd px-s2 py-[2px] text-[10px] text-label">
+            ⌘K
+          </kbd>
+        </button>
+        {children}
+      </div>
     </header>
   );
 }
