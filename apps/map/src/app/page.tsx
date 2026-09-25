@@ -33,7 +33,9 @@ import { DEFAULT_PERIOD, eventTitle, eventsIn, type Period } from "@/lib/events"
 import { allIslandPairs, belongsTo, ecosystemView, islandView, territoryView } from "@/lib/panel";
 import type { Ev } from "@/lib/types";
 import {
+  backLabel,
   defaultCenter,
+  expandHops,
   islandPairs,
   josa,
   linkRows,
@@ -43,6 +45,7 @@ import {
   relationsAt,
   touching,
   withActivity,
+  withEstimated,
   type IslandPairRow,
   type RelView,
 } from "@/lib/relations";
@@ -154,8 +157,13 @@ export default function Page() {
   const [focusEvent, setFocusEvent] = useState<string | null>(null);
   // 관계 탭 (설계서 4.3.6)
   const [relCenter, setRelCenter] = useState<string | null>(null);
+  // 고른 관계선(근거 화면 ⑦-8e)과 강조한 관계선(4.3.3 ① 이동 직후)은 따로 든다
   const [relSel, setRelSel] = useState<string | null>(null);
+  const [relHi, setRelHi] = useState<string | null>(null);
   const [relPair, setRelPair] = useState<RelPair | null>(null);
+  // 피그마 ⑦-8g 「추정 관계 포함」 · 「2단계로 확장」. 관계 탭에 들어올 때마다 기본값이다
+  const [relEst, setRelEst] = useState(true);
+  const [relDepth, setRelDepth] = useState<1 | 2>(1);
   const [origin, setOrigin] = useState<Origin | null>(null);
 
   const d = useMemo(() => quarterEnd(ym, TODAY), [ym]);
@@ -173,6 +181,8 @@ export default function Page() {
   /** 기준일에 그릴 관계. 세 화면이 이 목록 하나를 쓴다 (설계서 3.9) */
   const present = useMemo(() => new Set(layout.territories.map((t) => t.territoryId)), [layout]);
   const rels = useMemo(() => relationsAt(ALL_RELS, MAP.events, d, present), [d, present]);
+  /** 관계 탭이 그리는 관계. 「추정 관계 포함」을 끄면 추정을 뺀다 (피그마 ⑦-8g) */
+  const relShown = useMemo(() => withEstimated(rels, relEst), [rels, relEst]);
   const terr = useMemo(() => new Map(layout.territories.map((t) => [t.territoryId, t])), [layout]);
   const terrName = useCallback((id: string) => terr.get(id)?.name ?? id, [terr]);
   const islandOf = useCallback((id: string) => terr.get(id)?.islandKey, [terr]);
@@ -259,7 +269,11 @@ export default function Page() {
   /**
    * 관계 탭 중심. 고른 영토가 없거나, 기준일을 옮겨 그 영토가 지도에서 빠졌으면
    * **관계가 가장 많은 영토**다 (설계서 4.3.6). 「기준일 옮기기」 뒤에도 이것으로
-   * 중심이 선다 — 전에는 비어 있는 채로 남아 그래프가 안 그려졌다
+   * 중심이 선다 — 전에는 비어 있는 채로 남아 그래프가 안 그려졌다.
+   *
+   * 기본 중심은 추정을 뺀 목록이 아니라 **관계 전부**로 고른다. 「추정 관계 포함」을
+   * 끄고 켤 때 중심이 옮겨 다니면 무엇이 가려졌는지 알 수 없다 (관계 없음 ⑦-8g 가
+   * 「추정 관계를 포함하면 연결 후보를 확인할 수 있습니다」로 알린다)
    */
   const center = useMemo(
     () =>
@@ -296,7 +310,10 @@ export default function Page() {
 
   const clearRel = () => {
     setRelSel(null);
+    setRelHi(null);
     setRelPair(null);
+    setRelEst(true);
+    setRelDepth(1);
     setOrigin(null);
   };
 
@@ -308,6 +325,7 @@ export default function Page() {
     setMapView(o.mapView);
     setYm(o.ym);
     setRelSel(null);
+    setRelHi(null);
     setRelPair(null);
     setOrigin(null);
     setPlaying(false);
@@ -331,13 +349,20 @@ export default function Page() {
     return () => window.removeEventListener("popstate", onPop);
   }, [restore]);
 
-  const enterFromLinks = (next: { center: string | null; sel: string | null; pair: RelPair | null }) => {
+  /**
+   * 관계 탭으로 넘어간다. 넘겨 온 관계는 **강조만** 한다 (4.3.3 ① 표 — 선과 라벨
+   * 테두리, 연혁 강조와 스크롤). 근거 화면은 그 선이나 「근거 보기」를 눌러야 뜬다
+   */
+  const enterFromLinks = (next: { center: string | null; hi: string | null; pair: RelPair | null }) => {
     seqRef.current += 1;
     const seq = `${OPENED_AT}-${seqRef.current}`;
     setOrigin({ seq, tab, selection, panelTab, linkSel, mapView, ym });
     setRelCenter(next.center);
-    setRelSel(next.sel);
+    setRelSel(null);
+    setRelHi(next.hi);
     setRelPair(next.pair);
+    setRelEst(true);
+    setRelDepth(1);
     setTab("relation");
     setPlaying(false);
     try {
@@ -350,12 +375,26 @@ export default function Page() {
   /** [연결] 행 더블클릭 — 중심은 상대 영토, 그 관계를 강조한다 (4.3.3 ①) */
   const openRel = (v: RelView) => {
     if (selection.kind !== "territory") return;
-    enterFromLinks({ center: partnerOf(v, selection.id), sel: v.rel.id, pair: null });
+    enterFromLinks({ center: partnerOf(v, selection.id), hi: v.rel.id, pair: null });
   };
 
   /** 유형 간 행 더블클릭 — 섬 간 보기 (4.3.3 ②) */
   const openPair = (r: IslandPairRow) => {
-    enterFromLinks({ center: null, sel: null, pair: { from: r.from, to: r.to } });
+    enterFromLinks({ center: null, hi: null, pair: { from: r.from, to: r.to } });
+  };
+
+  /** 섬 간 보기에서 고르면 보통 관계 탭(①)이다. 중심은 도착 영토, 그 관계를 강조한다 (4.3.3 ②) */
+  const pickFromPair = (v: RelView) => {
+    setRelPair(null);
+    setRelCenter(v.rel.to);
+    setRelSel(null);
+    setRelHi(v.rel.id);
+  };
+
+  /** 관계 탭 안에서 관계선을 고르거나 푼다. 고르면 들어올 때 건 강조는 다 쓴 것이다 */
+  const pickRel = (id: string | null) => {
+    setRelSel(id);
+    setRelHi(null);
   };
 
   const back = () => {
@@ -444,11 +483,21 @@ export default function Page() {
    * 지도를 새로 계산해 중심 영토의 관계가 실제로 그려지는지 본다.
    */
   const relViews = relPair
-    ? pairViews(rels, islandOf, relPair.from, relPair.to)
+    ? pairViews(relShown, islandOf, relPair.from, relPair.to)
     : center
-      ? touching(rels, center)
+      ? touching(relShown, center)
       : [];
   const relEmpty = tab === "relation" && !relPair && relViews.length === 0;
+  /** 1단계 · 2단계 노드와 선 (피그마 ⑦-8g 「2단계로 확장」). 섬 간 보기면 없다 */
+  const relHops = !relPair && center ? expandHops(relShown, center, relDepth, terrName) : null;
+  /**
+   * 관계 탭 그래프에 그린 관계. **고른 관계선은 이 안에서만 산다** — 2단계에서 고른
+   * 바깥 선은 1단계로 좁히면 판에서 사라지므로 패널 근거 화면도 같이 걷힌다
+   */
+  const relDrawn = relHops ? relHops.views : relViews;
+  /** 「추정 관계 포함」을 꺼서 가린 중심의 관계 수. 관계 없음 안내가 갈린다 (⑦-8g) */
+  const relHiddenEst =
+    !relEst && center && !relPair ? touching(rels, center).filter((v) => v.rel.confidence === "estimated").length : 0;
 
   /**
    * 타임라인 시점. 설계서 4.3.7 이 「연도 칩 클릭 시 그 해 9월로 이동」이라
@@ -464,11 +513,12 @@ export default function Page() {
     for (const q of quarters) {
       if (q === ym) continue;
       const qd = quarterEnd(q, TODAY);
-      const here = relationsAt(ALL_RELS, MAP.events, qd, presentIn(qd));
+      // 추정을 가렸으면 그 분기에서도 가린 채로 본다 — 옮겨 간 뒤 또 비면 안 된다
+      const here = withEstimated(relationsAt(ALL_RELS, MAP.events, qd, presentIn(qd)), relEst);
       if (center ? touching(here, center).length > 0 : here.length > 0) return q;
     }
     return null;
-  }, [relEmpty, center, ym, quarters]);
+  }, [relEmpty, center, ym, quarters, relEst]);
 
   /**
    * 단축키 둘.
@@ -493,8 +543,10 @@ export default function Page() {
         setResults(null);
         return;
       }
-      if (tab === "relation") setRelSel(null);
-      else {
+      if (tab === "relation") {
+        setRelSel(null);
+        setRelHi(null);
+      } else {
         setSelection({ kind: "none" });
         setLinkSel(null);
       }
@@ -608,6 +660,7 @@ export default function Page() {
       if (tab === "relation") {
         setRelCenter(id);
         setRelSel(null);
+        setRelHi(null);
         setRelPair(null);
       } else {
         goTab("map");
@@ -642,12 +695,16 @@ export default function Page() {
       const to = quarterFor(quarters, ym, (qq) =>
         relationsAt([rel], MAP.events, quarterEnd(qq, TODAY), presentAt(qq)).length > 0,
       );
+      // 4.3.3 ①과 같은 상태 — 그 관계를 강조만 한다 (4.2.2 「관계」 결과 선택)
       if (tab === "relation") {
         setRelCenter(center);
-        setRelSel(rel.id);
+        setRelSel(null);
+        setRelHi(rel.id);
         setRelPair(null);
+        // 가려 둔 추정 관계를 골랐으면 다시 보인다. 강조할 선이 판에 있어야 한다
+        if (rel.confidence === "estimated") setRelEst(true);
       } else {
-        enterFromLinks({ center, sel: rel.id, pair: null });
+        enterFromLinks({ center, hi: rel.id, pair: null });
       }
       if (to) setYm(to);
       moved = to;
@@ -661,12 +718,16 @@ export default function Page() {
       const n = relViews.reduce((s, v) => s + v.count, 0);
       return `섬 간 보기 · ${islandInfo(relPair.from).name} → ${islandInfo(relPair.to).name} · 엔티티 ${relViews.length}쌍 · ${n}건`;
     }
-    const s = relViews.find((v) => v.rel.id === relSel);
+    // 2단계로 넓히면 중심에 닿지 않은 선도 고를 수 있어 그린 관계 전부에서 찾는다
+    const s = relDrawn.find((v) => v.rel.id === relSel);
     if (s) return `${terrName(s.rel.from)} → ${terrName(s.rel.to)} 관계선 선택됨`;
     if (!center) return "이 기준일에 기록된 관계가 없습니다";
-    return relViews.length
-      ? `중심 엔티티 ${terrName(center)} · 1단계 관계 ${relViews.length}`
-      : `중심 엔티티 ${terrName(center)} · 관계 0`;
+    if (!relViews.length) return `중심 엔티티 ${terrName(center)} · 관계 0`;
+    if (relHops && relDepth === 2) {
+      const n2 = relHops.hop2.length + relHops.rest;
+      return `중심 엔티티 ${terrName(center)} · 2단계 확장 · 1단계 ${relHops.hop1.length}곳 · 2단계 ${n2}곳`;
+    }
+    return `중심 엔티티 ${terrName(center)} · 1단계 관계 ${relViews.length}`;
   };
 
   /**
@@ -912,39 +973,43 @@ export default function Page() {
             ) : tab === "relation" ? (
               <RelationTab
                 layout={layout}
-                views={rels}
+                views={relShown}
                 center={center}
                 onCenter={(id) => {
                   setRelCenter(id);
                   setRelSel(null);
+                  setRelHi(null);
                   setRelPair(null);
                 }}
                 selected={relSel}
-                onSelect={setRelSel}
+                onSelect={pickRel}
+                highlight={relHi}
                 pair={relPair}
                 onClearPair={() => {
                   setRelPair(null);
                   setRelCenter(defaultCenter(rels, terrName));
                   setRelSel(null);
+                  setRelHi(null);
                 }}
-                onPairPick={(v) => {
-                  // 섬 간 보기에서 고르면 보통 관계 탭(①)이다. 중심은 도착 영토
-                  setRelPair(null);
-                  setRelCenter(v.rel.to);
-                  setRelSel(v.rel.id);
-                }}
+                onPairPick={pickFromPair}
+                // 출발 화면이 있으면 고른 것이 없어도 돌아가기를 띄운다 (4.3.3 ① · 4.2.2).
+                // 고른 것이 없었으면 단추 글이 출발 탭 이름이다
                 origin={
-                  origin && origin.selection.kind === "territory"
-                    ? { id: origin.selection.id, name: origin.selection.name }
-                    : origin && origin.selection.kind === "island"
-                      ? { id: "", name: origin.selection.name }
-                      : origin
-                        ? { id: "", name: "다크웹 생태계" }
-                        : null
+                  origin
+                    ? {
+                        id: origin.selection.kind === "territory" ? origin.selection.id : null,
+                        label: backLabel(origin.tab, origin.selection.kind === "none" ? null : origin.selection.name),
+                      }
+                    : null
                 }
                 onBack={back}
                 moveTo={moveTo}
                 onMove={() => moveTo && setYm(moveTo)}
+                est={relEst}
+                onEst={setRelEst}
+                depth={relDepth}
+                onDepth={setRelDepth}
+                hiddenEst={relHiddenEst}
               />
             ) : (
               <EntityTab
@@ -1008,15 +1073,14 @@ export default function Page() {
               onToggle={setPanelOpen}
               layout={layout}
               views={relViews}
+              pool={relDrawn}
               center={center}
               selected={relSel}
-              onSelect={setRelSel}
+              onSelect={pickRel}
+              highlight={relHi}
               pair={relPair}
-              onPairPick={(v) => {
-                setRelPair(null);
-                setRelCenter(v.rel.to);
-                setRelSel(v.rel.id);
-              }}
+              onPairPick={pickFromPair}
+              hiddenEst={relHiddenEst}
             />
           ) : (
             <DetailPanel

@@ -11,9 +11,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  backLabel,
   centerChips,
+  confOfVerdict,
   connectedIslandCount,
   defaultCenter,
+  expandHops,
   historyOrder,
   historyText,
   islandPairs,
@@ -27,6 +30,7 @@ import {
   selectedText,
   summaryText,
   withActivity,
+  withEstimated,
 } from './relations.ts';
 
 /* ── 재료 ─────────────────────────────────────────────────────── */
@@ -211,4 +215,110 @@ test('행위자는 활동 관계만 본다 — [연결] 목록 · 배지 · 지�
   assert.deepEqual(linksOf(views, 'a1', true).map((v) => v.rel.kind), ['activity']);
   assert.equal(linksOf(views, 'a1', false).length, 2, '행위자가 아니면 모든 종류');
   assert.equal(partnerCount(linksOf(views, 'a1', true), 'a1'), 1);
+});
+
+/* ── 관계 탭 들어오기 · 관계 없음 (설계서 4.3.3 · 4.3.6, 피그마 ⑦-8g) ── */
+
+/** 기준일 계산을 거치지 않은 관계 한 줄. 그래프 모양만 볼 때 쓴다 */
+function view(id, from, to, count, confidence = 'confirmed') {
+  return {
+    rel: { id, from, to, kind: 'affiliate', confidence, evidence: ['x'] },
+    count, first: null, last: null, evidence: [], fromRegistry: false,
+  };
+}
+
+test('출발 영토도 칩 줄에 둔다 — 점을 찍을 칩이 있어야 한다 (설계서 4.3.3 ①)', () => {
+  const { views } = sample();
+  // 건수 합 상위 3: f1 · r1 · t1
+  assert.deepEqual(centerChips(views, 'f1', nameOf, 3, 'r2'), ['r2', 'f1', 'r1', 't1'], '출발이 상위 밖이면 앞에 붙인다');
+  assert.deepEqual(centerChips(views, 'f2', nameOf, 3, 'r2'), ['f2', 'r2', 'f1', 'r1', 't1'], '중심 다음 자리');
+  assert.deepEqual(centerChips(views, 'f1', nameOf, 3, 'r1'), ['f1', 'r1', 't1'], '상위 안이면 그대로');
+  assert.deepEqual(centerChips(views, 'r2', nameOf, 3, 'r2'), ['r2', 'f1', 'r1', 't1'], '중심과 같으면 한 번만');
+});
+
+test('돌아가기 단추 — 고른 것이 없으면 출발 탭 이름 (설계서 4.3.3 ① · 4.2.2)', () => {
+  assert.equal(backLabel('map', 'Qilin'), 'Qilin 연결로 돌아가기');
+  assert.equal(backLabel('entity', '포럼'), '포럼 연결로 돌아가기');
+  assert.equal(backLabel('map', null), '지도로 돌아가기');
+  assert.equal(backLabel('entity', null), '엔티티로 돌아가기');
+  assert.equal(backLabel('timeline', null), '타임라인으로 돌아가기');
+});
+
+test('사건 판정 → 신뢰도 칩. 허위는 칩이 없다 (설계서 2.3)', () => {
+  assert.equal(confOfVerdict('confirmed'), 'confirmed');
+  assert.equal(confOfVerdict('high'), 'high');
+  assert.equal(confOfVerdict('false'), null);
+  for (const v of ['unverified', 'unknown', 'low']) assert.equal(confOfVerdict(v), 'estimated', v);
+});
+
+test('추정 관계 포함을 끄면 추정 신뢰도 관계만 빠진다 (피그마 ⑦-8g)', () => {
+  const { views } = sample();
+  assert.equal(withEstimated(views, true).length, views.length);
+  assert.deepEqual(withEstimated(views, false).map((v) => v.rel.id), ['REL-1', 'REL-3'], '확인됨 · 높은 신뢰는 남는다');
+});
+
+test('1단계는 중심에 닿은 관계뿐, 2단계는 이웃의 이웃을 더한다 (설계서 4.3.6, 피그마 ⑦-8g)', () => {
+  const { views } = sample();
+
+  // f1 중심: 1단계 넷. 건수가 같은 Play(r2) · PwnForums(f2) 는 이름 순
+  const one = expandHops(views, 'f1', 1, nameOf);
+  assert.deepEqual(one.hop1, ['r1', 't1', 'r2', 'f2']);
+  assert.deepEqual(one.hop2, []);
+  assert.deepEqual(one.views.map((v) => v.rel.id).sort(), ['REL-1', 'REL-2', 'REL-3', 'REL-4'], '1단계끼리 선(REL-5)은 안 그린다');
+
+  // f1 은 모두와 이어져 2단계로 넓힐 곳이 없다. 대신 1단계끼리 선이 든다
+  const fTwo = expandHops(views, 'f1', 2, nameOf);
+  assert.deepEqual(fTwo.hop2, []);
+  assert.ok(fTwo.views.some((v) => v.rel.id === 'REL-5'), '1단계끼리 선');
+
+  // r2 중심: 1단계 f1 하나, 2단계는 f1 의 이웃 셋. 건수 합 순
+  const two = expandHops(views, 'r2', 2, nameOf);
+  assert.deepEqual(two.hop1, ['f1']);
+  assert.deepEqual(two.hop2, ['r1', 't1', 'f2']);
+  assert.deepEqual([...two.via.values()], ['f1', 'f1', 'f1']);
+  assert.equal(two.rest, 0);
+  assert.ok(!two.views.some((v) => v.rel.id === 'REL-5'), '2단계끼리 선(r1 → t1)은 중심에서 세 걸음이라 뺀다');
+  assert.deepEqual(two.views.map((v) => v.rel.id).sort(), ['REL-1', 'REL-2', 'REL-3', 'REL-4']);
+
+  // 자리가 모자라면 건수 합이 큰 곳만 남기고 뺀 수를 적는다. 뺀 곳의 선도 빠진다
+  const cut = expandHops(views, 'r2', 2, nameOf, 2);
+  assert.deepEqual(cut.hop2, ['r1', 't1']);
+  assert.equal(cut.rest, 1);
+  assert.ok(!cut.views.some((v) => v.rel.id === 'REL-4'));
+
+  // 관계가 없는 영토는 2단계로 넓혀도 비어 있다 — 관계 없음 화면의 「2단계로 확장」이 할 일이 없다
+  const none = expandHops(views, 'nowhere', 2, nameOf);
+  assert.deepEqual([none.hop1, none.hop2, none.views], [[], [], []]);
+});
+
+test('2단계 영토는 건수가 가장 큰 1단계 영토 곁에 선다', () => {
+  const views = [
+    view('A', 'c', 'a', 5),
+    view('B', 'c', 'b', 1),
+    view('XA', 'x', 'a', 1),
+    view('XB', 'x', 'b', 3),
+    view('YA', 'y', 'a', 2),
+    view('YB', 'y', 'b', 2),
+  ];
+  const h = expandHops(views, 'c', 2, (id) => id);
+  assert.deepEqual(h.hop1, ['a', 'b']);
+  assert.deepEqual(h.hop2, ['x', 'y'], '둘 다 건수 합 4 — 이름 순');
+  assert.equal(h.via.get('x'), 'b', '건수 3 쪽');
+  assert.equal(h.via.get('y'), 'a', '같으면 1단계 차례가 앞선 쪽');
+});
+
+test('관계 없음 요약 — 가린 추정 관계뿐이면 피그마 ⑦-8g 문안', () => {
+  assert.equal(
+    summaryText('Exploit.in', [], 0, 0, 2),
+    'Exploit.in은 아직 확인된 관계가 없습니다. 추정 관계를 포함하면 연결 후보를 확인할 수 있습니다.',
+  );
+  assert.equal(summaryText('Exploit.in', [], 0, 0), 'Exploit.in은 이 기준일에 기록된 관계가 없습니다.');
+});
+
+test('중심에 닿지 않은 선을 고르면 중심의 관계와 견주지 않는다 (2단계 확장)', () => {
+  const ca = view('CA', 'c', 'a', 1);
+  const xa = view('XA', 'x', 'a', 9);
+  const text = selectedText(xa, 'c', [ca], (id) => id);
+  assert.match(text, /^선택한 관계 x → a는 제휴자 모집 9건입니다\./);
+  assert.doesNotMatch(text, /가장 많습니다/);
 });
