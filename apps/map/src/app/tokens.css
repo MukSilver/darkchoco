@@ -449,6 +449,42 @@
 }
 
 /*
+ * 흐린 칸 — 영토나 섬을 골랐을 때 진하게 남지 않은 칸 (설계서 4.2.3, 피그마
+ * ⑦-2 · ⑦-11b · ⑦-3 · ⑦-10b, 시트 `11 / 06 DW/Hex v2` 의 Dim).
+ *
+ * 전에는 섬 색을 25% 불투명도로 깔았다. 피그마는 불투명한 색 하나로 칠한다.
+ *
+ * **라이트 블랙은 랜섬웨어 섬만 어두운 붉은색이고 나머지 셋은 회색이다.** 고른 영토가
+ * 어느 섬이든 그렇다 — Qilin 을 고른 ⑦-11b · ⑦-3 에서도, BreachForums 를 고른 ⑦-10b
+ * 에서도, 포럼 섬을 고른 ⑦-2 에서도 흐린 랜섬웨어 칸은 #4c1616 이고 흐린 포럼 ·
+ * 텔레그램 칸은 #37393d 다. 「고른 섬만 제 색으로 어둡게」가 아니라 섬마다 정해진
+ * 흐림색이다. 값은 네 화면 픽셀이다.
+ *
+ * 기타 섬은 ⑦-11b · ⑦-3 에서 #3d3f44, ⑦-2 · ⑦-10b 처럼 섬째 꺼졌을 때 #37383c 로
+ * 한 끗 다르다(시트의 Dim · Inactive). 눈에 안 갈리는 차라 Dim 값 하나로 둔다.
+ * 화이트 판은 시트 Dim 이 원색 `dim` 과 같다(⑦-11b 흰 판 픽셀도 같다).
+ */
+:root {
+  --t-island-forum-dim: var(--p-forum-dim);
+  --t-island-ransomware-dim: var(--p-ransomware-dim);
+  --t-island-telegram-dim: var(--p-telegram-dim);
+  --t-island-actor-dim: var(--p-etc-dim);
+}
+[data-mode="black"] {
+  --t-island-forum-dim: #37393d;
+  --t-island-ransomware-dim: #4c1616;
+  --t-island-telegram-dim: #37393d;
+  --t-island-actor-dim: #3d3f44;
+}
+/* 네온 판도 같은 얼개다 (`05_⑦ 다크 네온` ⑦-11b 픽셀) */
+[data-mode="neon"] {
+  --t-island-forum-dim: #16284c;
+  --t-island-ransomware-dim: #4c1616;
+  --t-island-telegram-dim: #16284c;
+  --t-island-actor-dim: #1c2e53;
+}
+
+/*
  * 원색 팔레트. 모드가 없다.
  *
  * 다크웹 섬은 네 갈래 값을 쓴다.
