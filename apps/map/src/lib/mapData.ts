@@ -14,7 +14,7 @@
 import raw from "@/data/map.json";
 import { DARK_ISLANDS } from "./islands";
 import { SAMPLE } from "./sample";
-import type { Ev, MapData, Relation, Territory } from "./types";
+import type { ActorInfo, Ev, MapData, Relation, Territory } from "./types";
 
 const baked = raw as unknown as Omit<MapData, "islands"> & {
   islands?: MapData["islands"];
@@ -45,13 +45,48 @@ function pickTerritory(t: Territory): Territory {
     ...(typeof t.posts === "number" ? { posts: t.posts } : {}),
     ...(typeof t.threads === "number" ? { threads: t.threads } : {}),
     ...(t.since ? { since: t.since } : {}),
+    ...(t.islandId === "ACTOR" && t.actor ? pickActor(t.actor) : {}),
   };
+}
+
+/** 행위자 DB 역할 선택지 (굽기 `ROLE_VALUES` 와 같게) */
+const ROLES = new Set(["판매자", "운영자", "해킹 그룹", "재배포", "중개·보증", "랜섬웨어 그룹"]);
+
+/** 행위자 정보 (설계서 4.3.8). 굽기의 모양 검사를 여기서 한 번 더 한다 */
+function pickActor(a: ActorInfo): { actor?: ActorInfo } {
+  const out: ActorInfo = {};
+  const roles = (a.roles ?? []).filter((r) => ROLES.has(r));
+  if (roles.length) out.roles = roles;
+  const countries = (a.countries ?? []).filter((c) => /^[가-힣A-Za-z ]{1,12}$/.test(c));
+  if (countries.length) out.countries = countries;
+  if (typeof a.firstSeen === "string" && /^\d{4}-\d{2}-\d{2}$/.test(a.firstSeen)) out.firstSeen = a.firstSeen;
+  if (typeof a.deals === "string" && a.deals && a.deals.length <= 80 && !/[@＠]|\d{11,}/.test(a.deals)) out.deals = a.deals;
+  // 파이썬 `\w` 처럼 한글도 받는다 (굽기 `RE_HANDLE_SHAPE`)
+  const names = (a.otherNames ?? []).filter((x) => /^[\p{L}\p{N}_-]{2,32}$/u.test(x));
+  if (names.length) out.otherNames = names;
+  return Object.keys(out).length ? { actor: out } : {};
 }
 
 /** 사건 종류 칩 값 (설계서 2.3). 굽기가 이것 밖의 값을 내면 안 받는다 */
 const EV_KINDS = new Set<string>(["data_post", "claim", "sale", "access_sale", "repost", "official"]);
 /** 규모 단위. 굽기의 `claim_size` 가 내는 값뿐이다 */
 const SIZE_UNITS = new Set(["TB", "GB", "MB", "KB", "억", "만", "건"]);
+/** 공식 발표 사고 선택지 (굽기 `LEAK_ITEMS` · `CONFIRM_VALUES` · `SOURCE_KINDS` 와 같게) */
+const LEAK_ITEMS = new Set(["이름", "이메일", "전화", "계정", "주소", "카드금융", "주민번호", "기타"]);
+const CONFIRMS = new Set(["조직 공식 발표", "게시글만", "언론 보도", "규제기관 확정", "연구자 발견"]);
+const SOURCE_KINDS = new Set(["언론 보도", "보안업체", "기타", "기업 공지", "개인정보보호위원회", "한국인터넷진흥원"]);
+
+/** 공식 발표 사고 칸 (설계서 4.3.4). 공식 발표 사건에만 받는다 */
+function pickOfficial(e: Ev): Partial<Ev> {
+  if (e.kind !== "official") return {};
+  const out: Partial<Ev> = {};
+  if (typeof e.occurredAt === "string" && /^\d{4}-\d{2}-\d{2}$/.test(e.occurredAt)) out.occurredAt = e.occurredAt;
+  const items = (e.leakItems ?? []).filter((x) => LEAK_ITEMS.has(x));
+  if (items.length) out.leakItems = items;
+  if (e.confirm && CONFIRMS.has(e.confirm)) out.confirm = e.confirm;
+  if (e.sourceKind && SOURCE_KINDS.has(e.sourceKind)) out.sourceKind = e.sourceKind;
+  return out;
+}
 
 /**
  * 제목 재료 (2026-09-25 최현서 결정). **분류 값만 받는다** — 국가는 두 글자
@@ -82,6 +117,7 @@ function pickEv(e: Ev): Ev {
     ...(e.actorTerritoryId ? { actorTerritoryId: e.actorTerritoryId } : {}),
     ...(e.dateSubstituted ? { dateSubstituted: true } : {}),
     ...pickTitleBits(e),
+    ...pickOfficial(e),
   };
 }
 

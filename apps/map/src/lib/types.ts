@@ -90,6 +90,23 @@ export type Territory = {
    * 사건이 없는 명부 영토는 비워 두고, 이번 분기에만 나온다
    */
   since?: string | null;
+  /** 행위자 섬만. 행위자 DB 정보 칸 (설계서 4.3.8, 2026-09-26 최현서) */
+  actor?: ActorInfo;
+};
+
+/**
+ * 행위자 DB 정보 칸 — 행위자 패널 [개요] (설계서 4.3.8).
+ *
+ * 역할 · 국가는 선택지, 처음 본 날은 날짜다. 다루는 것과 다른 이름은 사람이 쓰는
+ * 칸이라 굽기가 조직명 대조 · 값 훑기 · 핸들 모양 검사를 통과한 것만 싣는다
+ * (`bake.py` `actor_info`). 다른 이름은 검색도 찾는다 (4.2.2)
+ */
+export type ActorInfo = {
+  roles?: string[];
+  countries?: string[];
+  firstSeen?: string;
+  deals?: string;
+  otherNames?: string[];
 };
 
 /**
@@ -152,6 +169,14 @@ export type Ev = {
   industry?: string;
   sizeValue?: number;
   sizeUnit?: string;
+  /**
+   * 공식 발표 사고(유출 사고 DB)만 (설계서 4.3.4). 사고 시점, 유출 항목, 외부 확인,
+   * 출처 종류. 넷 다 날짜나 선택지다. **조직명과 출처 링크는 안 싣는다** (2026-09-26)
+   */
+  occurredAt?: string;
+  leakItems?: string[];
+  confirm?: string;
+  sourceKind?: string;
 };
 
 /**
