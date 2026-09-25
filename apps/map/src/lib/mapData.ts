@@ -105,6 +105,10 @@ function pickRelations(
       kind: r.kind,
       confidence: r.confidence,
       evidence: (r.evidence ?? []).filter((x) => evs.has(x)),
+      // 명부 「연결된 곳」 원문 (설계서 4.3.6). 근거가 없는 관계에만 뜻이 있다
+      ...(typeof r.note === "string" && r.note && !(r.evidence ?? []).length
+        ? { note: r.note.slice(0, 400) }
+        : {}),
     }));
 }
 

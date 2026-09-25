@@ -189,6 +189,12 @@ export type Relation = {
   confidence: Confidence;
   /** 근거 사건 id 들. 기준일에 지도에 든 것만 건수가 된다 (설계서 3.9) */
   evidence: string[];
+  /**
+   * 근거 사건이 없는 관계선의 명부 「연결된 곳」 원문 (설계서 4.3.6). 두 영토의
+   * 그 칸에서 상대 이름이 든 항목만 굽기가 골랐다. 가해 쪽 주소가 들 수 있다
+   * (2026-09-25 최현서 결정). 피해 조직 이름이 든 항목은 굽기가 뺐다
+   */
+  note?: string;
 };
 
 export type RelationKind =
