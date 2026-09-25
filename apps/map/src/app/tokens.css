@@ -377,6 +377,26 @@
 }
 
 /*
+ * 관계 종류 일곱 (설계서 2.3 · 4.3.6 「관계 종류별 색」).
+ *
+ * `08_⑦-8 관계 탭 (BreachForums · 관계 4)` 의 범례 점에서 뽑았다. 구성 막대와
+ * 선택한 관계선도 같은 값이다. 시안이 라이트 블랙 판 하나라 모드를 안 나눈다.
+ *
+ * **활동만 우리가 정한 값이다.** 피그마 범례에 없다 — 설계서 5.3 이 「범례에
+ * 관계 종류 '활동' 추가」를 시안 할 일로 남겼다. 행위자 → 영토 관계라 행위자
+ * 섬 색을 쓴다.
+ */
+:root {
+  --t-rel-affiliate: #ff3333; /* Recruitment */
+  --t-rel-contact: #093ca3; /* Communication */
+  --t-rel-leak: #ff6e33; /* Data Leak */
+  --t-rel-access: #089b3f; /* Access Supply */
+  --t-rel-sale: #9b5608; /* Data Sale */
+  --t-rel-successor: #8333ff; /* Successor */
+  --t-rel-activity: var(--t-island-actor);
+}
+
+/*
  * 원색 팔레트. 모드가 없다.
  *
  * 다크웹 섬은 네 갈래 값을 쓴다.

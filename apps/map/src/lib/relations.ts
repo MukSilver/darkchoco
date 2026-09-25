@@ -88,6 +88,27 @@ export const CONF_DASH: Record<Confidence, string> = {
   estimated: "2 4",
 };
 
+/**
+ * 근거 사건 목록의 판정 · 규모 이름 (설계서 2.5 · 3.2). 근거 목록은 사건
+ * 제목을 안 낸다 — 제목에 피해 조직 이름이 든다 (2026-09-23 결정). 그래서
+ * 날짜 · 판정 · 규모 · 올라온 곳만 보인다
+ */
+export const VERDICT_LABEL: Record<Ev["verdict"], string> = {
+  confirmed: "확인됨",
+  high: "신뢰성 높음",
+  unverified: "검증 전",
+  unknown: "미확인",
+  low: "신뢰성 낮음",
+  false: "허위",
+};
+
+export const SIZE_LABEL: Record<Ev["size"], string> = {
+  large: "규모 큼",
+  medium: "규모 중간",
+  small: "규모 작음",
+  unknown: "규모 모름",
+};
+
 /* ────────────────────────────────────────────────────────────────
  * 활동 관계
  * ──────────────────────────────────────────────────────────────── */
