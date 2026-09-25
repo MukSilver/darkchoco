@@ -609,17 +609,33 @@ def korean_count(seg: str) -> float | None:
     return total if found else None
 
 
+#: 랜섬 규모의 새 꼴 (본진 PR #45, 2026-09-25) — 「피해 월평균 M건 (최근 D일)」
+RE_MONTHLY = re.compile(r"피해\s*월평균\s*([\d,]+(?:\.\d+)?)\s*건\s*\(\s*최근\s*(\d+)\s*일\s*\)")
+
+
 def registry_size(island: str, text: str | None) -> dict[str, float]:
-    """명부 「규모」 칸의 **첫 줄**에서 활동도 원자료를 읽는다 (설계서 3.3).
+    """게시처 DB 「규모」 칸의 **첫 줄**에서 활동도 원자료를 읽는다 (설계서 3.3).
 
     포럼은 회원 · 게시물 · 스레드를 낱말로 찾아 따로 읽는다. 나머지 섬은 첫
     숫자 하나다 — 설계서 3.3 「숫자가 둘이면 앞의 것」. 텔레그램은 구독자 수,
     랜섬웨어는 피해 기업 수다. 못 읽으면 빈 사전을 돌려주고, 그 영토는 원자료가
     없어 지도에서 빠진다 (2.5).
+
+    **랜섬웨어는 두 꼴이 섞인다** (2026-09-25 최현서 결정). 조사기가 규모 줄을
+    「피해 기업 N (날짜 기준)」(N = 최근 여섯 달 피해 건수)에서 「피해 월평균 M건
+    (최근 D일) (날짜 기준)」(M = D일 건수 ÷ 6)으로 바꿨는데, D일 안에 피해가 없는
+    그룹은 규모를 안 써서 옛 줄이 그대로 남는다. 월평균을 그대로 읽으면 쉬는
+    그룹(옛 합계)이 활발한 그룹(월평균)보다 크게 그려진다. 그래서 월평균 줄은
+    **M × D ÷ 30** 으로 돌려 옛 꼴과 같은 단위(약 여섯 달 건수)로 읽는다.
     """
     if not text:
         return {}
     first = text.strip().split("\n", 1)[0]
+    if island == "RANSOMWARE":
+        m = RE_MONTHLY.search(first)
+        if m:
+            v = float(m.group(1).replace(",", "")) * int(m.group(2)) / 30
+            return {"raw": round(v, 1)} if v > 0 else {}
     if island == "FORUM":
         out: dict[str, float] = {}
         for key, label in FORUM_LABELS.items():
