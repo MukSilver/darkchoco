@@ -263,24 +263,59 @@ def test_실패하면_짧은_간격으로_다시_본다():
 
 
 def test_안쓴것은_차례를_안건드린다():
-    """준비가 안 돼 건너뛴 것은 성공도 실패도 아니다."""
+    """준비가 안 돼 건너뛴 것은 성공도 실패도 아니다.
+
+    dry 로 돌리면 여러판이 차례표를 아예 안 봐서 이 검사가 헛돈다.
+    그래서 실제로 돌리고, 그 대신 **채널 목록을 못 찾게** 해 둔다.
+
+    전에는 DARKCHOCO_CHANNELS 만 뺐다. 그러면 tg_preview 가
+    ~/.config/darkchoco/telegram_channels 로 물러나서, 그 파일이 있는
+    PC 에서는 채널마다 t.me 에 실제로 요청을 보냈다. 시험 한 번이
+    몇 분씩 걸렸다 (2026-09-26). 집 자리를 빈 폴더로 돌리고, 요청이
+    나가려 하면 잡아 둔다.
+    """
     from hub.sched import Sched
+
+    sys.path.insert(0, str(ROOT / "skills"))      # tg_preview 가 부르는 자리와 같게
+    try:
+        from collect import fetch
+    except ImportError:          # requests 가 없으면 Needs 가 먼저 건너뛴다
+        fetch = None
+
+    나간것 = []
+
+    def 막기(self, url, *a, **k):
+        나간것.append(url)
+        raise RuntimeError("시험이 밖에 요청을 보내려 했다")
 
     with tempfile.TemporaryDirectory() as d:
         db = Path(d) / "t.db"
-        옛 = os.environ.pop("DARKCHOCO_CHANNELS", None)
+        옛채널 = os.environ.pop("DARKCHOCO_CHANNELS", None)
+        옛집 = Path.__dict__["home"]
+        Path.home = classmethod(lambda cls: Path(d))
+        if fetch:
+            옛get = fetch.Fetcher.get
+            fetch.Fetcher.get = 막기
         try:
-            runner.여러판(["tg-preview"], db=db)
+            결과 = runner.여러판(["tg-preview"], db=db)
         finally:
-            if 옛 is not None:
-                os.environ["DARKCHOCO_CHANNELS"] = 옛
+            if fetch:
+                fetch.Fetcher.get = 옛get
+            Path.home = 옛집
+            if 옛채널 is not None:
+                os.environ["DARKCHOCO_CHANNELS"] = 옛채널
         s = Sched(db)
         try:
             줄 = s.상태()
         finally:
             s.close()
-    if 줄:   # 채널 목록이 이 PC 에 있으면 돌았을 수도 있다
-        assert 줄[0]["fails"] == 0, "안 쓴 것을 실패로 셌다"
+
+    # tg_preview 는 채널 하나가 막혀도 삼키고 다음으로 가므로 따로 센다.
+    # 주소는 안 찍는다. 채널 목록은 무엇을 보는지가 드러나서 저장소 밖에 둔다
+    assert not 나간것, f"밖에 요청을 {len(나간것)}번 보내려 했다"
+    r = 결과[0]
+    assert r.skipped and not r.error, f"건너뛰지 않았다: {r.skipped!r} / {r.error!r}"
+    assert not 줄, f"안 쓴 것이 차례표에 들어갔다: {줄}"
 
 
 def test_install_task_가_명령을_만든다():
