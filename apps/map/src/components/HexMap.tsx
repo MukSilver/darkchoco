@@ -12,8 +12,17 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { cellToXY, hexPoints } from "@/lib/hex";
 import type { MapLayout, TerritoryShape } from "@/lib/layout";
-import { boxOrigin, flipFrom, growFrom, islandBoxes, parseMs, type IslandBox } from "@/lib/motion";
+import { boxOrigin, boxUnder, flipFrom, flipTo, growFrom, islandBoxes, parseMs, type IslandBox } from "@/lib/motion";
 import { CONF_DASH, KIND_NAME, type RelView } from "@/lib/relations";
+
+/** 섬이 옮겨 가는 이징. 토큰 `--ease-out` 과 같은 곡선이다 */
+const EASE = "cubic-bezier(0.2, 0, 0, 1)";
+
+/** 요소에 지금 걸린 CSS 행렬. 없으면 null */
+function matrixOf(el: Element): DOMMatrixReadOnly | null {
+  const t = getComputedStyle(el).transform;
+  return t && t !== "none" ? new DOMMatrixReadOnly(t) : null;
+}
 
 /** 칸 하나의 육각 경로 */
 function hexPath(col: number, row: number, size: number): string {
@@ -196,6 +205,8 @@ export default function HexMap({
   const frame = viewBox ?? layout.viewBox;
   const svgRef = useRef<SVGSVGElement>(null);
   const prevFrame = useRef<{ boxes: Map<string, IslandBox>; origin: { x: number; y: number } } | null>(null);
+  // 지금 도는 움직임 — 섬마다 [첫 모양, 도착 모양]. 도중에 새로 붙는 섬 요소를 같은 움직임에 태운다
+  const motion = useRef<{ start: number; ms: number; frames: Map<string, [string, string]> } | null>(null);
   useLayoutEffect(() => {
     const svg = svgRef.current;
     const now = { boxes: islandBoxes(layout), origin: boxOrigin(frame) };
@@ -204,21 +215,64 @@ export default function HexMap({
     if (!svg || !before || typeof svg.animate !== "function") return;
     const ms = parseMs(getComputedStyle(svg).getPropertyValue("--dur-slow"));
     if (ms <= 0) return;
-    const opts: KeyframeAnimationOptions = { duration: ms, easing: "cubic-bezier(0.2, 0, 0, 1)" };
+    const opts: KeyframeAnimationOptions = { duration: ms, easing: EASE };
+    const frames = new Map<string, [string, string]>();
     for (const [key, box] of now.boxes) {
-      const was = before.boxes.get(key);
-      const frames: Keyframe[] = was
-        ? [{ transform: flipFrom(was, box, before.origin, now.origin) }, { transform: "none" }]
-        : [{ transform: growFrom(box), opacity: 0 }, { transform: "none", opacity: 1 }];
-      svg.querySelectorAll<SVGElement>(`[data-island="${CSS.escape(key)}"]`).forEach((el) => {
+      const els = [...svg.querySelectorAll<SVGElement>(`[data-island="${CSS.escape(key)}"]`)];
+      const old = before.boxes.get(key);
+      // 앞 움직임이 아직 돌고 있으면 지금 그려진 자리에서 이어 간다 (`boxUnder`)
+      const moving = els.find((el) => el.getAnimations().length > 0);
+      const m = moving ? matrixOf(moving) : null;
+      const was = old && m ? boxUnder(m, old) : old;
+      const from = was ? flipFrom(was, box, before.origin, now.origin) : growFrom(box);
+      const to = flipTo(box);
+      frames.set(key, [from, to]);
+      for (const el of els) {
+        // 새 섬은 투명에서, 번지다 끊긴 섬은 지금 진하기에서 제 진하기로 간다. 번짐 경로처럼 제
+        // opacity 가 있는 도형을 1 까지 올렸다 뚝 떨어뜨리지 않는다 (2026-09-29 묶음 6 검토)
+        const cur = getComputedStyle(el).opacity;
         el.getAnimations().forEach((a) => a.cancel());
-        el.animate(frames, opts);
-      });
+        const base = getComputedStyle(el).opacity;
+        const o0 = was ? cur : "0";
+        el.animate(
+          o0 === base
+            ? [{ transform: from }, { transform: to }]
+            : [
+                { transform: from, opacity: o0 },
+                { transform: to, opacity: base },
+              ],
+          opts,
+        );
+      }
     }
+    motion.current = { start: performance.now(), ms, frames };
+    // 관계선은 섬이 80% 옮겨 온 뒤에 번져 나온다(이징 뒤 진행도라 곧 섬이 옮겨 온 몫이다). 선은
+    // 처음부터 새 자리라 먼저 보이면 선 끝이 허공에 떴다. 앞 번짐은 끊는다 (2026-09-29 묶음 6 검토)
     svg.querySelectorAll<SVGElement>('[data-flip="fade"]').forEach((el) => {
-      el.animate([{ opacity: 0 }, { opacity: 1 }], opts);
+      el.getAnimations().forEach((a) => a.cancel());
+      el.animate([{ opacity: 0 }, { opacity: 0, offset: 0.8 }, { opacity: 1 }], opts);
     });
   }, [layout, frame]);
+
+  // 움직이는 도중에 새로 붙은 섬 요소(마우스 올림 덮개, 고를 때 떠오른 겹, 새 이름표)도 같은 움직임에
+  // 같은 진행 시각으로 태운다. 안 그러면 섬이 옮겨 오는 동안 그것만 도착 자리에 먼저 그려졌다
+  // (2026-09-29 묶음 6 검토). 그릴 때마다 돌지만 움직임이 끝났으면 바로 나간다
+  useLayoutEffect(() => {
+    const svg = svgRef.current;
+    const m = motion.current;
+    if (!svg || !m) return;
+    const t = performance.now() - m.start;
+    if (t >= m.ms) {
+      motion.current = null;
+      return;
+    }
+    svg.querySelectorAll<SVGElement>("[data-island]").forEach((el) => {
+      const f = m.frames.get(el.getAttribute("data-island") ?? "");
+      if (!f || el.getAnimations().length > 0) return;
+      const a = el.animate([{ transform: f[0] }, { transform: f[1] }], { duration: m.ms, easing: EASE });
+      a.currentTime = t;
+    });
+  });
 
   /** 떠오르는가 — 고른 영토, 이어진 영토, [연결] 행의 상대 영토 */
   const isUp = (t: TerritoryShape) =>

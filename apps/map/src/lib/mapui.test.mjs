@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { labelTicks, pastSnapshot, revealPan, tipPlace, toCanvas } from './mapui.ts';
+import { fitTicks, labelTicks, pastSnapshot, revealPan, tipPlace, toCanvas } from './mapui.ts';
 
 // 판 1000 × 680, 위 여백 16 · 아래 여백 64 → 지도 판은 1000 × 600
 const STAGE = { w: 1000, h: 680, top: 16, bottom: 64 };
@@ -90,6 +90,16 @@ test('분기가 적으면 이름표를 다 단다', () => {
   assert.deepEqual(labelTicks(5, 8), [0, 1, 2, 3, 4]);
   assert.deepEqual(labelTicks(1, 8), [0]);
   assert.deepEqual(labelTicks(0, 8), []);
+});
+
+test('이름표 수는 슬라이더 폭에 맞춘다 — 좁으면 줄이고 넓으면 분기 수대로 (G-10 묶음 6 검토)', () => {
+  // 20분기, 1280 창 · 패널 연 스냅샷 바(슬라이더 약 286px). 셋마다 달면 첫 둘이 겹친다
+  assert.deepEqual(fitTicks(20, 286, 40, 8), [0, 5, 10, 15, 19]);
+  // 넓은 바(약 390px)는 분기 수로 정한 것과 같다
+  assert.deepEqual(fitTicks(20, 390, 40, 8), labelTicks(20, 8));
+  assert.deepEqual(fitTicks(20, 60, 40, 8), [0, 19], '아주 좁으면 양 끝만');
+  assert.deepEqual(fitTicks(1, 286, 40, 8), [0]);
+  assert.deepEqual(fitTicks(0, 286, 40, 8), []);
 });
 
 test('많으면 건너뛰되 오른쪽 끝은 늘 단다', () => {
