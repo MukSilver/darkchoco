@@ -194,10 +194,49 @@ check("결과 제목은 짧은 이름 그대로",
       [("### %s (" % db) in 대조6 for db, _, _ in R.DBS], [True] * len(R.DBS))
 check("짧은 이름마다 전체 이름이 있다", sorted({db for db, _, _ in R.DBS} - set(R.NOTION_NAME)), [])
 
+# ── 11. 사고 DB 대조는 기준선 갈래로 따로 남는다 (2026-09-28) ──
+# 유출 사고 DB 는 공식 확인 사고 명단이고 8/19 뒤로 안 늘어난다. 못 찾았다고 「없음」 이 아니다
+불린 = []
+
+
+def _가짜run(cmd):
+    불린.append(cmd)
+    if cmd[1] == "유출 사고 DB":
+        return 0, "기준선: …\n  >> 범위 밖 — DB 로는 판단 못 함. 갈래 A 필수\n"
+    return 0, "  >> 다른 건 — 새 줄로 둔다\n"
+
+
+R.run, R.CALL_GAP = _가짜run, 0
+try:
+    case7 = Path(tempfile.mkdtemp())
+    R.stage3_teamdb(case7, st6, use_notion=True)
+    사고명령 = [c for c in 불린 if c[1] == "유출 사고 DB"][0]
+    check("사고 DB 에 게시 시각을 준다", 사고명령[사고명령.index("--date") + 1], "2026-09-01")
+    check("사고 DB 대조는 따로 남는다", st6.get("사고 DB 대조"), "범위 밖")
+    check("수집 DB 분류에 섞지 않는다", "범위 밖" in (st6.get("도구 분류") or {}), False)
+    R.write_stage3_input(case7, st6)
+    재료7 = (case7 / "③재료.md").read_text(encoding="utf-8")
+    check("③재료.md 에 사고 DB 줄", "| ③-1 유출 사고 DB | 범위 밖 |" in 재료7, True)
+    # 걸린 줄은 갈래와 INC 번호가 같이 남는다. ⑤ 에 번호를 옮겨야 한다
+    R.run = lambda cmd: (0, "■ 가상조직 사고\n  >> 있음(주장 기록) — INC40 · 공식 확인 아님(외부 확인 게시글만)\n"
+                            "■ 가상조직 사고\n  >> 있음(공식) — INC41 · 외부 확인 언론 보도 · 공표 2026-03-02\n"
+                            "있음(주장 기록) 은 공식 확인이 아니다.\n") \
+        if cmd[1] == "유출 사고 DB" else (0, "")
+    st8 = json.loads(json.dumps(st6))
+    R.stage3_teamdb(case7, st8, use_notion=True)
+    check("걸린 줄의 갈래와 번호", st8.get("사고 DB 대조"), "있음(주장 기록) INC40 · 있음(공식) INC41")
+    # 조회가 실패하면 못 봄이다
+    R.run = lambda cmd: (1, "멈춤") if cmd[1] == "유출 사고 DB" else (0, "")
+    st7 = json.loads(json.dumps(st6))
+    R.stage3_teamdb(case7, st7, use_notion=True)
+    check("사고 DB 조회 실패는 못 봄", st7.get("사고 DB 대조"), "못 봄(조회 실패)")
+finally:
+    R.run, R.CALL_GAP = 원래run, 원래간격
+
 # ── 결과 ────────────────────────────────────────
 if fails:
     print("실패 %d" % len(fails))
     for f in fails:
         print("  - %s" % f)
     sys.exit(1)
-print("통과. 시험 10 묶음")
+print("통과. 시험 11 묶음")
