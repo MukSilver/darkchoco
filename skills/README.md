@@ -130,7 +130,7 @@ docker run --rm \
   --read-only --tmpfs /tmp \
   -v "$HOME/.config/darkchoco/notion_token:/run/secrets/notion_token:ro" \
   -v "$PWD/재료:/data:ro" -v "$PWD/결과:/out" \
-  darkchoco-verify python /tools/notion_find.py 수집 <대상 조직>
+  darkchoco-verify python /tools/notion_find.py "수집 DB" <대상 조직>
 ```
 
 **토큰 값을 `-e` 로 넘기지 마라.** `docker inspect` 와 셸 히스토리에 남는다.
@@ -296,9 +296,9 @@ python tools/notion_push.py <page_id> "<제목>" <md파일> --update
 사건 ID는 노션이 자동 부여하므로 **사건명·대상 조직·게시자 핸들로 찾는다.**
 
 ```bash
-python tools/notion_find.py 수집 sample-mall
-python tools/notion_find.py 수집 Databasehooligan
-python tools/notion_find.py 검증 11번가
+python tools/notion_find.py "수집 DB" sample-mall
+python tools/notion_find.py "수집 DB" Databasehooligan
+python tools/notion_find.py "검증 DB" 11번가
 ```
 
 읽기만 한다.

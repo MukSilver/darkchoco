@@ -4,9 +4,11 @@
 사건 ID는 노션이 자동 부여하므로 ID로 찾지 않는다.
 사건명, 대상 조직, 게시자 핸들, 원문 URL 같은 사람이 읽는 값으로 찾는다.
 
-    python tools/notion_find.py 수집 sample-mall
-    python tools/notion_find.py 수집 Databasehooligan --field "게시자 핸들"
-    python tools/notion_find.py 검증 11번가
+    python tools/notion_find.py "수집 DB" sample-mall
+    python tools/notion_find.py "수집 DB" Databasehooligan --field "게시자 핸들"
+    python tools/notion_find.py "검증 DB" 11번가
+
+DB 는 전체 이름(「○○ DB」)으로 준다. 짧게 주면 부분 일치로 비슷한 이름의 DB 가 같이 걸려 멈출 수 있다.
 
 읽기만 한다. 아무것도 쓰지 않는다.
 """
@@ -172,7 +174,9 @@ def alias_set(handle: str) -> tuple[set, str, str]:
         return _ALIAS[key]
 
     try:
-        ds, _ = find_db("행위자")
+        # 전체 이름으로 찾는다 (2026-09-28). 짧은 이름은 비슷한 이름의 DB 가 생기면 멈추고,
+        # 여기서는 멈춤이 「행위자 DB 없음」 으로 조용히 넘어가 별칭 풀기가 빠진다
+        ds, _ = find_db("행위자 DB")
         rs = rows(ds)
     except SystemExit:
         _ALIAS[key] = (set(), "", "행위자 DB 없음. 문자열로만 비교했다")

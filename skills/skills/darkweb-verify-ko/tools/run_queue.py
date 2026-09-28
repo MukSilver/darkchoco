@@ -106,6 +106,15 @@ DBS = [
     ("유출 사고", "조직", "이미 보도된 사고인지"),
 ]
 
+# notion_find 에 넘기는 이름. **전체 이름을 준다** (2026-09-28).
+# notion_find 는 부분 일치로 찾고, 여럿이 걸리면 이름이 정확히 같은 것 하나만 받는다.
+# 「유출 사고」 는 「유출 사고 DB」 와 「유출 요약(…)」 둘에 걸리고 정확히 같은 것이 없어 멈췄다.
+# 그래서 자동 경로에서 사고 DB 대조가 늘 「못 봄」 이었다. 나머지 넷도 지금 걸리는 것이 하나뿐이라
+# 될 뿐, 비슷한 이름의 DB 가 하나 생기면 똑같이 멈춘다. 전체 이름은 정확히 같은 것이 하나다.
+# 화면과 ③_팀DB대조.md 의 제목은 짧은 이름 그대로 둔다.
+NOTION_NAME = {"수집": "수집 DB", "검증": "검증 DB", "행위자": "행위자 DB",
+               "포럼": "포럼 DB", "유출 사고": "유출 사고 DB"}
+
 # 압축은 도구가 열지 않는다. 있으면 멈춘다.
 ARCHIVE = re.compile(r"\.(zip|rar|7z|tar|gz|bz2|xz|tgz|tbz|txz|zst|arj|cab)$", re.I)
 
@@ -229,7 +238,7 @@ def stage3_teamdb(case: Path, st: dict, use_notion: bool) -> list[str]:
         if not q:
             chunks.append("### %s (%s)\n\n안 봄. 질의로 쓸 값이 없다 (%s)\n" % (db, why, kind))
             continue
-        cmd = [str(HERE / "notion_find.py"), db, q]
+        cmd = [str(HERE / "notion_find.py"), NOTION_NAME.get(db, db), q]
         if db in ("수집", "검증"):
             for flag, v in (("--org", org), ("--handle", handle),
                             ("--forum", forum), ("--url", url), ("--date", day)):

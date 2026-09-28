@@ -171,10 +171,33 @@ call3 = (case3 / "호출.md").read_text(encoding="utf-8")
 if "샘플이 없다" not in call3 or "지어내지 마라" not in call3:
     fails.append("샘플 없는 케이스에 경고가 없다: %r" % call3[-400:])
 
+# ── 10. 팀 DB 는 전체 이름으로 찾는다 (2026-09-28) ──
+# 「유출 사고」 는 「유출 사고 DB」 와 「유출 요약(…)」 둘에 걸리고 정확히 같은 이름이 없어
+# notion_find 가 멈췄다. 자동 경로에서 사고 DB 대조가 늘 「못 봄」 이었다
+불린 = []
+원래run, 원래간격 = R.run, R.CALL_GAP
+R.run = lambda cmd: (불린.append(cmd), (0, ""))[1]
+R.CALL_GAP = 0
+try:
+    case6 = Path(tempfile.mkdtemp())
+    st6 = {"칸": {"대상 조직": "가상출판", "행위자": "someone", "공식 도메인": "example.co.kr",
+                 "원 출처": "http://abc.onion/site/blog?u=1", "게시 시각": "2026-09-01"}}
+    R.stage3_teamdb(case6, st6, use_notion=True)
+finally:
+    R.run, R.CALL_GAP = 원래run, 원래간격
+check("노션에 넘기는 이름", [c[1] for c in 불린],
+      ["수집 DB", "수집 DB", "검증 DB", "행위자 DB", "포럼 DB", "유출 사고 DB"])
+check("수집 · 검증은 새 건 값을 같이 준다",
+      [("--org" in c) for c in 불린], [True, True, True, False, False, False])
+대조6 = (case6 / "③_팀DB대조.md").read_text(encoding="utf-8")
+check("결과 제목은 짧은 이름 그대로",
+      [("### %s (" % db) in 대조6 for db, _, _ in R.DBS], [True] * len(R.DBS))
+check("짧은 이름마다 전체 이름이 있다", sorted({db for db, _, _ in R.DBS} - set(R.NOTION_NAME)), [])
+
 # ── 결과 ────────────────────────────────────────
 if fails:
     print("실패 %d" % len(fails))
     for f in fails:
         print("  - %s" % f)
     sys.exit(1)
-print("통과. 시험 9 묶음")
+print("통과. 시험 10 묶음")
