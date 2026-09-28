@@ -343,7 +343,9 @@ def to_item(*, chan: str, src_id: str, text: str, links: list, when: str,
         body_kind="집계 채널 글",
         body_via=body_via,
         posted_at=when,
-        # **원 출처는 글 안에 적힌 주소다.** 텔레그램 주소가 아니다
+        # **원 출처는 글 안에 적힌 주소다.** 텔레그램 주소가 아니다.
+        # 노션 원문 URL 에는 텔레그램 주소(perma)가 올라가지만 그것은 push.py `_원문` 이 한다.
+        # **여기를 바꾸지 않는다.** post_url 은 UID 재료라 바꾸면 이미 올린 글이 새 줄로 또 올라간다
         post_url=src,
         via=["t.me/" + chan],
         claimed_size=first(fields, PICK["size"]),
