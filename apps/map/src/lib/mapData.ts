@@ -71,10 +71,11 @@ function pickActor(a: ActorInfo): { actor?: ActorInfo } {
 const EV_KINDS = new Set<string>(["data_post", "claim", "sale", "access_sale", "repost", "official"]);
 /** 규모 단위. 굽기의 `claim_size` 가 내는 값뿐이다 */
 const SIZE_UNITS = new Set(["TB", "GB", "MB", "KB", "억", "만", "건"]);
-/** 공식 발표 사고 선택지 (굽기 `LEAK_ITEMS` · `CONFIRM_VALUES` · `SOURCE_KINDS` 와 같게) */
+/** 공식 발표 사고 선택지 (굽기 `LEAK_ITEMS` · `OFFICIAL_CONFIRMS` · `SOURCE_KINDS` 와 같게) */
 const LEAK_ITEMS = new Set(["이름", "이메일", "전화", "계정", "주소", "카드금융", "주민번호", "기타", "회사 내부 자료"]);
 const RISKS = new Set(["high", "medium", "low"]);
-const CONFIRMS = new Set(["조직 공식 발표", "게시글만", "언론 보도", "규제기관 확정", "연구자 발견"]);
+/** 외부 확인. 연구자 발견 · 게시글만인 사고는 굽기가 싣지 않는다 (2026-09-28 G-8) */
+const CONFIRMS = new Set(["조직 공식 발표", "규제기관 확정", "언론 보도"]);
 const SOURCE_KINDS = new Set(["언론 보도", "보안업체", "기타", "기업 공지", "개인정보보호위원회", "한국인터넷진흥원"]);
 
 /**

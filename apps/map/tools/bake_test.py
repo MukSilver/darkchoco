@@ -179,6 +179,7 @@ def test_손_고침_표는_관문_앞에서_영토_날짜_칩을_정한다():
     assert got == {"drop": False, "postedAt": "2026-02-02", "kind": "sale", "cand": f}, got
     got = ov({"kind": "없는 칩", "postedAt": "어제", "territory": ["FORUM", "없는 곳"]}, ix)
     assert got == {"drop": False}, "표 밖 값은 버린다"
+    assert "kind" not in ov({"kind": "official"}, ix), "수집 DB 줄은 공식 발표가 될 수 없다 (G-8)"
     old = bake.OVERRIDES_FILE
     with tempfile.TemporaryDirectory() as d:
         bake.OVERRIDES_FILE = Path(d) / "overrides.json"
@@ -236,6 +237,28 @@ def test_원문_URL_은_t_me_채널_이름만_돌려준다():
         except SystemExit:
             continue
         raise AssertionError("원문 URL 은 col_tme() 로만 읽는다")
+
+
+def test_공식_발표는_외부_확인이_조직_규제기관_언론인_사고만():
+    # 2026-09-28 최현서 G-8. 가르는 것은 「외부 확인」 이지 「출처」 가 아니다
+    ur = bake.unofficial_reason
+    for ok in ["조직 공식 발표", "규제기관 확정", "언론 보도"]:
+        assert ur(ok) is None, ok
+    assert ur("게시글만") == ur("연구자 발견") == "외부 확인이 게시글만 · 연구자 발견"
+    assert ur(None) == ur("새 선택지") == "외부 확인이 비었거나 선택지 밖", "빈칸은 짐작하지 않는다"
+    base = {"territories": [{"id": "f1", "name": "F", "islandId": "FORUM", "web": "dark"}],
+            "events": [{"id": "INC-1", "territoryId": "f1", "postedAt": "2026-01-01", "verdict": "confirmed",
+                        "size": "unknown", "repost": False, "excluded": False, "kind": "official",
+                        "confirm": "규제기관 확정", "sourceKind": "언론 보도"}],
+            "relations": [], "links": []}
+    assert bake.check(base) == []
+    for bad_confirm in ["게시글만", "연구자 발견", None]:
+        bad = json_copy(base)
+        if bad_confirm:
+            bad["events"][0]["confirm"] = bad_confirm
+        else:
+            del bad["events"][0]["confirm"]
+        assert len(bake.check(bad)) == 1, (bad_confirm, bake.check(bad))
 
 
 def json_copy(x):
