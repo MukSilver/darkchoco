@@ -389,6 +389,160 @@ def test_노션_줄에서_uid_와_열쇠를_읽는다():
     assert push._노션줄의_열쇠(페이지) == ("", "t|v")
 
 
+# ── 텔레그램 줄의 원문 URL 은 전한 메시지 주소 (2026-09-28, F-1) ──────────
+#
+# 설계서 「텔레그램 재유포 사건의 채널 정하는 방법」. 지도는 원문 URL 의 t.me 로 채널을 찾는다.
+# **수집 표의 post_url 은 그대로 원래 링크다.** UID 재료라서 바꾸면 이미 올린 글이 새 줄로
+# 또 올라간다. 노션에 올릴 때만 메시지 주소로 바꾼다.
+
+_메시지 = "https://t.me/somechan/123"
+_원래링크 = "https://forum.example/Thread-sample"
+
+
+def _전한글(**바꿈) -> 줄:
+    r = _기본(source="telegram", venue="forum.example", venue_kind="forum",
+             src_id="somechan/123", post_url=_원래링크, target_org="", title="샘플 알림",
+             raw=json.dumps({"글 종류": "유출 알림", "집계 채널 글 주소": _메시지}))
+    r.update(바꿈)
+    return r
+
+
+def test_텔레그램_원문_URL_은_전한_메시지_주소다():
+    p = push.만들기(_전한글())
+    assert _글(p, "원문 URL") == _메시지
+    # 게시 플랫폼은 원래 게시처 쪽 값 그대로다
+    assert _글(p, "게시 플랫폼") == "forum.example"
+
+
+def test_원래_링크가_없던_텔레그램_줄도_메시지_주소를_단다():
+    p = push.만들기(_전한글(post_url="", venue="t.me/somechan", venue_kind="telegram"))
+    assert _글(p, "원문 URL") == _메시지
+
+
+def test_raw_에_메시지_주소가_없으면_글_번호로_만든다():
+    for raw in ("", "{깨짐", json.dumps({"집계 채널 글 주소": "javascript:alert(1)"})):
+        assert _글(push.만들기(_전한글(raw=raw)), "원문 URL") == _메시지, raw
+    # 글 번호 꼴도 아니면 옛날처럼 원래 링크를 둔다. 빈칸보다 낫다
+    p = push.만들기(_전한글(raw="", src_id="이상한값"))
+    assert _글(p, "원문 URL") == _원래링크
+    assert "원문 URL" not in push.만들기(_전한글(raw="", src_id="", post_url=""))
+
+
+def test_다른_소스의_원문_URL_은_그대로다():
+    for src in ("ransom", "ransomlive", "forum", "kit", "x"):
+        p = push.만들기(_기본(source=src, src_id="somechan/123", raw=json.dumps(
+            {"집계 채널 글 주소": _메시지})))
+        assert _글(p, "원문 URL") == "http://example.invalid/post/1", src
+
+
+def test_텔레그램_열쇠는_노션에_올라가는_원문_URL_과_같다():
+    """열쇠가 노션 원문 URL 과 어긋나면 다음 판에 노션에서 읽은 열쇠와 못 맞춘다."""
+    assert push._열쇠들(_전한글(uid="u-1")) == ("u-1", _메시지)
+    assert push._열쇠들(_전한글(uid="")) == ("", _메시지)
+
+
+def test_이미_올린_텔레그램_글은_다시_안_올라간다():
+    본uid, 본열쇠 = {"u-1"}, {_원래링크}
+    # 바꾸기 전에 올린 줄. 원문 URL 은 원래 링크지만 UID 가 같다 (2026-09-28 텔레그램 93줄 모두 UID 있음)
+    assert push._겹치나(_전한글(uid="u-1"), 본uid, 본열쇠)
+    # 바꾼 뒤에 올린 줄. UID 가 없어도 원문 URL 로 걸린다
+    assert push._겹치나(_전한글(uid=""), set(), {_메시지})
+
+
+def test_같은_링크를_붙인_다른_메시지는_따로_올라간다():
+    """메시지 하나가 사건 하나다. 전에는 원래 링크가 열쇠라 한 줄로 뭉쳤다."""
+    앞 = _전한글(uid="u-1")
+    뒤 = _전한글(uid="u-2", src_id="somechan/124",
+             raw=json.dumps({"집계 채널 글 주소": "https://t.me/somechan/124"}))
+    본uid, 본열쇠 = {"u-1"}, {push._열쇠들(앞)[1]}
+    assert not push._겹치나(뒤, 본uid, 본열쇠)
+
+
+class _기록노션:
+    """노션에 안 붙습니다. `줄들` 을 수집 DB 로 돌려주고 쓰기 요청을 모읍니다."""
+    줄들: list = []
+    쓴것: list = []
+
+    def __init__(self, *a, **k):
+        pass
+
+    def query_all(self, _ds):
+        return list(_기록노션.줄들)
+
+    def request(self, method, path, body=None):
+        _기록노션.쓴것.append((method, path, body))
+        return {}
+
+
+def _전한글_돌리기(노션줄들: list, *인자) -> tuple[int, str, list, str]:
+    """실제 텔레그램 파서로 줄을 만들어 push.main 을 돌린다. (반환값, 출력, 쓴것, uid)"""
+    import contextlib
+    import io
+    import tempfile
+
+    sys.path.insert(0, str(ROOT / "skills"))
+    from collect.sources import tg_post
+    from dc_store import Store
+
+    it = tg_post.to_item(
+        chan="somechan", src_id="somechan/123",
+        text="• Target/Title: 가짜조직-QZX-시험용\n• Threat Actor: someone\n" + _원래링크,
+        links=[_원래링크], when="2026-09-27T01:02:03+00:00", perma=_메시지,
+        got_by="시험", body_via="t.me/s")
+    # **수집 표의 원 출처는 그대로 원래 링크다.** 이것이 바뀌면 UID 가 바뀐다
+    assert it.post_url == _원래링크 and it.venue == "forum.example"
+    _기록노션.줄들, _기록노션.쓴것 = 노션줄들, []
+    원래 = push.Notion
+    push.Notion = _기록노션
+    버퍼 = io.StringIO()
+    try:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as d:
+            db = Path(d) / "darkchoco.db"
+            s = Store(db)
+            s.put(it, "2026-09-27")
+            s.close()
+            with contextlib.redirect_stdout(버퍼):
+                rc = push.main(["--db", str(db), *인자])
+    finally:
+        push.Notion = 원래
+    return rc, 버퍼.getvalue(), _기록노션.쓴것, it.uid()
+
+
+def _원문노션줄(uid: str, 원문: str) -> dict:
+    return {"properties": {
+        "자료 제목": {"title": [{"plain_text": "가짜조직-QZX-시험용"}]},
+        "원문 URL": {"rich_text": [{"plain_text": 원문}] if 원문 else []},
+        "게시 플랫폼": {"rich_text": [{"plain_text": "forum.example"}]},
+        "UID": {"rich_text": [{"plain_text": uid}] if uid else []},
+    }}
+
+
+def test_새_텔레그램_글은_메시지_주소로_올라간다():
+    rc, 글, 쓴것, uid = _전한글_돌리기([], "--apply")
+    assert rc == 0, 글
+    assert len(쓴것) == 1, 글
+    p = 쓴것[0][2]["properties"]
+    assert _글(p, "원문 URL") == _메시지
+    assert _글(p, "게시 플랫폼") == "forum.example"
+    assert _글(p, "UID") == uid
+
+
+def test_바꾸기_전에_올린_글은_노션에_또_안_올라간다():
+    """노션에는 원래 링크로 올라가 있다. 같은 메시지를 다시 읽어도 UID 가 같아 걸린다."""
+    _, _, _, uid = _전한글_돌리기([])
+    기존 = [_원문노션줄(uid, _원래링크)]
+    rc, 글, 쓴것, _ = _전한글_돌리기(기존, "--apply")
+    assert rc == 0, 글
+    assert 쓴것 == [], 글
+    assert "겹치는 1줄" in 글, 글
+
+
+def test_메시지_주소는_Actions_로그에_안_나간다():
+    rc, 글, _, _ = _전한글_돌리기([])
+    assert rc == 0, 글
+    assert _메시지 not in 글 and _원래링크 not in 글, 글
+
+
 def test_뺀_줄의_자취는_uid_와_글번호다():
     r = _기본(uid="u-1", src_id="somechan/1270060")
     assert push._자취(r) == "u-1 somechan/1270060"
