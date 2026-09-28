@@ -85,6 +85,43 @@
 }
 
 /*
+ * 공통 마우스 올림 규칙 (2026-09-28 최현서 1 · 9번 — 「상호작용이 가능한 버튼은 마우스오버
+ * 동작이 되게」). **눌리는 것은 모양에 따라 아래 넷 가운데 하나를 단다.** 전에는 부품마다
+ * 달랐고 절반은 없었다 — 글자색 한 단계(body → title)만 바뀌거나, 패널 바탕과 거의 같은
+ * `bg-card` 로 바뀌어 없는 셈이었다
+ *
+ *   hover-edge     테두리 단추 · 카드. 테두리가 진해지고 바탕이 한 단계 밝아지고 글자가 밝다
+ *   hover-row      목록 줄 · 메뉴 항목 · 표 줄. 바탕이 트랙 색으로 밝아진다
+ *   hover-seg      알약 통 안의 안 고른 칸 · 글자 단추. 글자가 밝고 바탕이 살짝 뜬다
+ *   hover-accent   강조색으로 채운 단추. 조금 밝아진다
+ *
+ * 꺼진 단추(`:disabled`)는 안 바뀐다
+ */
+@utility hover-edge {
+  &:hover:not(:disabled) {
+    border-color: var(--t-border-strong);
+    background-color: var(--t-surface-track);
+    color: var(--t-text-title);
+  }
+}
+@utility hover-row {
+  &:hover:not(:disabled) {
+    background-color: var(--t-surface-track);
+  }
+}
+@utility hover-seg {
+  &:hover:not(:disabled) {
+    color: var(--t-text-title);
+    background-color: color-mix(in srgb, var(--t-surface-panel) 60%, transparent);
+  }
+}
+@utility hover-accent {
+  &:hover:not(:disabled) {
+    filter: brightness(1.12);
+  }
+}
+
+/*
  * **모드를 `prefers-color-scheme` 에 걸지 않는다.** 여기서 모드는 밝기가 아니라
  * 「지금 어느 웹을 보고 있나」다. 오픈웹은 화이트, 다크웹은 라이트 블랙,
  * 네온은 그 위의 선택지다. 사람이 고르는 것이라 OS 설정을 따르면 안 된다.
@@ -123,6 +160,25 @@ body {
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]) {
     cursor: pointer;
+  }
+
+  /* 눌리는 것의 색 바뀜은 짧게 번진다. 부품의 `transition-*` 클래스가 이긴다 */
+  button,
+  [role="button"],
+  a,
+  summary {
+    transition-property: color, background-color, border-color, opacity, box-shadow, filter;
+    transition-duration: var(--dur-fast);
+    transition-timing-function: var(--ease-out);
+  }
+
+  /* 키보드로 옮겨 온 자리. 마우스로 누를 때는 안 보인다 */
+  button:focus-visible,
+  [role="button"]:focus-visible,
+  a:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 2px solid var(--t-accent-muted);
+    outline-offset: 2px;
   }
 
   input[type="range"] {

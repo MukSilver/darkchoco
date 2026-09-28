@@ -19,7 +19,7 @@
  *
  * 행을 한 번 누르면 강조하고 지도에 그 사건의 관계선만 남긴다 (피그마 ⑦-4 「선택한
  * 사건의 관계선만 표시 중」). **강조는 부르는 쪽이 들고 있다** — 지도가 같은 값을
- * 봐야 해서다. 두 번 누르면 보고서 팝업(4.3.4)이 열린다 (`EventRow`).
+ * 봐야 해서다. 누르면 보고서 팝업(4.3.4)이 열린다 (`EventRow`, 한 번 클릭 — 최현서 9번).
  *
  * 「사기 의심」은 칩 없이 여기 거르기로만 쓴다 (설계서 2.3 L98). 기본은 다 보이고,
  * 이 기간에 사기 의심 사건이 있을 때만 「사기 의심 숨기기」 칸이 건수와 함께 나온다. 거르는
@@ -112,7 +112,7 @@ export default function EventsTab({
     <section className="flex flex-col gap-s3">
       <div className="flex items-baseline justify-between">
         {/* 피그마 ⑦-4 머리글 문안 그대로 */}
-        <h3 className="text-[12px] text-label">사건 타임라인 · 더블클릭 시 상세</h3>
+        <h3 className="text-[12px] text-label">사건 타임라인 · 누르면 상세</h3>
         <span className="text-[11px] tabular-nums text-label">
           {periodLabel(period, d)} · {list.length}건
         </span>
@@ -137,10 +137,11 @@ export default function EventsTab({
             type="button"
             onClick={onClearActor}
             aria-label={`행위자 필터 ${actor} 풀기`}
-            className="inline-flex items-center gap-s1 rounded-full border border-accent-edge bg-accent-subtle px-s3 py-[2px] text-[12px] text-title"
+            // 누르면 풀린다는 것이 보이게 테두리를 강조색으로, × 를 밝게 (2026-09-28 최현서 1번)
+            className="group inline-flex items-center gap-s1 rounded-full border border-accent-edge bg-accent-subtle px-s3 py-[2px] text-[12px] text-title hover:border-accent"
           >
             행위자: {actor}
-            <span aria-hidden className="text-label">
+            <span aria-hidden className="text-label transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)] group-hover:text-title">
               ×
             </span>
           </button>
@@ -156,9 +157,11 @@ export default function EventsTab({
               type="button"
               aria-pressed={on}
               onClick={() => onPeriod(c.p)}
+              // 고른 칸은 화면 탭(`ViewTabs`)처럼 테두리 있는 패널색 칸이다. 전에는 bg-selected 라
+              // 통 색(bg-track)과 거의 같아 무엇을 골랐는지 흐렸다 (2026-09-28 코드 분석)
               className={[
-                "flex-1 rounded-[8px] py-s2 text-[12px]",
-                on ? "bg-selected font-semibold text-strong" : "text-label hover:text-body",
+                "flex-1 rounded-[8px] border py-s2 text-[12px]",
+                on ? "border-edge bg-panel font-semibold text-strong" : "border-transparent text-label hover-seg",
               ].join(" ")}
             >
               {c.label}
@@ -182,14 +185,19 @@ export default function EventsTab({
               setToIn(end);
               setEditing((v) => !v);
             }}
-            className="text-[11px] text-label hover:text-title"
+            // 글자 단추도 바탕이 떠서 눌리는 자리가 보이게. 여백만큼 오른쪽을 당겨 글자 자리는 그대로다
+            className="-mr-s1 rounded-[6px] px-s1 text-[11px] text-label hover-row hover:text-title"
           >
             변경 {editing ? "▲" : "▼"}
           </button>
         </div>
         {editing && (
+          /*
+            날짜 칸 둘을 세로로 쌓는다. 한 줄에 두면 패널 폭(264)에서 칸이 80px 남짓이라
+            날짜가 잘렸다 (2026-09-28 코드 분석)
+          */
           <form
-            className="flex items-center gap-s2"
+            className="flex flex-col gap-s2"
             onSubmit={(ev) => {
               ev.preventDefault();
               const from = fromIn || fromDay;
@@ -198,27 +206,33 @@ export default function EventsTab({
               setEditing(false);
             }}
           >
-            <input
-              name="from"
-              type="date"
-              value={fromIn}
-              onChange={(ev) => setFromIn(ev.target.value)}
-              max={toIn || end}
-              aria-label="시작일"
-              className="min-w-0 flex-1 rounded-[6px] border border-edge-input bg-input px-s2 py-[2px] text-[12px] text-body"
-            />
-            <span className="text-label">—</span>
-            <input
-              name="to"
-              type="date"
-              value={toIn}
-              onChange={(ev) => setToIn(ev.target.value)}
-              min={fromIn || undefined}
-              max={isoDay(d.getTime())}
-              aria-label="끝날"
-              className="min-w-0 flex-1 rounded-[6px] border border-edge-input bg-input px-s2 py-[2px] text-[12px] text-body"
-            />
-            <button type="submit" className="rounded-[6px] border border-edge px-s2 py-[2px] text-[11px] text-body">
+            <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-s2 gap-y-s1 text-[11px] text-label">
+              <span aria-hidden>시작</span>
+              <input
+                name="from"
+                type="date"
+                value={fromIn}
+                onChange={(ev) => setFromIn(ev.target.value)}
+                max={toIn || end}
+                aria-label="시작일"
+                className="w-full min-w-0 rounded-[6px] border border-edge-input bg-input px-s2 py-[2px] text-[12px] text-body"
+              />
+              <span aria-hidden>끝</span>
+              <input
+                name="to"
+                type="date"
+                value={toIn}
+                onChange={(ev) => setToIn(ev.target.value)}
+                min={fromIn || undefined}
+                max={isoDay(d.getTime())}
+                aria-label="끝날"
+                className="w-full min-w-0 rounded-[6px] border border-edge-input bg-input px-s2 py-[2px] text-[12px] text-body"
+              />
+            </div>
+            <button
+              type="submit"
+              className="self-end rounded-[6px] border border-edge px-s2 py-[2px] text-[11px] text-body hover-edge"
+            >
               적용
             </button>
           </form>
@@ -240,7 +254,7 @@ export default function EventsTab({
                 where={whereOf(e)}
                 on={picked === e.id}
                 onClick={() => onPick(picked === e.id ? null : e.id)}
-                // 열 때 그 줄을 강조해 둔다. 이미 강조된 줄은 첫 click 이 강조를 풀어서다
+                // 누르면 그 줄을 강조하고 팝업을 연다 (한 번 클릭). Space 는 강조만 켜고 끈다
                 onOpen={() => {
                   onPick(e.id);
                   onOpen(e.id);

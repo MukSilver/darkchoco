@@ -43,10 +43,13 @@ export type PanelHeader = {
  * `top` 89px 은 머리글 한 줄씩(눈표 15 · 제목 25 · 부제 18 + 여백 12 · 12 · 4 · 4 + 구분선 1
  * = 91)일 때 핸들 가운데가 구분선 11px 아래에 오는 값이다 (⑦-1). 제목이 두 줄로
  * 늘면 핸들이 머리글 옆에 걸리지만, 핸들은 왼쪽 여백(24) 안쪽 12px 까지만 들어와서
- * 글씨를 가리지 않는다
+ * 글씨를 가리지 않는다.
+ *
+ * 마우스를 올리면 테두리가 진해지고 바탕이 뜬다 (`hover-edge`). 전에는 글자색만 바뀌어
+ * 눌리는 단추인지 알기 어려웠다 (2026-09-28 최현서 1번)
  */
 const HANDLE =
-  "absolute left-[-12px] top-[89px] z-10 grid size-[24px] place-items-center rounded-full border border-edge bg-panel text-[11px] text-body hover:text-title";
+  "absolute left-[-12px] top-[89px] z-10 grid size-[24px] place-items-center rounded-full border border-edge bg-panel text-[11px] text-body hover-edge";
 
 /**
  * 본문. 여백 24, 조각 사이 24.

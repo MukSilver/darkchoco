@@ -9,6 +9,7 @@
  * 한 경로에 담으면 칸 경계가 안 보이므로, 채움용 경로와 격자용 경로를 나눈다.
  */
 
+import { useState } from "react";
 import { cellToXY, hexPoints } from "@/lib/hex";
 import type { MapLayout, TerritoryShape } from "@/lib/layout";
 import { CONF_DASH, KIND_NAME, type RelView } from "@/lib/relations";
@@ -158,6 +159,14 @@ export default function HexMap({
   lines = [],
 }: HexMapProps) {
   const hasSelection = Boolean(selectedTerritory || selectedIsland);
+  /**
+   * 누를 수 있는 지도인가. 고르기는 `MapCanvas` 가 받으므로 마우스 올림을 받는 쪽(=캔버스 안)만
+   * 손가락 커서를 준다 — 전에는 타임라인 지도처럼 눌러도 아무 일이 없는 자리도 손가락이었다
+   */
+  const interactive = Boolean(onHoverTerritory);
+  const pointer = interactive ? "cursor-pointer" : "";
+  // 마우스를 올린 섬 이름표. 테두리를 섬 색으로 바꾼다 (2026-09-28 코드 분석 — hover 가 없었다)
+  const [hoverIsland, setHoverIsland] = useState<string | null>(null);
 
   /** 떠오르는가 — 고른 영토, 이어진 영토, [연결] 행의 상대 영토 */
   const isUp = (t: TerritoryShape) =>
@@ -272,7 +281,7 @@ export default function HexMap({
             fill={dim(t) ? `var(--t-island-${t.token}-dim)` : `var(--t-island-${t.token})`}
             stroke="var(--t-border-hex)"
             strokeWidth={1}
-            className="cursor-pointer transition-colors"
+            className={`${pointer} transition-colors`}
             {...hoverProps(t.territoryId)}
           />
         ))}
@@ -289,8 +298,8 @@ export default function HexMap({
             aria-hidden
             d={cellsPath(hoveredFlat, layout.size)}
             fill={`var(--t-island-${hoveredFlat.token}-hover)`}
-            stroke={`var(--t-island-${hoveredFlat.token}-side)`}
-            strokeWidth={1.2}
+            stroke="var(--t-hex-hover-edge)"
+            strokeWidth={1.4}
             className="pointer-events-none"
           />
         )}
@@ -318,7 +327,7 @@ export default function HexMap({
                 fill={`var(--t-island-${t.token}-side)`}
                 stroke={`var(--t-island-${t.token}-side)`}
                 strokeWidth={1}
-                className="cursor-pointer"
+                className={pointer}
                 {...hoverProps(t.territoryId)}
               />
             ))}
@@ -330,14 +339,18 @@ export default function HexMap({
               data-id={t.territoryId}
               d={cellsPath(t, layout.size)}
               transform={`translate(0 ${-LIFT})`}
-              fill={
-                t.territoryId === selectedTerritory || t.territoryId === hovered
-                  ? `var(--t-island-${t.token}-hover)`
-                  : `var(--t-island-${t.token})`
+              // 마우스를 올리면 밝아지고, 고른 영토는 밝은 윤곽선으로 이어진 영토와 가른다
+              // (2026-09-28 최현서 6번 · 코드 분석 — 전에는 고른 것과 이어진 것의 윗면이 거의 같았다)
+              fill={t.territoryId === hovered ? `var(--t-island-${t.token}-hover)` : `var(--t-island-${t.token})`}
+              stroke={
+                t.territoryId === selectedTerritory
+                  ? "var(--t-hex-selected-edge)"
+                  : t.territoryId === hovered
+                    ? "var(--t-hex-hover-edge)"
+                    : `var(--t-island-${t.token}-side)`
               }
-              stroke={`var(--t-island-${t.token}-side)`}
-              strokeWidth={1}
-              className="cursor-pointer"
+              strokeWidth={t.territoryId === selectedTerritory ? 2 : t.territoryId === hovered ? 1.4 : 1}
+              className={pointer}
               {...hoverProps(t.territoryId)}
             />
           ))}
@@ -392,14 +405,16 @@ export default function HexMap({
               data-id={i.islandKey}
               transform={`translate(${i.label.x - w / 2} ${i.label.y - 9})`}
               opacity={dimIsland(i.islandKey) ? 0.4 : 1}
-              className="cursor-pointer"
+              className={pointer}
+              onMouseEnter={interactive ? () => setHoverIsland(i.islandKey) : undefined}
+              onMouseLeave={interactive ? () => setHoverIsland(null) : undefined}
             >
               <rect
                 width={w}
                 height={18}
                 rx={9}
-                fill="var(--t-surface-panel)"
-                stroke="var(--t-border-card)"
+                fill={hoverIsland === i.islandKey ? "var(--t-surface-track)" : "var(--t-surface-panel)"}
+                stroke={hoverIsland === i.islandKey ? `var(--t-island-${i.token})` : "var(--t-border-card)"}
               />
               <circle cx={11} cy={9} r={3} fill={`var(--t-island-${i.token})`} />
               <text x={19} y={12.5} fontSize={9} fontWeight={600}>

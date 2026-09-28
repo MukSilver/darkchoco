@@ -21,6 +21,7 @@
 
 import { useEffect, useMemo, type CSSProperties } from "react";
 
+import PlayGlyph from "./PlayGlyph";
 import HexMap from "./HexMap";
 import { islandToken } from "@/lib/islands";
 import type { MapLayout } from "@/lib/layout";
@@ -177,7 +178,11 @@ export default function TimelineTab({
 
   return (
     <div className="flex min-h-0 flex-1 gap-s4 overflow-hidden">
-      <div className="flex min-h-0 flex-1 flex-col gap-s4 overflow-y-auto">
+      {/*
+        왼쪽 칸은 폭이 바뀐다 — 상세 패널이 탭을 옮겨도 펼쳐진 채 남아서(최현서 2번) 1280 창에서는
+        약 400px 이다. 칸 폭을 보고(`@container`) 아래 줄을 쌓는다 (2026-09-28 검토)
+      */}
+      <div className="@container flex min-h-0 min-w-0 flex-1 flex-col gap-s4 overflow-y-auto">
         {/*
           연도 칩 · 재생 줄. 좁으면 재생 줄이 다음 줄로 내려간다 — 전에는 연도 칩이 못 줄어
           「시점 비교」 글자가 접혔다 (2026-09-28 코드 분석, 1280 창)
@@ -185,7 +190,7 @@ export default function TimelineTab({
         <div className="flex shrink-0 flex-wrap items-center gap-s4">
           <nav
             aria-label="시점 고르기"
-            className="flex shrink-0 gap-s1 rounded-[12px] bg-track p-[3px]"
+            className="flex min-w-0 max-w-full gap-s1 overflow-x-auto rounded-[12px] bg-track p-[3px] [scrollbar-width:thin]"
           >
             {chips.map(({ year, snap }) => {
               const marks = compare
@@ -206,15 +211,18 @@ export default function TimelineTab({
                       ? `${compare.next === "a" ? "A" : "B"} 시점으로 찍기 · ${snap.ym}`
                       : snap.ym
                   }
+                  // 고른 칸은 화면 탭(`ViewTabs`)처럼 테두리 있는 패널색 칸이다 — 전에는 bg-selected 가
+                  // 통 색과 거의 같아 흐렸다. 안 고른 칸은 글자색을 단추가 들고 안쪽 줄이 물려받아
+                  // 마우스를 올리면 두 줄이 같이 밝아진다 (2026-09-28 코드 분석, 최현서 1번)
                   className={[
-                    "rounded-[10px] px-s4 py-s2 text-center",
-                    on ? "bg-selected" : "",
+                    "shrink-0 rounded-[10px] border px-s4 py-s2 text-center",
+                    on ? "border-edge bg-panel" : "border-transparent text-label hover-seg",
                   ].join(" ")}
                 >
                   <div
                     className={
                       "text-[14px] tabular-nums " +
-                      (on ? "font-semibold text-strong" : "text-label")
+                      (on ? "font-semibold text-strong" : "")
                     }
                   >
                     {year}
@@ -223,7 +231,7 @@ export default function TimelineTab({
                   <div
                     className={
                       "text-[10px] tabular-nums " +
-                      (marks.length ? "font-semibold text-accent" : "text-label")
+                      (marks.length ? "font-semibold text-accent" : on ? "text-label" : "")
                     }
                   >
                     {marks.length ? marks.join(" ") : `${snap.events}건`}
@@ -239,7 +247,8 @@ export default function TimelineTab({
             재생 단추 줄 — 피그마 ⑦-9b · ⑦-9c, 시트 `07 / 02 Playback Control`.
             30px 네모 단추(모서리 8px) 넷을 6px 씩 띄운다. ◀ · ▶▶ 는 테두리 단추,
             재생은 강조색 채움이다. 꺼진 단추는 통째로 40% 로 흐린다 — ⑦-9c 에서 꺼진
-            ◀ 의 테두리 · 그림이 둘 다 바탕과 40% 로 섞인 색이다
+            ◀ 의 테두리 · 그림이 둘 다 바탕과 40% 로 섞인 색이다.
+            마우스 올림은 공통 규칙이다 — 테두리 단추는 hover-edge, 재생은 hover-accent (최현서 1번)
           */}
           <div className="flex shrink-0 items-center gap-[6px] whitespace-nowrap">
             <button
@@ -247,9 +256,9 @@ export default function TimelineTab({
               aria-label="1년 전"
               disabled={compare !== null || prevYear === null}
               onClick={() => prevYear && onPick(prevYear)}
-              className="grid size-[30px] place-items-center rounded-[8px] border border-edge text-body disabled:opacity-40"
+              className="grid size-[30px] place-items-center rounded-[8px] border border-edge text-body hover-edge disabled:opacity-40"
             >
-              <Glyph kind="prev" />
+              <PlayGlyph kind="prev" />
             </button>
             <button
               type="button"
@@ -262,18 +271,18 @@ export default function TimelineTab({
                 if (!playing && at >= snaps.length - 1 && snaps.length > 1) onPick(snaps[0].ym);
                 onPlaying(!playing);
               }}
-              className="grid size-[30px] place-items-center rounded-[8px] bg-accent text-on-accent disabled:opacity-40"
+              className="grid size-[30px] place-items-center rounded-[8px] bg-accent text-on-accent hover-accent disabled:opacity-40"
             >
-              <Glyph kind={playing ? "pause" : "play"} />
+              <PlayGlyph kind={playing ? "pause" : "play"} />
             </button>
             <button
               type="button"
               aria-label="1년 후"
               disabled={compare !== null || nextYear === null}
               onClick={() => nextYear && onPick(nextYear)}
-              className="grid size-[30px] place-items-center rounded-[8px] border border-edge text-body disabled:opacity-40"
+              className="grid size-[30px] place-items-center rounded-[8px] border border-edge text-body hover-edge disabled:opacity-40"
             >
-              <Glyph kind="next" />
+              <PlayGlyph kind="next" />
             </button>
             {/*
               재생 속도 — 피그마는 세 값을 늘어놓지 않고 「2× ▾」 펼침 하나다. 고르는 값과
@@ -282,7 +291,7 @@ export default function TimelineTab({
             */}
             <div
               className={[
-                "relative h-[30px] rounded-[8px] border",
+                "relative h-[30px] rounded-[8px] border hover:border-edge-strong",
                 playing ? "border-accent" : "border-edge",
               ].join(" ")}
             >
@@ -305,43 +314,49 @@ export default function TimelineTab({
                 ▾
               </span>
             </div>
+            {/*
+              「시점 비교」 스위치. 마우스를 올리면 글자가 밝아지고 통이 한 단계 진해진다 — 전에는
+              아무것도 안 바뀌었다 (2026-09-28 코드 분석, 최현서 1번). 글자색은 단추가 들고 글이
+              물려받는다. 꺼진 단추는 안 바뀐다(`enabled`). 손잡이 · 통 전환은 토큰 시간이다
+            */}
             <button
               type="button"
               onClick={toggleCompare}
               disabled={snaps.length < 2}
               aria-pressed={compare !== null}
-              className="flex items-center gap-s2 text-[12px] disabled:text-disabled"
+              className={[
+                "group flex items-center gap-s2 text-[12px] enabled:hover:text-title disabled:text-disabled",
+                compare ? "text-strong" : "text-label",
+              ].join(" ")}
             >
               <span
                 aria-hidden
-                className="relative h-[16px] w-[30px] rounded-full transition-colors"
-                style={{
-                  background: compare
-                    ? "var(--t-accent)"
-                    : "var(--t-surface-track)",
-                }}
+                className={[
+                  "relative h-[16px] w-[30px] rounded-full transition-[background-color,filter] duration-[var(--dur-base)] ease-[var(--ease-out)]",
+                  compare
+                    ? "bg-accent group-enabled:group-hover:brightness-110"
+                    : "bg-track group-enabled:group-hover:bg-edge-strong",
+                ].join(" ")}
               >
                 <span
-                  className="absolute top-[2px] size-[12px] rounded-full bg-white transition-all"
+                  className="absolute top-[2px] size-[12px] rounded-full bg-white transition-[left] duration-[var(--dur-base)] ease-[var(--ease-out)]"
                   style={{ left: compare ? 16 : 2 }}
                 />
               </span>
-              <span className={compare ? "text-strong" : "text-label"}>
-                시점 비교
-              </span>
+              <span>시점 비교</span>
             </button>
           </div>
         </div>
 
         {변화 ? (
-          <div className="grid shrink-0 grid-cols-2 gap-s4">
+          <div className="grid shrink-0 grid-cols-1 gap-s4 @min-[560px]:grid-cols-2">
             <SideMap mark="A" snap={변화.a} />
             <SideMap mark="B" snap={변화.b} />
           </div>
         ) : (
         <section className="relative flex min-h-[340px] shrink-0 flex-col rounded-[14px] border border-edge bg-canvas p-s5">
-          <header className="z-10 flex shrink-0 items-center gap-s3">
-            <h2 className="text-[15px] font-semibold text-title">
+          <header className="z-10 flex shrink-0 flex-wrap items-center gap-s3">
+            <h2 className="whitespace-nowrap text-[15px] font-semibold text-title">
               Historical Map
             </h2>
             <Chip label="사건" value={`${now.events}건`} />
@@ -368,7 +383,8 @@ export default function TimelineTab({
             {now.ym}
           </span>
 
-          <div className="min-h-0 flex-1">
+          {/* 큰 분기 글씨(워터마크)는 지도 밑에 깐다 — 전에는 지도 위층에 칠해졌다 */}
+          <div className="relative z-[1] min-h-0 flex-1">
             <HexMap layout={now.layout} />
           </div>
 
@@ -393,7 +409,7 @@ export default function TimelineTab({
         </section>
         )}
 
-        <div className="grid shrink-0 grid-cols-[1fr_320px] gap-s4">
+        <div className="grid shrink-0 grid-cols-1 gap-s4 @min-[720px]:grid-cols-[minmax(0,1fr)_320px]">
           <TrendChart
             snaps={snaps}
             at={at}
@@ -445,18 +461,19 @@ export default function TimelineTab({
                   </div>
                   {/*
                     막대 둘을 겹친다 — 어두운 쪽이 처음, 밝은 쪽이 지금이다 (피그마 ⑦-9b).
-                    길이는 추이 그래프 세로축과 같은 눈금이라 재생하면 자라는 것이 보인다
+                    길이는 추이 그래프 세로축과 같은 눈금이라 재생하면 자라는 것이 보인다.
+                    시점을 옮기면 길이가 번져 자란다 — 전에는 딱 바뀌었다 (최현서 1번)
                   */}
                   <div className="relative h-[5px] overflow-hidden rounded-full bg-bar-track">
                     <div
-                      className="absolute inset-y-0 left-0 rounded-full"
+                      className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-[var(--dur-base)] ease-[var(--ease-out)]"
                       style={{
                         width: `${pctOf(r.to, peak)}%`,
                         background: `var(--t-island-${r.token})`,
                       }}
                     />
                     <div
-                      className="absolute inset-y-0 left-0 rounded-full"
+                      className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-[var(--dur-base)] ease-[var(--ease-out)]"
                       style={{
                         width: `${pctOf(Math.min(r.from, r.to), peak)}%`,
                         background: `var(--t-island-${r.token})`,
@@ -482,7 +499,11 @@ export default function TimelineTab({
             </h3>
             {cards.map((c) => {
               const on = c.year === now.year;
-              // 지금 시점보다 뒤의 해는 흐리게 둔다 (피그마 ⑦-9b 재생 중 2025 · 2026 카드)
+              /*
+               * 지금 시점보다 뒤의 해. **흐리게 하는 것은 재생 중에만이다** (피그마 ⑦-9b 재생 중
+               * 2025 · 2026 카드). 멈춰 있을 때는 글자색만 한 단계 낮춘다 — 전에는 늘 50% 라 꺼진
+               * 단추(같은 화면 40%)처럼 보였는데 누르면 그 시점으로 옮겨 갔다 (2026-09-28 코드 분석)
+               */
               const later = c.year > now.year;
               return (
                 <button
@@ -490,10 +511,11 @@ export default function TimelineTab({
                   type="button"
                   onClick={() => onPick(c.snap.ym)}
                   aria-current={on ? "true" : undefined}
+                  // 안 고른 카드는 공통 규칙(`hover-edge`) — 테두리가 진해지고 바탕이 한 단계 밝다 (최현서 1번)
                   className={[
                     "flex shrink-0 items-center gap-s3 rounded-[12px] border p-s2 pr-s4 text-left",
-                    on ? "border-accent bg-row-selected" : "border-edge bg-card",
-                    later ? "opacity-50" : "",
+                    on ? "border-accent bg-row-selected" : "border-edge bg-card hover-edge",
+                    later && playing ? "opacity-50" : "",
                   ].join(" ")}
                 >
                   <Thumb layout={c.snap.layout} viewBox={c.box} />
@@ -501,7 +523,7 @@ export default function TimelineTab({
                     <span
                       className={
                         "block text-[14px] tabular-nums " +
-                        (on ? "font-semibold text-accent" : "text-strong")
+                        (on ? "font-semibold text-accent" : later ? "text-body" : "text-strong")
                       }
                     >
                       {c.snap.ym}
@@ -525,35 +547,6 @@ export default function TimelineTab({
 }
 
 /**
- * 재생 단추 그림 (피그마 ⑦-9b · ⑦-9c).
- *
- * **글자(◀ ▶ ⏸)를 쓰지 않는다.** ⏸ · ▶ 는 윈도에서 컬러 이모지로 바뀌어 피그마의
- * 흰 도형과 달라진다. 크기는 ⑦-9b 에서 읽었다 — 삼각형 폭 6px(▶▶ 는 둘을 3px 띄움),
- * 일시정지 막대 약 4px 둘을 1.5px 띄움
- */
-function Glyph({ kind }: { kind: "prev" | "play" | "pause" | "next" }) {
-  const w = kind === "next" ? 16 : 12;
-  return (
-    <svg aria-hidden width={w} height="12" viewBox={`0 0 ${w} 12`} fill="currentColor">
-      {kind === "prev" && <path d="M9 2.5v7L3 6z" />}
-      {kind === "play" && <path d="M3.5 2v8L10 6z" />}
-      {kind === "pause" && (
-        <>
-          <rect x="1.5" y="2" width="3.75" height="8" rx="0.5" />
-          <rect x="6.75" y="2" width="3.75" height="8" rx="0.5" />
-        </>
-      )}
-      {kind === "next" && (
-        <>
-          <path d="M0.5 2.5v7L6.5 6z" />
-          <path d="M9.5 2.5v7L15.5 6z" />
-        </>
-      )}
-    </svg>
-  );
-}
-
-/**
  * 스냅샷 카드의 섬 썸네일 (피그마 ⑦-9b, 컴포넌트 시트 「Snapshot List Item」).
  * 섬 테두리 경로만 섬 색으로 채운다. viewBox 를 카드끼리 맞춰 해마다 자라는 것이 보인다
  */
@@ -561,7 +554,8 @@ function Thumb({ layout, viewBox }: { layout: MapLayout; viewBox: string }) {
   return (
     <span
       aria-hidden
-      className="block h-[44px] w-[60px] shrink-0 rounded-[8px] bg-track p-[4px]"
+      // 테두리를 둘러 카드에 마우스를 올려 바탕이 트랙 색이 되어도 틀이 묻히지 않게 한다
+      className="block h-[44px] w-[60px] shrink-0 rounded-[8px] border border-edge bg-track p-[4px]"
     >
       <svg viewBox={viewBox} className="block size-full">
         {layout.islands.map((i) => (
@@ -661,7 +655,7 @@ function TimeSlider({
 function SideMap({ mark, snap }: { mark: "A" | "B"; snap: Snapshot }) {
   return (
     <section className="relative flex min-h-[340px] flex-col rounded-[14px] border border-edge bg-canvas p-s5">
-      <header className="z-10 flex shrink-0 items-center gap-s3">
+      <header className="z-10 flex shrink-0 flex-wrap items-center gap-s3">
         <span
           className="grid size-[20px] place-items-center rounded-[6px] text-[11px] font-bold text-on-accent"
           style={{ background: "var(--t-accent)" }}
@@ -682,7 +676,7 @@ function SideMap({ mark, snap }: { mark: "A" | "B"; snap: Snapshot }) {
         {snap.ym}
       </span>
 
-      <div className="min-h-0 flex-1">
+      <div className="relative z-[1] min-h-0 flex-1">
         <HexMap layout={snap.layout} />
       </div>
     </section>
@@ -845,11 +839,11 @@ function TrendChart({
 
   return (
     <section className="rounded-[14px] border border-edge bg-card px-s5 py-s4">
-      <div className="flex items-baseline justify-between">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-s4 gap-y-s1">
         <h3 className="text-[12px] font-semibold text-strong">
           섬별 누적 사건 추이
         </h3>
-        <ul className="flex gap-s4">
+        <ul className="flex flex-wrap gap-x-s4 gap-y-s1">
           {ids.map((id) => (
             <li key={id} className="flex items-center gap-s2 whitespace-nowrap text-[11px]">
               <span

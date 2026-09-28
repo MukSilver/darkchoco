@@ -105,7 +105,9 @@ export default function AppHeader({
           onClick={onHome}
           aria-label="WEB SCOPE — 첫 화면으로"
           title="첫 화면으로"
-          className="flex shrink-0 items-center gap-s3 rounded-[8px]"
+          // 눌리는 로고라는 것이 보이게 마우스를 올리면 바탕이 뜬다 (2026-09-28 최현서 1번).
+          // 여백만큼 좌우를 당겨 로고 자리는 그대로다
+          className="-mx-s2 flex shrink-0 items-center gap-s3 rounded-[8px] px-s2 py-s1 hover-row"
         >
           <Logo />
         </button>
@@ -173,7 +175,9 @@ export default function AppHeader({
         <button
           type="button"
           onClick={onSearch}
-          className="flex size-full items-center gap-s2 rounded-[8px] border border-edge-input bg-input px-s4 text-left"
+          // 입력칸 모양이라 바탕은 두고 테두리만 진해진다. `hover-edge` 는 바탕을 트랙 색으로
+          // 바꿔 입력칸이 단추처럼 보인다 (2026-09-28 최현서 1번)
+          className="flex size-full items-center gap-s2 rounded-[8px] border border-edge-input bg-input px-s4 text-left hover:border-edge-strong"
         >
           <span aria-hidden className="text-[12px] text-disabled">
             ⌕

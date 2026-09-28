@@ -34,7 +34,7 @@
 
 "use client";
 
-import { useEffect, useMemo, useRef, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 
 import { Chip, KindDot, TeamMark, hexPoints } from "./RelBits";
 import type { MapLayout, TerritoryShape } from "@/lib/layout";
@@ -214,15 +214,16 @@ function Toggle({
       disabled={disabled}
       title={title}
       onClick={onClick}
-      className="flex items-center gap-s2 rounded-[10px] border border-edge bg-panel px-s3 py-s2 text-[12px] text-body enabled:hover:text-title disabled:cursor-not-allowed disabled:opacity-50"
+      className="flex items-center gap-s2 rounded-[10px] border border-edge bg-panel px-s3 py-s2 text-[12px] text-body hover-edge disabled:cursor-not-allowed disabled:opacity-50"
     >
+      {/* 손잡이와 통 색은 번져 옮겨 간다 — 전에는 딱 바뀌었다. 타임라인 「시점 비교」 스위치와 같다 (최현서 1번) */}
       <span
         aria-hidden
-        className="relative h-[16px] w-[28px] shrink-0 rounded-full"
+        className="relative h-[16px] w-[28px] shrink-0 rounded-full transition-[background-color] duration-[var(--dur-base)] ease-[var(--ease-out)]"
         style={{ background: on ? "var(--t-accent)" : "var(--t-border-strong)" }}
       >
         <span
-          className="absolute top-[2px] size-[12px] rounded-full"
+          className="absolute top-[2px] size-[12px] rounded-full transition-[left] duration-[var(--dur-base)] ease-[var(--ease-out)]"
           style={{ left: on ? 14 : 2, background: "var(--t-text-on-accent)" }}
         />
       </span>
@@ -244,6 +245,17 @@ export default function RelationTab(p: RelationTabProps) {
     estFocus.current = false;
     document.querySelector<HTMLElement>("[data-est-toggle]")?.focus();
   }, [p.est]);
+  /*
+   * 마우스를 올린 관계선(선 · 라벨이 같은 id)과 노드. 선은 굵고 진해지고, 노드는 테두리가 밝아진다 —
+   * 전에는 손가락 커서 말고 아무 표시가 없어 어느 선을 누르게 될지 몰랐다 (2026-09-28 코드 분석,
+   * 최현서 1번). 떠날 때는 제 id 일 때만 지운다 — 선에서 라벨로 옮겨 가도 켜진 채 남는다
+   */
+  const [hoverEdge, setHoverEdge] = useState<string | null>(null);
+  const [hoverNode, setHoverNode] = useState<string | null>(null);
+  const edgeHover = (id: string) => ({
+    onMouseEnter: () => setHoverEdge(id),
+    onMouseLeave: () => setHoverEdge((h) => (h === id ? null : h)),
+  });
   const byId = useMemo(() => new Map(p.layout.territories.map((t) => [t.territoryId, t])), [p.layout]);
   const islandById = useMemo(() => new Map(p.layout.islands.map((i) => [i.islandKey, i])), [p.layout]);
   const nameOf = (id: string) => byId.get(id)?.name ?? id;
@@ -357,10 +369,11 @@ export default function RelationTab(p: RelationTabProps) {
     <div className="flex min-h-0 flex-1 flex-col gap-s4">
       <div className="flex shrink-0 flex-wrap items-center gap-s3">
         {p.origin && (
+          // 테두리 단추의 공통 마우스 올림(`hover-edge`) — 전에는 글자색만 한 단계 바뀌었다 (최현서 1번)
           <button
             type="button"
             onClick={p.onBack}
-            className="rounded-full border border-edge bg-card px-s3 py-s1 text-[12px] text-body hover:text-title"
+            className="rounded-full border border-edge bg-card px-s3 py-s1 text-[12px] text-body hover-edge"
           >
             ‹ {p.origin.label}
           </button>
@@ -389,15 +402,20 @@ export default function RelationTab(p: RelationTabProps) {
                     type="button"
                     onClick={() => p.onCenter(id)}
                     aria-pressed={on}
-                    className="flex items-center gap-s2 rounded-full border px-s4 py-s1 text-[13px]"
-                    style={{
-                      borderColor: on ? `var(--t-island-${token})` : "var(--t-border-card)",
-                      background: on ? `color-mix(in srgb, var(--t-island-${token}) 14%, transparent)` : "var(--t-surface-card)",
-                      color: on ? `var(--t-island-${token})` : "var(--t-text-body)",
-                      fontWeight: on ? 600 : 400,
-                    }}
+                    /*
+                     * 섬 색만 CSS 변수(`--chip`)로 넘기고 모양은 고정 클래스로 쓴다. 전에는 테두리 · 바탕 ·
+                     * 글자색을 인라인 style 로 줘서 마우스 올림 클래스가 먹지 않았다. 안 고른 칩은 테두리
+                     * 단추의 공통 규칙(`hover-edge`)이다 (2026-09-28 코드 분석, 최현서 1번)
+                     */
+                    className={[
+                      "flex items-center gap-s2 rounded-full border px-s4 py-s1 text-[13px]",
+                      on
+                        ? "border-[color:var(--chip)] bg-[color:color-mix(in_srgb,var(--chip)_14%,transparent)] font-semibold text-[color:var(--chip)]"
+                        : "border-edge bg-card text-body hover-edge",
+                    ].join(" ")}
+                    style={{ "--chip": `var(--t-island-${token})` } as CSSProperties}
                   >
-                    <span aria-hidden className="size-[8px] rounded-full" style={{ background: `var(--t-island-${token})` }} />
+                    <span aria-hidden className="size-[8px] rounded-full" style={{ background: "var(--chip)" }} />
                     {nameOf(id)}
                     {originId === id && (
                       <span aria-label="출발 영토" className="size-[6px] rounded-full" style={{ background: "var(--t-accent)" }} />
@@ -446,28 +464,34 @@ export default function RelationTab(p: RelationTabProps) {
             ))}
           </defs>
 
-          {/* 선 */}
+          {/*
+            선. 마우스를 올리면 굵고 진해진다 — 흐려진 선도 반쯤 살아나 누를 수 있는 것이 보인다.
+            굵기 · 흐려짐은 번져 바뀐다 (최현서 1번). `d` 는 전환에 안 넣는다 — 중심이 바뀔 때
+            선이 날아다니지 않게
+          */}
           {graph.edges.map(({ v, d }) => {
             const on = focus?.rel.id === v.rel.id;
             const picked = sel?.rel.id === v.rel.id;
             const dimmed = focus && !on;
+            const hover = hoverEdge === v.rel.id;
             const pick = (e: MouseEvent) => {
               e.stopPropagation();
               if (p.pair) p.onPairPick(v);
               else p.onSelect(picked ? null : v.rel.id);
             };
             return (
-              <g key={v.rel.id} className="cursor-pointer" onClick={pick}>
+              <g key={v.rel.id} className="cursor-pointer" onClick={pick} {...edgeHover(v.rel.id)}>
                 <path d={d} fill="none" stroke="transparent" strokeWidth={16} />
                 <path
                   d={d}
                   fill="none"
                   stroke={`var(--t-rel-${v.rel.kind})`}
-                  strokeWidth={on ? 3 : 1.8}
+                  strokeWidth={on ? 3 : hover ? 2.6 : 1.8}
                   strokeDasharray={CONF_DASH[v.rel.confidence] || undefined}
                   strokeLinecap="round"
                   markerEnd={`url(#rel-arrow-${v.rel.kind})`}
-                  opacity={dimmed ? 0.15 : on ? 1 : outerEdge(v) ? 0.5 : 0.85}
+                  opacity={dimmed ? (hover ? 0.5 : 0.15) : on || hover ? 1 : outerEdge(v) ? 0.5 : 0.85}
+                  className="transition-[stroke-width,opacity] duration-[var(--dur-base)] ease-[var(--ease-out)]"
                 />
               </g>
             );
@@ -476,11 +500,13 @@ export default function RelationTab(p: RelationTabProps) {
           {/*
             선 라벨 — 「Recruitment 14건」 (설계서 4.3.6). 고른 선은 칠하고, 강조한 선은
             테두리만 진하게 한다 (4.3.3 ① 「'Recruitment 14건' 강조 테두리」).
-            2단계 바깥 선은 라벨이 겹쳐 강조 · 선택했을 때만 단다
+            2단계 바깥 선은 라벨이 겹쳐 강조 · 선택했을 때만 단다.
+            마우스를 올리면(선이든 라벨이든) 바탕이 한 단계 밝고 테두리가 관계 색이 된다 (최현서 1번)
           */}
           {graph.edges.map(({ v, mid }) => {
             const on = focus?.rel.id === v.rel.id;
             const picked = sel?.rel.id === v.rel.id;
+            const hover = hoverEdge === v.rel.id;
             if (outerEdge(v) && !on) return null;
             const name = KIND_NAME[v.rel.kind];
             const w = textWidth(name, 13) + textWidth(`${v.count}건`, 12) + 34;
@@ -488,21 +514,29 @@ export default function RelationTab(p: RelationTabProps) {
               <g
                 key={`l-${v.rel.id}`}
                 transform={`translate(${mid.x - w / 2} ${mid.y - 13})`}
-                className="cursor-pointer"
-                opacity={focus && !on ? 0.3 : 1}
+                className="cursor-pointer transition-opacity duration-[var(--dur-base)] ease-[var(--ease-out)]"
+                opacity={focus && !on ? (hover ? 0.75 : 0.3) : 1}
                 onClick={(e) => {
                   e.stopPropagation();
                   if (p.pair) p.onPairPick(v);
                   else p.onSelect(picked ? null : v.rel.id);
                 }}
+                {...edgeHover(v.rel.id)}
               >
                 <rect
                   width={w}
                   height={26}
                   rx={6}
-                  fill={picked ? `var(--t-rel-${v.rel.kind})` : "var(--t-surface-panel)"}
-                  stroke={on ? `var(--t-rel-${v.rel.kind})` : "var(--t-border-card)"}
-                  strokeWidth={on && !picked ? 2 : 1}
+                  fill={
+                    picked
+                      ? `var(--t-rel-${v.rel.kind})`
+                      : hover
+                        ? "var(--t-surface-track)"
+                        : "var(--t-surface-panel)"
+                  }
+                  stroke={on || hover ? `var(--t-rel-${v.rel.kind})` : "var(--t-border-card)"}
+                  strokeWidth={on && !picked ? 2 : hover && !picked ? 1.5 : 1}
+                  className="transition-[fill,stroke,stroke-width] duration-[var(--dur-fast)] ease-[var(--ease-out)]"
                 />
                 {!picked && <circle cx={13} cy={13} r={3.5} fill={`var(--t-rel-${v.rel.kind})`} />}
                 <text x={picked ? 12 : 23} y={17.5} fontSize={13} fontWeight={600}>
@@ -515,20 +549,30 @@ export default function RelationTab(p: RelationTabProps) {
             );
           })}
 
-          {/* 노드 */}
+          {/*
+            노드. 누를 수 있는 노드(중심이 아닌 것)에 마우스를 올리면 테두리가 지도 영토와 같은
+            밝은 색(`--t-hex-hover-edge`)으로 굵어지고, 흐려진 노드도 반쯤 살아난다 (최현서 1번)
+          */}
           {[...graph.nodes.values()].map((n) => {
             const isCenter = n.id === p.center && !p.pair;
             const c = `var(--t-island-${n.t.token})`;
             const faded = focus && !onFocus(n.id);
+            const hover = !isCenter && hoverNode === n.id;
             return (
               <g
                 key={n.id}
-                className={isCenter ? "" : "cursor-pointer"}
-                opacity={faded ? 0.35 : 1}
+                className={
+                  isCenter
+                    ? "transition-opacity duration-[var(--dur-base)] ease-[var(--ease-out)]"
+                    : "cursor-pointer transition-opacity duration-[var(--dur-base)] ease-[var(--ease-out)]"
+                }
+                opacity={faded ? (hover ? 0.7 : 0.35) : 1}
                 onClick={(e) => {
                   e.stopPropagation();
                   if (!isCenter) p.onCenter(n.id);
                 }}
+                onMouseEnter={isCenter ? undefined : () => setHoverNode(n.id)}
+                onMouseLeave={isCenter ? undefined : () => setHoverNode((h) => (h === n.id ? null : h))}
               >
                 <title>{isCenter ? n.t.name : `${n.t.name} — 눌러서 중심으로`}</title>
                 {isCenter && (
@@ -536,17 +580,24 @@ export default function RelationTab(p: RelationTabProps) {
                 )}
                 {n.actor ? (
                   <>
-                    <polygon points={hexPoints(n.x, n.y, n.r)} fill="var(--t-surface-card)" stroke={c} strokeWidth={1.5} />
+                    <polygon
+                      points={hexPoints(n.x, n.y, n.r)}
+                      fill="var(--t-surface-card)"
+                      stroke={hover ? "var(--t-hex-hover-edge)" : c}
+                      strokeWidth={hover ? 2.5 : 1.5}
+                      className="transition-[stroke,stroke-width] duration-[var(--dur-fast)] ease-[var(--ease-out)]"
+                    />
                     <TeamMark cx={n.x} cy={n.y} size={n.r} />
                   </>
                 ) : (
                   <polygon
                     points={hexPoints(n.x, n.y, n.r)}
                     fill={c}
-                    stroke="var(--t-border-hex)"
-                    strokeWidth={1}
+                    stroke={hover ? "var(--t-hex-hover-edge)" : "var(--t-border-hex)"}
+                    strokeWidth={hover ? 2 : 1}
                     strokeDasharray={empty && isCenter ? "4 3" : undefined}
                     fillOpacity={empty && isCenter ? 0.25 : 1}
+                    className="transition-[stroke,stroke-width] duration-[var(--dur-fast)] ease-[var(--ease-out)]"
                   />
                 )}
                 {n.side === "below" && n.outer ? (
@@ -693,10 +744,11 @@ export default function RelationTab(p: RelationTabProps) {
                 </>
               )}
               {p.moveTo && (
+                // 강조색 단추의 공통 마우스 올림(`hover-accent`) — 전에는 없었다 (최현서 1번)
                 <button
                   type="button"
                   onClick={p.onMove}
-                  className="rounded-[8px] px-s4 py-s2 text-[13px] font-semibold text-on-accent"
+                  className="rounded-[8px] px-s4 py-s2 text-[13px] font-semibold text-on-accent hover-accent"
                   style={{ background: "var(--t-accent)" }}
                 >
                   {quarterText(p.moveTo)} 부터 관계 확인 · 기준일 옮기기

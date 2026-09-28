@@ -3,7 +3,7 @@
  * (02 · 07 라이트 블랙), 컴포넌트 시트 Incident Modal · Key Value · Tag · Button.
  *
  *   ‹ 이전 사건                                         닫기 ×
- *   EVENT · 사건 상세 · 더블클릭으로 열림
+ *   EVENT · 사건 상세
  *   [KR · 유통 · 2026-05-14 · 255GB]
  *   영토 · 섬 · 게시 시각 (UTC)
  *   [종류] [신뢰도] [위험도] [사건 번호]
@@ -117,7 +117,10 @@ export default function EventReport({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-s5"
+      // 열릴 때 막이 짧게 번지고 팝업이 살짝 떠오른다 (`@starting-style`, 2026-09-28 최현서 1번 —
+      // 「화면이 딱딱 바뀌어 어색하다」). 움직임 줄이기면 `--dur-base` 가 0 이라 바로 뜬다.
+      // 연결된 사건으로 바꿀 때는 다시 마운트되지 않아 안 움직인다
+      className="fixed inset-0 z-50 flex items-center justify-center p-s5 transition-opacity duration-[var(--dur-base)] ease-[var(--ease-out)] starting:opacity-0"
       // 뒤 화면을 어둡게 (L684). 모드와 무관하게 검은 막이라 토큰이 없다 — 화이트 판에서도 어두워야 한다
       style={{ background: "rgb(0 0 0 / 0.55)" }}
       onMouseDown={(e) => {
@@ -134,7 +137,7 @@ export default function EventReport({
         aria-labelledby="event-report-title"
         tabIndex={-1}
         onKeyDown={trapTab}
-        className="flex flex-col overflow-hidden rounded-[16px] border border-edge bg-panel shadow-2xl outline-none"
+        className="flex flex-col overflow-hidden rounded-[16px] border border-edge bg-panel shadow-2xl outline-none transition-[translate] duration-[var(--dur-base)] ease-[var(--ease-out)] starting:translate-y-[8px]"
         style={{
           width: "min(var(--w-modal), calc(100vw - 32px))",
           maxHeight: "min(var(--h-modal), calc(100vh - 48px))",
@@ -146,19 +149,20 @@ export default function EventReport({
               <button
                 type="button"
                 onClick={onBack}
-                className="shrink-0 rounded-[8px] border border-edge px-s2 py-[2px] text-[11px] text-body hover:text-title"
+                className="shrink-0 rounded-[8px] border border-edge px-s2 py-[2px] text-[11px] text-body hover-edge"
               >
                 ‹ 이전 사건
               </button>
             )}
             <span className="min-w-0 flex-1 truncate font-mono text-[11px] tracking-[0.12em] text-label">
-              EVENT · 사건 상세 · 더블클릭으로 열림
+              EVENT · 사건 상세
             </span>
             <button
               type="button"
               onClick={onClose}
               aria-label="사건 상세 닫기"
-              className="shrink-0 text-[12px] text-label hover:text-title"
+              // 글자 단추도 바탕이 떠서 눌리는 자리가 보이게. 여백만큼 오른쪽을 당겨 글자 자리는 그대로다
+              className="-mr-s2 shrink-0 rounded-[8px] px-s2 py-[2px] text-[12px] text-label hover-row hover:text-title"
             >
               닫기 ×
             </button>
@@ -208,7 +212,8 @@ export default function EventReport({
                       type="button"
                       onClick={() => onOpenLinked(x.id)}
                       title="이 사건으로 바꿔 보기"
-                      className="flex w-full items-center gap-s3 rounded-[12px] border border-edge px-s4 py-s3 text-left hover:border-edge-strong"
+                      // 테두리만 바뀌어서는 약했다. 공통 테두리 단추 규칙으로 바탕도 뜬다 (최현서 1번)
+                      className="flex w-full items-center gap-s3 rounded-[12px] border border-edge px-s4 py-s3 text-left hover-edge"
                     >
                       <span className="min-w-0 flex-1 truncate text-[13px] text-title">
                         {x.title}
@@ -225,7 +230,7 @@ export default function EventReport({
                       type="button"
                       onClick={() => onOpenRel(r.id)}
                       title="관계 탭에서 이 관계 보기"
-                      className="flex w-full items-center gap-s3 rounded-[12px] border border-edge px-s4 py-s3 text-left hover:border-edge-strong"
+                      className="flex w-full items-center gap-s3 rounded-[12px] border border-edge px-s4 py-s3 text-left hover-edge"
                     >
                       <span className="min-w-0 flex-1 truncate text-[13px] text-title">
                         {r.route}
@@ -258,7 +263,7 @@ export default function EventReport({
           <button
             type="button"
             onClick={exportJson}
-            className="shrink-0 rounded-[10px] border border-edge px-s4 py-s2 text-[12px] text-body hover:border-edge-strong hover:text-title"
+            className="shrink-0 rounded-[10px] border border-edge px-s4 py-s2 text-[12px] text-body hover-edge"
           >
             JSON 내보내기
           </button>

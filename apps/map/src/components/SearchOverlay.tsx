@@ -277,9 +277,11 @@ export default function SearchOverlay({
                           aria-pressed={on}
                           onMouseDown={keepFocus}
                           onClick={() => onFilter({ ...filter, scope: s.key })}
+                          // 안 고른 칩은 마우스를 올리면 바탕이 트랙 색으로 뜬다. 글자색만 바뀌어서는
+                          // 패널 위 bg-card 칩이 달라 보이지 않았다 (2026-09-28 최현서 1번)
                           className={
                             "rounded-full px-s3 py-[3px] text-[12px] " +
-                            (on ? "bg-title font-semibold text-panel" : "bg-card text-body hover:text-title")
+                            (on ? "bg-title font-semibold text-panel" : "bg-card text-body hover-row hover:text-title")
                           }
                         >
                           {s.label}
@@ -297,9 +299,14 @@ export default function SearchOverlay({
                           aria-pressed={on}
                           onMouseDown={keepFocus}
                           onClick={() => toggleIsland(isl.id)}
+                          // 범위 칩처럼 마우스를 올리면 바탕이 트랙 색으로 뜨고 글자가 밝다. 테두리 칩이라
+                          // 테두리도 진해지는 `hover-edge` 다. 고른 칩은 다시 누르면 풀려서 테두리를
+                          // 강조색으로 올린다. 전에는 hover 가 없었다 (최현서 1번)
                           className={
                             "flex items-center gap-s1 rounded-full border px-s3 py-[2px] text-[12px] " +
-                            (on ? "border-accent-edge bg-accent-subtle text-title" : "border-edge text-body")
+                            (on
+                              ? "border-accent-edge bg-accent-subtle text-title hover:border-accent"
+                              : "border-edge text-body hover-edge")
                           }
                         >
                           <span
