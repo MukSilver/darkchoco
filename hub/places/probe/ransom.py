@@ -42,7 +42,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Iterator
 
@@ -88,7 +88,22 @@ NEEDS_PACKAGES: list[str] = []      # 표준 라이브러리만 씁니다
 # 여섯 달인 이유는 한 달에 한 요청이고 62초 간격이라, 여섯이면 한 판에
 # 6분쯤 더 걸리기 때문입니다. 열둘이면 12분입니다. 백오프로 줄인 시간
 # 안에서 감당되는 값으로 잡았습니다.
-개월 = 6
+#
+# ## 2026-09-25 — 달력 여섯 달 합계에서 「최근 180일 월평균」 으로 (최현서 승인, 인계 A)
+#
+# 달력 여섯 달 합계는 **이번 달이 덜 찬 채로** 셌습니다. 매달 1일에 가득 찬 가장 오래된
+# 달이 빠지고 거의 빈 새 달이 들어와, 숫자가 뚝 떨어졌다가 한 달 동안 다시 오르는 톱니가
+# 됐습니다. 칸 글자에 기간이 없어 누적 건수처럼 읽히기도 했습니다. 이름만 「평균」 으로
+# 바꾸면 톱니는 그대로라 **세는 구간을 바꿉니다.**
+#
+#   세는 구간   게시일(attackdate, 없으면 discovered)이 오늘부터 거슬러 180일 안인 건
+#   받는 달     180일을 덮으려면 일곱 달입니다. 요청 간격 62초는 그대로라 1분 늘어납니다
+#   규모        「피해 월평균 N건 (최근 180일) (날짜 기준)」. N 은 180일 건수 ÷ 6
+#   나머지      피해 대상 · 한국 관련 유출 · 최근 활동도 같은 180일로 셉니다
+#
+# 못 받은 달이 있으면 네 칸을 안 쓰는 규칙(2026-09-25)은 그대로 먹습니다.
+개월 = 7
+창 = 180            # 일. 이 안에 게시된 피해만 셉니다
 UA = "darkchoco-research/1.0 (WHS4; read-only)"
 
 # locations[].type 을 노션 「형식」 칸 값으로 옮깁니다.
@@ -258,6 +273,8 @@ def _피해모으기(마지막: list[float], 개월수: int, op=None) -> tuple[d
     """
     모음: dict = {}
     못본달: list[str] = []
+    # 180일 창의 첫날. 이 날부터 오늘까지 게시된 것만 셉니다
+    시작 = (_오늘() - timedelta(days=창 - 1)).isoformat()
     실패 = 0
     달들 = list(_달들(개월수))
     # **진행을 찍습니다.** 62초 간격이라 여섯 달이면 6분 넘게 걸리는데, 그동안
@@ -292,10 +309,14 @@ def _피해모으기(마지막: list[float], 개월수: int, op=None) -> tuple[d
             g = str(v.get("group") or "").strip()
             if not g:
                 continue
+            # **180일 창 밖이면 안 셉니다.** 받는 달이 일곱이라 첫 달 앞쪽은 창 밖입니다.
+            # 날짜가 없는 건은 어느 창에 드는지 몰라 안 셉니다
+            when = str(v.get("attackdate") or v.get("discovered") or "")[:10]
+            if not when or when < 시작:
+                continue
             d = 모음.setdefault(g, {"건수": 0, "마지막": "",
                                    "업종": collections.Counter(), "한국": 0})
             d["건수"] += 1
-            when = str(v.get("attackdate") or v.get("discovered") or "")[:10]
             if when > d["마지막"]:
                 d["마지막"] = when
             업종 = str(v.get("activity") or "").strip()
@@ -358,7 +379,8 @@ def 조사(*, dry: bool = False, limit: int = 0,
         return
 
     피해, 못본달 = _피해모으기(마지막, 개월수, op) if 개월수 > 0 else ({}, [])
-    기간 = f"최근 {개월수}달" if 개월수 > 0 else ""
+    # 받는 달 수와 세는 구간은 다릅니다. 일곱 달을 받아 180일만 셉니다
+    기간 = f"최근 {창}일" if 개월수 > 0 else ""
     if 못본달:
         # 대시보드 로그 요약이 이 줄을 집습니다 (worker.js 요약무늬). 문구를 바꾸면 거기도 봅니다
         print(f"    피해 목록 {개월수}달 중 {len([x for x in 못본달 if '(' in x])}달을 못 받아 "
@@ -403,7 +425,9 @@ def 조사(*, dry: bool = False, limit: int = 0,
         # 값을 안 채우면 노션값() 이 그 칸을 안 냅니다. 노션의 지금 값이 그대로 남습니다.
         # 상태 · 확인일 · 주소는 그룹 목록에서 오므로 그대로 씁니다.
         if d and not 못본달:
-            p.피해기업수 = d["건수"]
+            p.피해기업수 = d["건수"]          # 180일 건수. 시계열 표에 쌓습니다
+            p.피해월평균 = round(d["건수"] / (창 / 30), 1)
+            p.피해기간 = 기간
             if d["마지막"]:
                 p.최근활동 = d["마지막"]
             업종 = _업종줄(d["업종"])

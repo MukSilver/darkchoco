@@ -237,6 +237,10 @@ class Place:
     게시물수: int | None = None
     구독자수: int | None = None
     피해기업수: int | None = None
+    # 랜섬 규모. 최근 180일 피해 건수를 달 수(6)로 나눈 값입니다 (2026-09-25).
+    # 달력 여섯 달 합계는 매달 1일에 뚝 떨어지는 톱니였습니다. probe/ransom.py 머리말
+    피해월평균: float | None = None
+    피해기간: str = ""              # 「최근 180일」. 규모 줄에 같이 적습니다
     어림수: bool = False            # t.me 가 8.12K 처럼 줄여 준 값인가
     주소이상: bool = False          # 명부의 주소가 이 갈래 것이 아닙니다
     두드림: bool = False            # 이 줄을 실제로 두드려 응답을 받았는가
@@ -287,7 +291,10 @@ class Place:
             조각.append(f"회원 {self.회원수:,}")
         if self.게시물수 is not None:
             조각.append(f"게시물 {self.게시물수:,}")
-        if self.피해기업수 is not None:
+        if self.피해월평균 is not None:
+            조각.append(f"피해 월평균 {self.피해월평균:.1f}건"
+                      + (f" ({self.피해기간})" if self.피해기간 else ""))
+        elif self.피해기업수 is not None:
             조각.append(f"피해 기업 {self.피해기업수:,}")
         if not 조각:
             return ""
