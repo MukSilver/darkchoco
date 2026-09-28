@@ -19,7 +19,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { hitKey, rowParts, type SearchCtx } from "./SearchRows";
 import { DARK_ISLANDS } from "@/lib/islands";
@@ -60,7 +60,7 @@ const BUTTON: Record<Hit["kind"], string> = {
 
 const CONFS: (Confidence | null)[] = [null, "confirmed", "high", "estimated"];
 
-/** 필터 단추 하나와 펼친 목록. 바깥을 누르면 닫힌다 */
+/** 필터 단추 하나와 펼친 목록. 바깥을 누르거나 Esc 를 누르면 닫힌다 */
 function Menu({
   label,
   value,
@@ -71,13 +71,38 @@ function Menu({
   children: (close: () => void) => React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLDivElement>(null);
+  const button = useRef<HTMLButtonElement>(null);
+
+  // 열린 동안 Esc 는 메뉴만 닫고 멈춘다. 안 멈추면 page.tsx 의 창 Esc 가 결과 화면 전체를
+  // 닫았다 (2026-09-28 코드 분석, `SearchOverlay` 의 Esc 와 같은 까닭). 단추의 onKeyDown 이
+  // 아니라 창의 잡기 단계에서 받는다 — 사파리는 단추를 눌러도 초점을 안 옮겨 키가 단추로 안 온다
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      const now = document.activeElement;
+      const inside = !!wrap.current?.contains(now);
+      // 초점이 다른 자리(메뉴를 연 채 Ctrl+K 로 연 검색 창 따위)에 있으면 그쪽 Esc 다
+      if (!inside && now && now !== document.body) return;
+      e.stopPropagation();
+      e.preventDefault();
+      // 목록 항목에 있던 초점은 항목이 사라지며 문서 맨 앞으로 빠진다. 단추로 돌려준다
+      if (inside) button.current?.focus();
+      setOpen(false);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [open]);
+
   return (
-    <div className="relative">
+    <div ref={wrap} className="relative">
       <button
+        ref={button}
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-s1 rounded-[10px] border border-edge bg-panel px-s3 py-s2 text-[12px] text-body hover:text-title"
+        className="flex items-center gap-s1 rounded-[10px] border border-edge bg-panel px-s3 py-s2 text-[12px] text-body hover-edge"
       >
         {label}: {value}
         <span aria-hidden className="text-[9px] text-label">
@@ -102,8 +127,9 @@ function Opt({ on, onClick, children }: { on: boolean; onClick: () => void; chil
       type="button"
       aria-pressed={on}
       onClick={onClick}
+      // 마우스 올림은 공통 줄 규칙. 전에는 패널 바탕과 거의 같은 bg-card 라 없는 셈이었다 (최현서 1번)
       className={
-        "flex items-center gap-s2 px-s3 py-s1 text-left text-[12px] hover:bg-card " +
+        "flex items-center gap-s2 px-s3 py-s1 text-left text-[12px] hover-row " +
         (on ? "font-semibold text-title" : "text-body")
       }
     >
@@ -185,9 +211,10 @@ export default function SearchResults({
               role="tab"
               aria-selected={on}
               onClick={() => onFilter({ ...filter, scope: s.key })}
+              // 안 고른 탭은 마우스를 올리면 밑줄 자리가 옅게 선다 — 글자색만으로는 안 보였다 (최현서 1번)
               className={
                 "-mb-px flex items-baseline gap-s1 border-b-2 pb-s2 text-[14px] " +
-                (on ? "font-semibold text-title" : "border-transparent text-label hover:text-body") +
+                (on ? "font-semibold text-title" : "border-transparent text-label hover:border-edge-strong hover:text-body") +
                 (n === 0 && !on ? " opacity-60" : "")
               }
               style={on ? { borderColor: "var(--t-accent)" } : undefined}
@@ -203,7 +230,7 @@ export default function SearchResults({
           <button
             type="button"
             onClick={onClose}
-            className="mb-s2 shrink-0 whitespace-nowrap rounded-[10px] border border-edge px-s3 py-s1 text-[12px] text-body hover:text-title"
+            className="mb-s2 shrink-0 whitespace-nowrap rounded-[10px] border border-edge px-s3 py-s1 text-[12px] text-body hover-edge"
           >
             검색 결과 닫기 ×
           </button>
@@ -304,7 +331,7 @@ export default function SearchResults({
               <button
                 type="button"
                 onClick={() => onFilter({ ...NO_FILTER, sort: filter.sort })}
-                className="mt-s2 rounded-[10px] border border-edge px-s3 py-s2 text-[12px] text-body hover:text-title"
+                className="mt-s2 rounded-[10px] border border-edge px-s3 py-s2 text-[12px] text-body hover-edge"
               >
                 필터 초기화
               </button>

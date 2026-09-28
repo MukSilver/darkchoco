@@ -16,6 +16,7 @@
 
 import { useEffect } from "react";
 
+import PlayGlyph from "./PlayGlyph";
 import { labelTicks } from "@/lib/mapui";
 import { quarterRange, tickLabel, type QuarterKey } from "@/lib/quarter";
 
@@ -100,10 +101,11 @@ export default function SnapshotBar({
         aria-label={playing ? "정지" : atEnd ? "처음부터 재생" : "재생"}
         title={!playing && atEnd ? "처음 분기부터 재생" : undefined}
         onClick={togglePlay}
-        className="grid size-[34px] shrink-0 place-items-center rounded-[10px] text-[13px] text-on-accent"
+        className="grid size-[34px] shrink-0 place-items-center rounded-[10px] text-on-accent hover-accent"
         style={{ background: "var(--t-accent)" }}
       >
-        {playing ? "⏸" : "▶"}
+        {/* 글자(⏸ ▶)는 윈도에서 컬러 이모지가 된다. 타임라인 탭과 같은 그림을 쓴다 */}
+        <PlayGlyph kind={playing ? "pause" : "play"} />
       </button>
 
       <div className="shrink-0">
@@ -163,7 +165,7 @@ export default function SnapshotBar({
         type="button"
         onClick={() => onChange(to)}
         disabled={value === to}
-        className="shrink-0 whitespace-nowrap rounded-[10px] border border-edge px-s4 py-s2 text-[12px] text-body disabled:text-disabled"
+        className="shrink-0 whitespace-nowrap rounded-[10px] border border-edge px-s4 py-s2 text-[12px] text-body hover-edge disabled:text-disabled"
       >
         기준일로
       </button>

@@ -10,7 +10,8 @@
  *   한 번 클릭        행 선택. 지도에 그 관계선만 그리고 상대 영토가 떠오른다
  *   같은 행 다시 클릭  선택 해제
  *   더블클릭          관계 탭으로 간다
- *   「관계 보기 ›」    더블클릭과 같다. 마우스를 올릴 때만 보인다
+ *   「관계 보기 ›」    더블클릭과 같다. 마우스를 올린 줄과 고른 줄에서 보인다 (한 번 클릭으로도
+ *                     관계 탭에 갈 수 있게 — 2026-09-28 최현서 9번)
  *
  * 건수는 지도 관계선 라벨 · 관계 연혁과 같은 값이다 (설계서 3.9, `relations.ts`).
  */
@@ -110,7 +111,8 @@ function Row({
       className={[
         "group relative flex cursor-pointer select-none flex-col gap-s2 rounded-[12px] border px-s4 py-s4 outline-none",
         "focus-visible:ring-2 focus-visible:ring-[var(--t-accent)]",
-        on ? "border-[var(--t-accent)] bg-accent-subtle" : "border-edge bg-card hover:border-edge-strong",
+        // 마우스 올림은 공통 규칙(`hover-edge`)에 맞춰 바탕도 한 단계 밝힌다 (최현서 1 · 9번)
+        on ? "border-[var(--t-accent)] bg-accent-subtle" : "border-edge bg-card hover:border-edge-strong hover:bg-track",
       ].join(" ")}
     >
       <div className="flex items-center gap-s2">
@@ -127,10 +129,13 @@ function Row({
           e.stopPropagation();
           onOpen();
         }}
+        // 고른 줄에서도 보인다 — 한 번 눌러 고른 뒤 한 번 더 누르면 관계 탭이다. 더블클릭을 몰라도
+        // 한 번 클릭으로 갈 수 있게 (2026-09-28 최현서 9번). 마우스를 안 올린 줄에서는 설계서
+        // 4.3.3 L604 대로 숨긴다
         className={[
-          "absolute bottom-s3 right-s3 rounded-[6px] px-s2 py-[2px] text-[11px] text-title opacity-0 transition-opacity",
+          "absolute bottom-s3 right-s3 rounded-[6px] border px-s2 py-[2px] text-[11px] text-title transition-opacity hover:border-edge-strong",
           "focus-visible:opacity-100 group-hover:opacity-100",
-          on ? "bg-accent-subtle" : "bg-card",
+          on ? "border-accent-edge bg-accent-subtle opacity-100" : "border-transparent bg-card opacity-0",
         ].join(" ")}
       >
         관계 보기 ›

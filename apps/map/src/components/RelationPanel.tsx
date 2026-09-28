@@ -16,7 +16,7 @@
  *
  * **근거 사건 제목은 `eventTitle` 이 분류 칸으로 짓는다** (국가 · 산업 · 날짜 · 규모).
  * 자료 제목에는 피해 조직 이름이 들어 굽기가 안 싣는다 (2026-09-23 결정).
- * 사건 줄을 두 번 누르면 `onOpenEvent` 를 부른다 — 보고서 팝업(4.3.4) 자리다.
+ * 사건 줄을 누르면 `onOpenEvent` 를 부른다 — 보고서 팝업(4.3.4) 자리다 (한 번 클릭, 최현서 9번).
  */
 
 "use client";
@@ -67,7 +67,7 @@ export type RelationPanelProps = {
   onPairPick: (v: RelView) => void;
   /** 「추정 관계 포함」을 꺼서 가린 중심의 관계 수. 관계 없음 요약 문안이 갈린다 (⑦-8g) */
   hiddenEst: number;
-  /** 근거 사건 더블클릭 — 보고서 팝업 (설계서 4.3.4 · 4.3.6) */
+  /** 근거 사건 누르기 — 보고서 팝업 (설계서 4.3.4 · 4.3.6, 한 번 클릭) */
   onOpenEvent?: (id: string) => void;
 };
 
@@ -123,7 +123,7 @@ export default function RelationPanel(p: RelationPanelProps) {
                 <button
                   type="button"
                   onClick={() => p.onPairPick(v)}
-                  className="flex w-full flex-col gap-s2 rounded-[12px] border border-edge bg-card px-s4 py-s3 text-left hover:border-edge-strong"
+                  className="flex w-full flex-col gap-s2 rounded-[12px] border border-edge bg-card px-s4 py-s3 text-left hover:border-edge-strong hover:bg-track"
                 >
                   <span className="flex items-center gap-s2">
                     <Chip tone={KIND_CHIP[v.rel.kind]}>{KIND_LABEL[v.rel.kind]}</Chip>
@@ -192,9 +192,14 @@ export default function RelationPanel(p: RelationPanelProps) {
           <h3 className="text-[13px] font-semibold text-strong">관계 유형 구성</h3>
           <span className="text-[11px] tabular-nums text-label">사건 {total}건</span>
         </div>
+        {/* 중심이나 기준일이 바뀌면 칸 길이가 번져 바뀐다 — 전에는 딱 바뀌었다 (최현서 1번) */}
         <div className="flex h-[6px] overflow-hidden rounded-full bg-bar-track">
           {mix.map((m) => (
-            <div key={m.kind} style={{ width: `${(m.count / total) * 100}%`, background: `var(--t-rel-${m.kind})` }} />
+            <div
+              key={m.kind}
+              className="transition-[width] duration-[var(--dur-base)] ease-[var(--ease-out)]"
+              style={{ width: `${(m.count / total) * 100}%`, background: `var(--t-rel-${m.kind})` }}
+            />
           ))}
         </div>
         {mix.length > 0 && (
@@ -238,13 +243,10 @@ export default function RelationPanel(p: RelationPanelProps) {
               // 사건 판정을 신뢰도 칩으로 (설계서 2.3). 허위는 칩이 없다
               const conf = confOfVerdict(e.verdict);
               return (
-                <li
-                  key={e.id}
-                  className="relative"
-                  title={p.onOpenEvent ? "두 번 누르면 사건 보고서" : undefined}
-                >
-                  {/* 더블클릭 · Enter 는 EventRow 가 받는다 — 키보드로도 팝업이 열린다. 열 때 그 줄을
-                      강조해 둔다 (이미 강조된 줄을 두 번 누르면 첫 click 이 강조를 풀기 때문) */}
+                <li key={e.id}>
+                  {/* 한 번 누르기 · Enter 는 EventRow 가 받는다 — 그 줄을 강조하고 팝업을 연다
+                      (2026-09-28 최현서 9번). 신뢰도 칩은 칩 줄 오른쪽 끝 자리(`side`)에 둔다 —
+                      전에는 줄 위에 띄워서 칩이 늘면 첫 줄 칩과 겹쳤다 */}
                   <EventRow
                     e={e}
                     where={whereOf(e)}
@@ -258,12 +260,8 @@ export default function RelationPanel(p: RelationPanelProps) {
                           }
                         : undefined
                     }
+                    side={conf ? <Chip tone={CONF_CHIP[conf]}>{CONF_LABEL[conf]}</Chip> : undefined}
                   />
-                  {conf && (
-                    <span className="pointer-events-none absolute right-s3 top-s3">
-                      <Chip tone={CONF_CHIP[conf]}>{CONF_LABEL[conf]}</Chip>
-                    </span>
-                  )}
                 </li>
               );
             })}
@@ -319,11 +317,15 @@ export default function RelationPanel(p: RelationPanelProps) {
                     {nameOf(v.rel.from)} → {nameOf(v.rel.to)}
                   </p>
                   <p className="text-[12px] leading-[1.7] text-body">{historyText(v, nameOf)}</p>
+                  {/*
+                    글자 단추의 공통 마우스 올림(`hover-seg`) — 전에는 밑줄만 그어졌다. 글자색을 인라인
+                    style 로 주면 hover 클래스가 못 이겨서 클래스로 옮겼다. 안쪽 여백만큼 바깥을 당겨
+                    글자 자리는 그대로다 (2026-09-28 코드 분석, 최현서 1번)
+                  */}
                   <button
                     type="button"
                     onClick={() => p.onSelect(on ? null : v.rel.id)}
-                    className="self-start text-[12px] hover:underline"
-                    style={{ color: "var(--t-web-connection)" }}
+                    className="-mx-s1 self-start rounded-[6px] px-s1 text-[12px] text-web-connection hover-seg hover:underline"
                   >
                     {on ? "선택 해제" : "근거 보기"}
                   </button>

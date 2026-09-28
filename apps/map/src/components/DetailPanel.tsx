@@ -101,12 +101,13 @@ export default function DetailPanel({
                 if (enabled) onTab(t.key);
               }}
               title={enabled ? undefined : "섬이나 영토를 고르면 보입니다"}
+              // 안 고른 탭은 마우스를 올리면 밑줄 자리가 옅게 선다 — 글자색만으로는 안 보였다 (최현서 1번)
               className={[
                 "-mb-px border-b-2 pb-s3 text-[13px]",
                 on
                   ? "border-[var(--t-accent)] font-semibold text-strong"
                   : "border-transparent text-label disabled:cursor-not-allowed",
-                !on && enabled ? "hover:text-body" : "",
+                !on && enabled ? "hover:border-edge-strong hover:text-body" : "",
               ].join(" ")}
             >
               {t.name}
@@ -232,8 +233,9 @@ function Overview({
                   </span>
                 </div>
                 <div className="h-[4px] overflow-hidden rounded-full bg-bar-track">
+                  {/* 기준일 · 선택이 바뀌면 길이가 번져 옮겨 간다. 전에는 딱 바뀌었다 (2026-09-28 코드 분석) */}
                   <div
-                    className="h-full rounded-full"
+                    className="h-full rounded-full transition-[width,background-color] duration-[var(--dur-base)] ease-[var(--ease-out)]"
                     style={{
                       width: `${s.percent}%`,
                       background: `var(--t-island-${s.token})`,
@@ -289,7 +291,7 @@ function ActivityRow({
           type="button"
           onClick={() => onPick(row.territoryId)}
           title={`${row.name} 고르기`}
-          className="flex w-full items-center gap-s2 rounded-[10px] border border-edge bg-card px-s3 py-s2 hover:border-edge-strong"
+          className="flex w-full items-center gap-s2 rounded-[10px] border border-edge bg-card px-s3 py-s2 hover-edge"
         >
           {inner}
         </button>
@@ -342,7 +344,8 @@ function OfficialBlock({
         <button
           type="button"
           onClick={() => onOpen(latest.id)}
-          className="flex flex-col gap-s1 rounded-[12px] border border-edge bg-card px-s4 py-s3 text-left hover:border-edge-strong"
+          // 테두리만 바뀌어서는 약했다. 공통 테두리 카드 규칙으로 바탕도 뜬다 (최현서 1번)
+          className="flex flex-col gap-s1 rounded-[12px] border border-edge bg-card px-s4 py-s3 text-left hover-edge"
         >
           {card}
         </button>
@@ -378,7 +381,8 @@ function MonthChart({ bars, token }: { bars: PanelBar[]; token: string | null })
             <div
               key={b.label}
               title={`${b.label} · ${b.count}건`}
-              className="flex-1 rounded-t-[3px]"
+              // 기준일 · 선택이 바뀌면 높이 · 진하기 · 색이 번져 옮겨 간다 (2026-09-28 코드 분석)
+              className="flex-1 rounded-t-[3px] transition-[height,opacity,background-color] duration-[var(--dur-base)] ease-[var(--ease-out)]"
               style={{
                 height: `${Math.max(2, (b.count / max) * 100)}%`,
                 background: color,

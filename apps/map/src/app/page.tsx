@@ -128,7 +128,13 @@ type Origin = {
    */
   seq: string;
   tab: ViewTabKey;
+  /** 되살릴 선택. 기준일 밖이라 안 보이던 선택도 그대로 둔다 (기준일과 같이 되살아난다) */
   selection: MapSelection;
+  /**
+   * 떠날 때 화면에 보이던 선택(`liveSelection`). 돌아가기 단추 글이 이것을 읽는다 — 원래 선택을
+   * 읽으면 기준일 밖에 숨은 영토 이름이 단추에 찍혔다 (2026-09-28 검토)
+   */
+  shown: MapSelection;
   panelTab: PanelTabKey;
   linkSel: LinkSel;
   mapView: MapView;
@@ -480,7 +486,7 @@ export default function Page() {
   const enterFromLinks = (next: { center: string | null; hi: string | null; pair: RelPair | null }) => {
     seqRef.current += 1;
     const seq = `${OPENED_AT}-${seqRef.current}`;
-    setOrigin({ seq, tab, selection, panelTab, linkSel, mapView, ym, panelOpen });
+    setOrigin({ seq, tab, selection, shown: liveSelection, panelTab, linkSel, mapView, ym, panelOpen });
     // goTab 을 안 거치고 관계 탭으로 가므로 탭별 정리를 여기서 한다. 관계를 골라서 들어온
     // 것이라 패널을 펼치고(연혁 강조가 보여야 한다 — 고르면 펼친다는 규칙과 같다), 타임라인을
     // 떠나면 시점 비교를 푼다
@@ -514,6 +520,7 @@ export default function Page() {
 
   /** 섬 간 보기에서 고르면 보통 관계 탭(①)이다. 중심은 도착 영토, 그 관계를 강조한다 (4.3.3 ②) */
   const pickFromPair = (v: RelView) => {
+    setPanelOpen(true);
     setRelPair(null);
     setRelCenter(v.rel.to);
     setRelSel(null);
@@ -524,6 +531,8 @@ export default function Page() {
   const pickRel = (id: string | null) => {
     setRelSel(id);
     setRelHi(null);
+    // 관계를 고르면 펼친다 — 근거 화면(⑦-8e)이 패널에 뜬다. 풀 때는 안 접는다 (최현서 2번 규칙)
+    if (id) setPanelOpen(true);
   };
 
   const back = () => {
@@ -794,6 +803,7 @@ export default function Page() {
     );
     // 4.3.3 ①과 같은 상태 — 그 관계를 강조만 한다 (4.2.2 「관계」 결과 선택)
     if (tab === "relation") {
+      setPanelOpen(true);
       setRelCenter(center);
       setRelSel(null);
       setRelHi(rel.id);
@@ -820,6 +830,9 @@ export default function Page() {
    * 밖이면 기간을 전체로 넓힌다 — 강조할 줄이 목록에 있어야 한다.
    */
   const pickHit = (h: Hit, q: string) => {
+    // 재생을 멈춘다. 같은 탭이면 goTab 이 일찍 돌아가 재생이 남고, 옮긴 기준일을 1초 뒤에
+    // 다음 분기가 덮어썼다 (2026-09-28 검토 — 끝에서 ▶ 가 되감게 되며 쉽게 닿는다)
+    setPlaying(false);
     setRecent((r) => pushRecent(r, recentOf(searchCtx, h, Date.now())));
     setSearchQ(null);
     setResults(null);
@@ -834,6 +847,7 @@ export default function Page() {
       label = h.e.name;
       moved = moveFor((qq) => presentAt(qq).has(id));
       if (tab === "relation") {
+        setPanelOpen(true);
         setRelCenter(id);
         setRelSel(null);
         setRelHi(null);
@@ -912,6 +926,7 @@ export default function Page() {
    * 「상세」로 기준일 밖 사건을 연 경우) 보이는 분기로 기준일을 옮긴다 (4.2.2 와 같은 규칙)
    */
   const pickFromReport = (id: string) => {
+    setPlaying(false);
     setReport([]);
     setResults(null);
     moveFor((qq) => presentAt(qq).has(id));
@@ -1089,7 +1104,7 @@ export default function Page() {
                     setSearchQ(toast.q);
                     setToast(null);
                   }}
-                  className="rounded-[8px] border px-s2 py-[2px] font-semibold"
+                  className="rounded-[8px] border px-s2 py-[2px] font-semibold underline-offset-2 hover:underline"
                   style={{ borderColor: "color-mix(in srgb, var(--t-surface-panel) 50%, transparent)" }}
                 >
                   검색으로 돌아가기
@@ -1204,6 +1219,8 @@ export default function Page() {
                 views={relShown}
                 center={center}
                 onCenter={(id) => {
+                  // 중심 엔티티 칩도 영토 고르기라 펼친다
+                  setPanelOpen(true);
                   setRelCenter(id);
                   setRelSel(null);
                   setRelHi(null);
@@ -1225,8 +1242,8 @@ export default function Page() {
                 origin={
                   origin
                     ? {
-                        id: origin.selection.kind === "territory" ? origin.selection.id : null,
-                        label: backLabel(origin.tab, origin.selection.kind === "none" ? null : origin.selection.name),
+                        id: origin.shown.kind === "territory" ? origin.shown.id : null,
+                        label: backLabel(origin.tab, origin.shown.kind === "none" ? null : origin.shown.name),
                       }
                     : null
                 }

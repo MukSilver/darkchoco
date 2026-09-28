@@ -47,7 +47,7 @@ export type EntityTabProps = {
   onPickTerritory: (id: string) => void;
   /** 「지도에서 보기」 */
   onGoToMap: (id: string) => void;
-  /** 「최근 주요 이벤트」 사건 더블클릭 — 보고서 팝업 (설계서 4.3.5 L745 · 4.3.4) */
+  /** 「최근 주요 이벤트」 사건 누르기 — 보고서 팝업 (설계서 4.3.5 L745 · 4.3.4, 한 번 클릭) */
   onOpenEvent?: (id: string) => void;
 };
 
@@ -123,19 +123,35 @@ export default function EntityTab({
     ? [...rows].sort((a, b) => b.metrics.activity - a.metrics.activity)[0]
     : null;
 
+  /**
+   * 정렬 머리. 단추로 감싸 키보드로도 누른다. 정렬할 수 있는 열은 흐린 ↕ 를 달아 알린다 —
+   * 전에는 정렬 중인 열에만 ▲▼ 가 있어 다른 열이 눌리는지 몰랐다 (2026-09-28 코드 분석)
+   */
   const head = (key: SortKey, name: string, extra = "") => (
     <th
-      className={"cursor-pointer py-s3 font-normal text-label " + extra}
-      onClick={() => {
-        if (sort === key) setAsc((v) => !v);
-        else {
-          setSort(key);
-          setAsc(false);
-        }
-      }}
+      className={"py-s3 font-normal text-label " + extra}
+      aria-sort={sort === key ? (asc ? "ascending" : "descending") : undefined}
     >
-      {name}
-      {sort === key && <span className="ml-s1">{asc ? "▲" : "▼"}</span>}
+      <button
+        type="button"
+        onClick={() => {
+          if (sort === key) setAsc((v) => !v);
+          else {
+            setSort(key);
+            setAsc(false);
+          }
+        }}
+        className="-mx-s1 flex items-center gap-s1 whitespace-nowrap rounded-[6px] px-s1 hover-seg"
+      >
+        {name}
+        {sort === key ? (
+          <span className="text-body">{asc ? "▲" : "▼"}</span>
+        ) : (
+          <span aria-hidden className="text-disabled">
+            ↕
+          </span>
+        )}
+      </button>
     </th>
   );
 
@@ -156,9 +172,11 @@ export default function EntityTab({
               type="button"
               aria-current={on ? "page" : undefined}
               onClick={() => onPickIsland(i.islandKey)}
+              // 고른 칸은 화면 탭(`ViewTabs`)처럼 테두리 있는 패널색 칸이다 — 전에는 bg-selected 가
+              // 통 색과 거의 같아 무엇을 골랐는지 흐렸다 (2026-09-28 코드 분석)
               className={[
-                "flex items-center gap-s2 rounded-[10px] px-s4 py-s2 text-[13px]",
-                on ? "bg-selected font-semibold text-strong" : "text-label",
+                "flex items-center gap-s2 whitespace-nowrap rounded-[10px] border px-s4 py-s2 text-[13px]",
+                on ? "border-edge bg-panel font-semibold text-strong" : "border-transparent text-label hover-seg",
               ].join(" ")}
             >
               <span
@@ -202,19 +220,24 @@ export default function EntityTab({
         />
       </div>
 
-      {/* 좁으면 표 안에서 가로로 굴린다. 전에는 `overflow-hidden` 이라 오른쪽 열이 잘렸다 */}
-      <div className="shrink-0 overflow-x-auto rounded-[14px] border border-edge">
-        <table className="w-full border-collapse text-[13px]">
+      {/*
+        표는 고정 배치다 — 열 폭을 머리가 정하고 엔티티 이름 열이 남는 폭을 받아 말줄임한다.
+        상세 패널이 펼쳐진 1280 창(표 폭 약 660)에서도 모든 열이 보인다. 표 폭이 좁으면
+        (`@container`) 활동도 막대를 줄인다. 전에는 자동 배치라 이름이 여러 줄로 접히고 오른쪽
+        열이 칸 밖으로 밀렸다 (2026-09-28 검토 — 패널이 탭을 옮겨도 펼쳐진 채 남게 된 뒤)
+      */}
+      <div className="@container shrink-0 overflow-x-auto rounded-[14px] border border-edge">
+        <table className="w-full table-fixed border-collapse text-[13px]">
           <thead>
             <tr className="border-b border-divider bg-panel text-left text-[12px]">
-              <th className="w-[48px] py-s3 pl-s5 font-normal text-label">#</th>
+              <th className="w-[44px] py-s3 pl-s5 font-normal text-label">#</th>
               <th className="py-s3 font-normal text-label">엔티티</th>
-              {head("activity", "활동도", "w-[220px]")}
-              {head("delta", "30일", "w-[80px]")}
-              <th className="w-[92px] py-s3 font-normal text-label">상태</th>
-              {head("events", "사건", "w-[80px]")}
-              {head("lastSeen", "최근 관측", "w-[100px]")}
-              <th className="w-[124px] py-s3 pr-s5" />
+              {head("activity", "활동도", "w-[112px] @min-[820px]:w-[220px]")}
+              {head("delta", "30일", "w-[68px]")}
+              <th className="w-[84px] py-s3 font-normal text-label">상태</th>
+              {head("events", "사건", "w-[64px]")}
+              {head("lastSeen", "최근 관측", "w-[84px]")}
+              <th className="w-[120px] py-s3 pr-s4" />
             </tr>
           </thead>
           <tbody>
@@ -225,14 +248,24 @@ export default function EntityTab({
                 <tr
                   key={t.territoryId}
                   onClick={() => onPickTerritory(t.territoryId)}
+                  // 키보드로도 고른다 — Enter · Space (2026-09-28 코드 분석)
+                  tabIndex={0}
+                  aria-selected={on}
+                  onKeyDown={(ev) => {
+                    if (ev.target !== ev.currentTarget) return;
+                    if (ev.key === "Enter" || ev.key === " ") {
+                      ev.preventDefault();
+                      onPickTerritory(t.territoryId);
+                    }
+                  }}
                   className={[
                     "cursor-pointer border-b border-divider last:border-0",
-                    on ? "bg-row-selected" : "bg-panel",
+                    on ? "bg-row-selected" : "bg-panel hover-row",
                   ].join(" ")}
                 >
                   <td className="py-s4 pl-s5 tabular-nums text-label">{k + 1}</td>
-                  <td className="py-s4">
-                    <span className="flex items-center gap-s3">
+                  <td className="py-s4 pr-s3">
+                    <span className="flex min-w-0 items-center gap-s3">
                       <span
                         aria-hidden
                         className="size-[8px] shrink-0 rounded-full"
@@ -241,8 +274,9 @@ export default function EntityTab({
                         }}
                       />
                       <span
+                        title={t.name}
                         className={
-                          on ? "font-semibold text-strong" : "text-body"
+                          "truncate " + (on ? "font-semibold text-strong" : "text-body")
                         }
                       >
                         {t.name}
@@ -297,7 +331,7 @@ export default function EntityTab({
                   <td className="py-s4 tabular-nums text-label">
                     {lastSeen[t.territoryId] ?? "—"}
                   </td>
-                  <td className="py-s4 pr-s5 text-right">
+                  <td className="py-s4 pr-s4 text-right">
                     <button
                       type="button"
                       onClick={(e) => {
@@ -305,7 +339,7 @@ export default function EntityTab({
                         onGoToMap(t.territoryId);
                       }}
                       // 두 줄로 접히던 것을 한 줄로 (2026-09-28 코드 분석). 열 폭도 단추에 맞췄다
-                      className="whitespace-nowrap rounded-[8px] border border-edge px-s3 py-[3px] text-[11px] text-label"
+                      className="whitespace-nowrap rounded-[8px] border border-edge px-s3 py-[3px] text-[11px] text-label hover-edge"
                     >
                       지도에서 보기
                     </button>
@@ -331,7 +365,8 @@ export default function EntityTab({
 
 /**
  * 「최근 주요 이벤트」 — 고른 섬의 최신 사건 셋, 날짜순 (설계서 4.3.5).
- * 더블클릭하면 보고서 팝업(4.3.4)이 열린다. 카드 오른쪽 위 안내 문구는 피그마 ⑦-7 그대로다
+ * 누르면 보고서 팝업(4.3.4)이 열린다(한 번 클릭 — 최현서 9번). 카드 오른쪽 위 안내 문구도
+ * 그에 맞춰 고쳤다(피그마 ⑦-7 은 「사건 더블클릭 → 상세 팝업」)
  */
 function RecentEvents({
   title,
@@ -352,7 +387,7 @@ function RecentEvents({
     <section className="flex shrink-0 flex-col gap-s3 rounded-[14px] border border-edge px-s5 py-s4">
       <div className="flex items-baseline justify-between gap-s3">
         <h3 className="text-[12px] text-label">{title}</h3>
-        {onOpen && list.length > 0 && <span className="text-[11px] text-label">사건 더블클릭 → 상세 팝업</span>}
+        {onOpen && list.length > 0 && <span className="text-[11px] text-label">사건 클릭 → 상세 팝업</span>}
       </div>
       {list.length === 0 ? (
         <p className="text-[12px] text-label">이 기준일까지 이 섬에 올라온 사건이 없습니다.</p>
@@ -369,7 +404,14 @@ function RecentEvents({
               }
               on={picked === e.id}
               onClick={() => onPick(picked === e.id ? null : e.id)}
-              onOpen={onOpen && (() => onOpen(e.id))}
+              // 누르면 그 줄을 강조하고 팝업을 연다 (다른 두 자리와 같게)
+              onOpen={
+                onOpen &&
+                (() => {
+                  onPick(e.id);
+                  onOpen(e.id);
+                })
+              }
             />
           ))}
         </div>

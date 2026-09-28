@@ -441,11 +441,41 @@
   --t-island-telegram-side: #105e7f; /* 랜섬웨어 공지 채널 */
   --t-island-actor-side: #26282a; /* Initial Access Brokers */
 }
+/*
+ * 마우스를 올린 영토 윗면. **섬 색에 흰색을 섞어 밝힌다** (2026-09-28 최현서 6번 — 전에는
+ * 섬 색 90% + 옆면 10% 라 원래 색과 거의 같아 바로 알아채기 어려웠다). 테두리는 아래
+ * `--t-hex-hover-edge` 다. 고른 영토는 채움을 안 바꾸고 `--t-hex-selected-edge` 윤곽선으로
+ * 가른다 — 떠오른 영토 가운데 고른 것과 이어진 것이 같은 색이던 것도 같이 풀린다
+ */
 :root {
-  --t-island-forum-hover: color-mix(in srgb, var(--t-island-forum) 90%, var(--t-island-forum-side));
-  --t-island-ransomware-hover: color-mix(in srgb, var(--t-island-ransomware) 90%, var(--t-island-ransomware-side));
-  --t-island-telegram-hover: color-mix(in srgb, var(--t-island-telegram) 90%, var(--t-island-telegram-side));
-  --t-island-actor-hover: color-mix(in srgb, var(--t-island-actor) 90%, var(--t-island-actor-side));
+  --t-island-forum-hover: color-mix(in srgb, var(--t-island-forum) 72%, #ffffff);
+  --t-island-ransomware-hover: color-mix(in srgb, var(--t-island-ransomware) 72%, #ffffff);
+  --t-island-telegram-hover: color-mix(in srgb, var(--t-island-telegram) 72%, #ffffff);
+  --t-island-actor-hover: color-mix(in srgb, var(--t-island-actor) 72%, #ffffff);
+  --t-hex-hover-edge: var(--t-text-title);
+  --t-hex-selected-edge: var(--t-text-title);
+}
+
+/*
+ * 전환 시간 (2026-09-28 최현서 1 · 7번 — 「버튼을 누르면 화면이 딱딱 바뀌어 어색하다」).
+ * 부품은 이 값만 쓴다. **움직임 줄이기를 켠 사람에게는 0 이다**
+ *
+ *   --dur-fast   마우스 올림 색 · 테두리 · 글자
+ *   --dur-base   판 이동 · 줌 · 스위치 손잡이 · 막대 길이 · 팝업 여닫기
+ *   --dur-slow   시점을 옮길 때 지도 칸이 바뀌는 것
+ */
+:root {
+  --dur-fast: 120ms;
+  --dur-base: 220ms;
+  --dur-slow: 480ms;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur-base: 0ms;
+    --dur-slow: 0ms;
+  }
 }
 
 /*

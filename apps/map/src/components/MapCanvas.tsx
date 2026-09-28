@@ -22,7 +22,8 @@
  * **고른 영토가 화면 밖이면 옮긴다** (설계서 4.2.3 「영토 선택 시 줌 유지, 화면
  * 밖이면 보이는 위치로 이동」 · 4.2.2 「지도 이동 후 영토 선택」). 부모가 `reveal`
  * 에 영토 id 를 주면 그림이 끝난 뒤 이름표 자리를 재 보고, 밖이면 이동만 바꿔
- * `onRevealed` 로 돌려준다. 옮기기는 단번이다 — 부드럽게 옮기는 것은 별건이다.
+ * `onRevealed` 로 돌려준다. 옮기기 · 줌 · 전체 보기는 `--dur-base` 동안 옮겨 간다(끄는 동안은
+ * 끈다, 2026-09-28 최현서 1 · 7번). 움직임 줄이기를 켠 사람에게는 단번이다.
  * 기준일을 옮기며 고른 경우(검색)도 새 배치로 재야 해서 그림 뒤에 잰다.
  */
 
@@ -131,6 +132,8 @@ export default function MapCanvas({
     null,
   );
   const moved = useRef(false);
+  // 왼쪽 단추로 판을 쥐고 있나. 커서 모양과 전환을 끄고 켜는 데 쓴다 (`drag` 는 다시 그리지 않는 값이다)
+  const [grabbing, setGrabbing] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   /**
    * 마지막 마우스 자리. 툴팁이 **처음 뜰 때** 여기 뜬다.
@@ -194,13 +197,18 @@ export default function MapCanvas({
       />
 
       {/* 아래쪽 여백은 힌트 알약과 줌 단추가 앉을 자리다 (`PAD_BOTTOM`) */}
+      {/*
+        끄는 판. 손 커서(끄는 동안 쥔 손)로 끌 수 있다는 것을 알린다 (2026-09-28 코드 분석).
+        영토 · 섬 이름표 위에서는 손가락 커서가 이긴다
+      */}
       <div
-        className="absolute inset-0 touch-none"
+        className={"absolute inset-0 touch-none " + (grabbing ? "cursor-grabbing" : "cursor-grab")}
         style={{ paddingTop: PAD_TOP, paddingBottom: PAD_BOTTOM }}
         onWheel={(e) => step(e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP)}
         onPointerDown={(e) => {
           drag.current = { x: e.clientX, y: e.clientY, px: pan.x, py: pan.y };
           moved.current = false;
+          if (e.buttons & 1) setGrabbing(true);
         }}
         onPointerMove={(e) => {
           const r = box.current?.getBoundingClientRect();
@@ -218,6 +226,7 @@ export default function MapCanvas({
           // 놓고 돌아온 경우도 여기서 걸러진다
           if (!d || (e.buttons & 1) === 0) {
             drag.current = null;
+            setGrabbing(false);
             return;
           }
           if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 3) {
@@ -227,9 +236,11 @@ export default function MapCanvas({
         }}
         onPointerUp={() => {
           drag.current = null;
+          setGrabbing(false);
         }}
         onPointerLeave={() => {
           drag.current = null;
+          setGrabbing(false);
         }}
         onClick={(e) => {
           // 끌고 놓은 것은 클릭이 아니다
@@ -266,6 +277,9 @@ export default function MapCanvas({
           style={{
             transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom / 100})`,
             transformOrigin: "center center",
+            // 줌 · 전체 보기 · 화면 밖 영토로 옮기기는 짧게 옮겨 간다. 끄는 동안은 손을 바로
+            // 따라가야 해서 끈다 (2026-09-28 최현서 1 · 7번 — 전에는 한 번에 뛰었다)
+            transition: grabbing ? "none" : "transform var(--dur-base) var(--ease-out)",
           }}
         >
           <HexMap
@@ -323,7 +337,7 @@ export default function MapCanvas({
             aria-label="축소"
             disabled={zoom <= ZOOM_MIN}
             onClick={() => step(-ZOOM_STEP)}
-            className="px-s4 text-[13px] text-body disabled:text-disabled"
+            className="h-full rounded-l-full px-s4 text-[13px] text-body hover-seg disabled:text-disabled"
           >
             −
           </button>
@@ -335,7 +349,7 @@ export default function MapCanvas({
             aria-label="확대"
             disabled={zoom >= ZOOM_MAX}
             onClick={() => step(ZOOM_STEP)}
-            className="px-s4 text-[13px] text-body disabled:text-disabled"
+            className="h-full rounded-r-full px-s4 text-[13px] text-body hover-seg disabled:text-disabled"
           >
             +
           </button>
@@ -343,7 +357,7 @@ export default function MapCanvas({
         <button
           type="button"
           onClick={reset}
-          className="flex items-center gap-s2 rounded-full border border-edge bg-panel px-s4 text-[12px] text-body"
+          className="flex items-center gap-s2 rounded-full border border-edge bg-panel px-s4 text-[12px] text-body hover-edge"
           style={{ height: "var(--h-zoom)" }}
         >
           <span aria-hidden>⛶</span>
