@@ -1014,7 +1014,10 @@ export default function Page() {
   })();
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col p-s5">
+    // 화면 최소 크기 1280 × 720. 그보다 작은 창에서는 줄이지 않고 `body` 에 스크롤바가 뜬다
+    // (2026-09-28 최현서 4번). 1280 은 범례 206 + 패널 312 + 여백을 빼고 가운데가 약 660 남는 폭이다 —
+    // 스냅샷 바가 줄어들고 가운데가 `min-w-0` 이라 패널이 안 잘린다
+    <div className="flex h-full min-h-[720px] min-w-[1280px] flex-col p-s5">
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[18px] border border-edge bg-panel">
         <AppHeader
           current="dark"
@@ -1046,7 +1049,11 @@ export default function Page() {
         <div className="flex min-h-0 flex-1">
           <Legend />
 
-          <main className="relative flex min-h-0 flex-1 flex-col gap-s4 px-s5 py-s5">
+          {/*
+            `min-w-0` — 없으면 가운데 최소폭이 스냅샷 바 768 에 묶여 1384px 아래 창에서 오른쪽
+            패널이 스크롤도 없이 잘렸다 (2026-09-28 코드 분석)
+          */}
+          <main className="relative flex min-h-0 min-w-0 flex-1 flex-col gap-s4 px-s5 py-s5">
             {toast && results === null && (
               // 지도 위쪽에 띄운다 (⑦-10b). 관계 탭은 위쪽에 돌아가기 줄과 칩 줄이 있어 아래쪽이다
               <div
@@ -1074,8 +1081,12 @@ export default function Page() {
                 </button>
               </div>
             )}
+            {/*
+              제목 줄. 제목 · 화면 탭은 안 접히고, 긴 설명(관계 탭 2단계 부제 따위)만 말줄임으로
+              줄어든다 — 전에는 설명이 두 줄이 되며 「타임라인」 탭 글자가 쪼개지고 탭 높이가 바뀌었다
+            */}
             <div className="flex shrink-0 items-center gap-s4">
-              <h1 className="text-[20px] font-semibold leading-none text-title">
+              <h1 className="shrink-0 whitespace-nowrap text-[20px] font-semibold leading-none text-title">
                 다크웹 생태계
               </h1>
               {!isBaked && (
@@ -1091,7 +1102,7 @@ export default function Page() {
                   예시 데이터
                 </span>
               )}
-              <p className="text-[12px] tabular-nums text-label">
+              <p className="min-w-0 truncate text-[12px] tabular-nums text-label">
                 {results !== null
                   ? `'${results}' 검색 결과 ${total(allResults)}건`
                   : tab === "map"
@@ -1111,7 +1122,7 @@ export default function Page() {
                 <button
                   type="button"
                   onClick={() => setResults(null)}
-                  className="rounded-[10px] border border-edge px-s3 py-s2 text-[12px] text-body hover:text-title"
+                  className="shrink-0 whitespace-nowrap rounded-[10px] border border-edge px-s3 py-s2 text-[12px] text-body hover:text-title"
                 >
                   검색 결과 닫기 ×
                 </button>

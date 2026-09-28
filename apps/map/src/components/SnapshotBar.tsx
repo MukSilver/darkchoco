@@ -89,9 +89,11 @@ export default function SnapshotBar({
   const labelled = labelTicks(n, MAX_TICKS);
 
   return (
+    // 폭은 768 이 한도이고 가운데가 좁으면 줄어든다. 전에는 768 고정이라 가운데 최소폭을 묶어
+    // 1384px 아래 창에서 오른쪽 패널이 잘렸다 (2026-09-28 코드 분석)
     <div
-      className="mx-auto flex shrink-0 items-center gap-s5 rounded-[14px] border border-edge bg-card px-s5"
-      style={{ width: "var(--w-snapshot)", height: "var(--h-snapshot)" }}
+      className="mx-auto flex w-full shrink-0 items-center gap-s5 rounded-[14px] border border-edge bg-card px-s5"
+      style={{ maxWidth: "var(--w-snapshot)", height: "var(--h-snapshot)" }}
     >
       <button
         type="button"
@@ -111,7 +113,7 @@ export default function SnapshotBar({
         </div>
       </div>
 
-      <div className="flex-1">
+      <div className="min-w-0 flex-1">
         <input
           type="range"
           min={0}
