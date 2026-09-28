@@ -10,9 +10,10 @@
 반출을 네 겹으로 막는다.
 
   1. 줄 관문      「DB 반영」이 꺼졌거나 「검토 여부」가 미검토·사건 X 면 뺀다
-  2. 읽는 칸      `ALLOWED_COLS` 에 없는 칸을 읽으려 하면 멈춘다. 원문 URL ·
-                 자료 제목 · 다크웹 주소는 `DENY_COLS` 다. 대상 조직은
-                 `MATCH_ONLY_COLS` 라 관계선 원문에 조직명이 섞였는지 대조만 한다
+  2. 읽는 칸      `ALLOWED_COLS` 에 없는 칸을 읽으려 하면 멈춘다. 자료 제목 ·
+                 다크웹 주소는 `DENY_COLS` 다. 대상 조직은 `MATCH_ONLY_COLS` 라
+                 관계선 원문에 조직명이 섞였는지 대조만 한다. 원문 URL 은
+                 `TME_ONLY_COLS` 라 t.me 채널 이름만 뽑아 채널을 찾는 데 쓴다
   3. 나가는 키    `TERRITORY_KEYS` · `EV_KEYS` · `RELATION_KEYS` 에 없는 키가
                  있으면 멈춘다
   4. 값 훑기      다 만든 뒤 JSON 에서 도메인 · `@` · 긴 숫자열을 찾는다
@@ -349,9 +350,18 @@ MATCH_ONLY_COLS: frozenset[str] = frozenset({
 #:
 #: 허용 목록만으로도 막히지만 이름을 적어 둔다. 왜 안 읽는지가 보여야
 #: 나중에 누가 「이것도 필요한데」 하고 허용 목록에 옮기기 전에 멈춘다.
+#: **t.me 채널 이름만 뽑는 칸.** `col_tme()` 로만 읽고, 돌려받는 것은 t.me 뒤 채널 이름뿐이다.
+#:
+#: - 「원문 URL」 — 텔레그램 재유포 사건의 채널을 정하는 두 번째 단서다 (설계서 3.3 「게시 플랫폼이나
+#:   원문 URL 에 t.me 주소가 있으면 그 채널」, 2026-09-28 최현서 G-7). 포럼 글 주소 · 피해 조직 도메인이
+#:   함께 들어 있어서 URL 은 한 글자도 안 싣고, t.me 가 아닌 주소는 읽자마자 버린다.
+#:   9/28 전에는 `DENY_COLS` 였다
+TME_ONLY_COLS: frozenset[str] = frozenset({
+    "원문 URL",
+})
+
 DENY_COLS = frozenset({
     "자료 제목",      # 196줄 중 172줄에 대상 조직 표기가 들어 있다
-    "원문 URL",
     # ↓ 명부 DB. 다크웹 주소와 접속 방법, 사람이 쓴 설명이다
     "주소",
     "어니언 주소",
@@ -424,6 +434,8 @@ def col(read, props: dict, name: str):
         )
     if name in MATCH_ONLY_COLS:
         raise SystemExit(f"맞추기 전용 칸입니다: {name} — col_match() 로 읽으세요")
+    if name in TME_ONLY_COLS:
+        raise SystemExit(f"t.me 채널 이름만 뽑는 칸입니다: {name} — col_tme() 로 읽으세요")
     if name not in ALLOWED_COLS:
         raise SystemExit(
             f"허용 목록에 없는 칸을 읽으려 했습니다: {name} — "
@@ -441,6 +453,17 @@ def col_match(read, props: dict, name: str) -> str | None:
     _note_missing(props, name)
     v = read(props.get(name))
     return v.strip() if isinstance(v, str) and v.strip() else None
+
+
+def col_tme(read, props: dict, name: str) -> str | None:
+    """t.me 채널 이름만 뽑는 칸을 읽는다. **칸 값은 돌려주지 않는다** — t.me 주소가 있으면 그
+    채널 이름, 없으면 None. 돌려준 이름도 텔레그램 DB 줄을 찾는 데만 쓴다."""
+    if name not in TME_ONLY_COLS:
+        raise SystemExit(f"t.me 채널 이름만 뽑는 칸이 아닙니다: {name}")
+    _note_missing(props, name)
+    v = read(props.get(name))
+    m = RE_TME.search(v) if isinstance(v, str) else None
+    return m.group(1) if m else None
 
 
 #: **구운 파일에 나가도 되는 키.** 여기 없는 키가 있으면 굽기가 멈춘다.
@@ -1523,7 +1546,27 @@ def override_of(ov: dict | None, index: "RegistryIndex") -> dict:
     return out
 
 
-RE_TME = re.compile(r"t\.me/(?:s/)?([A-Za-z0-9_]{3,64})", re.IGNORECASE)
+#: t.me 주소의 채널 이름. 앞에 글자가 붙은 도메인(`kit.me/…` 처럼 t.me 로 끝나는 다른 사이트)은
+#: 안 잡는다 — 원문 URL 에는 아무 사이트 주소나 들어 있다 (2026-09-28)
+RE_TME = re.compile(r"(?<![A-Za-z0-9_-])t\.me/(?:s/)?([A-Za-z0-9_]{3,64})", re.IGNORECASE)
+
+
+def tg_channel(index: "RegistryIndex", read, props: dict) -> dict | None:
+    """텔레그램 재유포 사건의 채널 (설계서 3.3 「텔레그램 재유포 사건의 채널 정하는 방법」).
+
+    찾는 순서: 게시 플랫폼의 t.me → 원문 URL 의 t.me → 채널 이름과 같은 게시자 핸들.
+    t.me 주소가 텔레그램 DB 에 없는 채널이면 다음 단서로 넘어간다. 그 밖에는 짐작하지 않는다 (2.5).
+    원문 URL 단서는 2026-09-28 에 더했다(G-7). 그 전에는 원문 URL 을 안 읽어서 알림 채널이
+    원문 URL 에만 적힌 사건이 확인필요로 빠졌다
+    """
+    m = RE_TME.search(col(read, props, "게시 플랫폼") or "")
+    for name in (m.group(1) if m else None,
+                 col_tme(read, props, "원문 URL"),
+                 col_match(read, props, "게시자 핸들")):
+        c = index.find("TELEGRAM", name)
+        if c:
+            return c
+    return None
 
 #: 보도된 유출 위치에서 떼어 낼 낱말 — 「Qilin 랜섬웨어 유출 사이트」 → 「Qilin」
 RE_PLACE_WORDS = re.compile(
@@ -1780,13 +1823,9 @@ def bake(n, sources: dict[str, str], log) -> dict:
         cand = ov.get("cand")
         if not reason and cand is None:
             if island == "TELEGRAM":
-                # 텔레그램 재유포 사건의 채널 (설계서 3.3). t.me 주소가 게시 플랫폼에
-                # 있으면 그 채널, 없으면 게시자 핸들이 채널 이름과 같을 때만.
-                # 원문 URL 은 안 읽는다 (DENY_COLS) — 그래서 하나를 놓칠 수 있다
-                m = RE_TME.search(plat or "")
-                cand = index.find("TELEGRAM", m.group(1)) if m else None
-                if not cand:
-                    cand = index.find("TELEGRAM", col_match(read, p, "게시자 핸들"))
+                # 원래 게시처(포럼 · 랜섬 사이트)가 따로 있어도 그 글을 올린 채널의 사건이다.
+                # 텔레그램 섬은 재유포(확산)를 잰다 (설계서 3.3, 2026-09-28 최현서)
+                cand = tg_channel(index, read, p)
             else:
                 cand = index.find(island, place) or index.find(island, plat)
                 # 랜섬웨어 사건의 게시자 핸들은 그룹 이름이다. 게시처 · 게시 플랫폼으로 못
