@@ -24,6 +24,7 @@
 import type { ReactNode } from "react";
 
 import { TeamMark } from "./RelBits";
+import { useShortcutLabel } from "./useShortcutLabel";
 import type { Web } from "@/lib/types";
 
 /** 웹 전환 탭 셋. 순서는 설계서 4.2.1 의 「오픈웹 / 연결 / 다크웹」이다 */
@@ -84,6 +85,11 @@ function Logo() {
       </span>
     </>
   );
+}
+
+/** 검색 단축키 글자 — 맥 「⌘K」 · 그 밖 「Ctrl K」 (`useShortcutLabel`) */
+function ShortcutText() {
+  return <>{useShortcutLabel()}</>;
 }
 
 export default function AppHeader({
@@ -186,7 +192,7 @@ export default function AppHeader({
             {query || "노드 · 키워드 · 엔티티 검색"}
           </span>
           <kbd className="rounded bg-kbd px-s2 py-[2px] text-[10px] text-label">
-            ⌘K
+            <ShortcutText />
           </kbd>
         </button>
         {children}

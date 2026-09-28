@@ -44,11 +44,13 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEve
 import { Chip, KindDot, TeamMark, hexPoints } from "./RelBits";
 import { useWheelSteps } from "./useWheelSteps";
 import type { MapLayout, TerritoryShape } from "@/lib/layout";
+import { islandName } from "@/lib/islands";
 import { parseQuarter, type QuarterKey } from "@/lib/quarter";
 import {
   CONF_CHIP,
   CONF_DASH,
   CONF_LABEL,
+  KIND_LABEL,
   KIND_NAME,
   KIND_ORDER,
   centerChips,
@@ -315,7 +317,11 @@ export default function RelationTab(p: RelationTabProps) {
   // 휠은 모아서 문턱을 넘을 때 한 단계씩 — 트랙패드 한 번에 끝까지 튀지 않게. 페이지 스크롤은
   // 막는다 (`useWheelSteps`, 지도와 같다)
   const pad = useRef<HTMLDivElement>(null);
-  useWheelSteps(pad, (n) => zoomBy(n * ZOOM_STEP));
+  useWheelSteps(
+    pad,
+    (n) => zoomBy(n * ZOOM_STEP),
+    (dir) => (dir > 0 ? view.zoom >= ZOOM_MAX : view.zoom <= ZOOM_MIN),
+  );
   // 끌기. 3px 넘게 움직였으면 놓을 때의 클릭을 고르기로 치지 않는다 (지도 `MapCanvas` 와 같다)
   const drag = useRef<{ x: number; y: number; px: number; py: number } | null>(null);
   const moved = useRef(false);
@@ -433,6 +439,8 @@ export default function RelationTab(p: RelationTabProps) {
   /** 중심에 닿지 않은 선 — 2단계로 넓혔을 때만 있다 */
   const outerEdge = (v: RelView) => !p.pair && !!p.center && v.rel.from !== p.center && v.rel.to !== p.center;
   const empty = !p.pair && graph.list.length === 0;
+  // 섬 간 보기에서 스냅샷 바로 두 섬 사이 관계가 없던 분기로 갔다 — 전에는 안내 없이 판만 비었다
+  const pairEmpty = !!p.pair && graph.list.length === 0;
   const centerName = p.center ? nameOf(p.center) : "";
   const rest = graph.hops?.rest ?? 0;
 
@@ -511,7 +519,8 @@ export default function RelationTab(p: RelationTabProps) {
           <>
             <span className="shrink-0 whitespace-nowrap text-[12px] text-label">섬 간 필터</span>
             <span className="flex shrink-0 items-center gap-s2 whitespace-nowrap rounded-full border border-[var(--t-accent)] bg-accent-subtle px-s4 py-s1 text-[13px] text-title">
-              {islandById.get(p.pair.from)?.name} → {islandById.get(p.pair.to)?.name}
+              {islandById.get(p.pair.from)?.name ?? islandName(p.pair.from)} →{" "}
+              {islandById.get(p.pair.to)?.name ?? islandName(p.pair.to)}
               <button type="button" aria-label="섬 간 필터 해제" onClick={p.onClearPair} className="text-label hover:text-title">
                 ×
               </button>
@@ -557,7 +566,16 @@ export default function RelationTab(p: RelationTabProps) {
         )}
       </div>
 
-      <div ref={boardRef} className="relative min-h-0 flex-1 overflow-hidden rounded-[14px] border border-edge bg-canvas">
+      <div
+        ref={boardRef}
+        className="relative min-h-0 flex-1 overflow-hidden rounded-[14px] border border-edge bg-canvas"
+        // 판 밖으로 걸친 선 · 노드에 초점이 가면 브라우저가 이 틀을 스스로 굴려 범례 · 줌 단추가
+        // 밀렸다. 굴림은 줌 · 끌기로만 한다 (2026-09-29 검토)
+        onScroll={(e) => {
+          e.currentTarget.scrollTop = 0;
+          e.currentTarget.scrollLeft = 0;
+        }}
+      >
         <div
           aria-hidden
           className="absolute inset-0"
@@ -615,7 +633,10 @@ export default function RelationTab(p: RelationTabProps) {
             <svg
               viewBox={`0 0 ${W} ${H}`}
               className="block size-full"
-              role="img"
+              // 안의 선 · 노드가 단추라 그림 한 장(img)이 아니다. 이웃 노드를 키보드로 중심으로 삼으면
+              // 그 노드가 단추가 아니게 되어 초점을 여기로 옮긴다
+              role="group"
+              tabIndex={-1}
               aria-label={p.pair ? "섬 간 관계 그래프" : `${centerName} 중심 관계 그래프`}
             >
               <defs>
@@ -654,7 +675,25 @@ export default function RelationTab(p: RelationTabProps) {
                     else p.onSelect(picked ? null : v.rel.id);
                   };
                   return (
-                    <g key={v.rel.id} className="cursor-pointer" onClick={pick} {...edgeHover(v.rel.id)}>
+                    <g
+                      key={v.rel.id}
+                      className="cursor-pointer"
+                      onClick={pick}
+                      // 키보드로도 고른다 — Tab 으로 옮겨 Enter · Space (2026-09-28 코드 분석)
+                      data-edge=""
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`${KIND_LABEL[v.rel.kind]} · ${nameOf(v.rel.from)} → ${nameOf(v.rel.to)}`}
+                      aria-pressed={picked}
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter" && e.key !== " ") return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (p.pair) p.onPairPick(v);
+                        else p.onSelect(picked ? null : v.rel.id);
+                      }}
+                      {...edgeHover(v.rel.id)}
+                    >
                       <path d={d} fill="none" stroke="transparent" strokeWidth={16} />
                       <path
                         d={d}
@@ -764,6 +803,22 @@ export default function RelationTab(p: RelationTabProps) {
                         e.stopPropagation();
                         if (!isCenter) p.onCenter(n.id);
                       }}
+                      // 이웃 노드는 키보드로도 중심으로 삼는다 — Tab 으로 옮겨 Enter · Space
+                      tabIndex={isCenter ? undefined : 0}
+                      role={isCenter ? undefined : "button"}
+                      aria-label={isCenter ? undefined : `${n.t.name} — 중심으로`}
+                      onKeyDown={
+                        isCenter
+                          ? undefined
+                          : (e) => {
+                              if (e.key !== "Enter" && e.key !== " ") return;
+                              e.preventDefault();
+                              e.stopPropagation();
+                              const svg = e.currentTarget.ownerSVGElement;
+                              p.onCenter(n.id);
+                              setTimeout(() => svg?.focus({ preventScroll: true }), 0);
+                            }
+                      }
                       onMouseEnter={isCenter ? undefined : () => setHoverNode(n.id)}
                       // 떠나기는 중심 노드에도 단다 — 노드를 눌러 중심이 되면 떠나기 듣개가 빠져 hover 가
                       // 남았다가, 다시 이웃이 되면 마우스가 없는데도 밝게 그려졌다 (2026-09-28 검토)
@@ -846,7 +901,9 @@ export default function RelationTab(p: RelationTabProps) {
         <div
           className={
             legendOpen
-              ? "pointer-events-none absolute left-s4 top-s4 flex w-[190px] flex-col gap-s3 rounded-[12px] border border-edge bg-panel px-s4 py-s4"
+              // 판이 낮으면(스냅샷 바가 들어온 1280×720) 힌트 알약 위에서 멈추고 안에서 굴린다 — 전에는
+              // 아래 줄이 힌트에 덮였다 (2026-09-29 검토). 굴려야 해서 포인터를 받는다
+              ? "absolute left-s4 top-s4 flex max-h-[calc(100%-80px)] w-[190px] flex-col gap-s3 overflow-y-auto rounded-[12px] border border-edge bg-panel px-s4 py-s4 [scrollbar-width:thin] [scrollbar-color:var(--t-border-strong)_transparent]"
               : "absolute left-s4 top-s4"
           }
         >
@@ -971,6 +1028,14 @@ export default function RelationTab(p: RelationTabProps) {
           없어 끈다. 2단계로 넓힌 채 여기 왔으면 되돌릴 수 있게 켜 둔다.
           「전체 관계 보기」는 보류라 안 둔다 (설계서 4.2.7)
         */}
+        {pairEmpty && (
+          <div className="absolute bottom-[84px] left-1/2 flex w-[460px] max-w-[calc(100%-32px)] -translate-x-1/2 flex-col items-center gap-s3 rounded-[14px] border border-edge bg-panel px-s6 py-s5 text-center">
+            <h3 className="text-[15px] font-semibold text-title">이 기준일에는 두 섬 사이 관계가 없습니다</h3>
+            <p className="text-[12px] leading-[1.7] text-body">
+              스냅샷 바로 기준일을 옮기거나 섬 간 필터를 풀어 보세요.
+            </p>
+          </div>
+        )}
         {empty && (
           <div className="absolute bottom-[84px] left-1/2 flex w-[460px] max-w-[calc(100%-32px)] -translate-x-1/2 flex-col items-center gap-s3 rounded-[14px] border border-edge bg-panel px-s6 py-s5 text-center">
             <h3 className="text-[15px] font-semibold text-title">
@@ -1020,6 +1085,8 @@ export default function RelationTab(p: RelationTabProps) {
           <span className="min-w-0 truncate">
             {empty
               ? "관계 없음 상태 · 액션으로 탐색 확장"
+              : pairEmpty
+                ? "관계 없음 상태 · 스냅샷 바로 기준일 옮기기"
               : p.pair
                 ? "섬 간 보기 · 선을 누르면 그 관계로 이동"
                 : sel

@@ -27,7 +27,8 @@ import EventRow from "./EventRow";
 import PanelShell from "./PanelShell";
 import { Chip, KindDot } from "./RelBits";
 import type { MapLayout } from "@/lib/layout";
-import { quarterOfDate } from "@/lib/quarter";
+import { islandName } from "@/lib/islands";
+import { quarterOfDate, quarterText } from "@/lib/quarter";
 import {
   CONF_CHIP,
   CONF_LABEL,
@@ -72,7 +73,7 @@ export type RelationPanelProps = {
 };
 
 function quarterLabel(iso: string): string {
-  return quarterOfDate(new Date(iso)).replace("-", " ");
+  return quarterText(quarterOfDate(new Date(iso)));
 }
 
 export default function RelationPanel(p: RelationPanelProps) {
@@ -96,8 +97,8 @@ export default function RelationPanel(p: RelationPanelProps) {
   /* ── 섬 간 보기 ─────────────────────────────────────── */
 
   if (p.pair) {
-    const a = islands.get(p.pair.from)?.name ?? "";
-    const b = islands.get(p.pair.to)?.name ?? "";
+    const a = islands.get(p.pair.from)?.name ?? islandName(p.pair.from);
+    const b = islands.get(p.pair.to)?.name ?? islandName(p.pair.to);
     const total = p.views.reduce((s, v) => s + v.count, 0);
     return (
       <PanelShell

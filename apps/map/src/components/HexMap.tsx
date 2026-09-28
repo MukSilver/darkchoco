@@ -18,6 +18,13 @@ import { CONF_DASH, KIND_NAME, type RelView } from "@/lib/relations";
 /** 섬이 옮겨 가는 이징. 토큰 `--ease-out` 과 같은 곡선이다 */
 const EASE = "cubic-bezier(0.2, 0, 0, 1)";
 
+/**
+ * 관계선 번짐 — 섬이 60% 옮겨 온 뒤에 나온다(이징 뒤 진행도라 곧 섬이 옮겨 온 몫이다). 선은 처음부터
+ * 새 자리라 먼저 보이면 선 끝이 허공에 떴다. 80% 로 두면 4× 재생(250ms)에서 거의 안 보여 60% 로 낮췄다
+ * (2026-09-29 검토)
+ */
+const FADE: Keyframe[] = [{ opacity: 0 }, { opacity: 0, offset: 0.6 }, { opacity: 1 }];
+
 /** 요소에 지금 걸린 CSS 행렬. 없으면 null */
 function matrixOf(el: Element): DOMMatrixReadOnly | null {
   const t = getComputedStyle(el).transform;
@@ -246,11 +253,10 @@ export default function HexMap({
       }
     }
     motion.current = { start: performance.now(), ms, frames };
-    // 관계선은 섬이 80% 옮겨 온 뒤에 번져 나온다(이징 뒤 진행도라 곧 섬이 옮겨 온 몫이다). 선은
-    // 처음부터 새 자리라 먼저 보이면 선 끝이 허공에 떴다. 앞 번짐은 끊는다 (2026-09-29 묶음 6 검토)
+    // 관계선은 섬이 옮겨 온 뒤에 번져 나온다(`FADE`). 앞 번짐은 끊는다 (2026-09-29 묶음 6 검토)
     svg.querySelectorAll<SVGElement>('[data-flip="fade"]').forEach((el) => {
       el.getAnimations().forEach((a) => a.cancel());
-      el.animate([{ opacity: 0 }, { opacity: 0, offset: 0.8 }, { opacity: 1 }], opts);
+      el.animate(FADE, opts);
     });
   }, [layout, frame]);
 
@@ -272,6 +278,13 @@ export default function HexMap({
       const a = el.animate([{ transform: f[0] }, { transform: f[1] }], { duration: m.ms, easing: EASE });
       a.currentTime = t;
     });
+    // 도중에 처음 영토를 골라 새로 붙은 관계선 묶음도 같은 번짐에 태운다 — 안 그러면 바로 진하게 나와
+    // 선 끝이 옮겨 오는 섬과 떨어져 보였다
+    svg.querySelectorAll<SVGElement>('[data-flip="fade"]').forEach((el) => {
+      if (el.getAnimations().length > 0) return;
+      const a = el.animate(FADE, { duration: m.ms, easing: EASE });
+      a.currentTime = t;
+    });
   });
 
   /** 떠오르는가 — 고른 영토, 이어진 영토, [연결] 행의 상대 영토 */
@@ -289,9 +302,20 @@ export default function HexMap({
         Number(b.territoryId === selectedTerritory),
     );
   const hoveredFlat = flat.find((t) => t.territoryId === hovered);
+  // Tab 멈춤은 지도 하나에 하나 — 고른 영토, 없으면 첫 영토. 나머지 영토 · 섬 이름표는 화살표로 옮긴다
+  // (`MapCanvas`). 전에는 도형 186개가 다 Tab 차례라 줌 단추 · 스냅샷 바에 닿기 어려웠다 (2026-09-29 검토)
+  const entryId =
+    up.find((t) => t.territoryId === selectedTerritory)?.territoryId ?? flat[0]?.territoryId ?? up[0]?.territoryId;
   /** 이름표와 관계선 끝 자리. 떠오른 영토는 윗면이 올라간 만큼 같이 올린다 */
   const anchor = (t: TerritoryShape) =>
     isUp(t) ? { x: t.label.x, y: t.label.y - LIFT } : t.label;
+  /**
+   * 키보드로 고를 수 있게 — Enter · Space 로 고르고 화살표로 옮긴다 (`MapCanvas` 가 받는다, 2026-09-28
+   * 코드 분석). `entry` 만 Tab 차례(0)이고 나머지는 −1 이다. 떠오른 영토는 윗면에만 단다(옆면까지 달면
+   * 같은 영토에 두 번 멈춘다)
+   */
+  const keyProps = (name: string, entry = false) =>
+    interactive ? { tabIndex: entry ? 0 : -1, role: "button" as const, "aria-label": name } : {};
   const hoverProps = (id: string) => ({
     onMouseEnter: () => onHoverTerritory?.(id),
     onMouseLeave: () => onHoverTerritory?.(null),
@@ -323,7 +347,8 @@ export default function HexMap({
    * 고르면 알약과 이름표가 개수 제한 없이 붙어 겹쳤다 (2026-09-28 코드 분석). 100% 미만은 4개,
    * 150% 미만은 8개, 그 이상은 전부다. 마우스를 올린 영토에 닿은 선은 늘 단다 — 고른 영토는
    * 빼고. 지도 탭에서는 선이 다 고른 영토에 닿아서, 누른 직후 커서가 그 위에 있으면 개수 제한이
-   * 통째로 꺼졌다 (2026-09-29 묶음 5 검토). 알약끼리 겹치면 뒤(건수가 작은) 것을 뺀다
+   * 통째로 꺼졌다 (2026-09-29 묶음 5 검토). 알약끼리 겹치면 뒤(건수가 작은) 것을 빼고, 빈 자리를
+   * 개수 밖 선으로 채우지 않는다 — 채우면 끝 이름이 개수를 넘어 늘었다 (2026-09-29 묶음 7 검토)
    */
   const cap = zoom < 100 ? 4 : zoom < 150 ? 8 : Infinity;
   // 알약은 확대해도 화면에서 100% 때 크기를 넘지 않는다 — 그림과 같이 커지면 겹침이 그대로라
@@ -332,10 +357,12 @@ export default function HexMap({
   const shownLines = new Set<string>();
   const placed: { x0: number; y0: number; x1: number; y1: number }[] = [];
   const byCount = [...drawn].sort((x, y) => y.v.count - x.v.count || x.v.rel.id.localeCompare(y.v.rel.id));
+  // 라벨 · 끝 이름을 달 수 있는 선 — 건수 상위 `cap` 개
+  const topLines = new Set(byCount.slice(0, cap).map((d) => d.v.rel.id));
   for (const d of byCount) {
     const onHover =
       hovered != null && hovered !== selectedTerritory && (d.v.rel.from === hovered || d.v.rel.to === hovered);
-    if (!onHover && shownLines.size >= cap) continue;
+    if (!onHover && !topLines.has(d.v.rel.id)) continue;
     const w = lineLabelW(d.v) * ls;
     const b = { x0: d.mid.x - w / 2, y0: d.mid.y - 8 * ls, x1: d.mid.x + w / 2, y1: d.mid.y + 8 * ls };
     if (!onHover && placed.some((o) => o.x0 < b.x1 && b.x0 < o.x1 && o.y0 < b.y1 && b.y0 < o.y1)) continue;
@@ -344,10 +371,9 @@ export default function HexMap({
   }
 
   // 이름표는 섬마다 둘씩이다. 관계로 이어진 영토는 그 밖이어도 이름을 단다 — 선 끝에 이름이
-  // 없으면 어디로 이어졌는지 모른다 (피그마 ⑦-3). 다만 라벨을 단 선과 건수 상위 개수 안 선의 끝,
-  // 고른 · 떠오른 · 마우스를 올린 영토만 단다 (위 개수 규칙과 같이 간다). 알약이 겹쳐 빠진 선도
-  // 개수 안이면 끝 이름은 단다 — 전에는 관계가 셋뿐이어도 알약이 겹치면 선 끝이 이름 없이 남았다
-  const topLines = new Set(byCount.slice(0, cap).map((d) => d.v.rel.id));
+  // 없으면 어디로 이어졌는지 모른다 (피그마 ⑦-3). 다만 건수 상위 개수 안 선과 마우스를 올린 영토
+  // 선의 끝, 고른 · 떠오른 영토만 단다 (위 개수 규칙과 같이 간다). 알약이 겹쳐 빠진 선도 개수
+  // 안이면 끝 이름은 단다 — 전에는 관계가 셋뿐이어도 알약이 겹치면 선 끝이 이름 없이 남았다
   const namedEnds = new Set(
     drawn
       .filter((d) => shownLines.has(d.v.rel.id) || topLines.has(d.v.rel.id))
@@ -375,7 +401,8 @@ export default function HexMap({
       ref={svgRef}
       viewBox={frame}
       className="size-full"
-      role="img"
+      // 누를 수 있는 지도면 안의 영토 · 섬 이름표가 단추라 그림 한 장(img)이 아니다
+      role={interactive ? "group" : "img"}
       aria-label="다크웹 섬 지도"
     >
       <defs>
@@ -435,6 +462,7 @@ export default function HexMap({
             stroke="var(--t-border-hex)"
             strokeWidth={1}
             className={`${pointer} transition-colors`}
+            {...keyProps(t.name, t.territoryId === entryId)}
             {...hoverProps(t.territoryId)}
           />
         ))}
@@ -448,6 +476,8 @@ export default function HexMap({
         */}
         {hoveredFlat && (
           <path
+            // 영토마다 새 요소 — 같은 요소를 다시 쓰면 다른 섬으로 옮겨 가도 앞 섬의 움직임이 남았다
+            key={hoveredFlat.territoryId}
             aria-hidden
             data-island={hoveredFlat.islandKey}
             d={cellsPath(hoveredFlat, layout.size)}
@@ -508,6 +538,8 @@ export default function HexMap({
               }
               strokeWidth={t.territoryId === selectedTerritory ? 2 : t.territoryId === hovered ? 1.4 : 1}
               className={pointer}
+              {...keyProps(t.name, t.territoryId === entryId)}
+              aria-pressed={interactive ? t.territoryId === selectedTerritory : undefined}
               {...hoverProps(t.territoryId)}
             />
             </g>
@@ -587,6 +619,7 @@ export default function HexMap({
               transform={`translate(${i.label.x - w / 2} ${i.label.y - 9})`}
               opacity={dimIsland(i.islandKey) ? 0.4 : 1}
               className={pointer}
+              {...keyProps(`${i.name} 섬 · ${i.eventCount}건`)}
               onMouseEnter={interactive ? () => setHoverIsland(i.islandKey) : undefined}
               onMouseLeave={interactive ? () => setHoverIsland(null) : undefined}
             >

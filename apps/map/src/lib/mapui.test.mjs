@@ -6,6 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { fitTicks, labelTicks, pastSnapshot, revealPan, tipPlace, toCanvas } from './mapui.ts';
+import { quarterText } from './quarter.ts';
 
 // 판 1000 × 680, 위 여백 16 · 아래 여백 64 → 지도 판은 1000 × 600
 const STAGE = { w: 1000, h: 680, top: 16, bottom: 64 };
@@ -117,5 +118,7 @@ test('끝 바로 앞 이름표가 반 간격도 안 떨어지면 뺀다', () => 
 
 test('지나간 분기만 스냅샷 이름을 낸다', () => {
   assert.equal(pastSnapshot('2025-Q3', '2026-Q3'), '2025 Q3');
+  // 화면 분기 표기는 한 꼴이다 — 타임라인 · 스냅샷 바 · 관계 패널이 같이 쓴다 (G-10 묶음 9)
+  assert.equal(quarterText('2021-Q4'), '2021 Q4');
   assert.equal(pastSnapshot('2026-Q3', '2026-Q3'), null);
 });

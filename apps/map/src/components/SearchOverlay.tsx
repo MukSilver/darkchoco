@@ -20,6 +20,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { hitKey, hitOfRecent, rowParts, type SearchCtx } from "./SearchRows";
+import { useShortcutLabel } from "./useShortcutLabel";
 import { DARK_ISLANDS } from "@/lib/islands";
 import type { MapLayout } from "@/lib/layout";
 import {
@@ -94,6 +95,7 @@ export default function SearchOverlay({
 }: SearchOverlayProps) {
   const [q, setQ] = useState(initialQ);
   const [cursor, setCursor] = useState(0);
+  const shortcut = useShortcutLabel();
   // 최근 검색 시각 배지의 「지금」. 열 때 한 번 잡는다 — 창을 연 채 몇 분이 흘러도 배지가 안 바뀐다
   const [now] = useState(() => Date.now());
   const inputRef = useRef<HTMLInputElement>(null);
@@ -404,7 +406,7 @@ export default function SearchOverlay({
           <div className="flex shrink-0 items-center gap-s4 border-t border-divider px-s5 py-s2 text-[11px] text-label">
             {!typed ? (
               <>
-                <span>⌘K 열기</span>
+                <span>{shortcut} 열기</span>
                 <span>↑↓ 이동</span>
                 <span>↵ 선택</span>
                 <span>Esc 닫기</span>

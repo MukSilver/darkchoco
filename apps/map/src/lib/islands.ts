@@ -77,6 +77,16 @@ export function islandsOf(web: Web): Island[] {
  * 다른 색이라 (포럼 `#877BF3` → `#7666FF`) 판을 타는 토큰이 필요하다.
  * 데이터에 딸린 색은 `hex`, 화면이 칠하는 색은 토큰이다.
  */
+/**
+ * 다크웹 섬 이름. 그 분기 지도(`layout.islands`)에 섬이 없어도 이름을 낸다 — 관계 탭 섬 간 보기에서
+ * 스냅샷 바로 섬이 없던 분기로 가면 칩 · 패널 제목이 빈칸이 되었다 (2026-09-29 검토)
+ */
+export function islandName(id: string): string {
+  // 지도 섬 열쇠는 `dark:ACTOR` 꼴이다(`layout.ts`). 코드만 떼어 찾는다
+  const code = id.slice(id.lastIndexOf(":") + 1);
+  return DARK_ISLANDS.find((i) => i.id === code)?.name ?? id;
+}
+
 export function islandToken(id: IslandCode): string {
   switch (id) {
     case "FORUM":
