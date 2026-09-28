@@ -123,6 +123,11 @@ ARCHIVE = re.compile(r"\.(zip|rar|7z|tar|gz|bz2|xz|tgz|tbz|txz|zst|arj|cab)$", r
 # 통째로 찾으면 안내 문구를 실제 일치로 잘못 센다. 2026-08-26 에 겪었다.
 VERDICT = re.compile(r"^\s*>>\s*([^—\n]+?)\s*—", re.M)
 
+# 유출 사고 DB 는 기준선이라 갈래가 따로 나온다 (2026-09-28). notion_find 의 사고갈래 · 사고없음.
+# 수집 DB 용 「도구 분류」(중복 관계 후보)에 섞지 않고 「사고 DB 대조」 로 따로 남긴다.
+# ⑤ 「유출사고 DB 일치 여부」 에 INC 번호를 옮겨야 하므로 번호도 같이 잡는다
+SAGO = re.compile(r"^\s*>>\s*(있음\((?:공식|주장 기록)\)|범위 밖|범위 안에 없음)\s*—\s*(INC\d+)?", re.M)
+
 STEPS = ["①", "②", "③기계", "④기계"]     # 화면에 늘 이 순서로 낸다
 
 CALL_TIMEOUT = 180          # 한 번 부르는 데 이만큼 넘으면 끊는다
@@ -225,6 +230,7 @@ def stage3_teamdb(case: Path, st: dict, use_notion: bool) -> list[str]:
     stop = []
     if not use_notion:
         st["팀 DB 대조"] = "안 봄(노션 안 봄으로 돌렸다)"
+        st["사고 DB 대조"] = "안 봄(노션 안 봄으로 돌렸다)"
         return stop
 
     org, handle = val(st, "대상 조직"), val(st, "행위자")
@@ -237,6 +243,8 @@ def stage3_teamdb(case: Path, st: dict, use_notion: bool) -> list[str]:
              "조직": org, "포럼": forum}[kind]
         if not q:
             chunks.append("### %s (%s)\n\n안 봄. 질의로 쓸 값이 없다 (%s)\n" % (db, why, kind))
+            if db == "유출 사고":
+                st["사고 DB 대조"] = "안 봄(질의로 쓸 %s 이 없다)" % kind
             continue
         cmd = [str(HERE / "notion_find.py"), NOTION_NAME.get(db, db), q]
         if db in ("수집", "검증"):
@@ -244,14 +252,23 @@ def stage3_teamdb(case: Path, st: dict, use_notion: bool) -> list[str]:
                             ("--forum", forum), ("--url", url), ("--date", day)):
                 if v:
                     cmd += [flag, v]
+        # 사고 DB 는 게시 시각으로 기준선 범위 안인지 가른다 (2026-09-28)
+        if db == "유출 사고" and day:
+            cmd += ["--date", day]
         code, out = run(cmd)
         if code != 0:
             chunks.append("### %s (%s)\n\n못 봄. 조회가 실패했다\n\n```\n%s\n```\n"
                           % (db, why, out.strip()[:800]))
+            if db == "유출 사고":
+                st["사고 DB 대조"] = "못 봄(조회 실패)"
         else:
             chunks.append("### %s (%s)\n\n```\n%s\n```\n" % (db, why, out.strip()))
-            for k in VERDICT.findall(out):
-                found[k] = found.get(k, 0) + 1
+            if db == "유출 사고":
+                st["사고 DB 대조"] = " · ".join(
+                    ("%s %s" % (g, inc)).strip() for g, inc in SAGO.findall(out)) or "못 봄(갈래가 안 나왔다)"
+            else:
+                for k in VERDICT.findall(out):
+                    found[k] = found.get(k, 0) + 1
         time.sleep(CALL_GAP)
 
     (case / "③_팀DB대조.md").write_text(
@@ -303,7 +320,12 @@ def write_stage3_input(case: Path, st: dict) -> None:
               "|---|---|---|",
               "| ③-0 재료 판정 | %s | ③_재료판정.txt |" % st.get("재료 판정", "안 함"),
               "| ③-1 팀 DB 대조 | %s | ③_팀DB대조.md |" % st.get("팀 DB 대조", "안 함"),
+              "| ③-1 유출 사고 DB | %s | ③_팀DB대조.md |" % st.get("사고 DB 대조", "안 함"),
               "| ④ 샘플 패턴 | %s | ④_샘플패턴.md |" % st.get("샘플 패턴", "안 함"),
+              "",
+              "**유출 사고 DB 는 공식 확인 사고 명단(기준선)이다.** 게시 2026-01-01 ~ 2026-08-19 만 담고"
+              " 8/19 뒤로 안 늘어난다. 있음(주장 기록) 은 공식 확인이 아니다. 범위 밖 · 범위 안에 없음이면"
+              " 갈래 A 로 공식 자료를 직접 찾는다. ⑤ 「유출사고 DB 일치 여부」 에 갈래와 INC 번호를 옮긴다.",
               ""]
     cls = st.get("도구 분류") or {}
     if cls:
@@ -366,7 +388,8 @@ def call_text(case: Path, st: dict) -> str:
     h += ["", "## 할 것", "",
           "1. ③ 의 남은 절을 돈다. 대상 확인, 자료 찾기 갈래 A 다섯 질의와 갈래 B",
           "2. ④ 마스킹. `④_샘플패턴.md` 를 받아 패턴으로 적는다",
-          "3. ⑤ 재료 합치기",
+          "3. ⑤ 재료 합치기. 「유출사고 DB 일치 여부」 에는 ③ 유출 사고 DB 대조의 갈래와 INC 번호를 옮긴다"
+          " (지금 값: %s)" % st.get("사고 DB 대조", "안 함"),
           "4. ⑥ 판정 근거. `07_케이스/%s/검증_%s_<오늘날짜>.md` 로 쓴다"
           % (case.name, case.name), "",
           "## 하지 말 것", "",

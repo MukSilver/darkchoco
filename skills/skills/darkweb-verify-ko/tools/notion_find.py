@@ -46,6 +46,51 @@ def find_db(name: str) -> tuple[str, str]:
     return hits[0]["id"], title_of(hits[0])
 
 
+# ── 유출 사고 DB 는 기준선이다 (2026-09-28 최현서) ─────────────
+#
+# 유출 사고 DB 는 이제 공식 확인 사고 명단이다. 외부 확인이 아래 셋인 줄만 사고로 본다.
+# 게시글만 · 연구자 발견 줄은 「주장 기록」 으로 남기고 「DB 반영」 을 껐다. 이 도구는
+# 「DB 반영」 을 안 보고 줄을 다 읽으므로 꺼진 줄도 걸린다. 그래서 외부 확인으로 갈래를 가른다.
+#
+# **새 사고는 넣지 않는다**(마지막 입력 8/19). 그래서 못 찾았다고 「없음」 이 아니다.
+# 9월에 발표된 사고로 판매글이 올라와도 「없음」 이 나와 「이미 알려진 사고가 아니다」 로 읽힐 수 있다.
+# 게시 시각이 범위 밖이면 DB 로는 판단을 못 하고, 범위 안이어도 8/19 뒤 발표된 사고는 없다.
+#
+# 범위 시작은 2026-01-01 (최현서 9/28). 공표 시점이 있는 기준선 145줄 중 142줄이 2026-01~08 이고
+# 2025년은 3줄뿐이다. 그보다 앞선 게시글에 「없음」 을 내면 DB 가 거의 안 담은 때를 없다고 읽게 된다.
+사고DB = "유출 사고 DB"
+공식확인 = ("조직 공식 발표", "규제기관 확정", "언론 보도")
+기준선시작, 기준선끝 = "2026-01-01", "2026-08-19"
+기준선 = ("기준선: 외부 확인 공식 3값(%s) · 게시 %s ~ %s (마지막 입력 8/19). "
+       "게시글만 · 연구자 발견은 주장 기록" % (" · ".join(공식확인), 기준선시작, 기준선끝))
+_날짜 = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def 사고갈래(props: dict) -> tuple[str, str]:
+    """사고 DB 에서 걸린 줄 하나의 (갈래, 적을 말). 갈래는 있음(공식) · 있음(주장 기록)."""
+    inc = as_text(props.get("사건 ID", {})) or "INC 번호 없음"
+    확인 = as_text(props.get("외부 확인", {}))
+    공표 = as_text(props.get("공표 시점", {}))[:10]
+    if 확인 in 공식확인:
+        return "있음(공식)", "%s · 외부 확인 %s · 공표 %s" % (inc, 확인, 공표 or "모름")
+    return "있음(주장 기록)", "%s · 공식 확인 아님(외부 확인 %s)" % (inc, 확인 or "빈칸")
+
+
+def 사고없음(date: str) -> tuple[str, str]:
+    """사고 DB 에서 못 찾았을 때의 (갈래, 적을 말). `date` 는 새 건의 게시 시각이다.
+
+    갈래는 범위 밖 · 범위 안에 없음. **게시 시각을 모르면 범위를 못 가린다** — 범위 안에 없음으로
+    내되 그렇게 적는다. 어느 쪽이든 갈래 A 로 공식 자료를 직접 찾아야 한다."""
+    d = (date or "").strip()[:10]
+    if not _날짜.fullmatch(d):
+        return "범위 안에 없음", ("게시 시각을 몰라 범위를 못 가렸다. 8/19 뒤 발표된 사고는 DB 에 없다. "
+                              "공식 자료를 직접 찾는다(갈래 A)")
+    if d < 기준선시작 or d > 기준선끝:
+        return "범위 밖", ("게시 %s 가 기준선(%s ~ %s) 밖이다. DB 로는 판단 못 함. 갈래 A 필수"
+                        % (d, 기준선시작, 기준선끝))
+    return "범위 안에 없음", "8/19 뒤 발표된 사고는 DB 에 없다. 공식 자료를 직접 찾는다(갈래 A)"
+
+
 def rows(ds_id: str) -> list[dict]:
     out: list[dict] = []
     cursor = None
@@ -364,8 +409,18 @@ def main() -> None:
     print(f"질의      {args.query}" + (f"  (칸: {args.field})" if args.field else ""))
     print(f"일치      {len(hits)}줄\n")
 
+    # 유출 사고 DB 는 기준선이다. 갈래를 따로 가르고 수집 DB 용 분류기를 안 돌린다
+    사고 = dbname.strip() == 사고DB
+    if 사고:
+        print(기준선 + "\n")
+
     if not hits:
         print("일치하는 줄이 없다.")
+        if 사고:
+            갈래, 말 = 사고없음(args.date)
+            print(f"  >> {갈래} — {말}")
+            print("\n사고 DB 는 새 사고를 안 넣는다. 못 찾았다고 「없음」 으로 적지 말고 위 갈래를 옮긴다.")
+            return
         print("DB를 직접 조회해 부재를 확인했으므로 '없음'으로 적는다.")
         print("검색으로 못 찾은 것과 다르다.")
         return
@@ -389,7 +444,14 @@ def main() -> None:
                 if s:
                     # 원문 URL 은 자르지 않는다. 같은 글 판별에 통째로 쓴다
                     print(f"  {k}: {s if k == '원문 URL' else s[:90]}")
-        if args.url or args.org or args.date or args.handle or args.forum:
+        if 사고:
+            for k in ("외부 확인", "공표 시점", "사고 시점", "유출 규모", "보도된 행위자", "보도된 유출 위치"):
+                s = as_text(props.get(k, {}))
+                if s:
+                    print(f"  {k}: {s[:90]}")
+            갈래, 말 = 사고갈래(props)
+            print(f"  >> {갈래} — {말}")
+        elif args.url or args.org or args.date or args.handle or args.forum:
             kind, todo = classify(
                 as_text(props.get("원문 URL", {})), as_text(props.get("대상 조직", {})),
                 as_text(props.get("게시 시각", {})) or as_text(props.get("수집일", {})),
@@ -406,6 +468,10 @@ def main() -> None:
         print(f"         {alias_note}")
         print()
 
+    if 사고:
+        print("있음(주장 기록) 은 공식 확인이 아니다. 공식 사고로 적지 않는다.")
+        print("⑤ 「유출사고 DB 일치 여부」 에 갈래와 INC 번호를 그대로 옮긴다.")
+        return
     if args.url or args.org or args.date or args.handle or args.forum:
         print("분류는 참고다. 사람이 확인하고 정한다.")
         print("아예 동일 케이스가 하나라도 있으면 새 조사를 시작하지 않는다.")
