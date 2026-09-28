@@ -181,15 +181,31 @@ export function yearCards(snaps: readonly Snapshot[]): YearMark[] {
  * 섬이 커지는 것이 보이게 한다 (피그마 ⑦-9b 썸네일).
  */
 export function thumbBoxes(viewBoxes: readonly string[]): string[] {
-  const parsed = viewBoxes.map((v) => {
-    const [x, y, w, h] = v.split(/\s+/).map(Number);
-    return { x, y, w, h };
-  });
-  const W = Math.max(0, ...parsed.map((p) => p.w));
-  const H = Math.max(0, ...parsed.map((p) => p.h));
-  return parsed.map((p) =>
-    [p.x + p.w / 2 - W / 2, p.y + p.h / 2 - H / 2, W, H].join(" "),
-  );
+  const size = boxSize(viewBoxes);
+  return viewBoxes.map((v) => centerBox(v, size));
+}
+
+/** viewBox 들 가운데 가장 큰 폭 · 높이 */
+export function boxSize(viewBoxes: readonly string[]): { w: number; h: number } {
+  const parsed = viewBoxes.map((v) => v.split(/\s+/).map(Number));
+  return {
+    w: Math.max(0, ...parsed.map((p) => p[2] || 0)),
+    h: Math.max(0, ...parsed.map((p) => p[3] || 0)),
+  };
+}
+
+/**
+ * viewBox 를 크기 `size` 로 넓히고 제 가운데에 놓는다. **모든 분기가 같은 크기 틀을 쓰면
+ * 축척이 같다** — 지도 탭 · Historical Map · 시점 비교 A/B 가 모든 분기를 합친 크기로
+ * 그린다 (2026-09-28 최현서 3번 · 코드 분석). 전에는 분기마다 그려진 칸에 맞춰 판 배율이
+ * 바뀌어, 섬이 하나뿐인 분기는 지나치게 확대되고 슬라이더를 옮길 때마다 판이 튀었다.
+ * 크기가 원래보다 작으면 원래 크기를 쓴다(잘리지 않게)
+ */
+export function centerBox(viewBox: string, size: { w: number; h: number }): string {
+  const [x, y, w, h] = viewBox.split(/\s+/).map(Number);
+  const W = Math.max(w, size.w);
+  const H = Math.max(h, size.h);
+  return [x + w / 2 - W / 2, y + h / 2 - H / 2, W, H].join(" ");
 }
 
 /** 섬 누적 건수의 최댓값. 추이 그래프 세로축과 성장 요약 막대가 같은 눈금을 쓴다 */

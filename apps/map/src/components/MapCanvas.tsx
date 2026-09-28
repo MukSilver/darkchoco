@@ -73,7 +73,9 @@ function hintText(sel: MapSelection, snapshot: string | null): string {
     return `${sel.name} 선택됨 · 연결된 영토만 표시 중`;
   }
   if (snapshot) {
-    return `${snapshot} 기준 · 슬라이더를 옮기면 누적 사건만큼 칸이 늘어남`;
+    // 칸 총수는 분기와 상관없이 800 이라(설계서 3.1) 「칸이 늘어남」은 계산과 맞지 않았다.
+    // 늘거나 주는 것은 섬 · 영토의 칸 비중이다 (2026-09-28 코드 분석, 피그마 ⑦-1a 문구를 고침)
+    return `${snapshot} 기준 · 슬라이더를 옮기면 누적 사건만큼 칸 비중이 바뀜`;
   }
   return "섬 이름 클릭 → 섬 정보 · 영토 클릭 → 관계선";
 }
@@ -85,6 +87,8 @@ export const MAP_VIEW_HOME: MapView = { zoom: 100, pan: { x: 0, y: 0 } };
 
 export type MapCanvasProps = {
   layout: MapLayout;
+  /** 그릴 틀. 모든 분기를 합친 크기 틀이다(`centerBox`). 없으면 `layout.viewBox` */
+  viewBox?: string;
   selection: MapSelection;
   onSelect: (sel: MapSelection) => void;
   /** 영토 id → 최근 관측일 `MM-DD`. 툴팁 다섯째 줄에 쓴다 */
@@ -111,6 +115,7 @@ type At = { x: number; y: number; w: number; h: number };
 
 export default function MapCanvas({
   layout,
+  viewBox,
   selection,
   onSelect,
   lastSeen,
@@ -165,7 +170,7 @@ export default function MapCanvas({
       el && t && picked
         ? revealPan(
             t.label,
-            layout.viewBox,
+            viewBox ?? layout.viewBox,
             { w: el.clientWidth, h: el.clientHeight, top: PAD_TOP, bottom: PAD_BOTTOM },
             view,
           )
@@ -284,6 +289,7 @@ export default function MapCanvas({
         >
           <HexMap
             layout={layout}
+            viewBox={viewBox}
             selectedTerritory={
               selection.kind === "territory" ? selection.id : undefined
             }

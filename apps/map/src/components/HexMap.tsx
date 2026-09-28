@@ -82,6 +82,11 @@ function pickLabels(
 
 export type HexMapProps = {
   layout: MapLayout;
+  /**
+   * 그릴 틀. 없으면 `layout.viewBox`(그 분기에 그려진 칸에 맞춘 틀). 지도 탭 · 타임라인은
+   * 모든 분기를 합친 크기 틀(`centerBox`)을 넘겨 분기마다 축척이 같다 (G-10 묶음 4)
+   */
+  viewBox?: string;
   /** 고른 영토. 있으면 그 영토만 진하고 나머지는 흐리다 (설계서 4.2.3) */
   selectedTerritory?: string;
   /** 고른 섬. 그 섬 전체가 진하다 */
@@ -149,6 +154,7 @@ function mapDash(dash: string): string | undefined {
  */
 export default function HexMap({
   layout,
+  viewBox,
   selectedTerritory,
   selectedIsland,
   hovered,
@@ -222,7 +228,7 @@ export default function HexMap({
 
   return (
     <svg
-      viewBox={layout.viewBox}
+      viewBox={viewBox ?? layout.viewBox}
       className="size-full"
       role="img"
       aria-label="다크웹 섬 지도"

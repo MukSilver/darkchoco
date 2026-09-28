@@ -34,6 +34,7 @@ import {
   growth,
   peakOf,
   stepYear,
+  centerBox,
   thumbBoxes,
   yearCards,
   yearChips,
@@ -59,6 +60,11 @@ export type TimelineTabProps = {
   onSpeed: (v: number) => void;
   /** 섬 코드 → 이름 */
   nameOf: (islandId: string) => string;
+  /**
+   * 모든 분기를 합친 지도 크기 (`boxSize`). Historical Map 과 시점 비교 A/B 가 이 크기 틀로
+   * 그려 분기마다 축척이 같다 (G-10 묶음 4). 없으면 분기마다 제 칸에 맞춘다
+   */
+  mapSize?: { w: number; h: number };
 };
 
 export default function TimelineTab({
@@ -72,7 +78,10 @@ export default function TimelineTab({
   speed,
   onSpeed,
   nameOf,
+  mapSize,
 }: TimelineTabProps) {
+  /** 분기 지도의 틀. 합친 크기가 있으면 그 크기로 넓혀 제 가운데에 놓는다 */
+  const boxOf = (layout: MapLayout) => (mapSize ? centerBox(layout.viewBox, mapSize) : layout.viewBox);
   const at = Math.max(
     0,
     snaps.findIndex((s) => s.ym === current),
@@ -350,11 +359,15 @@ export default function TimelineTab({
 
         {변화 ? (
           <div className="grid shrink-0 grid-cols-1 gap-s4 @min-[560px]:grid-cols-2">
-            <SideMap mark="A" snap={변화.a} />
-            <SideMap mark="B" snap={변화.b} />
+            <SideMap mark="A" snap={변화.a} viewBox={boxOf(변화.a.layout)} />
+            <SideMap mark="B" snap={변화.b} viewBox={boxOf(변화.b.layout)} />
           </div>
         ) : (
-        <section className="relative flex min-h-[340px] shrink-0 flex-col rounded-[14px] border border-edge bg-canvas p-s5">
+        <section className="relative flex h-[400px] shrink-0 flex-col rounded-[14px] border border-edge bg-canvas p-s5">
+          {/*
+            블록 높이를 고정한다. 전에는 최소 높이만 있어 지도 틀 비율을 따라 시점마다 들쭉날쭉했다
+            (2026-09-28 최현서 3번). 틀도 모든 분기를 합친 크기라 축척이 같다
+          */}
           <header className="z-10 flex shrink-0 flex-wrap items-center gap-s3">
             <h2 className="whitespace-nowrap text-[15px] font-semibold text-title">
               Historical Map
@@ -385,7 +398,7 @@ export default function TimelineTab({
 
           {/* 큰 분기 글씨(워터마크)는 지도 밑에 깐다 — 전에는 지도 위층에 칠해졌다 */}
           <div className="relative z-[1] min-h-0 flex-1">
-            <HexMap layout={now.layout} />
+            <HexMap layout={now.layout} viewBox={boxOf(now.layout)} />
           </div>
 
           {playing && (
@@ -652,9 +665,10 @@ function TimeSlider({
 }
 
 /** 비교 모드의 지도 한 장. A 와 B 를 나란히 놓는다 (피그마 ⑦-9c) */
-function SideMap({ mark, snap }: { mark: "A" | "B"; snap: Snapshot }) {
+/** 시점 비교 한 장. A · B 가 같은 크기 틀(`viewBox`)이라 축척이 같다 — 전에는 섬이 적은 A 가 크게 확대됐다 */
+function SideMap({ mark, snap, viewBox }: { mark: "A" | "B"; snap: Snapshot; viewBox: string }) {
   return (
-    <section className="relative flex min-h-[340px] flex-col rounded-[14px] border border-edge bg-canvas p-s5">
+    <section className="relative flex h-[340px] flex-col rounded-[14px] border border-edge bg-canvas p-s5">
       <header className="z-10 flex shrink-0 flex-wrap items-center gap-s3">
         <span
           className="grid size-[20px] place-items-center rounded-[6px] text-[11px] font-bold text-on-accent"
@@ -677,7 +691,7 @@ function SideMap({ mark, snap }: { mark: "A" | "B"; snap: Snapshot }) {
       </span>
 
       <div className="relative z-[1] min-h-0 flex-1">
-        <HexMap layout={snap.layout} />
+        <HexMap layout={snap.layout} viewBox={viewBox} />
       </div>
     </section>
   );
