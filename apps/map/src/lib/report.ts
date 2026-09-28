@@ -92,8 +92,9 @@ function countryText(code: string): string {
 }
 
 /**
- * 외부 확인 칩 색. 조직 · 규제기관이 스스로 밝힌 것만 success 로 두고 나머지(언론
- * 보도 · 연구자 발견 · 게시글만)는 neutral 이다. 시안에 이 칩이 없어 정한 값이다
+ * 외부 확인 칩 색. 조직 · 규제기관이 스스로 밝힌 것만 success 로 두고 언론 보도는
+ * neutral 이다. 시안에 이 칩이 없어 정한 값이다. 연구자 발견 · 게시글만인 사고는
+ * 굽기가 싣지 않는다 (2026-09-28 G-8)
  */
 const CONFIRM_TONE: Record<string, string> = {
   "조직 공식 발표": "success",

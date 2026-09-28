@@ -198,7 +198,25 @@ RISK_ITEMS = {"주민번호", "카드금융"}
 RISK_VALUES = {"high", "medium", "low"}
 #: 관계 번호 모양 — `REL-012` · `ACT-...` 처럼 글자 · 숫자 · `_` · `-` 만
 RE_REL_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
-CONFIRM_VALUES = {"조직 공식 발표", "게시글만", "언론 보도", "규제기관 확정", "연구자 발견"}
+#: 「공식 발표」 로 싣는 유출 사고 DB 「외부 확인」 값 (2026-09-28 최현서 G-8). 칸 설명은 「누가 이 사건을
+#: 확인했나. 진위가 아니라 확인 주체」다. 나머지 두 값 — 연구자 발견 · 게시글만 — 은 조직이 아직 인정하지
+#: 않은 사고라 지도에 안 싣는다. **가르는 것은 이 칸이지 「출처」 칸이 아니다** — 언론이 다크웹 게시글을
+#: 보도했을 뿐인 사고는 출처가 언론 보도여도 외부 확인이 게시글만이다 (INC-230 · 138)
+OFFICIAL_CONFIRMS = {"조직 공식 발표", "규제기관 확정", "언론 보도"}
+#: 외부 확인 가운데 공식 발표가 아닌 선택지. 굽기 로그의 뺀 사유를 가르는 데만 쓴다
+UNOFFICIAL_CONFIRMS = {"연구자 발견", "게시글만"}
+
+
+def unofficial_reason(confirm: str | None) -> str | None:
+    """유출 사고 DB 줄을 공식 발표로 싣지 않는 사유. 실으면 None.
+
+    빈칸 · 새 선택지도 짐작해서 공식 발표로 올리지 않는다 (설계서 2.5 「없는 데이터를 채우지 않음」)
+    """
+    if confirm in OFFICIAL_CONFIRMS:
+        return None
+    if confirm in UNOFFICIAL_CONFIRMS:
+        return "외부 확인이 게시글만 · 연구자 발견"
+    return "외부 확인이 비었거나 선택지 밖"
 SOURCE_KINDS = {"언론 보도", "보안업체", "기타", "기업 공지", "개인정보보호위원회", "한국인터넷진흥원"}
 
 #: 행위자 DB 「역할」 선택지. 미확인은 뺀다
@@ -961,8 +979,8 @@ def check(data: dict) -> list[str]:
             bad.append(f"사건 {e['id']} 의 사고 시점이 날짜가 아닙니다")
         if "leakItems" in e and (not isinstance(e["leakItems"], list) or set(e["leakItems"]) - LEAK_ITEMS):
             bad.append(f"사건 {e['id']} 의 유출 항목이 선택지 밖입니다")
-        if "confirm" in e and e["confirm"] not in CONFIRM_VALUES:
-            bad.append(f"사건 {e['id']} 의 외부 확인이 선택지 밖입니다")
+        if e.get("kind") == "official" and e.get("confirm") not in OFFICIAL_CONFIRMS:
+            bad.append(f"사건 {e['id']} 는 외부 확인이 조직 · 규제기관 · 언론이 아닌데 공식 발표입니다")
         if "sourceKind" in e and e["sourceKind"] not in SOURCE_KINDS:
             bad.append(f"사건 {e['id']} 의 출처 종류가 선택지 밖입니다")
         if "risk" in e and e["risk"] not in RISK_VALUES:
@@ -1536,7 +1554,10 @@ def override_of(ov: dict | None, index: "RegistryIndex") -> dict:
     out: dict = {"drop": ov.get("drop") is True}
     if isinstance(ov.get("postedAt"), str) and RE_ISO_DAY.match(ov["postedAt"]):
         out["postedAt"] = ov["postedAt"]
-    if ov.get("kind") in EV_KIND_VALUES:
+    # 「공식 발표」는 유출 사고 DB 줄만 된다 — 외부 확인이 조직 · 규제기관 · 언론이어야 한다 (G-8).
+    # 이 표는 수집 DB 줄에 쓰므로 official 은 표 밖 값으로 버린다. 받으면 외부 확인 없는 공식
+    # 발표 사건이 생겨 반출 검사가 굽기 전체를 멈춘다 (2026-09-28 검토에서 찾음)
+    if ov.get("kind") in EV_KIND_VALUES - {"official"}:
         out["kind"] = ov["kind"]
     t = ov.get("territory")
     if isinstance(t, list) and len(t) == 2 and all(isinstance(x, str) for x in t):
@@ -1888,6 +1909,9 @@ def bake(n, sources: dict[str, str], log) -> dict:
     # 한 줄이 사건 하나다. 공표 시점이 게시 시각, 보도된 유출 위치가 영토다. 판정은
     # 확인됨(신뢰 1.0, 3.2), 규모는 유출 규모 칸에서 읽는다. 빼는 것은 셋이다 (2.5) —
     # 위치가 지도 영토와 안 맞음, 공표 시점 없음, 수집 DB 에 같은 조직 사건이 있음.
+    # **그보다 먼저 외부 확인이 조직 · 규제기관 · 언론인 줄만 공식 발표로 본다** (2026-09-28
+    # 최현서 G-8). 설계서의 「공식 발표 = 유출 사고 DB 1행」 을 좁힌 것이다 — 게시글로만 알려진
+    # 사고가 「공식 발표 · 확인됨(신뢰 1.0)」 으로 나가던 것을 막는다.
     # **조직명은 어디에도 안 싣는다.** 같은 사고 가르기와 조직명 거르기에만 쓴다
     inc_why: dict[str, int] = {}
     inc_gate = 0
@@ -1910,8 +1934,11 @@ def bake(n, sources: dict[str, str], log) -> dict:
             cand = incident_place(index, col_match(read, p, "보도된 유출 위치"))
             org = col_match(read, p, "조직명")
             iid = unique_id(col_prop(p, "사건 ID"))
+            confirm = col(read, p, "외부 확인")
             reason = None
-            if not cand:
+            if confirm not in OFFICIAL_CONFIRMS:
+                reason = unofficial_reason(confirm)
+            elif not cand:
                 reason = "위치가 영토와 안 맞음"
             elif not posted:
                 reason = "공표 시점 없음"
@@ -1954,7 +1981,7 @@ def bake(n, sources: dict[str, str], log) -> dict:
                 "korea": nation == "한국",
                 "official": {
                     "occurredAt": col(read, p, "사고 시점"),
-                    "confirm": col(read, p, "외부 확인"),
+                    "confirm": confirm,
                     "sourceKind": col(read, p, "출처"),
                 },
             })
@@ -2115,7 +2142,7 @@ def bake(n, sources: dict[str, str], log) -> dict:
         if o:
             if o.get("occurredAt") and RE_ISO_DAY.match(o["occurredAt"]):
                 ev["occurredAt"] = o["occurredAt"][:10]
-            if o.get("confirm") in CONFIRM_VALUES:
+            if o.get("confirm") in OFFICIAL_CONFIRMS:
                 ev["confirm"] = o["confirm"]
             if o.get("sourceKind") in SOURCE_KINDS:
                 ev["sourceKind"] = o["sourceKind"]
