@@ -329,7 +329,8 @@ export default function HexMap({
    * 고르면 알약과 이름표가 개수 제한 없이 붙어 겹쳤다 (2026-09-28 코드 분석). 100% 미만은 4개,
    * 150% 미만은 8개, 그 이상은 전부다. 마우스를 올린 영토에 닿은 선은 늘 단다 — 고른 영토는
    * 빼고. 지도 탭에서는 선이 다 고른 영토에 닿아서, 누른 직후 커서가 그 위에 있으면 개수 제한이
-   * 통째로 꺼졌다 (2026-09-29 묶음 5 검토). 알약끼리 겹치면 뒤(건수가 작은) 것을 뺀다
+   * 통째로 꺼졌다 (2026-09-29 묶음 5 검토). 알약끼리 겹치면 뒤(건수가 작은) 것을 빼고, 빈 자리를
+   * 개수 밖 선으로 채우지 않는다 — 채우면 끝 이름이 개수를 넘어 늘었다 (2026-09-29 묶음 7 검토)
    */
   const cap = zoom < 100 ? 4 : zoom < 150 ? 8 : Infinity;
   // 알약은 확대해도 화면에서 100% 때 크기를 넘지 않는다 — 그림과 같이 커지면 겹침이 그대로라
@@ -338,10 +339,12 @@ export default function HexMap({
   const shownLines = new Set<string>();
   const placed: { x0: number; y0: number; x1: number; y1: number }[] = [];
   const byCount = [...drawn].sort((x, y) => y.v.count - x.v.count || x.v.rel.id.localeCompare(y.v.rel.id));
+  // 라벨 · 끝 이름을 달 수 있는 선 — 건수 상위 `cap` 개
+  const topLines = new Set(byCount.slice(0, cap).map((d) => d.v.rel.id));
   for (const d of byCount) {
     const onHover =
       hovered != null && hovered !== selectedTerritory && (d.v.rel.from === hovered || d.v.rel.to === hovered);
-    if (!onHover && shownLines.size >= cap) continue;
+    if (!onHover && !topLines.has(d.v.rel.id)) continue;
     const w = lineLabelW(d.v) * ls;
     const b = { x0: d.mid.x - w / 2, y0: d.mid.y - 8 * ls, x1: d.mid.x + w / 2, y1: d.mid.y + 8 * ls };
     if (!onHover && placed.some((o) => o.x0 < b.x1 && b.x0 < o.x1 && o.y0 < b.y1 && b.y0 < o.y1)) continue;
@@ -350,10 +353,9 @@ export default function HexMap({
   }
 
   // 이름표는 섬마다 둘씩이다. 관계로 이어진 영토는 그 밖이어도 이름을 단다 — 선 끝에 이름이
-  // 없으면 어디로 이어졌는지 모른다 (피그마 ⑦-3). 다만 라벨을 단 선과 건수 상위 개수 안 선의 끝,
-  // 고른 · 떠오른 · 마우스를 올린 영토만 단다 (위 개수 규칙과 같이 간다). 알약이 겹쳐 빠진 선도
-  // 개수 안이면 끝 이름은 단다 — 전에는 관계가 셋뿐이어도 알약이 겹치면 선 끝이 이름 없이 남았다
-  const topLines = new Set(byCount.slice(0, cap).map((d) => d.v.rel.id));
+  // 없으면 어디로 이어졌는지 모른다 (피그마 ⑦-3). 다만 건수 상위 개수 안 선과 마우스를 올린 영토
+  // 선의 끝, 고른 · 떠오른 영토만 단다 (위 개수 규칙과 같이 간다). 알약이 겹쳐 빠진 선도 개수
+  // 안이면 끝 이름은 단다 — 전에는 관계가 셋뿐이어도 알약이 겹치면 선 끝이 이름 없이 남았다
   const namedEnds = new Set(
     drawn
       .filter((d) => shownLines.has(d.v.rel.id) || topLines.has(d.v.rel.id))

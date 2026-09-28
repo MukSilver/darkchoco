@@ -316,7 +316,11 @@ export default function RelationTab(p: RelationTabProps) {
   // 휠은 모아서 문턱을 넘을 때 한 단계씩 — 트랙패드 한 번에 끝까지 튀지 않게. 페이지 스크롤은
   // 막는다 (`useWheelSteps`, 지도와 같다)
   const pad = useRef<HTMLDivElement>(null);
-  useWheelSteps(pad, (n) => zoomBy(n * ZOOM_STEP));
+  useWheelSteps(
+    pad,
+    (n) => zoomBy(n * ZOOM_STEP),
+    (dir) => (dir > 0 ? view.zoom >= ZOOM_MAX : view.zoom <= ZOOM_MIN),
+  );
   // 끌기. 3px 넘게 움직였으면 놓을 때의 클릭을 고르기로 치지 않는다 (지도 `MapCanvas` 와 같다)
   const drag = useRef<{ x: number; y: number; px: number; py: number } | null>(null);
   const moved = useRef(false);

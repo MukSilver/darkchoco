@@ -45,6 +45,14 @@ import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP, clampZoom } from "@/lib/zoom";
  */
 const PAD_TOP = 16;
 const PAD_BOTTOM = 64;
+/**
+ * 캔버스가 `NARROW` 보다 좁을 때의 아래 여백. 힌트 · 「재생 중」 배지를 줌 단추 줄 위로 올리므로 그
+ * 높이까지 비운다 (24 + 30 + 8 + 32 + 6). 전에는 64 그대로라 올린 알약이 지도 아래 30px 를 덮었다
+ * (2026-09-29 묶음 7 검토)
+ */
+const PAD_BOTTOM_NARROW = 100;
+/** 힌트를 줌 단추 줄 위로 올리는 캔버스 폭 (px). 클래스의 `@max-[599px]` 과 같다 */
+const NARROW = 600;
 
 export type MapSelection =
   | { kind: "none" }
@@ -196,7 +204,12 @@ export default function MapCanvas({
         ? revealPan(
             t.label,
             viewBox ?? layout.viewBox,
-            { w: el.clientWidth, h: el.clientHeight, top: PAD_TOP, bottom: PAD_BOTTOM },
+            {
+              w: el.clientWidth,
+              h: el.clientHeight,
+              top: PAD_TOP,
+              bottom: el.clientWidth < NARROW ? PAD_BOTTOM_NARROW : PAD_BOTTOM,
+            },
             view,
           )
         : null;
@@ -209,7 +222,11 @@ export default function MapCanvas({
   const step = (by: number) => onView({ pan, zoom: clampZoom(zoom + by) });
   // 휠은 모아서 문턱을 넘을 때 한 단계씩 (`wheelSteps`). 전에는 이벤트마다 25% 라 트랙패드 한 번에
   // 50% ↔ 200% 끝까지 튀었다 (2026-09-28 코드 분석). 둘레 칸 스크롤은 막는다 (`useWheelSteps`)
-  useWheelSteps(pad, (n) => step(n * ZOOM_STEP));
+  useWheelSteps(
+    pad,
+    (n) => step(n * ZOOM_STEP),
+    (dir) => (dir > 0 ? zoom >= ZOOM_MAX : zoom <= ZOOM_MIN),
+  );
 
   /** 누른 도형으로 고른다 — 섬 이름표 · 영토, 둘 다 아니면 빈 곳이라 선택 해제 (설계서 4.2.3) */
   const pickHit = (hit: Element | null) => {
@@ -255,8 +272,12 @@ export default function MapCanvas({
       <div
         ref={pad}
         // 끄는 동안은 영토 · 섬 이름표의 손가락 커서도 쥔 손으로 덮는다 (2026-09-28 검토)
-        className={"absolute inset-0 touch-none " + (grabbing ? "cursor-grabbing [&_*]:cursor-grabbing" : "cursor-grab")}
-        style={{ paddingTop: PAD_TOP, paddingBottom: PAD_BOTTOM }}
+        // 아래 여백은 `PAD_BOTTOM`(64) · 좁은 캔버스면 `PAD_BOTTOM_NARROW`(100) — 클래스는 글자 그대로 써야 해서 숫자로 적는다
+        className={
+          "absolute inset-0 touch-none pb-[64px] @max-[599px]:pb-[100px] " +
+          (grabbing ? "cursor-grabbing [&_*]:cursor-grabbing" : "cursor-grab")
+        }
+        style={{ paddingTop: PAD_TOP }}
         onPointerDown={(e) => {
           drag.current = { x: e.clientX, y: e.clientY, px: pan.x, py: pan.y };
           moved.current = false;

@@ -151,6 +151,9 @@ type Origin = {
 /** 뒤로 가기 기록에 우리가 넣은 칸이라는 표시 */
 const HISTORY_KEY = "dcRel";
 
+/** 엔티티 표 처음 정렬 — 활동도 높은 순 (설계서 4.3.5). 로고를 누르면 여기로 돌아간다 */
+const ENTITY_SORT_HOME: { key: SortKey; asc: boolean } = { key: "activity", asc: false };
+
 /** 이 창을 연 시각. 뒤로 가기 기록 표가 새로 고침 전 것과 겹치지 않게 한다 */
 const OPENED_AT = Date.now().toString(36);
 
@@ -171,7 +174,7 @@ export default function Page() {
   // 엔티티 탭 섬 필터. 표만 거른다 — 전역 선택과 패널을 안 건드린다 (null 이면 선택한 섬 · 영토의 섬)
   const [entityIsland, setEntityIsland] = useState<string | null>(null);
   // 엔티티 표 정렬. 탭을 다녀와도 남는다 (2026-09-28 코드 분석)
-  const [entitySort, setEntitySort] = useState<{ key: SortKey; asc: boolean }>({ key: "activity", asc: false });
+  const [entitySort, setEntitySort] = useState(ENTITY_SORT_HOME);
   const [panelTab, setPanelTab] = useState<PanelTabKey>("overview");
   const [linkSel, setLinkSel] = useState<LinkSel>(null);
   // 패널 [사건] 탭 기간. 다른 영토를 골라도 그대로 둔다 (설계서 4.3.2)
@@ -618,6 +621,8 @@ export default function Page() {
     setReport([]);
     setPanelOpen(true);
     setEntityIsland(null);
+    // 정렬도 처음으로 — 섬 필터만 돌아가고 정렬은 남았다 (2026-09-29 묶음 7 검토)
+    setEntitySort(ENTITY_SORT_HOME);
     setPanelTab("overview");
     setPeriod(DEFAULT_PERIOD);
     setHideScam(false);
