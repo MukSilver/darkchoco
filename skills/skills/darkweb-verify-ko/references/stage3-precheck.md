@@ -129,16 +129,16 @@ CSV 와 텍스트 샘플은 `sample_stats.py` 로 간다. ④ 가 그 출력을 
 
 **새 건의 대상 조직·행위자·포럼을 함께 준다.** 그러면 줄마다 분류가 붙는다.
 
-    python tools/notion_find.py 수집 <행위자 핸들> --org "<대상 조직>" --handle "<행위자>" --forum "<포럼>" --url "<원문 URL>" --date <YYYY-MM-DD>
-    python tools/notion_find.py 수집 <대상 도메인> --org "<대상 조직>" --handle "<행위자>" --forum "<포럼>" --url "<원문 URL>" --date <YYYY-MM-DD>
-    python tools/notion_find.py 검증 <대상 조직>
+    python tools/notion_find.py "수집 DB" <행위자 핸들> --org "<대상 조직>" --handle "<행위자>" --forum "<포럼>" --url "<원문 URL>" --date <YYYY-MM-DD>
+    python tools/notion_find.py "수집 DB" <대상 도메인> --org "<대상 조직>" --handle "<행위자>" --forum "<포럼>" --url "<원문 URL>" --date <YYYY-MM-DD>
+    python tools/notion_find.py "검증 DB" <대상 조직>
 
 **DB 는 둘이 아니라 여섯이다.** 나머지 넷은 대조 재료다. 순서대로 돈다.
 
-    python tools/notion_find.py 행위자 <행위자 핸들>
-    python tools/notion_find.py 포럼 <포럼 이름 또는 주소>
+    python tools/notion_find.py "행위자 DB" <행위자 핸들>
+    python tools/notion_find.py "포럼 DB" <포럼 이름 또는 주소>
     python tools/notion_find.py "랜섬웨어 DB" <그룹 이름>        자체 유출 사이트일 때만
-    python tools/notion_find.py "유출 사고" <대상 조직>
+    python tools/notion_find.py "유출 사고 DB" <대상 조직>
 
 | DB | 무엇을 푸나 | 안 보면 무슨 일이 나나 |
 |---|---|---|
@@ -147,7 +147,10 @@ CSV 와 텍스트 샘플은 `sample_stats.py` 로 간다. ④ 가 그 출력을 
 | 랜섬웨어 | 그룹의 `이전 이름·별칭`, `피해 대상` | 리브랜딩한 그룹을 새 그룹으로 센다 |
 | 유출 사고 | `조직명`, `보도된 행위자`, `보도된 유출 위치` | 이미 보도된 사고를 새 건으로 조사한다 |
 
-`랜섬웨어` 와 `텔레그램` 은 이름이 겹치는 DB 가 있다. **전체 이름을 그대로 준다.**
+**DB 는 전체 이름(「○○ DB」)을 그대로 준다.** 도구가 부분 일치로 찾아서 짧게 주면 이름이 비슷한
+DB 가 같이 걸린다. 여럿이 걸리면 이름이 정확히 같은 것 하나만 받고, 없으면 멈춘다.
+`랜섬웨어` 와 `텔레그램` 이 그랬고, 2026-09-28 에는 「유출 사고」 가 「유출 요약(…)」 과 겹쳐
+`run_queue.py` 의 사고 DB 대조가 늘 「못 봄」 이었다.
 
 **별칭은 도구가 먼저 푼다.** `--handle` 을 주면 `notion_find` 가 행위자 DB 를
 조회해 `다른 이름` 까지 본다. 닉이 달라도 같은 사람이면 재게시로 가른다.

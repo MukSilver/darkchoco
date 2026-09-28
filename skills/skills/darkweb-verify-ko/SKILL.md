@@ -278,7 +278,7 @@ mysqldump 는 한 줄이 수 MB 다. 앞부분만 읽으면 표 구조도 규모
 
 경로가 안 잡히면 스킬 폴더를 기준으로 부른다.
 
-    python <스킬폴더>/tools/notion_find.py 수집 <대상>
+    python <스킬폴더>/tools/notion_find.py "수집 DB" <대상>
 
 **도구가 없다고 넘어가지 마라.** 스킬 폴더 안을 먼저 찾는다.
 그래도 없으면 못 봄에 도구 부재라고 적는다.
@@ -288,8 +288,8 @@ mysqldump 는 한 줄이 수 MB 다. 앞부분만 읽으면 표 구조도 규모
 ③에서 가장 먼저 하는 것은 **이 건이 이미 팀 DB에 있는지 보는 것**이다.
 
 ```
-python tools/notion_find.py 수집 <대상 도메인 또는 게시자 핸들>
-python tools/notion_find.py 검증 <대상 조직>
+python tools/notion_find.py "수집 DB" <대상 도메인 또는 게시자 핸들>
+python tools/notion_find.py "검증 DB" <대상 조직>
 ```
 
 **사건 ID로 찾지 않는다.** 노션이 자동 부여하므로 조사 시점에는 없다.
