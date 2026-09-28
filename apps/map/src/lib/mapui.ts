@@ -120,6 +120,29 @@ export function labelTicks(n: number, max: number): number[] {
   return out;
 }
 
+/** 이름표 사이 최소 틈 (px) */
+const TICK_GAP = 4;
+
+/**
+ * 폭(px)에 맞춰 이름표를 달 눈금 — `labelTicks` 의 개수를 줄여 가며 이름표끼리 안 겹치는 것을 고른다.
+ * 이름표 하나를 `labelW` 로 본다. 양 끝 이름표는 줄 끝에 맞추고 가운데 것은 제 눈금 가운데에 앉는다.
+ * 눈금 자리는 스냅샷 바 `tickLeft` 와 같다(양 끝 8px 안쪽). 전에는 분기 수로만 정해 슬라이더가
+ * 좁아지면 이름표가 겹쳤다 (2026-09-29 묶음 6 검토)
+ */
+export function fitTicks(n: number, width: number, labelW: number, max: number): number[] {
+  const span = (k: number): [number, number] => {
+    if (k === 0) return [0, labelW];
+    if (k === n - 1) return [width - labelW, width];
+    const x = 8 + ((width - 16) * k) / (n - 1);
+    return [x - labelW / 2, x + labelW / 2];
+  };
+  for (let m = max; m > 2; m--) {
+    const ks = labelTicks(n, m);
+    if (ks.every((k, j) => j === 0 || span(ks[j - 1])[1] + TICK_GAP <= span(k)[0])) return ks;
+  }
+  return n > 1 ? [0, n - 1] : labelTicks(n, 1);
+}
+
 /**
  * 지나간 분기를 보고 있으면 그 이름(`2025 Q3`), 가장 최근 분기면 `null`.
  *

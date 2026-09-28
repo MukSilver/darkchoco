@@ -69,6 +69,25 @@ export function growFrom(now: IslandBox, s = 0.85): string {
   return `translate(${r2(now.cx)}px, ${r2(now.cy)}px) scale(${s}) translate(${r2(-now.cx)}px, ${r2(-now.cy)}px)`;
 }
 
+/**
+ * FLIP 의 도착 모양 — 항등이지만 `flipFrom` · `growFrom` 과 같은 세 함수 목록이다. 끝을 `none` 으로
+ * 두면 CSS 가 그것을 항등 함수 목록으로 바꿔 함수마다 따로 보간해서, 가운데 구간에 섬이 판 원점(왼쪽
+ * 위) 쪽으로 휘었다가 돌아왔다 (2026-09-29 묶음 6 검토). 같은 모양이면 섬 가운데가 곧게 간다
+ */
+export function flipTo(now: IslandBox): string {
+  return `translate(${r2(now.cx)}px, ${r2(now.cy)}px) scale(1) translate(${r2(-now.cx)}px, ${r2(-now.cy)}px)`;
+}
+
+/**
+ * 움직이던 섬이 지금 그려진 자리. 앞 움직임이 끝나기 전에 판이 또 바뀌면 이 자리에서 이어 간다 —
+ * 전에는 앞 도착 자리에서 새로 시작해, 슬라이더를 끌거나 4× 로 재생하면 바뀔 때마다 섬이 튀었다
+ * (2026-09-29 묶음 6 검토). `m` 은 그 섬 요소에 지금 걸린 CSS 행렬(`DOMMatrix` 의 a · d · e · f),
+ * `box` 는 움직이던 판에서의 섬 상자다. 기울임은 없다 — 움직임은 옮기기와 같은 비 크기만 쓴다
+ */
+export function boxUnder(m: { a: number; d: number; e: number; f: number }, box: IslandBox): IslandBox {
+  return { cx: m.a * box.cx + m.e, cy: m.d * box.cy + m.f, w: m.a * box.w, h: m.d * box.h };
+}
+
 /** CSS 시간 글자(`480ms` · `0.3s` · `0ms`)를 밀리초로. 못 읽으면 0 */
 export function parseMs(v: string): number {
   const m = /^\s*([\d.]+)\s*(ms|s)?\s*$/.exec(v);

@@ -1,8 +1,9 @@
 /**
  * 엔티티 탭 — 설계서 4.3.5. 영토를 표로 견준다.
  *
- * 섬 필터로 한 번에 섬 하나만 본다. 위에 KPI 카드 넷, 가운데 표, 아래 최근
- * 주요 이벤트다.
+ * 섬 필터로 한 번에 섬 하나만 본다. 섬 필터 아래에 최근 주요 이벤트, KPI 카드 넷, 표 순이다.
+ * 설계서 4.3.5 · 피그마 ⑦-7 은 최근 주요 이벤트가 표 아래였는데, 표가 길면 스크롤해야 보였다
+ * (2026-09-28 최현서 10번 「제일 위로」).
  *
  * 「최근 주요 이벤트」는 고른 섬의 최신 사건 셋이다 (설계서 4.3.5, 피그마 ⑦-7).
  * 사건 제목은 분류 칸으로 새로 지은 것이다 — 자료 제목에 피해 조직 이름이
@@ -206,6 +207,16 @@ export default function EntityTab({
         })}
       </nav>
 
+      {/* 섬 필터 바로 아래 — 필터가 고른 섬의 사건이라 필터와 붙여 둔다 (최현서 10번) */}
+      <RecentEvents
+        title={`최근 주요 이벤트 · ${island.name}`}
+        list={eventsIn(events, d, { kind: "all" }, (e) => belongsTo(e, mine)).slice(0, 3)}
+        nameOf={(id) => layout.territories.find((t) => t.territoryId === id)?.name ?? ""}
+        picked={pickedEv}
+        onPick={setPickedEv}
+        onOpen={onOpenEvent}
+      />
+
       <div className="grid shrink-0 grid-cols-4 gap-s4">
         <Kpi label="평균 활동도" value={String(avg)} />
         <Kpi
@@ -365,15 +376,6 @@ export default function EntityTab({
           </tbody>
         </table>
       </div>
-
-      <RecentEvents
-        title={`최근 주요 이벤트 · ${island.name}`}
-        list={eventsIn(events, d, { kind: "all" }, (e) => belongsTo(e, mine)).slice(0, 3)}
-        nameOf={(id) => layout.territories.find((t) => t.territoryId === id)?.name ?? ""}
-        picked={pickedEv}
-        onPick={setPickedEv}
-        onOpen={onOpenEvent}
-      />
     </div>
   );
 }

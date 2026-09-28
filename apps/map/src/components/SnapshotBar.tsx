@@ -14,10 +14,10 @@
 
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import PlayGlyph from "./PlayGlyph";
-import { labelTicks } from "@/lib/mapui";
+import { fitTicks, labelTicks } from "@/lib/mapui";
 import { quarterRange, tickLabel, type QuarterKey } from "@/lib/quarter";
 
 export { quarterEnd as snapshotBasis } from "@/lib/quarter";
@@ -46,6 +46,8 @@ const SPEEDS = [1, 2, 4] as const;
 
 /** 눈금에 이름표를 몇 개까지 낼까. 분기가 많으면 건너뛴다 */
 const MAX_TICKS = 8;
+/** 이름표 하나의 폭으로 볼 값 (px) — 10px 글씨 「2021 Q4」 가 37px 쯤이다 */
+const LABEL_W = 40;
 
 /**
  * 분기 `k` 의 가로 자리. 노브 한가운데가 닿는 자리와 같다 — 노브는 양 끝에서
@@ -96,7 +98,18 @@ export default function SnapshotBar({
    * 지금 보는 분기는 피그마처럼 굵게 적고, 이름표를 건너뛴 분기면 눈금만 밝힌다
    */
   const n = list.length;
-  const labelled = labelTicks(n, MAX_TICKS);
+  // 슬라이더 폭(px). 이름표 수를 폭에 맞춘다 — 속도 칸이 들어오며 슬라이더가 좁아져 1280 창에서
+  // 첫 두 이름표가 겹쳤다 (2026-09-29 묶음 6 검토). 재기 전(0)에는 분기 수로만 정한다
+  const rail = useRef<HTMLDivElement>(null);
+  const [railW, setRailW] = useState(0);
+  useEffect(() => {
+    const el = rail.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([e]) => setRailW(Math.round(e.contentRect.width)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const labelled = railW > 0 ? fitTicks(n, railW, LABEL_W, MAX_TICKS) : labelTicks(n, MAX_TICKS);
 
   return (
     // 폭은 768 이 한도이고 가운데가 좁으면 줄어든다. 전에는 768 고정이라 가운데 최소폭을 묶어
@@ -152,7 +165,7 @@ export default function SnapshotBar({
         </div>
       </div>
 
-      <div className="min-w-0 flex-1">
+      <div ref={rail} className="min-w-0 flex-1">
         <input
           type="range"
           min={0}
