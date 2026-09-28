@@ -29,14 +29,15 @@
 
 "use client";
 
-import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
 
 import HexMap from "./HexMap";
 import HoverTip from "./HoverTip";
+import { useWheelSteps } from "./useWheelSteps";
 import type { MapLayout } from "@/lib/layout";
 import { revealPan } from "@/lib/mapui";
 import type { RelView } from "@/lib/relations";
-import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP, clampZoom, wheelSteps } from "@/lib/zoom";
+import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP, clampZoom } from "@/lib/zoom";
 
 /**
  * 지도 판의 위아래 여백 (px). 아래는 힌트 알약과 줌 단추가 앉을 자리다 — 안 두면
@@ -98,6 +99,8 @@ export type MapCanvasProps = {
   litIslands?: ReadonlySet<string>;
   /** 힌트 문구를 바꿔 낼 때. 검색 결과로 왔을 때 쓴다 (피그마 ⑦-10b) */
   hint?: string;
+  /** 힌트 알약 자리에 대신 낼 것 — 타임라인 「재생 중」 배지. 힌트와 같은 폭 · 자리 규칙을 따른다 */
+  badge?: ReactNode;
   /** 지나간 분기 스냅샷 이름(`2025 Q3`). 가장 최근 분기면 없다. 선택 없음 힌트가 쓴다 */
   snapshot?: string | null;
   /** 화면 밖이면 보이게 옮길 영토 id. 고를 때마다 부모가 채운다 */
@@ -111,6 +114,13 @@ export type MapCanvasProps = {
   framed?: boolean;
   /** 그림 설명 (`aria-label`) — 여러 장을 같이 둘 때 가른다 */
   label?: string;
+  /**
+   * 판을 쥐고 있나를 부모가 들 때. 시점 비교 A · B 처럼 `view` 를 같이 쓰는 두 장이 같이 준다 —
+   * 안 그러면 끌지 않는 쪽은 옮겨 가기 전환이 켜진 채라 끄는 동안 한 박자 늦게 따라왔다
+   * (2026-09-29 묶음 5 검토). 없으면 제 안에서 든다
+   */
+  grab?: boolean;
+  onGrab?: (g: boolean) => void;
 };
 
 /** 마우스 자리와 그때의 캔버스 크기 (px). 툴팁이 가장자리에서 뒤집을 때 쓴다 */
@@ -134,6 +144,9 @@ export default function MapCanvas({
   onRevealed,
   framed = true,
   label,
+  badge,
+  grab,
+  onGrab,
 }: MapCanvasProps) {
   const { zoom, pan } = view;
   const setPan = (p: MapView["pan"]) => onView({ zoom, pan: p });
@@ -142,9 +155,16 @@ export default function MapCanvas({
     null,
   );
   const moved = useRef(false);
-  // 왼쪽 단추로 판을 쥐고 있나. 커서 모양과 전환을 끄고 켜는 데 쓴다 (`drag` 는 다시 그리지 않는 값이다)
-  const [grabbing, setGrabbing] = useState(false);
+  // 왼쪽 단추로 판을 쥐고 있나. 커서 모양과 전환을 끄고 켜는 데 쓴다 (`drag` 는 다시 그리지 않는 값이다).
+  // 부모가 `grab` 을 주면 그것이 기준이다
+  const [ownGrab, setOwnGrab] = useState(false);
+  const grabbing = grab ?? ownGrab;
+  const setGrabbing = (g: boolean) => {
+    setOwnGrab(g);
+    if (g !== grabbing) onGrab?.(g);
+  };
   const box = useRef<HTMLDivElement>(null);
+  const pad = useRef<HTMLDivElement>(null);
   /**
    * 마지막 마우스 자리. 툴팁이 **처음 뜰 때** 여기 뜬다.
    *
@@ -188,15 +208,15 @@ export default function MapCanvas({
 
   const step = (by: number) => onView({ pan, zoom: clampZoom(zoom + by) });
   // 휠은 모아서 문턱을 넘을 때 한 단계씩 (`wheelSteps`). 전에는 이벤트마다 25% 라 트랙패드 한 번에
-  // 50% ↔ 200% 끝까지 튀었다 (2026-09-28 코드 분석)
-  const wheelAcc = useRef(0);
+  // 50% ↔ 200% 끝까지 튀었다 (2026-09-28 코드 분석). 둘레 칸 스크롤은 막는다 (`useWheelSteps`)
+  useWheelSteps(pad, (n) => step(n * ZOOM_STEP));
 
   return (
     <div
       ref={box}
       aria-label={label}
       className={
-        "relative flex-1 overflow-hidden " + (framed ? "rounded-[14px] border border-edge bg-canvas" : "")
+        "@container relative flex-1 overflow-hidden " + (framed ? "rounded-[14px] border border-edge bg-canvas" : "")
       }
     >
       {/* 점 격자 바탕. 피그마 캔버스에 깔려 있다 */}
@@ -217,14 +237,10 @@ export default function MapCanvas({
         영토 · 섬 이름표 위에서는 손가락 커서가 이긴다
       */}
       <div
+        ref={pad}
         // 끄는 동안은 영토 · 섬 이름표의 손가락 커서도 쥔 손으로 덮는다 (2026-09-28 검토)
         className={"absolute inset-0 touch-none " + (grabbing ? "cursor-grabbing [&_*]:cursor-grabbing" : "cursor-grab")}
         style={{ paddingTop: PAD_TOP, paddingBottom: PAD_BOTTOM }}
-        onWheel={(e) => {
-          const r = wheelSteps(wheelAcc.current, e.deltaY, e.deltaMode);
-          wheelAcc.current = r.acc;
-          if (r.steps) step(r.steps * ZOOM_STEP);
-        }}
         onPointerDown={(e) => {
           drag.current = { x: e.clientX, y: e.clientY, px: pan.x, py: pan.y };
           moved.current = false;
@@ -334,18 +350,26 @@ export default function MapCanvas({
         />
       )}
 
-      {/* 힌트를 빈 글로 주면 알약을 안 낸다 (타임라인 재생 중 배지와 겹치지 않게) */}
-      {(hint ?? hintText(selection, snapshot)) !== "" && (
-        <div
-          className="pointer-events-none absolute left-s5 flex items-center gap-s2 rounded-full border border-edge bg-panel px-s4 text-[12px] text-body"
-          style={{ bottom: "var(--s-5)", height: "var(--h-hint)" }}
-        >
-          <span
-            aria-hidden
-            className="size-[6px] rounded-full"
-            style={{ background: "var(--t-accent)" }}
-          />
-          {hint ?? hintText(selection, snapshot)}
+      {/*
+        힌트 알약 자리. `badge` 가 있으면 그것을 대신 내고, 힌트를 빈 글로 주면 비운다. 줌 단추 줄과
+        안 겹치게 폭을 줄이고 넘치면 말줄임한다. 캔버스가 600px 보다 좁으면 줌 단추 줄 위로 올린다 —
+        전에는 타임라인의 좁은 캔버스에서 줌 단추가 힌트를 덮었다 (2026-09-29 묶음 5 검토)
+      */}
+      {(badge || (hint ?? hintText(selection, snapshot)) !== "") && (
+        <div className="pointer-events-none absolute bottom-s5 left-s5 flex max-w-[calc(100%-310px)] @max-[599px]:bottom-[calc(var(--s-5)_+_var(--h-zoom)_+_var(--s-2))] @max-[599px]:max-w-[calc(100%-48px)]">
+          {badge ?? (
+            <div
+              className="flex min-w-0 items-center gap-s2 rounded-full border border-edge bg-panel px-s4 text-[12px] text-body"
+              style={{ height: "var(--h-hint)" }}
+            >
+              <span
+                aria-hidden
+                className="size-[6px] shrink-0 rounded-full"
+                style={{ background: "var(--t-accent)" }}
+              />
+              <span className="truncate">{hint ?? hintText(selection, snapshot)}</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -386,7 +410,8 @@ export default function MapCanvas({
           style={{ height: "var(--h-zoom)" }}
         >
           <span aria-hidden>⛶</span>
-          전체 보기
+          {/* 시점 비교 두 장처럼 아주 좁은 캔버스에서는 글자를 숨겨 단추 줄이 캔버스를 안 넘게 한다 */}
+          <span className="@max-[339px]:sr-only">전체 보기</span>
         </button>
       </div>
     </div>

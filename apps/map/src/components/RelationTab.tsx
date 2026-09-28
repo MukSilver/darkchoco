@@ -42,6 +42,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 
 import { Chip, KindDot, TeamMark, hexPoints } from "./RelBits";
+import { useWheelSteps } from "./useWheelSteps";
 import type { MapLayout, TerritoryShape } from "@/lib/layout";
 import { parseQuarter, type QuarterKey } from "@/lib/quarter";
 import {
@@ -68,7 +69,7 @@ import {
   type Pt,
   type Rect,
 } from "@/lib/relgraph";
-import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP, clampZoom, wheelSteps } from "@/lib/zoom";
+import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP, clampZoom } from "@/lib/zoom";
 
 export type RelPair = { from: string; to: string };
 
@@ -311,8 +312,10 @@ export default function RelationTab(p: RelationTabProps) {
     setView(VIEW_HOME);
   }
   const zoomBy = (by: number) => setView((v) => ({ ...v, zoom: clampZoom(v.zoom + by) }));
-  // 휠은 모아서 문턱을 넘을 때 한 단계씩 — 트랙패드 한 번에 끝까지 튀지 않게 (`wheelSteps`, 지도와 같다)
-  const wheelAcc = useRef(0);
+  // 휠은 모아서 문턱을 넘을 때 한 단계씩 — 트랙패드 한 번에 끝까지 튀지 않게. 페이지 스크롤은
+  // 막는다 (`useWheelSteps`, 지도와 같다)
+  const pad = useRef<HTMLDivElement>(null);
+  useWheelSteps(pad, (n) => zoomBy(n * ZOOM_STEP));
   // 끌기. 3px 넘게 움직였으면 놓을 때의 클릭을 고르기로 치지 않는다 (지도 `MapCanvas` 와 같다)
   const drag = useRef<{ x: number; y: number; px: number; py: number } | null>(null);
   const moved = useRef(false);
@@ -572,12 +575,8 @@ export default function RelationTab(p: RelationTabProps) {
           선 · 노드 고르기와 빈 곳 해제 어느 쪽에도 안 간다 (2026-09-28 최현서 5번)
         */}
         <div
+          ref={pad}
           className={"absolute inset-0 touch-none select-none " + (grabbing ? "cursor-grabbing" : "cursor-grab")}
-          onWheel={(e) => {
-            const r = wheelSteps(wheelAcc.current, e.deltaY, e.deltaMode);
-            wheelAcc.current = r.acc;
-            if (r.steps) zoomBy(r.steps * ZOOM_STEP);
-          }}
           onPointerDown={(e) => {
             if (e.button !== 0) return;
             drag.current = { x: e.clientX, y: e.clientY, px: view.x, py: view.y };

@@ -19,7 +19,7 @@
 
 "use client";
 
-import { useEffect, useMemo, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 
 import MapCanvas, { type MapSelection, type MapView } from "./MapCanvas";
 import PlayGlyph from "./PlayGlyph";
@@ -108,14 +108,16 @@ export default function TimelineTab({
 }: TimelineTabProps) {
   /** 분기 지도의 틀. 합친 크기가 있으면 그 크기로 넓혀 제 가운데에 놓는다 */
   const boxOf = (layout: MapLayout) => (mapSize ? centerBox(layout.viewBox, mapSize) : layout.viewBox);
+  // 지도 판을 쥐고 있나 — 시점 비교 A · B 가 같이 써서 끄는 동안 두 장이 함께 움직인다
+  const [grab, setGrab] = useState(false);
 
   /**
    * 분기 지도 한 장 — 지도 탭과 같은 캔버스(줌 · 끌기 · 툴팁 · 고르기). 전에는 그림만 그려서 줌도
    * 툴팁도 없고, 영역 이름표만 있는 영토(hive · lockbit2 따위)는 어디까지인지 알 수 없었다
    * (최현서 3번). 그 분기 지도에 없는 선택은 없는 것으로 본다(지도 탭 `liveSelection` 과 같게).
-   * `hint` 를 빈 글로 주면 힌트 알약을 안 낸다
+   * `badge` 는 힌트 알약 자리에 대신 낸다(「재생 중」). 판을 쥔 상태(`grab`)는 A · B 가 같이 쓴다
    */
-  const mapOf = (snap: Snapshot, label: string, hint?: string) => {
+  const mapOf = (snap: Snapshot, label: string, badge?: ReactNode) => {
     const has =
       selection.kind === "territory"
         ? snap.layout.territories.some((t) => t.territoryId === selection.id)
@@ -134,7 +136,10 @@ export default function TimelineTab({
         onView={onView}
         framed={false}
         label={label}
-        hint={hint ?? timelineHint(sel)}
+        hint={timelineHint(sel)}
+        badge={badge}
+        grab={grab}
+        onGrab={setGrab}
       />
     );
   };
@@ -512,20 +517,27 @@ export default function TimelineTab({
 
           {/* 큰 분기 글씨(워터마크)는 지도 밑에 깐다 — 전에는 지도 위층에 칠해졌다 */}
           <div className="relative z-[1] flex min-h-0 flex-1 flex-col">
-            {/* 재생 중에는 힌트를 걷는다 — 「재생 중」 배지와 같은 자리다 */}
-            {mapOf(now, `${now.ym} 지도`, playing ? "" : undefined)}
+            {/*
+              재생 중에는 힌트 대신 「재생 중」 배지다. 캔버스의 힌트 자리에 넣어 줌 단추와 안 겹친다 —
+              전에는 블록 기준으로 따로 떠서 좁은 캔버스에서 줌 단추 아래쪽을 덮었다 (2026-09-29 묶음 5 검토)
+            */}
+            {mapOf(
+              now,
+              `${now.ym} 지도`,
+              playing ? (
+                <div
+                  className="flex min-w-0 items-center gap-s2 rounded-full px-s4 text-[12px] text-on-accent"
+                  style={{ background: "var(--t-accent)", height: "var(--h-hint)" }}
+                >
+                  <span aria-hidden className="size-[6px] shrink-0 rounded-full bg-white" />
+                  <span className="truncate">
+                    재생 중 · {speed}× · {now.ym}
+                    {at < snaps.length - 1 && ` → ${snaps[at + 1].ym}`}
+                  </span>
+                </div>
+              ) : undefined,
+            )}
           </div>
-
-          {playing && (
-            <div
-              className="absolute bottom-[66px] left-s5 z-20 flex items-center gap-s2 rounded-full px-s4 py-s2 text-[12px] text-on-accent"
-              style={{ background: "var(--t-accent)" }}
-            >
-              <span aria-hidden className="size-[6px] rounded-full bg-white" />
-              재생 중 · {speed}× · {now.ym}
-              {at < snaps.length - 1 && ` → ${snaps[at + 1].ym}`}
-            </div>
-          )}
 
           <TimeSlider
             at={at}
