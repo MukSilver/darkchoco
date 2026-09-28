@@ -261,6 +261,52 @@ def test_공식_발표는_외부_확인이_조직_규제기관_언론인_사고�
         assert len(bake.check(bad)) == 1, (bad_confirm, bake.check(bad))
 
 
+def test_공식_발표_여부는_특정된_짝만_붙이고_일수는_한국_날짜로_센다():
+    # 2026-09-28 최현서 G-9. 묶음 사고(INC-242 · 243)는 추론이라 표에 없다
+    assert bake.SAME_AS_COLLECT["INC-241"] == ["LEAK-170", "LEAK-183"]
+    assert "INC-242" not in bake.SAME_AS_COLLECT and "INC-243" not in bake.SAME_AS_COLLECT
+    n = bake.incident_note
+    assert n("INC-1", "언론 보도", "2026-01-05", "2026-01-04") == \
+        {"id": "INC-1", "confirm": "언론 보도", "announcedAt": "2026-01-05", "gapDays": -1}
+    # 시각이 붙은 값만 한국 날짜로 옮긴다 — 07-03 20:00 UTC 는 한국 07-04 새벽이다
+    assert n("INC-1", "언론 보도", "2026-07-07", "2026-07-03T20:00:00.000Z")["gapDays"] == -3
+    assert n("INC-1", "언론 보도", "2026-07-07T23:30:00.000+00:00", "2026-07-08")["gapDays"] == 0
+    assert n("INC-1", "언론 보도", None, "2026-01-04") == {"id": "INC-1", "confirm": "언론 보도"}, \
+        "공표 시점이 비면 공표일도 일수도 없다"
+    assert "gapDays" not in n("INC-1", "언론 보도", "2026-01-05", None), "게시일을 대신 넣은 사건은 일수를 안 둔다"
+
+
+def test_공식_발표_여부도_반출_검사가_모양과_짝을_본다():
+    inc = {"id": "INC-241", "confirm": "언론 보도", "announcedAt": "2026-01-05"}
+    base = {"territories": [{"id": "f1", "name": "F", "islandId": "FORUM", "web": "dark"}],
+            "events": [{"id": "LEAK-170", "territoryId": "f1", "postedAt": "2026-01-04", "verdict": "high",
+                        "size": "unknown", "repost": False, "excluded": False, "kind": "sale",
+                        "incident": {**inc, "gapDays": -1}},
+                       {"id": "LEAK-183", "territoryId": "f1", "postedAt": "2026-01-14", "verdict": "high",
+                        "size": "unknown", "repost": False, "excluded": False,
+                        "incident": {**inc, "gapDays": 9}}],
+            "relations": [], "links": []}
+    assert bake.check(base) == [], "같은 사고가 두 게시에 붙으면 일수만 다르다"
+    breaks = [
+        lambda d: d["events"][0]["incident"].update(memo="?"),
+        lambda d: d["events"][0]["incident"].update(id="INC-x"),
+        lambda d: d["events"][0]["incident"].update(confirm="게시글만"),
+        lambda d: d["events"][0]["incident"].update(announcedAt="2026-01-05T00:00"),
+        lambda d: d["events"][0]["incident"].update(gapDays=True),
+        lambda d: d["events"][0]["incident"].pop("announcedAt"),        # 일수만 남는다 (+ 공표일 불일치)
+        lambda d: d["events"][0].update(kind="official", confirm="언론 보도"),
+        lambda d: d["events"][1]["incident"].update(confirm="규제기관 확정"),  # 같은 사고인데 값이 다르다
+        # 게시에 붙은 사고가 따로 된 사건으로도 있다 — 한 사고를 두 번 센다
+        lambda d: d["events"].append({"id": "INC-241", "territoryId": "f1", "postedAt": "2026-01-05",
+                                      "verdict": "confirmed", "size": "unknown", "repost": False,
+                                      "excluded": False, "kind": "official", "confirm": "언론 보도"}),
+    ]
+    for i, br in enumerate(breaks):
+        bad = json_copy(base)
+        br(bad)
+        assert bake.check(bad), f"{i}번 깨뜨림을 못 잡았다"
+
+
 def json_copy(x):
     import json
     return json.loads(json.dumps(x))

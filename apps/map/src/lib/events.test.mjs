@@ -13,6 +13,7 @@ import {
   byMonth,
   eventTitle,
   eventsIn,
+  gapText,
   periodBounds,
   periodDays,
   sizeText,
@@ -118,6 +119,12 @@ test('위험도 칩 이름과 색 (설계서 3.10, 피그마 ⑦-4 하단 모달
   assert.deepEqual(RISK_LABEL, { high: '높음', medium: '중간', low: '낮음' });
   assert.equal(RISK_TONE.high, 'danger');
   assert.deepEqual(Object.keys(RISK_TONE).sort(), Object.keys(RISK_LABEL).sort(), '세 등급 모두 색이 있다');
+});
+
+test('게시와 공표 사이 — 음수는 발표 전 게시, 하루 안쪽은 같은 날 무렵 (G-9)', () => {
+  assert.equal(gapText(-3), '발표 3일 전 게시');
+  assert.equal(gapText(9), '발표 9일 뒤 게시');
+  for (const n of [-1, 0, 1]) assert.equal(gapText(n), '같은 날 무렵');
 });
 
 test('보고서 팝업 게시 시각은 UTC 로 옮긴다 — 시각이 없으면 날짜만', () => {

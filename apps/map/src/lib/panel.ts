@@ -58,9 +58,15 @@ export type PanelOfficial = {
   latest: {
     id: string;
     title: string;
-    /** 공표일 `2026-05-14` — 공식 발표 사건의 게시 시각이 공표 시점이다 */
-    day: string;
-    /** `255GB` 처럼. 모르면 null */
+    /**
+     * 공표일 `2026-05-14` — 공식 발표 사건은 게시 시각이 공표 시점이다. 게시에 붙은 사고(G-9)는
+     * 그 사고의 공표일이고, 공표일이 비었으면 null 이다 (게시일을 공표일처럼 적지 않는다)
+     */
+    day: string | null;
+    /**
+     * `255GB` 처럼. 모르면 null. 게시에 붙은 사고는 늘 null 이다 — 사고의 유출 규모를 안
+     * 싣고, 게시의 주장 규모를 공식 발표 규모처럼 적으면 안 된다
+     */
     size: string | null;
   } | null;
 };
@@ -217,28 +223,62 @@ export function actorInfoRows(a: ActorInfo | undefined): PanelInfoRow[] {
  * 공식 발표 사고 절 (설계서 4.3.2). **이 영토에 올라온 공식 발표 사건**(`kind` 가
  * `official`)을 센다 — 굽기가 보도된 유출 위치를 영토로 맞춰 둔 것이다. 다른 건수와
  * 같이 기준일에 지도에 든 것만(`inScope`) 센다. 최근 1건은 공표 시점이 가장 늦은 것이다.
- * 행위자 칸(`actorTerritoryId`)은 안 본다 — 설계서가 「보도된 유출 위치」로 정했다
+ * 행위자 칸(`actorTerritoryId`)은 안 본다 — 설계서가 「보도된 유출 위치」로 정했다.
+ *
+ * **이 영토의 게시에 붙은 공식 발표 사고도 센다** (G-9). 붙은 사고는 따로 된 사건이 아니라
+ * 게시의 영토를 쓴다. 한 사고가 두 게시에 붙어도(INC-241) **사고 번호당 한 번** 센다.
+ *
+ *   기준일    붙은 사고도 **공표일로** 넣는다 — 따로 된 공식 발표 사건과 같게, 날짜만 적힌 값은
+ *            그날 0시(UTC)다. 공표일이 비면 알 수 없어 게시가 기준일에 들었을 때만 센다
+ *   빼는 것   게시가 반출 제외 · 허위면 안 센다 — 지도에 없는 게시라 팝업을 열 곳이 없다.
+ *            허위 게시에 붙은 사고는 굽기 로그 「판정과 어긋난 짝」 에 번호로 남는다
+ *   최근 1건  공표 날짜 → 시각 → 번호 차례. 공표일이 빈 사고는 맨 뒤이고 「공표 기록 없음」 이다.
+ *            붙은 사고는 규모를 안 적는다(사고 규모를 안 싣는다). 누르면 그 게시 팝업이 열린다
+ *
+ * 머지 전 검토(2026-09-28)에서 첫 판이 붙은 사고를 게시일로 기준일에 넣고, 공표일이 빈 사고에
+ * 게시일을 공표일처럼 적고, 게시의 주장 규모를 적던 것을 고쳤다
  */
 export function officialOf(events: readonly Ev[], territoryId: string, d: Date): PanelOfficial {
-  let count = 0;
-  let latest: Ev | null = null;
+  // 사고 번호 → 그 사고를 보여 줄 사건 · 공표 날짜(없으면 null) · 견줄 시각
+  type Hit = { e: Ev; day: string | null; at: number };
+  const seen = new Map<string, Hit>();
   for (const e of events) {
-    if (e.kind !== "official" || e.territoryId !== territoryId || !inScope(e, d)) continue;
-    count += 1;
-    // 노션이 적은 날짜 · 시각 글자로 세운다 (`eventsIn` 과 같다)
-    if (
-      !latest ||
-      (e.postedAt.slice(0, 16).localeCompare(latest.postedAt.slice(0, 16)) ||
-        Date.parse(e.postedAt) - Date.parse(latest.postedAt) ||
-        latest.id.localeCompare(e.id)) > 0
-    ) {
-      latest = e;
+    if (e.territoryId !== territoryId || e.excluded || e.verdict === "false") continue;
+    let hit: Hit;
+    let incId: string;
+    if (e.kind === "official") {
+      if (!inScope(e, d)) continue;
+      incId = e.id;
+      hit = { e, day: dayOf(e), at: Date.parse(e.postedAt) };
+    } else if (e.incident) {
+      const ann = e.incident.announcedAt;
+      if (ann ? !(Date.parse(ann) <= d.getTime()) : !inScope(e, d)) continue;
+      incId = e.incident.id;
+      hit = { e, day: ann ?? null, at: ann ? Date.parse(ann) : Date.parse(e.postedAt) };
+    } else {
+      continue;
     }
+    const had = seen.get(incId);
+    // 같은 사고가 두 게시에 붙으면 먼저 올라온 게시를 연다
+    if (!had || Date.parse(e.postedAt) < Date.parse(had.e.postedAt)) seen.set(incId, hit);
+  }
+  const later = (a: Hit, b: Hit): number =>
+    (a.day === null) !== (b.day === null)
+      ? (a.day === null ? -1 : 1)
+      : (a.day ?? "").localeCompare(b.day ?? "") || a.at - b.at || b.e.id.localeCompare(a.e.id);
+  let latest: Hit | null = null;
+  for (const x of seen.values()) {
+    if (!latest || later(x, latest) > 0) latest = x;
   }
   return {
-    count,
+    count: seen.size,
     latest: latest
-      ? { id: latest.id, title: eventTitle(latest), day: dayOf(latest), size: sizeText(latest) }
+      ? {
+          id: latest.e.id,
+          title: eventTitle(latest.e),
+          day: latest.day,
+          size: latest.e.kind === "official" ? sizeText(latest.e) : null,
+        }
       : null,
   };
 }

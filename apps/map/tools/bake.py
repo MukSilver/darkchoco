@@ -45,7 +45,7 @@ import json
 import os
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 # ── 부품 찾기 ───────────────────────────────────────────────────────────────
@@ -513,7 +513,14 @@ EV_KEYS = frozenset({
     # 위험도 (설계서 3.10, high · medium · low), 연결된 사건 번호 (수집 DB 같은 사건,
     # 4.3.4), 사기 의심 표시 (칩 없이 필터에서만, 2.3)
     "risk", "linked", "scam",
+    # 공식 발표 여부 (설계서 6.x 사건 칸 「공식 발표 여부」, 2026-09-28 최현서 G-9). 게시 사건과
+    # 같은 사고로 특정된 공식 발표 사고. 속 키는 `INCIDENT_KEYS` — 조직명은 안 싣는다
+    "incident",
 })
+#: 공식 발표 여부의 속 키 (G-9). 사고 번호 · 외부 확인(공식 3값) · 공표일 · 게시와 공표 사이 일수
+INCIDENT_KEYS = frozenset({"id", "confirm", "announcedAt", "gapDays"})
+RE_INC_ID = re.compile(r"^INC-\d+$")
+RE_DAY_ONLY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 #: 행위자 정보의 속 키 (설계서 4.3.8). 역할 · 국가 · 처음 본 날 · 다루는 것 · 다른 이름
 ACTOR_INFO_KEYS = frozenset({"roles", "countries", "firstSeen", "deals", "otherNames"})
 #: 관계선. 건수와 처음·마지막 본 날은 싣지 않는다 — 화면이 `evidence` 로 센다
@@ -917,10 +924,41 @@ EV_KIND_VALUES = {"data_post", "claim", "sale", "access_sale", "repost", "offici
 SIZE_UNITS = {"TB", "GB", "MB", "KB", "억", "만", "건"}
 
 
+def check_incident(e: dict, seen: dict[str, tuple]) -> list[str]:
+    """게시 사건에 붙은 공식 발표 사고(G-9) 한 칸을 본다. `seen` 에 사고 번호마다
+    (외부 확인, 공표일)을 모아 같은 사고가 게시마다 다르게 나가지 않게 한다.
+    일수는 게시마다 다르므로 견주지 않는다."""
+    bad: list[str] = []
+    inc = e["incident"]
+    if not isinstance(inc, dict):
+        return [f"사건 {e['id']} 의 공식 발표 여부가 칸 묶음이 아닙니다"]
+    if set(inc) - INCIDENT_KEYS:
+        bad.append(f"사건 {e['id']} 의 공식 발표 여부에 허용 밖 칸이 있습니다: {sorted(set(inc) - INCIDENT_KEYS)}")
+    if e.get("kind") == "official":
+        bad.append(f"사건 {e['id']} 는 공식 발표 사건인데 공식 발표 사고가 붙었습니다")
+    iid = inc.get("id")
+    if not isinstance(iid, str) or not RE_INC_ID.match(iid):
+        bad.append(f"사건 {e['id']} 에 붙은 공식 발표 사고 번호가 INC-숫자 모양이 아닙니다")
+        return bad
+    if inc.get("confirm") not in OFFICIAL_CONFIRMS:
+        bad.append(f"사건 {e['id']} 에 붙은 {iid} 의 외부 확인이 조직 · 규제기관 · 언론이 아닙니다")
+    if "announcedAt" in inc and not RE_DAY_ONLY.match(str(inc["announcedAt"])):
+        bad.append(f"사건 {e['id']} 에 붙은 {iid} 의 공표일이 날짜가 아닙니다")
+    gap = inc.get("gapDays")
+    if "gapDays" in inc and (type(gap) is not int or "announcedAt" not in inc):
+        bad.append(f"사건 {e['id']} 에 붙은 {iid} 의 일수가 정수가 아니거나 공표일 없이 있습니다")
+    key = (inc.get("confirm"), inc.get("announcedAt"))
+    if seen.setdefault(iid, key) != key:
+        bad.append(f"공식 발표 사고 {iid} 가 게시마다 외부 확인이나 공표일이 다릅니다")
+    return bad
+
+
 def check(data: dict) -> list[str]:
     """반출 검사와 구조 검사. 걸린 것을 다 모아 돌려준다."""
     bad: list[str] = []
     scan_strings(data, "map", bad)
+    # 게시에 붙은 공식 발표 사고 번호 → (외부 확인, 공표일) (G-9)
+    inc_seen: dict[str, tuple] = {}
 
     # 섬 목록은 굽기가 안 싣는다 (이름과 색이 설계서 2.3 값이라 노션에 없다).
     # 대신 코드 집합으로 견준다
@@ -987,10 +1025,15 @@ def check(data: dict) -> list[str]:
             bad.append(f"사건 {e['id']} 의 위험도가 설계서 3.10 에 없습니다")
         if "scam" in e and e["scam"] is not True:
             bad.append(f"사건 {e['id']} 의 사기 의심 표시가 참이 아닙니다")
+        if "incident" in e:
+            bad.extend(check_incident(e, inc_seen))
 
     # 관계선은 양 끝이 목록 안 영토여야 하고, 근거는 목록 안 사건이어야 한다.
     # 목록 밖을 가리키면 굽기가 이름을 잘못 맞췄거나 어디선가 지어낸 것이다
     evs = {e["id"] for e in data["events"]}
+    for iid in sorted(set(inc_seen) & evs):
+        # 짝 게시에 붙인 사고는 따로 된 사건으로 만들지 않는다 — 둘 다 있으면 한 사고를 두 번 센다
+        bad.append(f"공식 발표 사고 {iid} 가 게시에 붙었는데 따로 된 사건으로도 있습니다")
     for e in data["events"]:
         lk = e.get("linked")
         if lk is not None and (not isinstance(lk, list) or any(x not in evs or x == e["id"] for x in lk)):
@@ -1636,16 +1679,57 @@ def incident_place(index: "RegistryIndex", loc: str | None) -> dict | None:
 
 
 #: 정본 작업판(사건 탭 「지도 점수 제외」, 2026-09-22)이 수집 DB 와 같은 사고로 본
-#: 유출 사고 줄. **사람이 이름을 대조해 정한 짝이라 글자로는 못 가르는 것이 있다**
-#: (INC-241 ↔ LEAK-170). 사건 번호뿐이라 조직 이름은 안 든다. 이 표에 없는 줄은
-#: 조직 이름 전체나 도메인 이름이 같을 때만 같은 사고로 본다 (`same_org_keys`)
-SAME_AS_COLLECT = {
-    "INC-199": "LEAK-13", "INC-200": "LEAK-10", "INC-201": "LEAK-11", "INC-202": "LEAK-12",
-    "INC-203": "LEAK-14", "INC-204": "LEAK-8", "INC-205": "LEAK-9", "INC-206": "LEAK-3",
-    "INC-208": "LEAK-30", "INC-209": "LEAK-27", "INC-211": "LEAK-181", "INC-215": "LEAK-64",
-    "INC-216": "LEAK-53", "INC-217": "LEAK-69", "INC-218": "LEAK-98", "INC-220": "LEAK-102",
-    "INC-241": "LEAK-170",
+#: 유출 사고 줄 → 같은 사고의 수집 DB 게시. **사람이 이름을 대조해 정한 짝이라 글자로는
+#: 못 가르는 것이 있다** (INC-241 ↔ LEAK-170). 사건 번호뿐이라 조직 이름은 안 든다.
+#: 이 표에 없는 줄은 조직 이름 전체나 도메인 이름이 같을 때만 같은 사고로 보고 뺀다
+#: (`same_org_keys`) — 그 줄은 게시에 붙이지 않는다. **특정된 짝만 잇는다** (G-9).
+#:
+#: INC-241 의 LEAK-183 은 유출 사고 DB 메모에 사람이 적은 짝이다 (2026-09-28 최현서).
+#: 묶음 사고(INC-242 · 243)는 기간 · 게시자로 추론한 소속이라 표에 넣지 않는다
+SAME_AS_COLLECT: dict[str, list[str]] = {
+    "INC-199": ["LEAK-13"], "INC-200": ["LEAK-10"], "INC-201": ["LEAK-11"], "INC-202": ["LEAK-12"],
+    "INC-203": ["LEAK-14"], "INC-204": ["LEAK-8"], "INC-205": ["LEAK-9"], "INC-206": ["LEAK-3"],
+    "INC-208": ["LEAK-30"], "INC-209": ["LEAK-27"], "INC-211": ["LEAK-181"], "INC-215": ["LEAK-64"],
+    "INC-216": ["LEAK-53"], "INC-217": ["LEAK-69"], "INC-218": ["LEAK-98"], "INC-220": ["LEAK-102"],
+    "INC-241": ["LEAK-170", "LEAK-183"],
 }
+
+KST = timezone(timedelta(hours=9))
+
+
+def id_order(x: str) -> tuple:
+    """사건 번호를 숫자 차례로 (`LEAK-9` 가 `LEAK-10` 앞). 로그 정렬용"""
+    head, _, num = x.rpartition("-")
+    return (head, int(num) if num.isdigit() else 0, x)
+
+
+def kst_day(s: str | None) -> date | None:
+    """노션 날짜 글자를 한국 날짜로. **시각이 붙은 값만** 한국 시각으로 옮기고 날짜만 있는
+    값은 그 날짜 그대로 쓴다 (G-9). 날짜가 아니면 None."""
+    if not isinstance(s, str) or not RE_ISO_DAY.match(s):
+        return None
+    try:
+        if "T" not in s:
+            return date.fromisoformat(s[:10])
+        return when(s).astimezone(KST).date()
+    except ValueError:
+        return None
+
+
+def incident_note(iid: str, confirm: str, announced: str | None, posted: str | None) -> dict:
+    """게시 사건에 붙일 공식 발표 여부 한 칸 (설계서 사건 칸 「공식 발표 여부」, G-9).
+
+    일수(`gapDays`) = 게시일 − 공표일. 음수면 발표 전에 게시된 것이다. 공표 시점이 비면
+    공표일도 일수도 안 둔다. 게시일을 대신 넣은 사건은 `posted` 에 None 을 넘겨 일수를 뺀다
+    """
+    out = {"id": iid, "confirm": confirm}
+    a = kst_day(announced)
+    if a:
+        out["announcedAt"] = a.isoformat()
+        p = kst_day(posted)
+        if p:
+            out["gapDays"] = (p - a).days
+    return out
 
 
 def same_org_keys(values: set[str]) -> set[str]:
@@ -1910,12 +1994,19 @@ def bake(n, sources: dict[str, str], log) -> dict:
     # 확인됨(신뢰 1.0, 3.2), 규모는 유출 규모 칸에서 읽는다. 빼는 것은 셋이다 (2.5) —
     # 위치가 지도 영토와 안 맞음, 공표 시점 없음, 수집 DB 에 같은 조직 사건이 있음.
     # **그보다 먼저 외부 확인이 조직 · 규제기관 · 언론인 줄만 공식 발표로 본다** (2026-09-28
-    # 최현서 G-8). 설계서의 「공식 발표 = 유출 사고 DB 1행」 을 좁힌 것이다 — 게시글로만 알려진
-    # 사고가 「공식 발표 · 확인됨(신뢰 1.0)」 으로 나가던 것을 막는다.
-    # **조직명은 어디에도 안 싣는다.** 같은 사고 가르기와 조직명 거르기에만 쓴다
+    # 최현서 G-8). 같은 날 그런 122줄의 DB 반영을 꺼서 DB 가 설계서 가정(공식 확인 사고만)과
+    # 맞으므로 이 조건은 안전장치다 — 다시 켜져 들어와도 게시글로만 알려진 사고가 「공식 발표 ·
+    # 확인됨(신뢰 1.0)」 으로 나가지 않게 막는다.
+    # **조직명은 어디에도 안 싣는다.** 같은 사고 가르기와 조직명 거르기에만 쓴다.
+    #
+    # **특정된 짝(`SAME_AS_COLLECT`)은 따로 된 사건으로 만들지 않고 짝 게시에 붙인다**
+    # (설계서 사건 칸 「공식 발표 여부」, 2026-09-28 최현서 G-9). 위치 · 공표 시점 조건은
+    # 붙일 때 따지지 않는다 — 게시의 영토를 쓴다. 이름 대조로만 같다고 본 줄은 붙이지 않는다
     inc_why: dict[str, int] = {}
     inc_gate = 0
     inc_n = 0
+    # 게시 사건 번호 → (사고 번호, 외부 확인, 공표 시점)
+    pairs: dict[str, tuple[str, str, str | None]] = {}
     if sources.get("incident"):
         _DB[0] = "유출 사고 DB"
         irows = n.query_all(sources["incident"])
@@ -1938,6 +2029,10 @@ def bake(n, sources: dict[str, str], log) -> dict:
             reason = None
             if confirm not in OFFICIAL_CONFIRMS:
                 reason = unofficial_reason(confirm)
+            elif iid in SAME_AS_COLLECT:
+                for leak in SAME_AS_COLLECT[iid]:
+                    pairs[leak] = (iid, confirm, posted)
+                reason = "짝 게시에 붙임"
             elif not cand:
                 reason = "위치가 영토와 안 맞음"
             elif not posted:
@@ -1946,7 +2041,7 @@ def bake(n, sources: dict[str, str], log) -> dict:
                 # 랜섬웨어 섬은 한국 관련 사건만 든다 (정본 사건!N · 수집 DB 랜섬 사건과 같게).
                 # 포럼 공식 발표는 해외여도 든다 (정본 INC-138 · INC-52)
                 reason = "한국 관련 아님"
-            elif iid in SAME_AS_COLLECT or (org and same_org_keys({org.casefold()}) & collect_keys):
+            elif org and same_org_keys({org.casefold()}) & collect_keys:
                 reason = "수집 DB 와 같은 사고"
             if reason:
                 inc_why[reason] = inc_why.get(reason, 0) + 1
@@ -1986,8 +2081,15 @@ def bake(n, sources: dict[str, str], log) -> dict:
                 },
             })
             inc_n += 1
-        log(f"유출 사고 DB {len(irows)}줄 → 공식 발표 사고 {inc_n}건 · 뺀 줄 — DB 반영 꺼짐 {inc_gate} · "
-            + " · ".join(f"{k} {v}" for k, v in sorted(inc_why.items())))
+        log(f"유출 사고 DB {len(irows)}줄 → 공식 발표 사고 {inc_n}건 · 따로 된 사건이 아닌 줄 — "
+            f"DB 반영 꺼짐 {inc_gate} · " + " · ".join(f"{k} {v}" for k, v in sorted(inc_why.items())))
+        # 짝 게시에 붙인다. 수집 DB 사건만 (재게시를 「같은 사건」 으로 따라가지 않는다).
+        # 게시의 판정 · 점수는 그대로 둔다
+        by_leak = {e["id"]: e for e in raw_events if e["kind"] != "official"}
+        for leak, (iid, confirm, announced) in pairs.items():
+            e = by_leak.get(leak)
+            if e is not None:
+                e["incident"] = incident_note(iid, confirm, announced, None if e["substituted"] else e["postedAt"])
     else:
         log("유출 사고 DB 를 안 알려 줘서 공식 발표 사고를 건너뜁니다 "
             f"(DC_MAP_INCIDENT_DS 또는 {SOURCES_FILE.name} 의 incident)")
@@ -2146,7 +2248,22 @@ def bake(n, sources: dict[str, str], log) -> dict:
                 ev["confirm"] = o["confirm"]
             if o.get("sourceKind") in SOURCE_KINDS:
                 ev["sourceKind"] = o["sourceKind"]
+        if e.get("incident"):
+            ev["incident"] = e["incident"]
         events.append(ev)
+
+    # 공식 발표 여부 (G-9). 번호만 찍는다. 짝 게시가 지도에 없으면 그 사고는 이번에 안 보인다
+    with_inc = {ev["id"]: ev["incident"] for ev in events if "incident" in ev}
+    if pairs:
+        log("공식 발표 여부 — 사고를 붙인 게시 "
+            + (", ".join(f"{k}({v['id']})" for k, v in sorted(with_inc.items(), key=lambda kv: id_order(kv[0])))
+               or "없음")
+            + f" · 짝 게시가 지도에 없음 {sum(1 for k in pairs if k not in with_inc)}")
+        # 게시 판정은 안 바꾼다. 공식 발표와 어긋나는 짝만 번호로 남긴다 (사람이 볼 것)
+        low = {ev["id"] for ev in events if ev["id"] in with_inc and ev["verdict"] in ("low", "false")}
+        if low:
+            log("  판정과 어긋난 짝(게시 판정이 신뢰성 낮음 · 허위) — "
+                + ", ".join(f"{k} ↔ {with_inc[k]['id']}" for k in sorted(low, key=id_order)))
 
     log("관문에서 뺀 줄 — " + " · ".join(f"{k} {v}" for k, v in gate.items()))
     if review:

@@ -57,6 +57,25 @@ export const RISK_TONE: Record<EvRisk, string> = {
 };
 
 /**
+ * 외부 확인 칩 색. 조직 · 규제기관이 스스로 밝힌 것만 success 로 두고 언론 보도는
+ * neutral 이다. 시안에 이 칩이 없어 정한 값이다. 연구자 발견 · 게시글만인 사고는
+ * 굽기가 싣지 않는다 (2026-09-28 G-8). 공식 발표 사건과 게시에 붙은 사고(G-9)가 같이 쓴다
+ */
+export const CONFIRM_TONE: Record<string, string> = {
+  "조직 공식 발표": "success",
+  "규제기관 확정": "success",
+};
+
+/**
+ * 게시와 공표 사이 (G-9). 일수 = 게시일 − 공표일이라 음수면 발표 전에 게시된 것이다.
+ * 하루 안쪽은 「같은 날 무렵」 — 날짜만 적힌 값과 시각을 한국 날짜로 옮긴 값이 섞여 있다
+ */
+export function gapText(days: number): string {
+  if (Math.abs(days) <= 1) return "같은 날 무렵";
+  return days < 0 ? `발표 ${-days}일 전 게시` : `발표 ${days}일 뒤 게시`;
+}
+
+/**
  * 보고서 팝업의 게시 시각 `2026-09-10 12:40 UTC` (피그마 ⑦-4 하단 모달 머리 줄).
  *
  * 목록 줄(`stampOf`)은 노션이 적은 시각 그대로인데 팝업은 **UTC 로 옮겨 적는다** —

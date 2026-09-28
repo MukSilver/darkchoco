@@ -315,7 +315,12 @@ function OfficialBlock({
   onOpen?: (id: string) => void;
 }) {
   const latest = o.latest;
-  const meta = latest ? [`공표 ${latest.day}`, latest.size ? `규모 ${latest.size}` : null].filter(Boolean).join(" · ") : "";
+  // 게시에 붙은 사고(G-9)는 공표일이 빌 수 있고 규모를 안 적는다 (`officialOf`)
+  const meta = latest
+    ? [latest.day ? `공표 ${latest.day}` : "공표 기록 없음", latest.size ? `규모 ${latest.size}` : null]
+        .filter(Boolean)
+        .join(" · ")
+    : "";
   const card = latest && (
     <>
       <span className="text-[10px] text-label">최근 1건</span>

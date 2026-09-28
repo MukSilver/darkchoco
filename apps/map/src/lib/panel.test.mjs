@@ -130,6 +130,41 @@ test('공식 발표 사고 절은 기준일까지의 건수와 공표일이 가�
   assert.deepEqual(territoryView(I, 'bf').official, { count: 0, latest: null });
 });
 
+test('공식 발표 사고 절은 게시에 붙은 사고도 사고 번호당 한 번 센다 (G-9)', () => {
+  const inc = { id: 'INC-241', confirm: '언론 보도', announcedAt: '2026-01-05' };
+  const a = ev('bf', '2026-01-04', { kind: 'sale', incident: { ...inc, gapDays: -1 } });
+  const b = ev('bf', '2026-01-14', { kind: 'data_post', incident: { ...inc, gapDays: 9 } });
+  const c = ev('bf', '2025-12-01T09:00:00+09:00', { kind: 'official' });
+  const away = ev('xss', '2026-02-01', { incident: { id: 'INC-9', confirm: '언론 보도' } });
+  const o = officialOf([a, b, c, away], 'bf', D);
+  assert.equal(o.count, 2, 'INC-241 은 두 게시에 붙어도 한 번, 다른 영토 사고는 안 센다');
+  // 공표일이 가장 늦은 것은 INC-241 이고, 먼저 올라온 게시(a)의 팝업을 연다
+  assert.deepEqual(o.latest, { id: a.id, title: '[2026-01-04]', day: '2026-01-05', size: null });
+});
+
+test('붙은 사고는 공표일로 기준일에 넣고, 공표일이 비면 맨 뒤 · 규모는 안 적는다 (G-9 검토)', () => {
+  const Q = new Date('2026-03-31T23:59:59Z');
+  const inc = (id, announcedAt) => ({ id, confirm: '언론 보도', ...(announcedAt ? { announcedAt } : {}) });
+  // 게시는 분기 안인데 공표는 분기 뒤 — 이 기준일에는 아직 없는 공식 발표다
+  const early = ev('bf', '2026-03-30', { incident: inc('INC-2', '2026-04-02'), sizeValue: 255, sizeUnit: 'GB' });
+  // 공표는 분기 안인데 게시는 분기 뒤 — 공표로 센다
+  const late = ev('bf', '2026-04-03', { incident: inc('INC-3', '2026-03-25') });
+  const off = ev('bf', '2026-02-01', { kind: 'official' });
+  const got = officialOf([early, late, off], 'bf', Q);
+  assert.equal(got.count, 2);
+  assert.deepEqual(got.latest, { id: late.id, title: '[2026-04-03]', day: '2026-03-25', size: null });
+  // 공표일이 빈 사고는 게시가 기준일에 들어야 세고, 공표일 있는 사고를 밀어내지 않는다
+  const noDay = ev('bf', '2026-03-28', { incident: inc('INC-5') });
+  const mix = officialOf([noDay, off], 'bf', Q);
+  assert.equal(mix.count, 2);
+  assert.equal(mix.latest.id, off.id);
+  assert.equal(officialOf([noDay], 'bf', Q).latest.day, null, '게시일을 공표일처럼 적지 않는다');
+  // 허위 게시는 지도에 없어 안 센다 (굽기 로그 「판정과 어긋난 짝」)
+  assert.equal(officialOf([ev('bf', '2026-03-01', { verdict: 'false', incident: inc('INC-6', '2026-03-01') })], 'bf', Q).count, 0);
+  // 공식 발표 사건은 전처럼 규모를 적는다
+  assert.equal(officialOf([ev('bf', '2026-03-01', { kind: 'official', sizeValue: 1, sizeUnit: 'TB' })], 'bf', Q).latest.size, '1TB');
+});
+
 test('섬 · 생태계 패널에는 공식 발표 · 행위자 절이 없다', () => {
   const eco = ecosystemView(I);
   const isl = islandView(I, I.layout.islands[0].islandKey);

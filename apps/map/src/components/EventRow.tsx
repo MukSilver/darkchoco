@@ -5,6 +5,9 @@
  *     [KR · 유통 · 2026-05-14 · 255GB]
  *     Darkforums · 규모 큼
  *
+ * 같은 사고로 특정된 공식 발표 사고가 있는 게시는 종류 칩 뒤에 「공식 발표」 와 외부
+ * 확인 값 칩이 붙는다 (설계서 사건 칸 「공식 발표 여부」, G-9).
+ *
  * 한 번 누르면 강조하고, 두 번 누르면 보고서 팝업(4.3.4)을 연다 (설계서 4.3.2 L587
  * 「클릭: 강조 / 더블클릭: 보고서 팝업」, 4.3.3 L607 「한 번은 미리보기, 두 번은 상세」).
  *
@@ -17,7 +20,7 @@
 "use client";
 
 import { Chip } from "./RelBits";
-import { EV_KIND_LABEL, EV_KIND_TONE, eventTitle, stampOf } from "@/lib/events";
+import { CONFIRM_TONE, EV_KIND_LABEL, EV_KIND_TONE, eventTitle, stampOf } from "@/lib/events";
 import { SIZE_LABEL } from "@/lib/relations";
 import type { Ev } from "@/lib/types";
 
@@ -66,7 +69,7 @@ export default function EventRow({
         }}
       />
       <span className="flex min-w-0 flex-1 flex-col gap-s1">
-        <span className="flex items-center gap-s2">
+        <span className="flex flex-wrap items-center gap-s2">
           <span
             className="font-mono text-[11px] tabular-nums"
             style={{ color: on ? "var(--t-accent)" : "var(--t-text-label)" }}
@@ -74,6 +77,13 @@ export default function EventRow({
             {stampOf(e)}
           </span>
           {e.kind && <Chip tone={EV_KIND_TONE[e.kind]}>{EV_KIND_LABEL[e.kind]}</Chip>}
+          {/* 공식 발표 여부 (G-9) — 같은 사고로 특정된 공식 발표 사고가 있는 게시 */}
+          {e.incident && (
+            <>
+              <Chip tone={EV_KIND_TONE.official}>{EV_KIND_LABEL.official}</Chip>
+              <Chip tone={CONFIRM_TONE[e.incident.confirm] ?? "neutral"}>{e.incident.confirm}</Chip>
+            </>
+          )}
         </span>
         <span className="truncate text-[13px] font-semibold text-title">{eventTitle(e)}</span>
         <span className="truncate text-[11px] text-label">
