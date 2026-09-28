@@ -202,7 +202,8 @@ export default function EntityTab({
         />
       </div>
 
-      <div className="shrink-0 overflow-hidden rounded-[14px] border border-edge">
+      {/* 좁으면 표 안에서 가로로 굴린다. 전에는 `overflow-hidden` 이라 오른쪽 열이 잘렸다 */}
+      <div className="shrink-0 overflow-x-auto rounded-[14px] border border-edge">
         <table className="w-full border-collapse text-[13px]">
           <thead>
             <tr className="border-b border-divider bg-panel text-left text-[12px]">
@@ -213,7 +214,7 @@ export default function EntityTab({
               <th className="w-[92px] py-s3 font-normal text-label">상태</th>
               {head("events", "사건", "w-[80px]")}
               {head("lastSeen", "최근 관측", "w-[100px]")}
-              <th className="w-[110px] py-s3 pr-s5" />
+              <th className="w-[124px] py-s3 pr-s5" />
             </tr>
           </thead>
           <tbody>
@@ -303,7 +304,8 @@ export default function EntityTab({
                         e.stopPropagation();
                         onGoToMap(t.territoryId);
                       }}
-                      className="rounded-[8px] border border-edge px-s3 py-[3px] text-[11px] text-label"
+                      // 두 줄로 접히던 것을 한 줄로 (2026-09-28 코드 분석). 열 폭도 단추에 맞췄다
+                      className="whitespace-nowrap rounded-[8px] border border-edge px-s3 py-[3px] text-[11px] text-label"
                     >
                       지도에서 보기
                     </button>

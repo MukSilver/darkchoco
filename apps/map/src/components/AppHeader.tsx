@@ -74,7 +74,7 @@ function Logo() {
       <svg aria-hidden width="18" height="18" viewBox="0 0 18 18" className="shrink-0">
         <TeamMark cx={9} cy={9} size={18} />
       </svg>
-      <span className="flex flex-col gap-[5px] text-left">
+      <span className="flex flex-col gap-[5px] whitespace-nowrap text-left">
         <span className="text-[14px] font-bold leading-none tracking-[0.08em] text-title">
           WEB SCOPE
         </span>
@@ -105,12 +105,12 @@ export default function AppHeader({
           onClick={onHome}
           aria-label="WEB SCOPE — 첫 화면으로"
           title="첫 화면으로"
-          className="flex items-center gap-s3 rounded-[8px]"
+          className="flex shrink-0 items-center gap-s3 rounded-[8px]"
         >
           <Logo />
         </button>
       ) : (
-        <div className="flex items-center gap-s3">
+        <div className="flex shrink-0 items-center gap-s3">
           <Logo />
         </div>
       )}
@@ -121,7 +121,7 @@ export default function AppHeader({
       */}
       <nav
         aria-label="웹 전환"
-        className="flex items-center gap-s1 rounded-[8px] border border-edge bg-track p-[3px]"
+        className="flex shrink-0 items-center gap-s1 rounded-[8px] border border-edge bg-track p-[3px]"
       >
         {WEBS.map((w) => {
           const on = w.key === current;
@@ -137,7 +137,8 @@ export default function AppHeader({
                   : "이 화면은 아직 없습니다 — 오픈웹은 다른 팀 몫이고 연결 3D 는 보류입니다"
               }
               className={[
-                "flex items-center gap-s2 rounded-[6px] border px-s4 py-[5px] text-[13px]",
+                // 좁은 창에서 한글이 글자마다 세로로 쪼개지지 않게 (2026-09-28 최현서 4번)
+                "flex items-center gap-s2 whitespace-nowrap rounded-[6px] border px-s4 py-[5px] text-[13px]",
                 // 지금 웹은 누를 곳이 없는 표시다 (설계서 4.2.1) — 손가락 커서를 안 준다
                 on
                   ? "cursor-default border-edge bg-panel font-semibold text-strong"
@@ -159,7 +160,7 @@ export default function AppHeader({
 
       <time
         dateTime={generatedAt}
-        className="font-mono text-[12px] tabular-nums tracking-[0.04em] text-label"
+        className="shrink-0 whitespace-nowrap font-mono text-[12px] tabular-nums tracking-[0.04em] text-label"
       >
         {utcLabel(generatedAt)}
       </time>
@@ -168,7 +169,7 @@ export default function AppHeader({
         검색창은 모서리 8px 네모다 (피그마 ⑦-1 · ⑦-10a, 시트 `07 / 01 Search Input`).
         전에는 알약이었다. 열린 입력칸(`SearchOverlay`)도 같은 모양이라 열 때 안 튄다
       */}
-      <div className="relative h-[34px] w-[320px]">
+      <div className="relative h-[34px] w-[320px] shrink-0">
         <button
           type="button"
           onClick={onSearch}

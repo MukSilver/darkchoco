@@ -178,10 +178,14 @@ export default function TimelineTab({
   return (
     <div className="flex min-h-0 flex-1 gap-s4 overflow-hidden">
       <div className="flex min-h-0 flex-1 flex-col gap-s4 overflow-y-auto">
-        <div className="flex shrink-0 items-center gap-s4">
+        {/*
+          연도 칩 · 재생 줄. 좁으면 재생 줄이 다음 줄로 내려간다 — 전에는 연도 칩이 못 줄어
+          「시점 비교」 글자가 접혔다 (2026-09-28 코드 분석, 1280 창)
+        */}
+        <div className="flex shrink-0 flex-wrap items-center gap-s4">
           <nav
             aria-label="시점 고르기"
-            className="flex gap-s1 rounded-[12px] bg-track p-[3px]"
+            className="flex shrink-0 gap-s1 rounded-[12px] bg-track p-[3px]"
           >
             {chips.map(({ year, snap }) => {
               const marks = compare
@@ -237,7 +241,7 @@ export default function TimelineTab({
             재생은 강조색 채움이다. 꺼진 단추는 통째로 40% 로 흐린다 — ⑦-9c 에서 꺼진
             ◀ 의 테두리 · 그림이 둘 다 바탕과 40% 로 섞인 색이다
           */}
-          <div className="flex items-center gap-[6px]">
+          <div className="flex shrink-0 items-center gap-[6px] whitespace-nowrap">
             <button
               type="button"
               aria-label="1년 전"
@@ -847,7 +851,7 @@ function TrendChart({
         </h3>
         <ul className="flex gap-s4">
           {ids.map((id) => (
-            <li key={id} className="flex items-center gap-s2 text-[11px]">
+            <li key={id} className="flex items-center gap-s2 whitespace-nowrap text-[11px]">
               <span
                 aria-hidden
                 className="size-[7px] rounded-full"

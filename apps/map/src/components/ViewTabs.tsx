@@ -35,7 +35,7 @@ export default function ViewTabs({
   return (
     <nav
       aria-label="화면 전환"
-      className="flex items-center rounded-[8px] border border-edge bg-track p-[3px]"
+      className="flex shrink-0 items-center rounded-[8px] border border-edge bg-track p-[3px]"
     >
       {TABS.map((t) => {
         const on = t.key === current;
@@ -49,7 +49,8 @@ export default function ViewTabs({
             onClick={() => onChange(t.key)}
             title={t.why}
             className={[
-              "rounded-[6px] border px-[10px] py-[5px] text-[13px]",
+              // 좁은 창에서 「타임라인」 이 글자마다 쪼개지지 않게 (2026-09-28 최현서 4번)
+              "whitespace-nowrap rounded-[6px] border px-[10px] py-[5px] text-[13px]",
               on
                 ? "border-edge bg-panel font-semibold text-strong"
                 : "border-transparent text-label disabled:cursor-not-allowed",
