@@ -13,8 +13,12 @@
  *   핸들         지름 24, 왼쪽 테두리에 반쯤 걸친다. 가운데가 머리글 구분선 11px 아래
  *   접힘 레일     같은 자리에 같은 핸들, 그 아래 세로 글씨 「상세패널」
  *
- * **핸들은 펼침과 접힘 모두 ‹ 다.** 설계서 4.2.4 표가 두 상태 모두 「‹ 클릭」으로
- * 적었고 피그마 ⑦-1 · ⑦-7 도 같다. 전에는 접힘 레일만 › 였다.
+ * **핸들 화살표는 누르면 갈 쪽이다 — 펼쳐져 있으면 ›(접기), 접혀 있으면 ‹(펼치기).**
+ * 설계서 4.2.4 표와 피그마 ⑦-1 · ⑦-7 은 두 상태 모두 ‹ 였는데, 펼쳐져 있어도 ‹ 라
+ * 무엇을 하는 단추인지 헷갈렸다 (2026-09-28 최현서 2번 — README 「설계서와 다른 곳」).
+ *
+ * **펼침 상태는 화면 전체에 하나다** (`page.tsx` `panelOpen`). 탭을 옮겨도 그대로이고,
+ * 사람이 핸들로 바꾼 값이 기준이다. 섬 · 영토를 고르면 펼치되 선택을 풀어도 접지 않는다
  */
 
 "use client";
@@ -115,7 +119,7 @@ export default function PanelShell({
         onClick={() => onToggle(false)}
         className={HANDLE}
       >
-        ‹
+        ›
       </button>
 
       <aside className="absolute inset-0 flex flex-col overflow-y-auto border-l border-divider bg-panel">

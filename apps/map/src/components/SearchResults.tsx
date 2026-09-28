@@ -123,6 +123,7 @@ export default function SearchResults({
   onFilter,
   onPick,
   onOpenEvent,
+  onClose,
 }: {
   ctx: SearchCtx;
   q: string;
@@ -132,6 +133,8 @@ export default function SearchResults({
   onPick: (h: Hit) => void;
   /** 사건 「상세」 — 보고서 팝업. 없으면 다른 줄처럼 `onPick` 으로 간다 */
   onOpenEvent?: (h: EventHit) => void;
+  /** 「검색 결과 닫기 ×」. 없으면 단추를 안 낸다 */
+  onClose?: () => void;
 }) {
   const needle = needleOf(q);
   const count = (s: Scope) => (s === "all" ? total(results) : results[s].length);
@@ -166,7 +169,12 @@ export default function SearchResults({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-s4">
-      <div role="tablist" aria-label="검색 범위" className="flex shrink-0 gap-s5 border-b border-divider">
+      {/*
+        범위 탭 줄 오른쪽 끝에 「검색 결과 닫기 ×」. 전에는 제목 줄의 화면 탭 자리에 있어서
+        결과 화면에서는 화면 탭이 사라졌다 (2026-09-28 코드 분석 — 탭 버튼 자리 고정)
+      */}
+      <div className="flex shrink-0 items-end gap-s5 border-b border-divider">
+      <div role="tablist" aria-label="검색 범위" className="flex gap-s5">
         {SCOPES.map((s) => {
           const on = s.key === filter.scope;
           const n = count(s.key);
@@ -189,6 +197,17 @@ export default function SearchResults({
             </button>
           );
         })}
+      </div>
+        <div className="flex-1" />
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="mb-s2 shrink-0 whitespace-nowrap rounded-[10px] border border-edge px-s3 py-s1 text-[12px] text-body hover:text-title"
+          >
+            검색 결과 닫기 ×
+          </button>
+        )}
       </div>
 
       <div className="flex shrink-0 flex-wrap gap-s2">
