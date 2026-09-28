@@ -12,11 +12,13 @@ import assert from 'node:assert/strict';
 
 import {
   boxSize,
+  canPick,
   centerBox,
   chipQuarter,
   compareStart,
   comparePick,
   diff,
+  freshIds,
   growth,
   peakOf,
   snapshots,
@@ -36,7 +38,7 @@ const info = (id) => ({ name: id, token: id.toLowerCase() });
 function snap(ym, events, byIsland = {}, delta = null) {
   const [y, q] = ym.split('-Q').map(Number);
   return {
-    ym, year: y, q, events, delta, fresh: null,
+    ym, year: y, q, events, delta, fresh: null, liveIds: [],
     byIsland: { FORUM: 0, RANSOMWARE: 0, TELEGRAM: 0, ACTOR: 0, ...byIsland },
     layout: { viewBox: '0 0 100 100', size: 10, islands: [], territories: [] },
   };
@@ -61,21 +63,34 @@ test('◀ / ▶▶ 는 한 해씩, 끝에서 멈춘다 (L798)', () => {
   assert.equal(stepYear(QS, '1999-Q1', 1), null, '목록에 없는 시점');
 });
 
-test('시점 비교 — 처음은 3년 전 같은 분기 ↔ 최근, 칩은 A · B 를 번갈아 채운다 (L812-813)', () => {
+test('시점 비교 — 처음은 3년 전 같은 분기 ↔ 최근, A · B 를 따로 고르고 A 는 늘 B 보다 앞선다 (G-10 묶음 7)', () => {
   const c = compareStart(QS);
-  assert.deepEqual(c, { a: '2023-Q3', b: '2026-Q3', next: 'a' });
+  assert.deepEqual(c, { a: '2023-Q3', b: '2026-Q3', active: 'a' });
+  // A 를 고르는 중에는 칩이 A 만 바꾼다 — 번갈아 채우지 않는다
   const c1 = comparePick(c, '2022-Q3');
-  assert.deepEqual(c1, { a: '2022-Q3', b: '2026-Q3', next: 'b' }, '첫 클릭이 A');
-  const c2 = comparePick(c1, '2025-Q3');
-  assert.deepEqual(c2, { a: '2022-Q3', b: '2025-Q3', next: 'a' }, '두 번째가 B');
-  assert.equal(comparePick(c2, '2024-Q3').a, '2024-Q3', '세 번째는 다시 A');
+  assert.deepEqual(c1, { a: '2022-Q3', b: '2026-Q3', active: 'a' });
+  assert.deepEqual(comparePick(c1, '2024-Q3'), { a: '2024-Q3', b: '2026-Q3', active: 'a' }, '다시 눌러도 A');
+  // B 와 같거나 B 보다 늦은 시점은 A 로 못 찍는다
+  assert.equal(canPick(c1, '2026-Q3'), false, '같은 시점');
+  assert.deepEqual(comparePick(c1, '2026-Q3'), c1, '못 찍으면 그대로');
+  // B 를 고르는 쪽으로 바꾸면 A 보다 뒤인 시점만
+  const cb = { ...c1, active: 'b' };
+  assert.equal(canPick(cb, '2021-Q4'), false, 'B 가 A 보다 앞설 수 없다');
+  assert.deepEqual(comparePick(cb, '2025-Q3'), { a: '2022-Q3', b: '2025-Q3', active: 'b' });
+  assert.equal(canPick(cb, '2025-Q3', 'a'), true, '쪽을 따로 물을 수 있다');
 
   assert.deepEqual(
     compareStart(quarterRange('2025-Q1', '2026-Q2')),
-    { a: '2025-Q1', b: '2026-Q2', next: 'a' },
+    { a: '2025-Q1', b: '2026-Q2', active: 'a' },
     '3년치가 안 되면 첫 분기가 A',
   );
   assert.equal(compareStart(['2026-Q3']), null, '시점이 하나면 비교가 없다');
+});
+
+test('「신규」 는 앞 시점에 사건이 없었는데 뒤 시점에 사건이 있는 영토 — 칩과 비교가 같은 기준', () => {
+  assert.deepEqual(freshIds(['a', 'b'], ['a', 'b', 'c']), ['c']);
+  assert.deepEqual(freshIds([], ['x']), ['x']);
+  assert.deepEqual(freshIds(['a'], []), [], '사라진 영토는 신규가 아니다');
 });
 
 test('전년 대비는 한 해 앞 같은 분기와 견준다 (L806)', () => {
@@ -126,6 +141,15 @@ test('성장 요약과 섬별 증가는 0건 섬도 넣고 섬 목록 차례를 
   assert.equal(d.islands[2].delta, 0);
   assert.equal(d.deltaEvents, 20);
   assert.equal(d.times, 3);
+
+  // 신규 영토는 A 에 사건이 없었고 B 에 사건이 있는 영토만 — 지도에만 있는 명부 영토(사건 0)는 아니다
+  const a2 = { ...a, liveIds: ['f1'] };
+  const b2 = {
+    ...b,
+    liveIds: ['f1', 'f2'],
+    layout: { ...b.layout, territories: [{ territoryId: 'f1', name: 'F1' }, { territoryId: 'f2', name: 'F2' }, { territoryId: 'reg', name: 'Reg' }] },
+  };
+  assert.deepEqual(diff(a2, b2, info).fresh, ['F2']);
 });
 
 test('눈금 최댓값과 썸네일 viewBox', () => {

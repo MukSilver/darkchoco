@@ -19,7 +19,7 @@
 
 "use client";
 
-import { useEffect, useMemo, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 
 import MapCanvas, { type MapSelection, type MapView } from "./MapCanvas";
 import PlayGlyph from "./PlayGlyph";
@@ -34,6 +34,7 @@ import {
   growth,
   peakOf,
   stepYear,
+  canPick,
   centerBox,
   thumbBoxes,
   yearCards,
@@ -107,14 +108,16 @@ export default function TimelineTab({
 }: TimelineTabProps) {
   /** 분기 지도의 틀. 합친 크기가 있으면 그 크기로 넓혀 제 가운데에 놓는다 */
   const boxOf = (layout: MapLayout) => (mapSize ? centerBox(layout.viewBox, mapSize) : layout.viewBox);
+  // 지도 판을 쥐고 있나 — 시점 비교 A · B 가 같이 써서 끄는 동안 두 장이 함께 움직인다
+  const [grab, setGrab] = useState(false);
 
   /**
    * 분기 지도 한 장 — 지도 탭과 같은 캔버스(줌 · 끌기 · 툴팁 · 고르기). 전에는 그림만 그려서 줌도
    * 툴팁도 없고, 영역 이름표만 있는 영토(hive · lockbit2 따위)는 어디까지인지 알 수 없었다
    * (최현서 3번). 그 분기 지도에 없는 선택은 없는 것으로 본다(지도 탭 `liveSelection` 과 같게).
-   * `hint` 를 빈 글로 주면 힌트 알약을 안 낸다
+   * `badge` 는 힌트 알약 자리에 대신 낸다(「재생 중」). 판을 쥔 상태(`grab`)는 A · B 가 같이 쓴다
    */
-  const mapOf = (snap: Snapshot, label: string, hint?: string) => {
+  const mapOf = (snap: Snapshot, label: string, badge?: ReactNode) => {
     const has =
       selection.kind === "territory"
         ? snap.layout.territories.some((t) => t.territoryId === selection.id)
@@ -133,7 +136,10 @@ export default function TimelineTab({
         onView={onView}
         framed={false}
         label={label}
-        hint={hint ?? timelineHint(sel)}
+        hint={timelineHint(sel)}
+        badge={badge}
+        grab={grab}
+        onGrab={setGrab}
       />
     );
   };
@@ -190,7 +196,10 @@ export default function TimelineTab({
     onPlaying(false);
   };
 
-  /** 연도 칩. 비교 중이면 첫 클릭이 A, 두 번째가 B 다 (L812) */
+  /**
+   * 연도 칩. 비교 중이면 지금 고르는 쪽(A · B 고르기 단추)을 그 시점으로 바꾼다 — 설계서 L812 는
+   * 「첫 번째 클릭이 A, 두 번째가 B」였다 (2026-09-28 최현서 8번). 못 찍는 칩은 꺼져 있다
+   */
   const pickYear = (q: string) => {
     if (!compare) {
       onPick(q);
@@ -264,15 +273,25 @@ export default function TimelineTab({
                   ].filter(Boolean)
                 : [];
               const on = compare ? marks.length > 0 : now.year === year;
+              // 지금 고르는 쪽에 못 찍는 칩 — 같은 시점이거나 A 가 B 보다 늦어진다. 꺼 두고, 마우스를
+              // 올리면 붉게 바뀌어 안 된다는 것을 알린다 (최현서 8번 「해제 전에 안 된다는 것을 색 변화로」)
+              const side = compare?.active ?? "a";
+              const own = compare ? (side === "a" ? compare.a : compare.b) === snap.ym : false;
+              const blocked = compare ? !own && !canPick(compare, snap.ym) : false;
               return (
                 <button
                   key={year}
                   type="button"
                   aria-current={on ? "page" : undefined}
+                  disabled={blocked}
                   onClick={() => pickYear(snap.ym)}
                   title={
                     compare
-                      ? `${compare.next === "a" ? "A" : "B"} 시점으로 찍기 · ${snap.ym}`
+                      ? blocked
+                        ? side === "a"
+                          ? `A 는 B(${compare.b})보다 앞선 시점이어야 합니다 · B 를 먼저 옮기세요`
+                          : `B 는 A(${compare.a})보다 뒤 시점이어야 합니다 · A 를 먼저 옮기세요`
+                        : `${side === "a" ? "A" : "B"} 시점으로 찍기 · ${snap.ym}`
                       : snap.ym
                   }
                   // 고른 칸은 화면 탭(`ViewTabs`)처럼 테두리 있는 패널색 칸이다 — 전에는 bg-selected 가
@@ -281,6 +300,7 @@ export default function TimelineTab({
                   className={[
                     "shrink-0 rounded-[10px] border px-s4 py-s2 text-center",
                     on ? "border-edge bg-panel" : "border-transparent text-label hover-seg",
+                    "disabled:cursor-not-allowed disabled:text-disabled disabled:hover:border-danger-edge disabled:hover:text-danger",
                   ].join(" ")}
                 >
                   <div
@@ -304,6 +324,44 @@ export default function TimelineTab({
               );
             })}
           </nav>
+
+          {/*
+            시점 비교에서 연도 칩이 채울 쪽 — A 고르기 · B 고르기 (2026-09-28 최현서 8번 「A · B 각각의
+            버튼을 두거나」). 고른 쪽은 테두리 있는 패널색 칸이다
+          */}
+          {compare && (
+            <div
+              role="group"
+              aria-label="연도 칩이 채울 쪽"
+              className="flex shrink-0 items-center gap-s1 rounded-[10px] bg-track p-[3px]"
+            >
+              {(["a", "b"] as const).map((k) => {
+                const onSide = compare.active === k;
+                return (
+                  <button
+                    key={k}
+                    type="button"
+                    aria-pressed={onSide}
+                    onClick={() => onCompare({ ...compare, active: k })}
+                    title={`연도 칩이 ${k.toUpperCase()} 시점을 바꿉니다`}
+                    className={[
+                      "flex items-center gap-s2 whitespace-nowrap rounded-[8px] border px-s3 py-[5px] text-[12px] tabular-nums",
+                      onSide ? "border-edge bg-panel font-semibold text-strong" : "border-transparent text-label hover-seg",
+                    ].join(" ")}
+                  >
+                    <span
+                      aria-hidden
+                      className="grid size-[16px] place-items-center rounded-[4px] text-[10px] font-bold text-on-accent"
+                      style={{ background: "var(--t-accent)" }}
+                    >
+                      {k.toUpperCase()}
+                    </span>
+                    {k === "a" ? compare.a : compare.b} 고르기
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
           <div className="flex-1" />
 
@@ -445,7 +503,8 @@ export default function TimelineTab({
                 tone={now.delta > 0 ? "up" : now.delta < 0 ? "down" : undefined}
               />
             )}
-            {now.fresh !== null && <Chip label="신규" value={String(now.fresh)} />}
+            {/* 직전 분기 대비 새로 사건이 생긴 영토 (`freshIds` — 비교의 「신규 영토」와 같은 기준) */}
+            {now.fresh !== null && <Chip label="신규 · 직전 분기 대비" value={String(now.fresh)} />}
           </header>
 
           <span
@@ -458,20 +517,27 @@ export default function TimelineTab({
 
           {/* 큰 분기 글씨(워터마크)는 지도 밑에 깐다 — 전에는 지도 위층에 칠해졌다 */}
           <div className="relative z-[1] flex min-h-0 flex-1 flex-col">
-            {/* 재생 중에는 힌트를 걷는다 — 「재생 중」 배지와 같은 자리다 */}
-            {mapOf(now, `${now.ym} 지도`, playing ? "" : undefined)}
+            {/*
+              재생 중에는 힌트 대신 「재생 중」 배지다. 캔버스의 힌트 자리에 넣어 줌 단추와 안 겹친다 —
+              전에는 블록 기준으로 따로 떠서 좁은 캔버스에서 줌 단추 아래쪽을 덮었다 (2026-09-29 묶음 5 검토)
+            */}
+            {mapOf(
+              now,
+              `${now.ym} 지도`,
+              playing ? (
+                <div
+                  className="flex min-w-0 items-center gap-s2 rounded-full px-s4 text-[12px] text-on-accent"
+                  style={{ background: "var(--t-accent)", height: "var(--h-hint)" }}
+                >
+                  <span aria-hidden className="size-[6px] shrink-0 rounded-full bg-white" />
+                  <span className="truncate">
+                    재생 중 · {speed}× · {now.ym}
+                    {at < snaps.length - 1 && ` → ${snaps[at + 1].ym}`}
+                  </span>
+                </div>
+              ) : undefined,
+            )}
           </div>
-
-          {playing && (
-            <div
-              className="absolute bottom-[66px] left-s5 z-20 flex items-center gap-s2 rounded-full px-s4 py-s2 text-[12px] text-on-accent"
-              style={{ background: "var(--t-accent)" }}
-            >
-              <span aria-hidden className="size-[6px] rounded-full bg-white" />
-              재생 중 · {speed}× · {now.ym}
-              {at < snaps.length - 1 && ` → ${snaps[at + 1].ym}`}
-            </div>
-          )}
 
           <TimeSlider
             at={at}
@@ -825,7 +891,7 @@ function ChangeSummary({ d }: { d: Diff }) {
       {d.fresh.length > 0 && (
         <div className="shrink-0 rounded-[12px] border border-edge bg-card px-s4 py-s3">
           <div className="text-[11px] text-label">
-            신규 엔티티 ({d.a.ym} 이후)
+            신규 영토 ({d.a.ym} 뒤 첫 사건)
           </div>
           <p className="mt-s2 text-[12px] leading-[1.7] text-body">
             {d.fresh.join(" · ")}

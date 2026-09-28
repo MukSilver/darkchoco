@@ -35,8 +35,10 @@ export type Snapshot = {
    * 전에는 직전 분기와 견줬다. 칩 이름이 「전년 대비」라 값이 이름과 달랐다
    */
   delta: number | null;
-  /** 직전 시점에는 없던 영토 수. 첫 시점은 null */
+  /** 직전 분기 대비 새로 사건이 생긴 영토 수 (`freshIds`). 첫 시점은 null */
   fresh: number | null;
+  /** 그 시점까지 사건이 있는 영토 id. 「신규」 를 가르는 기준이다 (`freshIds`) */
+  liveIds: string[];
   /**
    * 섬 코드 → 누적 사건 수. 추이 그래프가 이것을 쓴다.
    * **0건 섬도 들고, 열쇠 차례가 넘겨 받은 섬 목록 차례다** (`computeMap` 이
@@ -119,10 +121,13 @@ export function stepYear(
 /**
  * 시점 비교 상태 (설계서 4.3.7 L811-816, 피그마 ⑦-9c).
  *
- * `next` 는 다음 연도 칩 클릭이 채울 자리다. 「첫 번째 클릭이 A, 두 번째가 B」라
- * 누를 때마다 A · B 를 번갈아 채운다.
+ * **A · B 를 따로 고른다** (2026-09-28 최현서 8번 — README 「설계서와 다른 곳」). `active` 는 연도
+ * 칩이 채울 쪽이고 사람이 「A 고르기 · B 고르기」 단추로 정한다. 설계서 L812 는 「첫 번째 클릭이
+ * A, 두 번째가 B」라 누를 때마다 번갈아 채웠는데, 그러면 무엇이 찍힐지 몰랐다.
+ * **A 는 늘 B 보다 앞선 시점이다** — 같은 시점이나 A 가 B 보다 늦어지는 칩은 못 찍는다(`canPick`).
+ * 전에는 막지 않아 변화 요약이 거꾸로 나왔다(「누적 사건 -N건」)
  */
-export type Compare = { a: QuarterKey; b: QuarterKey; next: "a" | "b" };
+export type Compare = { a: QuarterKey; b: QuarterKey; active: "a" | "b" };
 
 /**
  * 처음 켤 때 — A 는 B 의 3년 전 같은 분기, B 는 최근 분기 (L813).
@@ -133,12 +138,32 @@ export function compareStart(quarters: readonly QuarterKey[]): Compare | null {
   const b = quarters[quarters.length - 1];
   const { year, q } = parseQuarter(b);
   const want = quarterKey(year - 3, q);
-  return { a: quarters.includes(want) ? want : quarters[0], b, next: "a" };
+  return { a: quarters.includes(want) ? want : quarters[0], b, active: "a" };
 }
 
-/** 비교 중 연도 칩 클릭 — 차례대로 A, B 를 채운다 (L812) */
+/**
+ * 그 쪽(`side`, 없으면 지금 고르는 쪽)에 시점 `q` 를 찍을 수 있나 — A 는 B 보다 앞서야 하고 B 는
+ * A 보다 뒤여야 한다. 분기 열쇠는 글자 차례가 곧 시간 차례다
+ */
+export function canPick(c: Compare, q: QuarterKey, side: "a" | "b" = c.active): boolean {
+  return side === "a" ? q < c.b : q > c.a;
+}
+
+/** 비교 중 연도 칩 클릭 — 지금 고르는 쪽을 그 시점으로. 못 찍는 시점이면 그대로 둔다 */
 export function comparePick(c: Compare, q: QuarterKey): Compare {
-  return c.next === "a" ? { a: q, b: c.b, next: "b" } : { a: c.a, b: q, next: "a" };
+  if (!canPick(c, q)) return c;
+  return c.active === "a" ? { ...c, a: q } : { ...c, b: q };
+}
+
+/**
+ * 「신규」 영토 — **앞 시점에는 사건이 없었는데 뒤 시점에는 사건이 있는 영토**. Historical Map 의
+ * 「신규」 칩(직전 분기 대비)과 시점 비교의 「신규 영토」(A 대비)가 같이 쓴다. 전에는 칩은 사건 있는
+ * 영토, 비교는 지도에 있는 영토로 기준이 달라, 사건 없는 명부 영토(이번 분기에만 지도에 나온다)가
+ * 비교의 신규에 잔뜩 섞였다 (2026-09-28 코드 분석)
+ */
+export function freshIds(before: Iterable<string>, after: Iterable<string>): string[] {
+  const was = new Set(before);
+  return [...after].filter((id) => !was.has(id));
 }
 
 /** 연도 칩이나 스냅샷 카드 한 칸 — 그 해를 대표하는 시점 */
@@ -258,10 +283,8 @@ export function snapshots(i: TimelineInput, quarters: QuarterKey[]): Snapshot[] 
       q,
       events,
       delta: yearAgo ? events - yearAgo.events : null,
-      fresh:
-        prevEvents === null
-          ? null
-          : [...live].filter((id) => !prevLive.has(id)).length,
+      fresh: prevEvents === null ? null : freshIds(prevLive, live).length,
+      liveIds: [...live],
       byIsland,
       layout,
     };
@@ -332,14 +355,14 @@ export type Diff = {
     to: number;
     delta: number;
   }[];
-  /** B 에는 있고 A 에는 없던 영토 이름 */
+  /** A 에는 사건이 없었고 B 에는 있는 영토 이름 (`freshIds`) */
   fresh: string[];
 };
 
 /**
  * 두 시점을 견준다 — 설계서 4.3.7 시점 비교.
  *
- * **가해 쪽 이름만 나간다.** 「신규 엔티티」에 뜨는 것은 영토 이름이고,
+ * **가해 쪽 이름만 나간다.** 「신규 영토」에 뜨는 것은 영토 이름이고,
  * 영토는 포럼 · 랜섬웨어 그룹 · 텔레그램 채널이다. 피해 조직 이름은 애초에
  * 굽기가 안 싣는다 (2026-09-23 결정).
  *
@@ -356,10 +379,8 @@ export function diff(
     return { islandId, ...nameOf(islandId), from, to, delta: to - from };
   });
 
-  const was = new Set(a.layout.territories.map((t) => t.territoryId));
-  const fresh = b.layout.territories
-    .filter((t) => !was.has(t.territoryId))
-    .map((t) => t.name);
+  const newIds = new Set(freshIds(a.liveIds, b.liveIds));
+  const fresh = b.layout.territories.filter((t) => newIds.has(t.territoryId)).map((t) => t.name);
 
   return {
     a,
