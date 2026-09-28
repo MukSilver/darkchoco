@@ -105,6 +105,11 @@ export type HexMapProps = {
   raised?: ReadonlySet<string>;
   /** 이어진 섬. 여기 없는 섬은 이름표와 번짐을 흐리게 한다 (4.2.3 「연결 없는 섬은 흐리게」) */
   litIslands?: ReadonlySet<string>;
+  /**
+   * 지금 배율(%). 관계선 라벨과 이어진 영토 이름표를 몇 개까지 달지 정한다 — 줄이면 주요
+   * 관계만, 키우면 모두 (2026-09-28 최현서 5번 · 코드 분석, 관계도와 같은 규칙). 없으면 100
+   */
+  zoom?: number;
   /** 그릴 관계선. 영토를 골랐을 때만 온다 */
   lines?: readonly RelView[];
 };
@@ -132,6 +137,11 @@ function curve(
     d: `M${a.x.toFixed(1)},${a.y.toFixed(1)}Q${cx.toFixed(1)},${cy.toFixed(1)} ${b.x.toFixed(1)},${b.y.toFixed(1)}`,
     mid: { x: 0.25 * a.x + 0.5 * cx + 0.25 * b.x, y: 0.25 * a.y + 0.5 * cy + 0.25 * b.y },
   };
+}
+
+/** 관계선 라벨 알약 폭 (viewBox 단위). 겹침 판정과 그리기가 같이 쓴다 */
+function lineLabelW(v: RelView): number {
+  return textWidth(KIND_NAME[v.rel.kind], 8) + textWidth(`${v.count}건`, 7) + 18;
 }
 
 /**
@@ -163,6 +173,7 @@ export default function HexMap({
   raised,
   litIslands,
   lines = [],
+  zoom = 100,
 }: HexMapProps) {
   const hasSelection = Boolean(selectedTerritory || selectedIsland);
   /**
@@ -206,14 +217,6 @@ export default function HexMap({
   };
   const dimIsland = (key: string) => (litIslands ? !litIslands.has(key) : false);
 
-  // 이름표는 섬마다 둘씩이다. 관계로 이어진 영토는 그 밖이어도 이름을 단다 —
-  // 선 끝에 이름이 없으면 어디로 이어졌는지 모른다 (피그마 ⑦-3)
-  const picked = pickLabels(layout, selectedIsland);
-  const labelled = [
-    ...picked,
-    ...layout.territories.filter((t) => lit?.has(t.territoryId) && !picked.includes(t)),
-  ];
-
   const byId = new Map(layout.territories.map((t) => [t.territoryId, t]));
   const pairSeen = new Map<string, number>();
   const drawn = lines.flatMap((v) => {
@@ -225,6 +228,46 @@ export default function HexMap({
     pairSeen.set(key, k + 1);
     return [{ v, ...curve(anchor(a), anchor(b), k) }];
   });
+
+  /*
+   * 라벨을 달 선. **건수가 큰 것부터 배율에 맞는 개수까지만 단다** — 전에는 관계가 많은 영토를
+   * 고르면 알약과 이름표가 개수 제한 없이 붙어 겹쳤다 (2026-09-28 코드 분석). 100% 미만은 4개,
+   * 150% 미만은 8개, 그 이상은 전부다. 마우스를 올린 영토에 닿은 선은 늘 단다. 알약끼리
+   * 겹치면 뒤(건수가 작은) 것을 뺀다
+   */
+  const cap = zoom < 100 ? 4 : zoom < 150 ? 8 : Infinity;
+  // 알약은 확대해도 화면에서 100% 때 크기를 넘지 않는다 — 그림과 같이 커지면 겹침이 그대로라
+  // 확대해도 더 보이는 라벨이 없다. 그래서 확대할수록 판 단위로는 작아진다
+  const ls = Math.min(1, 100 / zoom);
+  const shownLines = new Set<string>();
+  const placed: { x0: number; y0: number; x1: number; y1: number }[] = [];
+  for (const d of [...drawn].sort((x, y) => y.v.count - x.v.count || x.v.rel.id.localeCompare(y.v.rel.id))) {
+    const onHover = hovered != null && (d.v.rel.from === hovered || d.v.rel.to === hovered);
+    if (!onHover && shownLines.size >= cap) continue;
+    const w = lineLabelW(d.v) * ls;
+    const b = { x0: d.mid.x - w / 2, y0: d.mid.y - 8 * ls, x1: d.mid.x + w / 2, y1: d.mid.y + 8 * ls };
+    if (!onHover && placed.some((o) => o.x0 < b.x1 && b.x0 < o.x1 && o.y0 < b.y1 && b.y0 < o.y1)) continue;
+    placed.push(b);
+    shownLines.add(d.v.rel.id);
+  }
+
+  // 이름표는 섬마다 둘씩이다. 관계로 이어진 영토는 그 밖이어도 이름을 단다 — 선 끝에 이름이
+  // 없으면 어디로 이어졌는지 모른다 (피그마 ⑦-3). 다만 라벨을 단 선의 끝, 고른 · 떠오른 ·
+  // 마우스를 올린 영토만 단다 (위 개수 규칙과 같이 간다)
+  const namedEnds = new Set(
+    drawn.filter((d) => shownLines.has(d.v.rel.id)).flatMap((d) => [d.v.rel.from, d.v.rel.to]),
+  );
+  const keepName = (t: TerritoryShape) =>
+    t.territoryId === selectedTerritory ||
+    t.territoryId === hovered ||
+    Boolean(raised?.has(t.territoryId)) ||
+    namedEnds.has(t.territoryId) ||
+    lines.length === 0;
+  const picked = pickLabels(layout, selectedIsland);
+  const labelled = [
+    ...picked,
+    ...layout.territories.filter((t) => lit?.has(t.territoryId) && !picked.includes(t) && keepName(t)),
+  ];
 
   return (
     <svg
@@ -360,6 +403,24 @@ export default function HexMap({
               {...hoverProps(t.territoryId)}
             />
           ))}
+          {/*
+            마우스를 올린 떠오른 영토의 밝은 테두리를 맨 위에 한 겹 더 긋는다 — 나중에 그려지는
+            떠오른 이웃이 맞닿은 변에서 테두리를 덮었다 (2026-09-28 검토). 평지의 덮는 겹과 같다
+          */}
+          {up
+            .filter((t) => t.territoryId === hovered && t.territoryId !== selectedTerritory)
+            .map((t) => (
+              <path
+                key={`hover-${t.territoryId}`}
+                aria-hidden
+                d={cellsPath(t, layout.size)}
+                transform={`translate(0 ${-LIFT})`}
+                fill="none"
+                stroke="var(--t-hex-hover-edge)"
+                strokeWidth={1.4}
+                className="pointer-events-none"
+              />
+            ))}
         </g>
       )}
 
@@ -382,11 +443,14 @@ export default function HexMap({
               opacity={0.85}
             />
           ))}
-          {drawn.map(({ v, mid }) => {
+          {drawn.filter(({ v }) => shownLines.has(v.rel.id)).map(({ v, mid }) => {
             const name = KIND_NAME[v.rel.kind];
-            const w = textWidth(name, 8) + textWidth(`${v.count}건`, 7) + 18;
+            const w = lineLabelW(v);
             return (
-              <g key={`l-${v.rel.id}`} transform={`translate(${mid.x - w / 2} ${mid.y - 8})`}>
+              <g
+                key={`l-${v.rel.id}`}
+                transform={`translate(${mid.x} ${mid.y}) scale(${ls}) translate(${-w / 2} -8)`}
+              >
                 <rect width={w} height={16} rx={4} fill="var(--t-surface-panel)" stroke="var(--t-border-card)" strokeWidth={0.8} />
                 <text x={7} y={11} fontSize={8} fontWeight={600}>
                   <tspan fill="var(--t-text-title)">{name}</tspan>

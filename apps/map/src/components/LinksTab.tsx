@@ -132,10 +132,13 @@ function Row({
         // 고른 줄에서도 보인다 — 한 번 눌러 고른 뒤 한 번 더 누르면 관계 탭이다. 더블클릭을 몰라도
         // 한 번 클릭으로 갈 수 있게 (2026-09-28 최현서 9번). 마우스를 안 올린 줄에서는 설계서
         // 4.3.3 L604 대로 숨긴다
+        // 고른 줄에서는 흐름 안(줄 오른쪽 아래)에 놓는다 — 줄 위에 띄우면 기간 줄 끝(최근 관측 월)을
+        // 늘 가렸다 (2026-09-28 검토). 마우스만 올린 줄은 전처럼 위에 띄운다
         className={[
-          "absolute bottom-s3 right-s3 rounded-[6px] border px-s2 py-[2px] text-[11px] text-title transition-opacity hover:border-edge-strong",
-          "focus-visible:opacity-100 group-hover:opacity-100",
-          on ? "border-accent-edge bg-accent-subtle opacity-100" : "border-transparent bg-card opacity-0",
+          "rounded-[6px] border px-s2 py-[2px] text-[11px] text-title transition-opacity hover:border-edge-strong",
+          on
+            ? "self-end border-accent-edge bg-accent-subtle"
+            : "absolute bottom-s3 right-s3 border-transparent bg-card opacity-0 focus-visible:opacity-100 group-hover:opacity-100",
         ].join(" ")}
       >
         관계 보기 ›

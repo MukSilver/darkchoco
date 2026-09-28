@@ -19,10 +19,10 @@
 
 "use client";
 
-import { useEffect, useMemo, type CSSProperties } from "react";
+import { useEffect, useMemo, type CSSProperties, type ReactNode } from "react";
 
+import MapCanvas, { type MapSelection, type MapView } from "./MapCanvas";
 import PlayGlyph from "./PlayGlyph";
-import HexMap from "./HexMap";
 import { islandToken } from "@/lib/islands";
 import type { MapLayout } from "@/lib/layout";
 import { parseQuarter } from "@/lib/quarter";
@@ -65,7 +65,27 @@ export type TimelineTabProps = {
    * 그려 분기마다 축척이 같다 (G-10 묶음 4). 없으면 분기마다 제 칸에 맞춘다
    */
   mapSize?: { w: number; h: number };
+  /**
+   * 지도에서 고른 것. 타임라인 지도(Historical Map · 시점 비교)도 같은 선택을 쓰고, 누르면
+   * 지도처럼 고른다 — 「블록의 기능은 2D 지도와 같다」 (2026-09-28 최현서 3번)
+   */
+  selection: MapSelection;
+  onSelect: (s: MapSelection) => void;
+  /** 분기 → 영토 최근 관측일(`MM-DD`). 툴팁 다섯째 줄 */
+  lastSeenAt: (ym: string) => Record<string, string>;
+  /** 타임라인 지도 줌 · 이동. Historical Map 과 시점 비교 A · B 가 같이 쓴다 — 두 장이 같이 움직인다 */
+  view: MapView;
+  onView: (v: MapView) => void;
 };
+
+const NO_SELECTION: MapSelection = { kind: "none" };
+
+/** 타임라인 지도 힌트. 관계선은 안 그리므로 지도 탭 문구와 다르다 */
+function timelineHint(sel: MapSelection): string {
+  if (sel.kind === "territory") return `${sel.name} 선택됨 · 오른쪽 패널에 정보`;
+  if (sel.kind === "island") return `${sel.name} 섬 선택됨`;
+  return "영토에 마우스를 올리면 정보 · 누르면 선택";
+}
 
 export default function TimelineTab({
   snaps,
@@ -79,9 +99,44 @@ export default function TimelineTab({
   onSpeed,
   nameOf,
   mapSize,
+  selection,
+  onSelect,
+  lastSeenAt,
+  view,
+  onView,
 }: TimelineTabProps) {
   /** 분기 지도의 틀. 합친 크기가 있으면 그 크기로 넓혀 제 가운데에 놓는다 */
   const boxOf = (layout: MapLayout) => (mapSize ? centerBox(layout.viewBox, mapSize) : layout.viewBox);
+
+  /**
+   * 분기 지도 한 장 — 지도 탭과 같은 캔버스(줌 · 끌기 · 툴팁 · 고르기). 전에는 그림만 그려서 줌도
+   * 툴팁도 없고, 영역 이름표만 있는 영토(hive · lockbit2 따위)는 어디까지인지 알 수 없었다
+   * (최현서 3번). 그 분기 지도에 없는 선택은 없는 것으로 본다(지도 탭 `liveSelection` 과 같게).
+   * `hint` 를 빈 글로 주면 힌트 알약을 안 낸다
+   */
+  const mapOf = (snap: Snapshot, label: string, hint?: string) => {
+    const has =
+      selection.kind === "territory"
+        ? snap.layout.territories.some((t) => t.territoryId === selection.id)
+        : selection.kind === "island"
+          ? snap.layout.islands.some((i) => i.islandKey === selection.key)
+          : true;
+    const sel = has ? selection : NO_SELECTION;
+    return (
+      <MapCanvas
+        layout={snap.layout}
+        viewBox={boxOf(snap.layout)}
+        selection={sel}
+        onSelect={onSelect}
+        lastSeen={lastSeenAt(snap.ym)}
+        view={view}
+        onView={onView}
+        framed={false}
+        label={label}
+        hint={hint ?? timelineHint(sel)}
+      />
+    );
+  };
   const at = Math.max(
     0,
     snaps.findIndex((s) => s.ym === current),
@@ -199,7 +254,7 @@ export default function TimelineTab({
         <div className="flex shrink-0 flex-wrap items-center gap-s4">
           <nav
             aria-label="시점 고르기"
-            className="flex min-w-0 max-w-full gap-s1 overflow-x-auto rounded-[12px] bg-track p-[3px] [scrollbar-width:thin]"
+            className="flex min-w-0 max-w-full gap-s1 overflow-x-auto rounded-[12px] bg-track p-[3px] [scrollbar-width:thin] [scrollbar-color:var(--t-border-strong)_transparent]"
           >
             {chips.map(({ year, snap }) => {
               const marks = compare
@@ -300,8 +355,9 @@ export default function TimelineTab({
             */}
             <div
               className={[
-                "relative h-[30px] rounded-[8px] border hover:border-edge-strong",
-                playing ? "border-accent" : "border-edge",
+                // 재생 중 강조 테두리를 마우스 올림이 지우지 않게 멈춰 있을 때만 hover 를 단다
+                "relative h-[30px] rounded-[8px] border",
+                playing ? "border-accent" : "border-edge hover:border-edge-strong",
               ].join(" ")}
             >
               <select
@@ -359,8 +415,12 @@ export default function TimelineTab({
 
         {변화 ? (
           <div className="grid shrink-0 grid-cols-1 gap-s4 @min-[560px]:grid-cols-2">
-            <SideMap mark="A" snap={변화.a} viewBox={boxOf(변화.a.layout)} />
-            <SideMap mark="B" snap={변화.b} viewBox={boxOf(변화.b.layout)} />
+            <SideMap mark="A" snap={변화.a}>
+              {mapOf(변화.a, `A ${변화.a.ym} 지도`)}
+            </SideMap>
+            <SideMap mark="B" snap={변화.b}>
+              {mapOf(변화.b, `B ${변화.b.ym} 지도`)}
+            </SideMap>
           </div>
         ) : (
         <section className="relative flex h-[400px] shrink-0 flex-col rounded-[14px] border border-edge bg-canvas p-s5">
@@ -397,13 +457,14 @@ export default function TimelineTab({
           </span>
 
           {/* 큰 분기 글씨(워터마크)는 지도 밑에 깐다 — 전에는 지도 위층에 칠해졌다 */}
-          <div className="relative z-[1] min-h-0 flex-1">
-            <HexMap layout={now.layout} viewBox={boxOf(now.layout)} />
+          <div className="relative z-[1] flex min-h-0 flex-1 flex-col">
+            {/* 재생 중에는 힌트를 걷는다 — 「재생 중」 배지와 같은 자리다 */}
+            {mapOf(now, `${now.ym} 지도`, playing ? "" : undefined)}
           </div>
 
           {playing && (
             <div
-              className="absolute bottom-[66px] left-s5 flex items-center gap-s2 rounded-full px-s4 py-s2 text-[12px] text-on-accent"
+              className="absolute bottom-[66px] left-s5 z-20 flex items-center gap-s2 rounded-full px-s4 py-s2 text-[12px] text-on-accent"
               style={{ background: "var(--t-accent)" }}
             >
               <span aria-hidden className="size-[6px] rounded-full bg-white" />
@@ -665,8 +726,11 @@ function TimeSlider({
 }
 
 /** 비교 모드의 지도 한 장. A 와 B 를 나란히 놓는다 (피그마 ⑦-9c) */
-/** 시점 비교 한 장. A · B 가 같은 크기 틀(`viewBox`)이라 축척이 같다 — 전에는 섬이 적은 A 가 크게 확대됐다 */
-function SideMap({ mark, snap, viewBox }: { mark: "A" | "B"; snap: Snapshot; viewBox: string }) {
+/**
+ * 시점 비교 한 장. A · B 가 같은 크기 틀이라 축척이 같고(전에는 섬이 적은 A 가 크게 확대됐다),
+ * 줌 · 이동을 같이 쓴다. 지도는 부모가 `children` 으로 넘긴다
+ */
+function SideMap({ mark, snap, children }: { mark: "A" | "B"; snap: Snapshot; children: ReactNode }) {
   return (
     <section className="relative flex h-[340px] flex-col rounded-[14px] border border-edge bg-canvas p-s5">
       <header className="z-10 flex shrink-0 flex-wrap items-center gap-s3">
@@ -690,9 +754,7 @@ function SideMap({ mark, snap, viewBox }: { mark: "A" | "B"; snap: Snapshot; vie
         {snap.ym}
       </span>
 
-      <div className="relative z-[1] min-h-0 flex-1">
-        <HexMap layout={snap.layout} viewBox={viewBox} />
-      </div>
+      <div className="relative z-[1] flex min-h-0 flex-1 flex-col">{children}</div>
     </section>
   );
 }
