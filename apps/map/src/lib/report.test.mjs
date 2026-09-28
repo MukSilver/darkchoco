@@ -99,6 +99,32 @@ test('공식 발표 변형 (L698) — 칩은 공식 발표 · 외부 확인, 표
   assert.deepEqual(bare.chips.map((c) => c.label), ['공식 발표', bare.id]);
 });
 
+test('공식 발표 여부 (G-9) — 게시에 붙은 사고는 칩 둘 · 표 세 칸을 더하고 판정 칩은 그대로다', () => {
+  const inc = { id: 'INC-200', confirm: '언론 보도', announcedAt: '2026-05-27', gapDays: 0 };
+  const e = ev({ kind: 'data_post', verdict: 'low', risk: 'medium', incident: inc });
+  const plain = eventReport({ ...e, incident: undefined }, NAMES, [], []);
+  const m = eventReport(e, NAMES, [], []);
+  assert.equal(m.official, false, '공식 발표 변형이 아니다 — 게시 사건 팝업이다');
+  assert.deepEqual(m.chips.map((c) => [c.label, c.tone]), [
+    ...plain.chips.slice(0, -1).map((c) => [c.label, c.tone]),
+    ['공식 발표', 'info'],
+    ['외부 확인 · 언론 보도', 'neutral'],
+    [e.id, 'neutral'],
+  ]);
+  assert.deepEqual(m.fields.slice(0, plain.fields.length), plain.fields);
+  assert.deepEqual(m.fields.slice(plain.fields.length).map((f) => [f.label, f.value]), [
+    ['공식 발표 사고', 'INC-200'],
+    ['공표 시점', '2026-05-27'],
+    ['게시와 공표 사이', '같은 날 무렵'],
+  ]);
+  assert.ok(m.description.startsWith(plain.description), '판정 문장은 그대로 두고 덧붙인다');
+  assert.ok(m.description.endsWith('같은 사고의 공식 발표(INC-200)가 있고, 외부 확인은 「언론 보도」입니다.'));
+  assert.ok(JSON.stringify(reportJson(m)).includes('INC-200'), 'JSON 내보내기에도 그대로');
+  const bare = eventReport(ev({ incident: { id: 'INC-9', confirm: '조직 공식 발표' } }), NAMES, [], []);
+  assert.deepEqual(bare.fields.slice(-2).map((f) => f.value), ['기록 없음', '기록 없음'], '공표일이 비면');
+  assert.equal(bare.chips.at(-2).tone, 'success');
+});
+
 test('설명은 분류 칸으로만 짓는다 — 자유 글 칸은 섞이지 않는다', () => {
   const e = ev({
     kind: 'sale', verdict: 'high', actorTerritoryId: 'ash', territoryId: 'bf', country: 'KR', industry: '유통',

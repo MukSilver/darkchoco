@@ -12,9 +12,23 @@
  *   설명              검증 요약 · 비고(사람이 쓴 글) 대신 분류 칸으로 지은 자동 문장
  *   출처              원문 URL · 캡처 · 받기 없이 소스 종류만. 굽기가 링크를 안 싣는다
  *   활동도 영향 줄     없다 (설계서 L697, 5.3 ⑦-5)
+ *
+ * 게시 사건에 같은 사고로 특정된 공식 발표 사고가 붙어 있으면(설계서 사건 칸 「공식 발표
+ * 여부」, G-9) 칩에 「공식 발표」 · 외부 확인 값을, 표에 사고 번호 · 공표 시점 · 게시와 공표
+ * 사이를 더한다. 게시의 판정 칩은 그대로다 — 둘이 어긋나도 고치지 않는다
  */
 
-import { EV_KIND_LABEL, EV_KIND_TONE, RISK_LABEL, RISK_TONE, eventTitle, sizeText, utcStamp } from "./events.ts";
+import {
+  CONFIRM_TONE,
+  EV_KIND_LABEL,
+  EV_KIND_TONE,
+  RISK_LABEL,
+  RISK_TONE,
+  eventTitle,
+  gapText,
+  sizeText,
+  utcStamp,
+} from "./events.ts";
 import { CONF_CHIP, CONF_LABEL, KIND_LABEL, KIND_ORDER, SIZE_LABEL, VERDICT_LABEL, confOfVerdict, josa } from "./relations.ts";
 import type { Confidence, Ev, Relation } from "./types.ts";
 
@@ -92,16 +106,6 @@ function countryText(code: string): string {
 }
 
 /**
- * 외부 확인 칩 색. 조직 · 규제기관이 스스로 밝힌 것만 success 로 두고 언론 보도는
- * neutral 이다. 시안에 이 칩이 없어 정한 값이다. 연구자 발견 · 게시글만인 사고는
- * 굽기가 싣지 않는다 (2026-09-28 G-8)
- */
-const CONFIRM_TONE: Record<string, string> = {
-  "조직 공식 발표": "success",
-  "규제기관 확정": "success",
-};
-
-/**
  * 연결된 사건 — 수집 DB 「같은 사건」 (설계서 L691 · L703). **양쪽 어느 줄에 적혀도
  * 잇는다** — 같은 사건은 방향이 없는 관계인데 노션에는 한쪽 줄에만 적힌 것이 있다.
  * 화면에 안 나오는 사건(반출 제외 · 허위)은 뺀다. 최신순이다.
@@ -163,6 +167,10 @@ export function eventSummary(e: Ev, names: ReportNames): string {
     if (e.confirm) parts.push(`외부 확인은 「${e.confirm}」입니다.`);
   } else {
     parts.push(`검증 판정은 「${VERDICT_LABEL[e.verdict]}」입니다.`);
+    // 공식 발표 여부 (G-9). 판정은 게시 것 그대로 두고 사고가 있다는 것만 덧붙인다
+    if (e.incident) {
+      parts.push(`같은 사고의 공식 발표(${e.incident.id})가 있고, 외부 확인은 「${e.incident.confirm}」입니다.`);
+    }
   }
   return parts.join(" ");
 }
@@ -210,10 +218,18 @@ export function eventReport(
     ];
   } else {
     const conf = confOfVerdict(e.verdict);
+    const inc = e.incident;
     chips = [
       ...(e.kind ? [{ label: EV_KIND_LABEL[e.kind], tone: EV_KIND_TONE[e.kind] }] : []),
       ...(conf ? [{ label: CONF_LABEL[conf], tone: CONF_CHIP[conf] }] : []),
       ...(e.risk ? [{ label: `위험도 ${RISK_LABEL[e.risk]}`, tone: RISK_TONE[e.risk] }] : []),
+      // 공식 발표 여부 (G-9) — 공식 발표 팝업(설계서 L698)과 같은 두 칩. 새 칩 이름은 안 만든다
+      ...(inc
+        ? [
+            { label: EV_KIND_LABEL.official, tone: EV_KIND_TONE.official },
+            { label: `외부 확인 · ${inc.confirm}`, tone: CONFIRM_TONE[inc.confirm] ?? "neutral" },
+          ]
+        : []),
       idTag,
     ];
     const actor = e.actorTerritoryId && e.actorTerritoryId !== e.territoryId ? e.actorTerritoryId : null;
@@ -224,6 +240,16 @@ export function eventReport(
       { label: "게시 위치", value: actor ? `${names.nameOf(actor)} → ${place}` : place },
       { label: "유출 규모", value: size },
       itemField,
+      ...(inc
+        ? [
+            { label: "공식 발표 사고", value: inc.id },
+            { label: "공표 시점", value: inc.announcedAt ?? "기록 없음" },
+            {
+              label: "게시와 공표 사이",
+              value: typeof inc.gapDays === "number" ? gapText(inc.gapDays) : "기록 없음",
+            },
+          ]
+        : []),
     ];
   }
 

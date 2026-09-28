@@ -14,7 +14,7 @@
 import raw from "@/data/map.json";
 import { DARK_ISLANDS } from "./islands";
 import { SAMPLE } from "./sample";
-import type { ActorInfo, Ev, MapData, Relation, Territory } from "./types";
+import type { ActorInfo, Ev, EvIncident, MapData, Relation, Territory } from "./types";
 
 const baked = raw as unknown as Omit<MapData, "islands"> & {
   islands?: MapData["islands"];
@@ -98,6 +98,22 @@ function pickOfficial(e: Ev): Partial<Ev> {
 }
 
 /**
+ * 공식 발표 여부 (설계서 사건 칸, G-9). **게시 사건에만** 받는다 — 공식 발표 사건에 붙어
+ * 오면 버린다. 사고 번호 · 외부 확인(공식 3값) · 공표일 · 일수 모양이 맞아야 받는다
+ */
+function pickIncident(e: Ev): Partial<Ev> {
+  const i = e.incident;
+  if (e.kind === "official" || !i || typeof i.id !== "string" || !/^INC-\d+$/.test(i.id)) return {};
+  if (!CONFIRMS.has(i.confirm)) return {};
+  const out: EvIncident = { id: i.id, confirm: i.confirm };
+  if (typeof i.announcedAt === "string" && /^\d{4}-\d{2}-\d{2}$/.test(i.announcedAt)) {
+    out.announcedAt = i.announcedAt;
+    if (Number.isInteger(i.gapDays)) out.gapDays = i.gapDays;
+  }
+  return { incident: out };
+}
+
+/**
  * 제목 재료 (2026-09-25 최현서 결정). **분류 값만 받는다** — 국가는 두 글자
  * 부호, 산업 분야는 짧은 한국어 낱말, 규모는 숫자와 정해진 단위다. 모양이
  * 다르면 굽기를 안 거친 값일 수 있어 버린다.
@@ -127,6 +143,7 @@ function pickEv(e: Ev): Ev {
     ...(e.dateSubstituted ? { dateSubstituted: true } : {}),
     ...pickTitleBits(e),
     ...pickOfficial(e),
+    ...pickIncident(e),
   };
 }
 
