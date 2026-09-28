@@ -27,7 +27,9 @@
 """
 from __future__ import annotations
 
+import json
 import random
+import re
 import threading
 import time
 import urllib.parse
@@ -44,6 +46,9 @@ GAP = {
     "ransomfeed.it": (3.0, 6.0),
     # 텔레그램 공개 미리보기
     "t.me": (2.5, 5.0),
+    # X 를 읽는 Jina Reader (2026-09-26). 키 없는 한도가 20 RPM 이라 기본 2.5초(24 RPM)면 넘는다.
+    # 키가 있어도 같은 간격을 둔다 — 한 판에 부르는 수가 적어 늦어질 것이 없다
+    "r.jina.ai": (3.5, 6.0),
 }
 
 FLOOR = 2.0             # 어떤 호스트도 이 밑으로는 못 간다
@@ -84,6 +89,9 @@ class Fetcher:
     sess: requests.Session = field(default_factory=requests.Session)
     dry: bool = False       # 참이면 요청을 안 보내고 무엇을 할지만 적는다
     log: list = field(default_factory=list)
+    # 403 · 429 · 5xx 때 본문에 적힌 오류 **이름**만. 본문은 버린다 (2026-09-26).
+    # Jina 는 차단 사유 문구에 제3자 계정 주소를 넣으므로 문구는 안 남긴다
+    last_err: str = ""
 
     def _gap(self, host: str) -> float:
         lo, hi = GAP.get(host, GAP["_기본"])
@@ -95,15 +103,21 @@ class Fetcher:
         return self.hosts.setdefault(host, Host())
 
     def get(self, url: str, params: dict | None = None,
-            accept: str = "application/json") -> tuple[int, bytes, str]:
+            accept: str = "application/json",
+            headers: dict | None = None) -> tuple[int, bytes, str]:
         """한 번 받는다. 재시도하지 않는다.
 
         재시도는 부르는 쪽이 정한다. 여기서 돌리면 상한이 흐려진다.
-        돌려주는 것은 (상태코드, 몸통, Content-Type) 이다."""
+        돌려주는 것은 (상태코드, 몸통, Content-Type) 이다.
+
+        `headers` 는 더 실을 머리다(인증 등). **로그에 안 남긴다.** UA 와 Accept 는
+        여기서 정한 값이 이긴다 — 부르는 쪽이 UA 를 바꿔 다른 도구인 척하지 않게 한다."""
         host = urllib.parse.urlparse(url).netloc.lower()
         st = self.state(host)
         if st.off:
             raise Blocked("%s 는 껐다: %s" % (host, st.off))
+        머리 = {**(headers or {}), "User-Agent": UA, "Accept": accept}
+        self.last_err = ""
 
         with self.lock:                      # 동시에 하나만 나간다
             wait = self._gap(host) - (time.monotonic() - st.last)
@@ -123,7 +137,7 @@ class Fetcher:
                 r = self.sess.get(
                     url, params=params, timeout=TIMEOUT, stream=True,
                     allow_redirects=True,
-                    headers={"User-Agent": UA, "Accept": accept})
+                    headers=머리)
             except requests.RequestException as e:
                 st.fails += 1
                 if st.fails >= FAIL_MAX:
@@ -136,6 +150,7 @@ class Fetcher:
                     st.fails += 1
                     if st.fails >= FAIL_MAX:
                         st.off = "%d 이 %d번 왔다" % (r.status_code, st.fails)
+                    self.last_err = _오류이름(r)
                     return r.status_code, b"", ""
 
                 ctype = (r.headers.get("Content-Type") or "").split(";")[0].strip().lower()
@@ -161,6 +176,23 @@ class Fetcher:
                        % (h, s.calls, max(lo, FLOOR), hi, s.fails,
                           ("  [꺼짐: %s]" % s.off) if s.off else ""))
         return "\n".join(out)
+
+
+def _오류이름(r) -> str:
+    """실패한 응답에서 오류 **이름**만 꺼낸다. 4 KiB 까지만 읽고, 못 읽으면 빈 글자.
+
+    JSON 봉투의 `name`(Jina 의 `AbuseAlleviationError` 등)이 있으면 그것, 없으면 빈 글자다.
+    사유 문구(`message`)는 안 꺼낸다 — 제3자 계정 주소나 우리 계정 id 가 들어 있다."""
+    try:
+        buf = b""
+        for chunk in r.iter_content(4096):
+            buf += chunk
+            break
+        d = json.loads(buf.decode("utf-8", "replace"))
+    except (ValueError, requests.RequestException, TypeError):
+        return ""
+    이름 = d.get("name") if isinstance(d, dict) else ""
+    return 이름 if isinstance(이름, str) and re.fullmatch(r"[A-Za-z]{1,60}", 이름) else ""
 
 
 # 쓰기 메서드를 아예 두지 않는다. post 나 put 이 없는 것이 방어다.

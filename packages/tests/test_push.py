@@ -657,6 +657,31 @@ def test_못_올린_줄_로그에도_제목과_대상_조직이_안_나간다():
     assert _가짜제목 not in 글 and _가짜조직 not in 글
 
 
+# ── X (2026-09-26) ───────────────────────────────────────────────
+def _엑스(**바꿈) -> 줄:
+    """X 집계 계정 글(skills/collect/sources/x_jina.py). 대상 조직을 못 읽은 꼴."""
+    r = _기본(source="x", venue="x.com/어느계정", venue_kind="x", target_org="",
+             target_domain="", country="", kind="", post_url="",
+             title="Some shop customer list for sale", body="",
+             raw=json.dumps({"글 종류": "기타", "우리 대상": None}))
+    r.update(바꿈)
+    return r
+
+
+def test_X_소스는_X_로_간다():
+    p = push.만들기(_엑스(target_org="어떤 회사"))
+    assert _select(p, "소스") == "X"
+    assert _select(p, "게시 성격") == "확인 못 함"
+
+
+def test_X_는_텔레그램처럼_한국_신호가_있으면_올린다():
+    올림, 왜 = push.사건인가(_엑스(title="customer DB of shop.example.co.kr for sale"))
+    assert 올림 is True and "한국 신호" in 왜, 왜
+    assert push.사건인가(_엑스())[0] is False
+    r = _엑스(title="CVE for shop.example.co.kr", raw=json.dumps({"글 종류": "CVE 알림", "우리 대상": False}))
+    assert push.사건인가(r) == (False, "유출 글이 아닙니다")
+
+
 if __name__ == "__main__":
     시험 = [(k, v) for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     실패 = 0
