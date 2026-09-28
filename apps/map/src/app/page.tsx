@@ -1332,9 +1332,10 @@ export default function Page() {
             {/*
               타임라인 탭은 제 안에 시점 슬라이더를 갖는다 (피그마 ⑦-9b).
               스냅샷 바를 같이 두면 같은 값을 두 군데서 조작하게 된다.
-              관계 탭에도 없다 (피그마 ⑦-8) — 기준일은 「기준일 옮기기」로만 바꾼다
+              관계 탭에는 둔다 — 피그마 ⑦-8 에는 없어 기준일을 「기준일 옮기기」로만 바꿨고, 시점을
+              옮기려면 다른 탭에 다녀와야 했다 (2026-09-28 최현서 10번)
             */}
-            {results === null && tab !== "timeline" && tab !== "relation" && (
+            {results === null && tab !== "timeline" && (
               <SnapshotBar
                 from={FROM}
                 to={TO}
