@@ -36,6 +36,7 @@
 from __future__ import annotations
 
 import collections
+import http.client
 import json
 import sys
 import time
@@ -62,6 +63,10 @@ NEEDS_PACKAGES: list[str] = []      # 표준 라이브러리만 씁니다
 
 간격 = 62.0          # 초. 1req/분/엔드포인트 (실측)
 연속실패_상한 = 3
+# 한 번 받기가 실패한 것으로 셀 예외. **IncompleteRead(HTTPException) 도 넣습니다.** Tor 로 받다가
+# 응답이 잘리면 나는데 OSError 가 아니라서 빠져나가 갈래 하나를 통째로 죽였습니다(2026-09-25 검토).
+# 조사기 밖에서 잡을 일이 생기면 이것을 가져다 씁니다 — http 를 부르는 자리는 조사기 안에만 둡니다(test_직접호출금지)
+받기오류 = (urllib.error.URLError, OSError, ValueError, http.client.HTTPException)
 # 피해 목록을 몇 달치 받나. **여섯 달을 받습니다.**
 #
 # 예전에는 0(안 받음)이었습니다. apps/dls-observatory/dls_fill.py 가 같은
@@ -268,10 +273,13 @@ def _피해모으기(마지막: list[float], 개월수: int, op=None) -> tuple[d
             실패 = 0
             print(f"      {i}/{len(달들)}  {년}-{월:02d}  {len(건들) if isinstance(건들, list) else 0}건",
                   flush=True)
-        except (urllib.error.URLError, OSError, ValueError) as e:
+        except 받기오류 as e:
             못본달.append(f"{년}-{월:02d}({type(e).__name__})")
             실패 += 1
             if 실패 >= 연속실패_상한:
+                # 멈추면 뒤의 달은 안 물었다. 그것도 못 받은 달로 적어야 「N달 중 M달」 이
+                # 맞게 나온다. 안 적으면 하나도 못 받은 판이 반쯤 받은 판으로 보였다(2026-09-25 검토)
+                못본달 += [f"{y}-{m:02d}(안 물음)" for y, m in 달들[i:]]
                 못본달.append("연속 실패로 멈춤")
                 break
             continue
@@ -337,7 +345,7 @@ def 조사(*, dry: bool = False, limit: int = 0,
     print("    집계처에서 그룹 목록을 받습니다", flush=True)
     try:
         그룹들 = _받기(rl_groups(), 마지막, op)
-    except (urllib.error.URLError, OSError, ValueError) as e:
+    except 받기오류 as e:
         yield Place(갈래="ransom", 이름="(그룹 목록)",
                     못본이유=f"그룹 목록을 못 받았습니다: {e}",
                     받은곳="ransomware.live/groups")
@@ -351,6 +359,10 @@ def 조사(*, dry: bool = False, limit: int = 0,
 
     피해, 못본달 = _피해모으기(마지막, 개월수, op) if 개월수 > 0 else ({}, [])
     기간 = f"최근 {개월수}달" if 개월수 > 0 else ""
+    if 못본달:
+        # 대시보드 로그 요약이 이 줄을 집습니다 (worker.js 요약무늬). 문구를 바꾸면 거기도 봅니다
+        print(f"    피해 목록 {개월수}달 중 {len([x for x in 못본달 if '(' in x])}달을 못 받아 "
+              "규모 · 피해 대상 · 한국 관련 유출 · 최근 활동은 이번 판에 안 씁니다", flush=True)
 
     본것 = 0
     for g in 그룹들:
@@ -381,7 +393,16 @@ def 조사(*, dry: bool = False, limit: int = 0,
             받은곳="ransomware.live/groups",
         )
 
-        if d:
+        # **못 받은 달이 있으면 피해 목록으로 센 네 칸을 안 채웁니다** (2026-09-25 최현서 결정).
+        #
+        # 규모 · 피해 대상 · 한국 관련 유출 · 최근 활동은 6달치를 다 받아야 맞는 숫자입니다.
+        # 한 달이 빠진 채로 쓰면 노션 숫자가 내려갔다가 다음 판에 돌아옵니다. 9/23 미리보기가
+        # 2026-06 을 못 받아 규모 52 · 피해 대상 46 줄이 바뀐다고 나왔는데, 다 받은 판은
+        # 14 · 9 였습니다.
+        #
+        # 값을 안 채우면 노션값() 이 그 칸을 안 냅니다. 노션의 지금 값이 그대로 남습니다.
+        # 상태 · 확인일 · 주소는 그룹 목록에서 오므로 그대로 씁니다.
+        if d and not 못본달:
             p.피해기업수 = d["건수"]
             if d["마지막"]:
                 p.최근활동 = d["마지막"]
