@@ -29,14 +29,14 @@ sys.path.insert(0, str(ROOT / "packages"))
 sys.path.insert(0, str(ROOT))
 
 from hub.places.write import 갈래별_DB, 명부, 반영결과  # noqa: E402
-from hub.places.backoff import 기록 as 두드림기록  # noqa: E402
+from hub.places.backoff import 기록 as 두드림기록, 옮겨오기  # noqa: E402
 from hub.places.merge import 합치기  # noqa: E402
 from hub.places.place import Place  # noqa: E402
 from hub.places.extract import links
 from hub.places import egress  # noqa: E402
 from hub.places.probe import forum, ransom, telegram  # noqa: E402
 
-__all__ = ["한갈래", "여러갈래", "표로", "기본_표", "갈래들",
+__all__ = ["한갈래", "여러갈래", "표로", "기본_표", "기본_두드림", "갈래들",
            "차례", "됐다고_적기"]
 
 갈래들 = ("telegram", "forum", "ransom")
@@ -51,6 +51,16 @@ __all__ = ["한갈래", "여러갈래", "표로", "기본_표", "갈래들",
 
 def 기본_표() -> Path:
     return ROOT / "hub" / "data" / "places.db"
+
+
+def 기본_두드림() -> Path:
+    """죽은 곳 쉬기 기록. **규모 표와 떼어 둡니다** (2026-09-25).
+
+    `places.db` 의 규모 표에는 명부 이름이 있어 CI 캐시로 못 남깁니다. 두드림 표는 열쇠가
+    노션 page_id 라 이름이 없습니다. `places.yml` 이 이 파일만 캐시로 이어 받아 예약 실행에서도
+    쉬기가 먹게 합니다. 자세한 것은 backoff.py 머리말에.
+    """
+    return ROOT / "hub" / "data" / "backoff.db"
 
 
 _시계열 = """
@@ -444,7 +454,25 @@ def 한갈래(갈래: str, *, apply: bool = False, limit: int = 0,
     # **쉰 줄은 노션을 안 건드립니다.** 확인일도 안 바꿉니다.
     # 「오늘 봤는데 죽어 있었다」와 「오늘 안 봤다」는 다릅니다.
     지금때 = time.time()
-    자취 = 두드림기록(db or 기본_표())
+    # 표를 직접 넘긴 호출(시험 · 다른 표)은 전처럼 그 파일 하나를 씁니다
+    자취파일 = Path(db or 기본_두드림())
+    try:
+        자취 = 두드림기록(자취파일)
+    except sqlite3.DatabaseError as e:
+        # **깨진 기록 파일은 치우고 새로 시작합니다** (2026-09-25 검토). 캐시로 이어 받은 파일이
+        # 쓰는 도중 끊긴 채 넣어졌으면 SQLite 가 못 엽니다. 그대로 두면 판마다 여기서 죽고, 저장
+        # 단계가 같은 파일을 또 캐시에 넣어 사람이 캐시를 지울 때까지 되풀이됩니다. 쉬기 기록은
+        # 잃어도 다시 쌓이는 것이라 조사를 멈출 까닭이 못 됩니다. 파일은 지우지 않고 옆으로 옮깁니다
+        치운곳 = 자취파일.with_name(자취파일.name + ".깨짐")
+        자취파일.replace(치운곳)
+        r.문제.append(f"쉬기 기록 파일을 못 열어 새로 시작합니다 ({type(e).__name__}). "
+                     f"옛 파일은 {치운곳.name}")
+        자취 = 두드림기록(자취파일)
+    if not db:
+        try:
+            옮겨오기(자취, 기본_표())      # 로컬의 옛 기록. 새 파일이 비었을 때 한 번만
+        except Exception:  # noqa: BLE001  옛 기록을 못 가져와도 조사는 돕니다
+            pass
     try:
         볼것, 쉰것 = 자취.거를것(갈래, 볼것, 지금때)
     except Exception:  # noqa: BLE001  자취가 깨져도 조사는 돕니다

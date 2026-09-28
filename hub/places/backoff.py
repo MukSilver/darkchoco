@@ -22,6 +22,16 @@
 
 걸린 초도 같이 쌓습니다. 시간 제한(30초·90초)과 동시 수(6)를 지금은
 짐작으로 정해 두었는데, 이 숫자가 모이면 재서 정할 수 있습니다.
+
+## 파일을 따로 둡니다 — `hub/data/backoff.db` (2026-09-25)
+
+전에는 `places.db` 안의 표 하나였습니다. GitHub Actions 는 판마다 새 컨테이너라 그 파일이
+사라져 **예약 실행에서는 쉬기가 한 번도 안 먹었습니다.** 캐시로 남기지 못한 까닭은 같은 파일의
+규모 표가 (갈래, 명부 이름, 본때) 라서 이름이 깃허브에 남기 때문이었습니다.
+
+**이 표에는 이름이 없습니다.** 갈래 · 노션 page_id · 연속 실패 수 · 시각 · 걸린 초뿐입니다.
+그래서 이 표만 따로 떼어 캐시로 이어 받습니다(`places.yml`). 로컬의 옛 기록은 새 파일이
+비어 있을 때 `옮겨오기()` 가 한 번 가져옵니다.
 """
 
 from __future__ import annotations
@@ -29,7 +39,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-__all__ = ["기록", "쉼표", "최대쉼"]
+__all__ = ["기록", "쉼표", "최대쉼", "옮겨오기"]
 
 # 연속 실패 횟수 → 며칠 쉬나
 쉼표 = {0: 0, 1: 0, 2: 1, 3: 3, 4: 7}
@@ -63,8 +73,13 @@ class 기록:
         self.db = Path(db)
         self.db.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(str(self.db))
-        self.conn.executescript(_표)
-        self.conn.commit()
+        try:
+            self.conn.executescript(_표)
+            self.conn.commit()
+        except sqlite3.DatabaseError:
+            # 못 여는 파일이면 연결을 닫고 올립니다. 안 닫으면 윈도에서 부르는 쪽이 파일을 못 치웁니다
+            self.conn.close()
+            raise
 
     def close(self) -> None:
         self.conn.close()
@@ -127,9 +142,38 @@ class 기록:
     def 저장(self) -> None:
         self.conn.commit()
 
+    def 줄수(self) -> int:
+        return self.conn.execute("SELECT COUNT(*) FROM 두드림").fetchone()[0]
+
     # ── 재기 ────────────────────────────────────────────────────
     def 걸린초분포(self, 갈래: str = "") -> list[float]:
         """성공한 것들이 몇 초에 답했나. 시간 제한을 정하는 근거입니다."""
         q = ("SELECT 걸린초 FROM 두드림 WHERE 마지막성공 > 0 AND 걸린초 > 0"
              + (" AND 갈래=?" if 갈래 else "") + " ORDER BY 걸린초")
         return [r[0] for r in self.conn.execute(q, (갈래,) if 갈래 else ())]
+
+
+def 옮겨오기(새: 기록, 옛: Path | str) -> int:
+    """옛 `places.db` 의 두드림 표를 새 파일로 옮깁니다. **새 파일이 비어 있을 때만.**
+
+    한 번 옮긴 뒤로는 새 파일이 정본이라 다시 안 옮깁니다. 옛 파일이 없거나 표가 없으면
+    0 입니다. 옛 파일은 안 건드립니다 — 규모 표와 차례표가 같이 들어 있습니다.
+    """
+    옛 = Path(옛)
+    if 새.줄수() or not 옛.is_file() or 옛.resolve() == 새.db.resolve():
+        return 0
+    try:
+        # 읽기 전용으로 엽니다. Windows 경로(역슬래시 · 한글)는 as_uri() 로 꼴을 맞춥니다
+        src = sqlite3.connect(옛.resolve().as_uri() + "?mode=ro", uri=True)
+        try:
+            줄들 = src.execute(
+                "SELECT 갈래, page_id, 연속실패, 마지막시도, 마지막성공, 걸린초 FROM 두드림").fetchall()
+        finally:
+            src.close()
+    except sqlite3.Error:
+        return 0
+    새.conn.executemany(
+        "INSERT OR IGNORE INTO 두드림 (갈래,page_id,연속실패,마지막시도,마지막성공,걸린초) "
+        "VALUES (?,?,?,?,?,?)", 줄들)
+    새.conn.commit()
+    return len(줄들)
