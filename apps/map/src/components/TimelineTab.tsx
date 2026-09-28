@@ -249,9 +249,15 @@ export default function TimelineTab({
             </button>
             <button
               type="button"
-              aria-label={playing ? "정지" : "재생"}
+              aria-label={playing ? "정지" : at >= snaps.length - 1 ? "처음부터 재생" : "재생"}
+              title={!playing && at >= snaps.length - 1 ? "처음 시점부터 재생" : undefined}
               disabled={compare !== null}
-              onClick={() => onPlaying(!playing)}
+              onClick={() => {
+                // 끝(가장 최근 시점)에서 누르면 첫 시점으로 되감고 재생한다. 첫 화면이 끝이라
+                // 전에는 첫 틱에 「끝이다」로 보고 바로 멈췄다 (2026-09-28 코드 분석). 스냅샷 바와 같은 규칙
+                if (!playing && at >= snaps.length - 1 && snaps.length > 1) onPick(snaps[0].ym);
+                onPlaying(!playing);
+              }}
               className="grid size-[30px] place-items-center rounded-[8px] bg-accent text-on-accent disabled:opacity-40"
             >
               <Glyph kind={playing ? "pause" : "play"} />

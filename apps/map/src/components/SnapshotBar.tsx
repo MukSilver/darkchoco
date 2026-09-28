@@ -6,7 +6,8 @@
  * (설계서 3.1). **이번 분기만 오늘까지 본다** — 아직 오지 않은 날이 최근
  * 7일·30일 창에 들어가면 급상승과 변화율이 비어 버린다.
  *
- * 재생은 한 분기씩 넘기고 끝에서 멈춘다. 타임라인 탭의 재생도 분기 단위라
+ * 재생은 한 분기씩 넘기고 끝에서 멈춘다. 끝에서 ▶ 를 누르면 첫 분기로 되감고
+ * 재생한다 (첫 화면이 끝이다). 타임라인 탭의 재생도 분기 단위라
  * 이제 둘이 같은 간격이지만, 켠 채로 탭을 옮기면 보고 있던 자리를 놓치므로
  * 여전히 탭 전환 때 멈춘다.
  */
@@ -56,6 +57,14 @@ export default function SnapshotBar({
 }: SnapshotBarProps) {
   const list = quarterRange(from, to);
   const i = Math.max(0, list.indexOf(value));
+  /** 끝(가장 최근 분기)에서 ▶ 를 누르면 첫 분기로 되감고 재생한다 */
+  const atEnd = i >= list.length - 1;
+  const togglePlay = () => {
+    // 첫 화면의 기준일이 끝이라 전에는 ▶ 가 첫 틱에 「끝이다」로 보고 바로 멈췄다
+    // (2026-09-28 코드 분석 — 첫 화면에서 ▶ 가 아무 일도 안 함). 타임라인 탭 ▶ 와 같은 규칙이다
+    if (!playing && atEnd && list.length > 1) onChange(list[0]);
+    onPlaying(!playing);
+  };
 
   useEffect(() => {
     if (!playing) return;
@@ -86,8 +95,9 @@ export default function SnapshotBar({
     >
       <button
         type="button"
-        aria-label={playing ? "정지" : "재생"}
-        onClick={() => onPlaying(!playing)}
+        aria-label={playing ? "정지" : atEnd ? "처음부터 재생" : "재생"}
+        title={!playing && atEnd ? "처음 분기부터 재생" : undefined}
+        onClick={togglePlay}
         className="grid size-[34px] shrink-0 place-items-center rounded-[10px] text-[13px] text-on-accent"
         style={{ background: "var(--t-accent)" }}
       >

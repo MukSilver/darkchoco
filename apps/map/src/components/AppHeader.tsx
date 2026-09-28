@@ -138,8 +138,9 @@ export default function AppHeader({
               }
               className={[
                 "flex items-center gap-s2 rounded-[6px] border px-s4 py-[5px] text-[13px]",
+                // 지금 웹은 누를 곳이 없는 표시다 (설계서 4.2.1) — 손가락 커서를 안 준다
                 on
-                  ? "border-edge bg-panel font-semibold text-strong"
+                  ? "cursor-default border-edge bg-panel font-semibold text-strong"
                   : "border-transparent text-label disabled:cursor-not-allowed",
               ].join(" ")}
             >
