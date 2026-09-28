@@ -11,6 +11,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  boxSize,
+  centerBox,
   chipQuarter,
   compareStart,
   comparePick,
@@ -132,4 +134,13 @@ test('눈금 최댓값과 썸네일 viewBox', () => {
 
   // 가장 큰 폭 · 높이로 맞추고 제 가운데에 둔다
   assert.deepEqual(thumbBoxes(['0 0 100 50', '-10 -20 200 100']), ['-50 -25 200 100', '-10 -20 200 100']);
+});
+
+test('모든 분기를 합친 크기 틀 — 축척이 같고 제 가운데, 원래보다 작으면 원래 크기 (G-10 묶음 4)', () => {
+  const size = boxSize(['0 0 100 50', '-10 -20 200 100', '5 5 80 120']);
+  assert.deepEqual(size, { w: 200, h: 120 });
+  // 섬 하나뿐인 작은 분기도 같은 틀이라 지나치게 확대되지 않는다
+  assert.equal(centerBox('0 0 100 50', size), '-50 -35 200 120');
+  assert.equal(centerBox('0 0 300 40', size), '0 -40 300 120', '더 넓은 분기는 잘리지 않게 제 폭');
+  assert.deepEqual(boxSize([]), { w: 0, h: 0 });
 });

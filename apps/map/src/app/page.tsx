@@ -67,7 +67,7 @@ import {
   type SearchFilter,
 } from "@/lib/search";
 import { quarterEnd, quarterOfDate, spanOf, type QuarterKey } from "@/lib/quarter";
-import { quartersOf, snapshots, type Compare } from "@/lib/timeline";
+import { boxSize, centerBox, quartersOf, snapshots, type Compare } from "@/lib/timeline";
 
 /**
  * 「오늘」. **구운 시각이다.** 구운 파일이 없을 때만 보는 사람의 시계를 쓴다.
@@ -737,6 +737,16 @@ export default function Page() {
       ),
     [quarters],
   );
+  /**
+   * 모든 분기를 합친 지도 크기. 지도 탭 · Historical Map · 시점 비교 A/B 가 이 크기 틀로 그려
+   * 분기마다 축척이 같다 — 확대는 줌으로만 한다 (G-10 묶음 4, 최현서 3번). 지금 분기 판도
+   * 넣는다(스냅샷 목록 밖 분기여도 잘리지 않게)
+   */
+  const mapSize = useMemo(
+    () => boxSize([...snaps.map((s) => s.layout.viewBox), layout.viewBox]),
+    [snaps, layout],
+  );
+  const mapBox = useMemo(() => centerBox(layout.viewBox, mapSize), [layout, mapSize]);
   const nameOf = useMemo(() => {
     const m = new Map(DARK_ISLANDS.map((i) => [i.id as string, i.name]));
     return (id: string) => m.get(id) ?? id;
@@ -1184,10 +1194,12 @@ export default function Page() {
                 speed={speed}
                 onSpeed={setSpeed}
                 nameOf={nameOf}
+                mapSize={mapSize}
               />
             ) : tab === "map" ? (
               <MapCanvas
                 layout={layout}
+                viewBox={mapBox}
                 selection={liveSelection}
                 onSelect={select}
                 lastSeen={lastSeen}
