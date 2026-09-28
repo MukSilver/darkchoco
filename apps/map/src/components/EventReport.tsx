@@ -67,6 +67,11 @@ export default function EventReport({
   const body = useRef<HTMLDivElement>(null);
   // 누르기가 바깥에서 시작했을 때만 닫는다. 본문 글을 끌어 고르다 바깥에서 놓아도 안 닫힌다
   const downOutside = useRef(false);
+  // 팝업이 열린 때 (`event.timeStamp` 와 같은 시계). 열린 직후의 바깥 누름을 거르는 데 쓴다
+  const openedAt = useRef(0);
+  useEffect(() => {
+    openedAt.current = performance.now();
+  }, []);
 
   // 열리면 팝업에 초점을 옮기고, 닫히면 열기 전 자리로 돌려준다 (키보드로 연 사람)
   useEffect(() => {
@@ -124,7 +129,10 @@ export default function EventReport({
       // 뒤 화면을 어둡게 (L684). 모드와 무관하게 검은 막이라 토큰이 없다 — 화이트 판에서도 어두워야 한다
       style={{ background: "rgb(0 0 0 / 0.55)" }}
       onMouseDown={(e) => {
-        downOutside.current = e.target === e.currentTarget;
+        // 열린 직후(더블클릭의 두 번째 누름)는 바깥 누름으로 치지 않는다. 사건 줄이 한 번 클릭으로
+        // 팝업을 열게 되자, 줄을 더블클릭하면 두 번째 누름이 새로 깔린 막에 떨어져 팝업이 바로
+        // 닫혔다 (2026-09-28 검토)
+        downOutside.current = e.target === e.currentTarget && e.timeStamp - openedAt.current > 400 && e.detail < 2;
       }}
       onClick={(e) => {
         if (downOutside.current && e.target === e.currentTarget) onClose();

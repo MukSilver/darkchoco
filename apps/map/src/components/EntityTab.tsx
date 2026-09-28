@@ -260,6 +260,8 @@ export default function EntityTab({
                   }}
                   className={[
                     "cursor-pointer border-b border-divider last:border-0",
+                    // 초점 테두리는 안쪽에 — 표를 감싼 가로 스크롤 통이 바깥 테두리를 잘랐다 (2026-09-28 검토)
+                    "focus-visible:-outline-offset-2",
                     on ? "bg-row-selected" : "bg-panel hover-row",
                   ].join(" ")}
                 >

@@ -36,11 +36,7 @@ import HoverTip from "./HoverTip";
 import type { MapLayout } from "@/lib/layout";
 import { revealPan } from "@/lib/mapui";
 import type { RelView } from "@/lib/relations";
-
-/** 설계서 4.2.3 — 50%~200%, 25% 단위 */
-const ZOOM_MIN = 50;
-const ZOOM_MAX = 200;
-const ZOOM_STEP = 25;
+import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP, clampZoom, wheelSteps } from "@/lib/zoom";
 
 /**
  * 지도 판의 위아래 여백 (px). 아래는 힌트 알약과 줌 단추가 앉을 자리다 — 안 두면
@@ -108,6 +104,13 @@ export type MapCanvasProps = {
   reveal?: string | null;
   /** `reveal` 을 다 봤다. 옮겨야 했으면 새 줌 · 이동, 아니면 `null` */
   onRevealed?: (v: MapView | null) => void;
+  /**
+   * 테두리 · 바탕 틀을 그리나. 타임라인 블록(Historical Map · 시점 비교)처럼 이미 틀이 있는
+   * 자리에 넣을 때 거짓으로 준다. 기본은 참
+   */
+  framed?: boolean;
+  /** 그림 설명 (`aria-label`) — 여러 장을 같이 둘 때 가른다 */
+  label?: string;
 };
 
 /** 마우스 자리와 그때의 캔버스 크기 (px). 툴팁이 가장자리에서 뒤집을 때 쓴다 */
@@ -129,6 +132,8 @@ export default function MapCanvas({
   snapshot = null,
   reveal = null,
   onRevealed,
+  framed = true,
+  label,
 }: MapCanvasProps) {
   const { zoom, pan } = view;
   const setPan = (p: MapView["pan"]) => onView({ zoom, pan: p });
@@ -181,13 +186,18 @@ export default function MapCanvas({
     if (reveal) revealNow(reveal);
   }, [reveal]);
 
-  const step = (by: number) =>
-    onView({ pan, zoom: Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom + by)) });
+  const step = (by: number) => onView({ pan, zoom: clampZoom(zoom + by) });
+  // 휠은 모아서 문턱을 넘을 때 한 단계씩 (`wheelSteps`). 전에는 이벤트마다 25% 라 트랙패드 한 번에
+  // 50% ↔ 200% 끝까지 튀었다 (2026-09-28 코드 분석)
+  const wheelAcc = useRef(0);
 
   return (
     <div
       ref={box}
-      className="relative flex-1 overflow-hidden rounded-[14px] border border-edge bg-canvas"
+      aria-label={label}
+      className={
+        "relative flex-1 overflow-hidden " + (framed ? "rounded-[14px] border border-edge bg-canvas" : "")
+      }
     >
       {/* 점 격자 바탕. 피그마 캔버스에 깔려 있다 */}
       <div
@@ -207,9 +217,14 @@ export default function MapCanvas({
         영토 · 섬 이름표 위에서는 손가락 커서가 이긴다
       */}
       <div
-        className={"absolute inset-0 touch-none " + (grabbing ? "cursor-grabbing" : "cursor-grab")}
+        // 끄는 동안은 영토 · 섬 이름표의 손가락 커서도 쥔 손으로 덮는다 (2026-09-28 검토)
+        className={"absolute inset-0 touch-none " + (grabbing ? "cursor-grabbing [&_*]:cursor-grabbing" : "cursor-grab")}
         style={{ paddingTop: PAD_TOP, paddingBottom: PAD_BOTTOM }}
-        onWheel={(e) => step(e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP)}
+        onWheel={(e) => {
+          const r = wheelSteps(wheelAcc.current, e.deltaY, e.deltaMode);
+          wheelAcc.current = r.acc;
+          if (r.steps) step(r.steps * ZOOM_STEP);
+        }}
         onPointerDown={(e) => {
           drag.current = { x: e.clientX, y: e.clientY, px: pan.x, py: pan.y };
           moved.current = false;
@@ -290,6 +305,7 @@ export default function MapCanvas({
           <HexMap
             layout={layout}
             viewBox={viewBox}
+            zoom={zoom}
             selectedTerritory={
               selection.kind === "territory" ? selection.id : undefined
             }
@@ -318,17 +334,20 @@ export default function MapCanvas({
         />
       )}
 
-      <div
-        className="pointer-events-none absolute left-s5 flex items-center gap-s2 rounded-full border border-edge bg-panel px-s4 text-[12px] text-body"
-        style={{ bottom: "var(--s-5)", height: "var(--h-hint)" }}
-      >
-        <span
-          aria-hidden
-          className="size-[6px] rounded-full"
-          style={{ background: "var(--t-accent)" }}
-        />
-        {hint ?? hintText(selection, snapshot)}
-      </div>
+      {/* 힌트를 빈 글로 주면 알약을 안 낸다 (타임라인 재생 중 배지와 겹치지 않게) */}
+      {(hint ?? hintText(selection, snapshot)) !== "" && (
+        <div
+          className="pointer-events-none absolute left-s5 flex items-center gap-s2 rounded-full border border-edge bg-panel px-s4 text-[12px] text-body"
+          style={{ bottom: "var(--s-5)", height: "var(--h-hint)" }}
+        >
+          <span
+            aria-hidden
+            className="size-[6px] rounded-full"
+            style={{ background: "var(--t-accent)" }}
+          />
+          {hint ?? hintText(selection, snapshot)}
+        </div>
+      )}
 
       <div
         className="absolute right-s5 flex items-center gap-s3"
@@ -343,7 +362,7 @@ export default function MapCanvas({
             aria-label="축소"
             disabled={zoom <= ZOOM_MIN}
             onClick={() => step(-ZOOM_STEP)}
-            className="h-full rounded-l-full px-s4 text-[13px] text-body hover-seg disabled:text-disabled"
+            className="h-full rounded-l-full px-s4 text-[13px] text-body hover-row hover:text-title disabled:text-disabled"
           >
             −
           </button>
@@ -355,7 +374,7 @@ export default function MapCanvas({
             aria-label="확대"
             disabled={zoom >= ZOOM_MAX}
             onClick={() => step(ZOOM_STEP)}
-            className="h-full rounded-r-full px-s4 text-[13px] text-body hover-seg disabled:text-disabled"
+            className="h-full rounded-r-full px-s4 text-[13px] text-body hover-row hover:text-title disabled:text-disabled"
           >
             +
           </button>

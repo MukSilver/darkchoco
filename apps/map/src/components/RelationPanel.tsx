@@ -194,10 +194,12 @@ export default function RelationPanel(p: RelationPanelProps) {
         </div>
         {/* 중심이나 기준일이 바뀌면 칸 길이가 번져 바뀐다 — 전에는 딱 바뀌었다 (최현서 1번) */}
         <div className="flex h-[6px] overflow-hidden rounded-full bg-bar-track">
-          {mix.map((m) => (
+          {/* 칸은 자리 순서로 잇는다 — 종류로 이으면 차례가 바뀔 때 옮겨진 칸만 전환 없이 붙어 합이
+              잠깐 100% 가 아니었다 (2026-09-28 검토). 색도 같이 번진다 */}
+          {mix.map((m, i) => (
             <div
-              key={m.kind}
-              className="transition-[width] duration-[var(--dur-base)] ease-[var(--ease-out)]"
+              key={i}
+              className="transition-[width,background-color] duration-[var(--dur-base)] ease-[var(--ease-out)]"
               style={{ width: `${(m.count / total) * 100}%`, background: `var(--t-rel-${m.kind})` }}
             />
           ))}

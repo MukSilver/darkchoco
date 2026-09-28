@@ -63,7 +63,8 @@ export default function EventRow({
         if (ev.key === " " && onOpen) ev.preventDefault();
       }}
       title={onOpen ? "누르면 사건 보고서" : undefined}
-      aria-pressed={on}
+      // 한 번 클릭이 팝업이라 켜고 끄는 단추가 아니다 — 강조된 줄은 「지금 것」으로 알린다 (2026-09-28 검토)
+      aria-current={on ? "true" : undefined}
       className={[
         "flex w-full select-none gap-s3 rounded-[12px] border px-s3 py-s3 text-left",
         // 마우스 올림은 공통 줄 규칙(`hover-row`) — 전에는 패널 바탕과 거의 같은 bg-card 라 없는 셈이었다

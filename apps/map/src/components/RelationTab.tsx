@@ -30,6 +30,11 @@
  *
  * 근거 사건 없이 명부 「연결된 곳」에서 만든 관계선은 팝오버에 그 칸의 원문을
  * 보인다 (4.3.6). 굽기가 상대 이름이 든 항목만 골라 `note` 로 싣는다.
+ *
+ * **판은 지도처럼 줌 · 끌기가 된다** (2026-09-28 최현서 5번). 줌 규칙은 지도와 같은
+ * `zoom.ts` 다 (50~200%, 25% 단위, 휠은 모아서 한 단계씩). 끌고 놓은 것은 고르기로 치지
+ * 않는다. 중심이 바뀌거나 섬 간 보기로 들어가면 처음 값(100%, 가운데)으로 돌아온다.
+ * 선은 배율과 상관없이 늘 그리고, 라벨은 배율에 따라 단다 — 규칙은 `relgraph.ts` 머리말.
  */
 
 "use client";
@@ -53,6 +58,17 @@ import {
   type Hops,
   type RelView,
 } from "@/lib/relations";
+import {
+  boardFit,
+  labelScale,
+  legendShift,
+  nodeBoxes,
+  placeLabels,
+  textWidth,
+  type Pt,
+  type Rect,
+} from "@/lib/relgraph";
+import { ZOOM_MAX, ZOOM_MIN, ZOOM_STEP, clampZoom, wheelSteps } from "@/lib/zoom";
 
 export type RelPair = { from: string; to: string };
 
@@ -97,11 +113,14 @@ const H = 620;
 const CX = W / 2;
 const CY = H / 2 - 10;
 
-function textWidth(s: string, fontSize: number): number {
-  let w = 0;
-  for (const ch of s) w += /[가-힣ㄱ-ㆎ]/.test(ch) ? 1 : 0.6;
-  return w * fontSize;
-}
+/** 라벨 알약 높이 (viewBox 단위, 100%) */
+const LABEL_H = 26;
+
+/** 범례 상자가 덮는 판 왼쪽 폭 (px) — `left-s4` 16 + 폭 190 + 틈 12 */
+const LEGEND_COVER = 218;
+
+/** 줌 · 이동의 처음 값. 이동은 화면 px 다 (지도와 같다) */
+const VIEW_HOME = { zoom: 100, x: 0, y: 0 };
 
 function quarterText(q: QuarterKey): string {
   const { year, q: n } = parseQuarter(q);
@@ -125,8 +144,23 @@ type Node = {
 type Edge = {
   v: RelView;
   d: string;
-  mid: { x: number; y: number };
+  /** 라벨 자리 후보. 첫째가 곡선 위 `t` 자리, 나머지는 선을 따라 앞뒤로 옮긴 자리 */
+  spots: Pt[];
 };
+
+/**
+ * 노드 이름 · 육각형 자리 — 라벨이 피할 곳 (`placeLabels`). 둘째 글은 아래 노드 그리기의
+ * 글과 같아야 한다 (아래에 붙이면 「섬 · 활동도 N」, 옆에 붙이면 「활동도 N」)
+ */
+function boxesOf(n: Node, center: boolean): Rect[] {
+  const sub = n.side === "below" ? `${n.islandName} · 활동도 ${n.t.metrics.activity}` : `활동도 ${n.t.metrics.activity}`;
+  return nodeBoxes({ x: n.x, y: n.y, r: n.r, side: n.side, outer: n.outer, center, name: n.t.name, sub });
+}
+
+/** 라벨 알약 폭 (viewBox 단위, 100%) — 「Recruitment 14건」 */
+function labelWidth(v: RelView): number {
+  return textWidth(KIND_NAME[v.rel.kind], 13) + textWidth(`${v.count}건`, 12) + 34;
+}
 
 /**
  * 두 노드 사이 선. 노드 가장자리에서 시작해 화살촉 자리만큼 떨어져 끝난다.
@@ -134,7 +168,7 @@ type Edge = {
  * 라벨도 곡선 위 `t` 자리를 달리해 앉힌다 — 휘기만 하면 라벨 폭이 휜 거리보다
  * 넓어 서로 덮는다.
  */
-function edgePath(a: Node, b: Node, bend: number, t = 0.5): { d: string; mid: { x: number; y: number } } {
+function edgePath(a: Node, b: Node, bend: number, t = 0.5): { d: string; spots: Pt[] } {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const len = Math.hypot(dx, dy) || 1;
@@ -153,10 +187,16 @@ function edgePath(a: Node, b: Node, bend: number, t = 0.5): { d: string; mid: { 
   // 조절점은 곡선 가운데가 (mx, my) 를 지나도록 잡는다
   const qx = 2 * mx - (sx + ex) / 2;
   const qy = 2 * my - (sy + ey) / 2;
-  const u = 1 - t;
+  const at = (s: number): Pt => {
+    const u = 1 - s;
+    return { x: u * u * sx + 2 * u * s * qx + s * s * ex, y: u * u * sy + 2 * u * s * qy + s * s * ey };
+  };
+  // 기본 자리가 이름이나 다른 라벨에 막히면 선을 따라 앞뒤로 옮겨 본다. 양 끝 노드에는
+  // 붙지 않게 가운데 쪽으로 가둔다 (2026-09-28 최현서 5번 — 2단계에서 라벨과 이름이 겹쳤다)
+  const ts = [t, t + 0.12, t - 0.12, t + 0.24, t - 0.24].map((s) => Math.min(0.85, Math.max(0.15, s)));
   return {
     d: `M${sx.toFixed(1)},${sy.toFixed(1)}Q${qx.toFixed(1)},${qy.toFixed(1)} ${ex.toFixed(1)},${ey.toFixed(1)}`,
-    mid: { x: u * u * sx + 2 * u * t * qx + t * t * ex, y: u * u * sy + 2 * u * t * qy + t * t * ey },
+    spots: [...new Set(ts)].map(at),
   };
 }
 
@@ -256,6 +296,48 @@ export default function RelationTab(p: RelationTabProps) {
     onMouseEnter: () => setHoverEdge(id),
     onMouseLeave: () => setHoverEdge((h) => (h === id ? null : h)),
   });
+
+  /*
+   * 줌 · 이동 (2026-09-28 최현서 5번 — 「관계도도 확대/축소」). 전에는 viewBox 1000×620 고정이라
+   * 2단계에서 라벨과 이름이 겹쳐도 볼 방법이 없었다. 지도처럼 판을 통째로 옮기고 키운다.
+   * 중심이 바뀌거나 섬 간 보기로 들어가면 처음 값으로 — 그리는 그래프가 통째로 바뀐다.
+   * 효과 대신 그리는 중에 앞 값과 견준다 (효과 안 setState 는 한 번 더 그린다)
+   */
+  const [view, setView] = useState(VIEW_HOME);
+  const viewKey = p.pair ? `pair:${p.pair.from}>${p.pair.to}` : `center:${p.center ?? ""}`;
+  const [viewOf, setViewOf] = useState(viewKey);
+  if (viewOf !== viewKey) {
+    setViewOf(viewKey);
+    setView(VIEW_HOME);
+  }
+  const zoomBy = (by: number) => setView((v) => ({ ...v, zoom: clampZoom(v.zoom + by) }));
+  // 휠은 모아서 문턱을 넘을 때 한 단계씩 — 트랙패드 한 번에 끝까지 튀지 않게 (`wheelSteps`, 지도와 같다)
+  const wheelAcc = useRef(0);
+  // 끌기. 3px 넘게 움직였으면 놓을 때의 클릭을 고르기로 치지 않는다 (지도 `MapCanvas` 와 같다)
+  const drag = useRef<{ x: number; y: number; px: number; py: number } | null>(null);
+  const moved = useRef(false);
+  const [grabbing, setGrabbing] = useState(false);
+  const endDrag = () => {
+    drag.current = null;
+    setGrabbing(false);
+  };
+
+  /*
+   * 범례 접기. 펼친 범례가 1366 급 창에서 1단계 왼쪽 노드를 덮었다 (2026-09-28 코드 분석).
+   * 펼쳐 두면 그래프를 범례 밑에서 비켜 오른쪽으로 민다 — 얼마나 밀지는 판 크기로 정해서
+   * (`legendShift`) 판을 재 둔다. 알약 크기(`labelScale`)도 이 크기를 쓴다
+   */
+  const [legendOpen, setLegendOpen] = useState(true);
+  const boardRef = useRef<HTMLDivElement>(null);
+  const [board, setBoard] = useState<{ w: number; h: number } | null>(null);
+  useEffect(() => {
+    const el = boardRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setBoard({ w: e.contentRect.width, h: e.contentRect.height }));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const byId = useMemo(() => new Map(p.layout.territories.map((t) => [t.territoryId, t])), [p.layout]);
   const islandById = useMemo(() => new Map(p.layout.islands.map((i) => [i.islandKey, i])), [p.layout]);
   const nameOf = (id: string) => byId.get(id)?.name ?? id;
@@ -351,6 +433,45 @@ export default function RelationTab(p: RelationTabProps) {
   const centerName = p.center ? nameOf(p.center) : "";
   const rest = graph.hops?.rest ?? 0;
 
+  /* ── 라벨 자리 · 범례 밀기 (2026-09-28 최현서 5번) ───────────── */
+
+  // 판이 viewBox 를 몇 배로 그리나. 알약 크기(`labelScale`)가 화면 글자 크기를 보고 정한다
+  const fit = boardFit(board, { w: W, h: H });
+  const obstacles = useMemo(
+    () => [...graph.nodes.values()].flatMap((n) => boxesOf(n, n.id === p.center && !p.pair)),
+    [graph, p.center, p.pair],
+  );
+  // 단 라벨의 id → 알약 가운데. 없는 선은 라벨 없이 선만 그린다. 늘 다는 선은 위 `focus` 와
+  // 같은 규칙(고른 선이 먼저, 없으면 강조한 선)으로 id 에서 바로 고른다
+  const labelAt = useMemo(() => {
+    const drawn = (id: string | null) => !!id && graph.edges.some((e) => e.v.rel.id === id);
+    const focusId = drawn(p.selected) ? p.selected : drawn(p.highlight) ? p.highlight : null;
+    return placeLabels(
+      graph.edges.map((e) => ({
+        id: e.v.rel.id,
+        count: e.v.count,
+        outer: !p.pair && !!p.center && e.v.rel.from !== p.center && e.v.rel.to !== p.center,
+        force: e.v.rel.id === focusId,
+        w: labelWidth(e.v),
+        h: LABEL_H,
+        spots: e.spots,
+      })),
+      view.zoom,
+      obstacles,
+      { fit },
+    );
+  }, [graph, obstacles, view.zoom, fit, p.selected, p.highlight, p.pair, p.center]);
+  // 알약은 확대해도 그림만큼 커지지 않는다 — 화면에서 설계 크기에 닿으면 그 크기를 지킨다 (`labelScale`)
+  const labelK = labelScale(view.zoom, fit);
+  const shift = useMemo(() => {
+    if (!legendOpen || obstacles.length === 0) return 0;
+    const span = {
+      min: Math.min(...obstacles.map((r) => r.x)),
+      max: Math.max(...obstacles.map((r) => r.x + r.w)),
+    };
+    return legendShift(board, LEGEND_COVER, span, { w: W, h: H });
+  }, [legendOpen, obstacles, board]);
+
   // 출발 영토가 지도에 있으면 칩 줄에 둔다 — 점을 찍을 칩이 있어야 한다 (4.3.3 ①)
   const originId = p.origin?.id && byId.has(p.origin.id) ? p.origin.id : null;
   const chips = p.pair ? [] : centerChips(p.views, p.center, nameOf, 6, originId);
@@ -367,21 +488,26 @@ export default function RelationTab(p: RelationTabProps) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-s4">
-      <div className="flex shrink-0 flex-wrap items-center gap-s3">
+      {/*
+        칩 줄은 한 줄 가로 스크롤 — 전에는 줄바꿈이라 칩 수 · 이름 길이에 따라 한두 줄이 되어 아래 판
+        높이와 배율이 바뀌었다 (2026-09-28 코드 분석). 높이를 박아 두어 스크롤 막대가 생겨도 판이
+        그대로다. 좌우 여백은 첫 칩의 초점 테두리가 잘리지 않게 둔다
+      */}
+      <div className="-mx-s1 flex h-[42px] shrink-0 flex-nowrap items-center gap-s3 overflow-x-auto overflow-y-hidden px-s1 [scrollbar-width:thin] [scrollbar-color:var(--t-border-strong)_transparent]">
         {p.origin && (
           // 테두리 단추의 공통 마우스 올림(`hover-edge`) — 전에는 글자색만 한 단계 바뀌었다 (최현서 1번)
           <button
             type="button"
             onClick={p.onBack}
-            className="rounded-full border border-edge bg-card px-s3 py-s1 text-[12px] text-body hover-edge"
+            className="shrink-0 whitespace-nowrap rounded-full border border-edge bg-card px-s3 py-s1 text-[12px] text-body hover-edge"
           >
             ‹ {p.origin.label}
           </button>
         )}
         {p.pair ? (
           <>
-            <span className="text-[12px] text-label">섬 간 필터</span>
-            <span className="flex items-center gap-s2 rounded-full border border-[var(--t-accent)] bg-accent-subtle px-s4 py-s1 text-[13px] text-title">
+            <span className="shrink-0 whitespace-nowrap text-[12px] text-label">섬 간 필터</span>
+            <span className="flex shrink-0 items-center gap-s2 whitespace-nowrap rounded-full border border-[var(--t-accent)] bg-accent-subtle px-s4 py-s1 text-[13px] text-title">
               {islandById.get(p.pair.from)?.name} → {islandById.get(p.pair.to)?.name}
               <button type="button" aria-label="섬 간 필터 해제" onClick={p.onClearPair} className="text-label hover:text-title">
                 ×
@@ -391,7 +517,7 @@ export default function RelationTab(p: RelationTabProps) {
         ) : (
           chips.length > 0 && (
             <>
-              <span className="text-[12px] text-label">중심 엔티티</span>
+              <span className="shrink-0 whitespace-nowrap text-[12px] text-label">중심 엔티티</span>
               {chips.map((id) => {
                 const t = byId.get(id);
                 const on = id === p.center;
@@ -408,7 +534,7 @@ export default function RelationTab(p: RelationTabProps) {
                      * 단추의 공통 규칙(`hover-edge`)이다 (2026-09-28 코드 분석, 최현서 1번)
                      */
                     className={[
-                      "flex items-center gap-s2 rounded-full border px-s4 py-s1 text-[13px]",
+                      "flex shrink-0 items-center gap-s2 whitespace-nowrap rounded-full border px-s4 py-s1 text-[13px]",
                       on
                         ? "border-[color:var(--chip)] bg-[color:color-mix(in_srgb,var(--chip)_14%,transparent)] font-semibold text-[color:var(--chip)]"
                         : "border-edge bg-card text-body hover-edge",
@@ -428,7 +554,7 @@ export default function RelationTab(p: RelationTabProps) {
         )}
       </div>
 
-      <div className="relative min-h-0 flex-1 overflow-hidden rounded-[14px] border border-edge bg-canvas">
+      <div ref={boardRef} className="relative min-h-0 flex-1 overflow-hidden rounded-[14px] border border-edge bg-canvas">
         <div
           aria-hidden
           className="absolute inset-0"
@@ -439,229 +565,339 @@ export default function RelationTab(p: RelationTabProps) {
           }}
         />
 
-        <svg
-          viewBox={`0 0 ${W} ${H}`}
-          className="absolute inset-0 size-full"
-          role="img"
-          aria-label={p.pair ? "섬 간 관계 그래프" : `${centerName} 중심 관계 그래프`}
+        {/*
+          끄는 판. 손 커서(끄는 동안 쥔 손)로 끌 수 있다는 것을 알린다. 선 · 라벨 · 노드 위에서는
+          손가락 커서가 이긴다. 포인터를 캡처하지 않는다 — 캡처하면 클릭 대상이 판으로 고정돼
+          무엇을 눌렀는지 모른다 (지도 `MapCanvas` 머리말). 끌고 놓은 클릭은 캡처 단계에서 끊어
+          선 · 노드 고르기와 빈 곳 해제 어느 쪽에도 안 간다 (2026-09-28 최현서 5번)
+        */}
+        <div
+          className={"absolute inset-0 touch-none select-none " + (grabbing ? "cursor-grabbing" : "cursor-grab")}
+          onWheel={(e) => {
+            const r = wheelSteps(wheelAcc.current, e.deltaY, e.deltaMode);
+            wheelAcc.current = r.acc;
+            if (r.steps) zoomBy(r.steps * ZOOM_STEP);
+          }}
+          onPointerDown={(e) => {
+            if (e.button !== 0) return;
+            drag.current = { x: e.clientX, y: e.clientY, px: view.x, py: view.y };
+            moved.current = false;
+            setGrabbing(true);
+          }}
+          onPointerMove={(e) => {
+            const d = drag.current;
+            if (!d) return;
+            // 판 밖에서 단추를 놓고 돌아온 경우 — 끌기가 아니다
+            if ((e.buttons & 1) === 0) return endDrag();
+            const dx = e.clientX - d.x;
+            const dy = e.clientY - d.y;
+            // 누르는 동안의 작은 떨림은 옮기지 않는다. 3px 를 넘어야 끌기다
+            if (!moved.current && Math.hypot(dx, dy) <= 3) return;
+            moved.current = true;
+            setView((v) => ({ ...v, x: d.px + dx, y: d.py + dy }));
+          }}
+          onPointerUp={endDrag}
+          onPointerLeave={endDrag}
+          onClickCapture={(e) => {
+            if (moved.current) e.stopPropagation();
+          }}
+          // 빈 곳 클릭이면 선택 해제. 선 · 라벨 · 노드는 제 클릭을 여기까지 안 올린다
           onClick={() => p.onSelect(null)}
         >
-          <defs>
-            {KIND_ORDER.map((k) => (
-              <marker
-                key={k}
-                id={`rel-arrow-${k}`}
-                viewBox="0 0 10 10"
-                refX="2"
-                refY="5"
-                markerWidth="9"
-                markerHeight="9"
-                markerUnits="userSpaceOnUse"
-                orient="auto"
-              >
-                <path d="M0,0 L10,5 L0,10 z" fill={`var(--t-rel-${k})`} />
-              </marker>
-            ))}
-          </defs>
-
-          {/*
-            선. 마우스를 올리면 굵고 진해진다 — 흐려진 선도 반쯤 살아나 누를 수 있는 것이 보인다.
-            굵기 · 흐려짐은 번져 바뀐다 (최현서 1번). `d` 는 전환에 안 넣는다 — 중심이 바뀔 때
-            선이 날아다니지 않게
-          */}
-          {graph.edges.map(({ v, d }) => {
-            const on = focus?.rel.id === v.rel.id;
-            const picked = sel?.rel.id === v.rel.id;
-            const dimmed = focus && !on;
-            const hover = hoverEdge === v.rel.id;
-            const pick = (e: MouseEvent) => {
-              e.stopPropagation();
-              if (p.pair) p.onPairPick(v);
-              else p.onSelect(picked ? null : v.rel.id);
-            };
-            return (
-              <g key={v.rel.id} className="cursor-pointer" onClick={pick} {...edgeHover(v.rel.id)}>
-                <path d={d} fill="none" stroke="transparent" strokeWidth={16} />
-                <path
-                  d={d}
-                  fill="none"
-                  stroke={`var(--t-rel-${v.rel.kind})`}
-                  strokeWidth={on ? 3 : hover ? 2.6 : 1.8}
-                  strokeDasharray={CONF_DASH[v.rel.confidence] || undefined}
-                  strokeLinecap="round"
-                  markerEnd={`url(#rel-arrow-${v.rel.kind})`}
-                  opacity={dimmed ? (hover ? 0.5 : 0.15) : on || hover ? 1 : outerEdge(v) ? 0.5 : 0.85}
-                  className="transition-[stroke-width,opacity] duration-[var(--dur-base)] ease-[var(--ease-out)]"
-                />
-              </g>
-            );
-          })}
-
-          {/*
-            선 라벨 — 「Recruitment 14건」 (설계서 4.3.6). 고른 선은 칠하고, 강조한 선은
-            테두리만 진하게 한다 (4.3.3 ① 「'Recruitment 14건' 강조 테두리」).
-            2단계 바깥 선은 라벨이 겹쳐 강조 · 선택했을 때만 단다.
-            마우스를 올리면(선이든 라벨이든) 바탕이 한 단계 밝고 테두리가 관계 색이 된다 (최현서 1번)
-          */}
-          {graph.edges.map(({ v, mid }) => {
-            const on = focus?.rel.id === v.rel.id;
-            const picked = sel?.rel.id === v.rel.id;
-            const hover = hoverEdge === v.rel.id;
-            if (outerEdge(v) && !on) return null;
-            const name = KIND_NAME[v.rel.kind];
-            const w = textWidth(name, 13) + textWidth(`${v.count}건`, 12) + 34;
-            return (
-              <g
-                key={`l-${v.rel.id}`}
-                transform={`translate(${mid.x - w / 2} ${mid.y - 13})`}
-                className="cursor-pointer transition-opacity duration-[var(--dur-base)] ease-[var(--ease-out)]"
-                opacity={focus && !on ? (hover ? 0.75 : 0.3) : 1}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (p.pair) p.onPairPick(v);
-                  else p.onSelect(picked ? null : v.rel.id);
-                }}
-                {...edgeHover(v.rel.id)}
-              >
-                <rect
-                  width={w}
-                  height={26}
-                  rx={6}
-                  fill={
-                    picked
-                      ? `var(--t-rel-${v.rel.kind})`
-                      : hover
-                        ? "var(--t-surface-track)"
-                        : "var(--t-surface-panel)"
-                  }
-                  stroke={on || hover ? `var(--t-rel-${v.rel.kind})` : "var(--t-border-card)"}
-                  strokeWidth={on && !picked ? 2 : hover && !picked ? 1.5 : 1}
-                  className="transition-[fill,stroke,stroke-width] duration-[var(--dur-fast)] ease-[var(--ease-out)]"
-                />
-                {!picked && <circle cx={13} cy={13} r={3.5} fill={`var(--t-rel-${v.rel.kind})`} />}
-                <text x={picked ? 12 : 23} y={17.5} fontSize={13} fontWeight={600}>
-                  <tspan fill={picked ? "var(--t-text-on-accent)" : "var(--t-text-title)"}>{name}</tspan>
-                  <tspan dx={6} fontSize={12} fontWeight={400} fill={picked ? "var(--t-text-on-accent)" : "var(--t-text-label)"}>
-                    {v.count}건
-                  </tspan>
-                </text>
-              </g>
-            );
-          })}
-
-          {/*
-            노드. 누를 수 있는 노드(중심이 아닌 것)에 마우스를 올리면 테두리가 지도 영토와 같은
-            밝은 색(`--t-hex-hover-edge`)으로 굵어지고, 흐려진 노드도 반쯤 살아난다 (최현서 1번)
-          */}
-          {[...graph.nodes.values()].map((n) => {
-            const isCenter = n.id === p.center && !p.pair;
-            const c = `var(--t-island-${n.t.token})`;
-            const faded = focus && !onFocus(n.id);
-            const hover = !isCenter && hoverNode === n.id;
-            return (
-              <g
-                key={n.id}
-                className={
-                  isCenter
-                    ? "transition-opacity duration-[var(--dur-base)] ease-[var(--ease-out)]"
-                    : "cursor-pointer transition-opacity duration-[var(--dur-base)] ease-[var(--ease-out)]"
-                }
-                opacity={faded ? (hover ? 0.7 : 0.35) : 1}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (!isCenter) p.onCenter(n.id);
-                }}
-                onMouseEnter={isCenter ? undefined : () => setHoverNode(n.id)}
-                onMouseLeave={isCenter ? undefined : () => setHoverNode((h) => (h === n.id ? null : h))}
-              >
-                <title>{isCenter ? n.t.name : `${n.t.name} — 눌러서 중심으로`}</title>
-                {isCenter && (
-                  <polygon points={hexPoints(n.x, n.y, n.r + 6)} fill="none" stroke={c} strokeWidth={2} opacity={0.9} />
-                )}
-                {n.actor ? (
-                  <>
-                    <polygon
-                      points={hexPoints(n.x, n.y, n.r)}
-                      fill="var(--t-surface-card)"
-                      stroke={hover ? "var(--t-hex-hover-edge)" : c}
-                      strokeWidth={hover ? 2.5 : 1.5}
-                      className="transition-[stroke,stroke-width] duration-[var(--dur-fast)] ease-[var(--ease-out)]"
-                    />
-                    <TeamMark cx={n.x} cy={n.y} size={n.r} />
-                  </>
-                ) : (
-                  <polygon
-                    points={hexPoints(n.x, n.y, n.r)}
-                    fill={c}
-                    stroke={hover ? "var(--t-hex-hover-edge)" : "var(--t-border-hex)"}
-                    strokeWidth={hover ? 2 : 1}
-                    strokeDasharray={empty && isCenter ? "4 3" : undefined}
-                    fillOpacity={empty && isCenter ? 0.25 : 1}
-                    className="transition-[stroke,stroke-width] duration-[var(--dur-fast)] ease-[var(--ease-out)]"
-                  />
-                )}
-                {n.side === "below" && n.outer ? (
-                  <text x={n.x} y={n.y + n.r + 16} textAnchor="middle" fontSize={12} fontWeight={600} fill="var(--t-text-title)">
-                    {n.t.name}
-                  </text>
-                ) : n.side === "below" ? (
-                  <>
-                    <text
-                      x={n.x}
-                      y={n.y + n.r + 20}
-                      textAnchor="middle"
-                      fontSize={isCenter ? 16 : 14}
-                      fontWeight={700}
-                      fill={isCenter ? c : "var(--t-text-title)"}
-                    >
-                      {n.t.name}
-                    </text>
-                    <text x={n.x} y={n.y + n.r + 37} textAnchor="middle" fontSize={12} fill="var(--t-text-label)">
-                      {n.islandName} · 활동도 {n.t.metrics.activity}
-                    </text>
-                  </>
-                ) : (
-                  <text
-                    x={n.side === "left" ? n.x - n.r - 10 : n.x + n.r + 10}
-                    y={n.y + 4}
-                    textAnchor={n.side === "left" ? "end" : "start"}
-                    fontSize={13}
-                    fontWeight={700}
-                    fill="var(--t-text-title)"
+          <div
+            className="size-full"
+            style={{
+              transform: `translate(${view.x}px, ${view.y}px) scale(${view.zoom / 100})`,
+              transformOrigin: "center center",
+              // 줌 · 전체 보기는 짧게 옮겨 간다. 끄는 동안은 손을 바로 따라가야 해서 끈다 (지도와 같다)
+              transition: grabbing ? "none" : "transform var(--dur-base) var(--ease-out)",
+            }}
+          >
+            <svg
+              viewBox={`0 0 ${W} ${H}`}
+              className="block size-full"
+              role="img"
+              aria-label={p.pair ? "섬 간 관계 그래프" : `${centerName} 중심 관계 그래프`}
+            >
+              <defs>
+                {KIND_ORDER.map((k) => (
+                  <marker
+                    key={k}
+                    id={`rel-arrow-${k}`}
+                    viewBox="0 0 10 10"
+                    refX="2"
+                    refY="5"
+                    markerWidth="9"
+                    markerHeight="9"
+                    markerUnits="userSpaceOnUse"
+                    orient="auto"
                   >
-                    {n.t.name}
-                    <tspan dx={6} fontSize={11} fontWeight={400} fill="var(--t-text-label)">
-                      활동도 {n.t.metrics.activity}
-                    </tspan>
-                  </text>
-                )}
-              </g>
-            );
-          })}
-        </svg>
+                    <path d="M0,0 L10,5 L0,10 z" fill={`var(--t-rel-${k})`} />
+                  </marker>
+                ))}
+              </defs>
 
-        {/* 범례 — 관계 종류 일곱, 신뢰도 셋 (설계서 4.3.6) */}
-        <div className="pointer-events-none absolute left-s4 top-s4 flex w-[190px] flex-col gap-s3 rounded-[12px] border border-edge bg-panel px-s4 py-s4">
-          <h3 className="text-[11px] text-label">관계 유형</h3>
-          <ul className="flex flex-col gap-s2">
-            {KIND_ORDER.map((k) => (
-              <li key={k} className="flex items-center gap-s2 text-[12px] text-body">
-                <KindDot kind={k} />
-                {KIND_NAME[k]}
-              </li>
-            ))}
-          </ul>
-          <div className="h-px bg-divider" />
-          <ul className="flex flex-col gap-s2">
-            {(["confirmed", "high", "estimated"] as const).map((c) => (
-              <li key={c} className="flex items-center gap-s3 text-[12px] text-body">
-                <svg aria-hidden width="34" height="2" viewBox="0 0 34 2" className="shrink-0 overflow-visible">
-                  <line x1="0" y1="1" x2="34" y2="1" stroke="var(--t-text-label)" strokeWidth="1.5" strokeDasharray={CONF_DASH[c] || undefined} strokeLinecap="round" />
-                </svg>
-                {CONF_LABEL[c]}
-              </li>
-            ))}
-          </ul>
+              {/* 펼친 범례를 비켜 민 자리 (`legendShift`). 접으면 0 이다 */}
+              <g transform={shift ? `translate(${shift.toFixed(1)} 0)` : undefined}>
+                {/*
+                  선. 마우스를 올리면 굵고 진해진다 — 흐려진 선도 반쯤 살아나 누를 수 있는 것이 보인다.
+                  굵기 · 흐려짐은 번져 바뀐다 (최현서 1번). `d` 는 전환에 안 넣는다 — 중심이 바뀔 때
+                  선이 날아다니지 않게
+                */}
+                {graph.edges.map(({ v, d }) => {
+                  const on = focus?.rel.id === v.rel.id;
+                  const picked = sel?.rel.id === v.rel.id;
+                  const dimmed = focus && !on;
+                  const hover = hoverEdge === v.rel.id;
+                  const pick = (e: MouseEvent) => {
+                    e.stopPropagation();
+                    if (p.pair) p.onPairPick(v);
+                    else p.onSelect(picked ? null : v.rel.id);
+                  };
+                  return (
+                    <g key={v.rel.id} className="cursor-pointer" onClick={pick} {...edgeHover(v.rel.id)}>
+                      <path d={d} fill="none" stroke="transparent" strokeWidth={16} />
+                      <path
+                        d={d}
+                        fill="none"
+                        stroke={`var(--t-rel-${v.rel.kind})`}
+                        strokeWidth={on ? 3 : hover ? 2.6 : 1.8}
+                        strokeDasharray={CONF_DASH[v.rel.confidence] || undefined}
+                        strokeLinecap="round"
+                        markerEnd={`url(#rel-arrow-${v.rel.kind})`}
+                        opacity={dimmed ? (hover ? 0.5 : 0.15) : on || hover ? 1 : outerEdge(v) ? 0.5 : 0.85}
+                        className="transition-[stroke-width,opacity] duration-[var(--dur-base)] ease-[var(--ease-out)]"
+                      />
+                    </g>
+                  );
+                })}
+
+                {/*
+                  선 라벨 — 「Recruitment 14건」 (설계서 4.3.6). 고른 선은 칠하고, 강조한 선은
+                  테두리만 진하게 한다 (4.3.3 ① 「'Recruitment 14건' 강조 테두리」).
+                  어느 선에 라벨을 달지는 배율이 정한다 (`placeLabels` — 100% 는 지금까지처럼 1단계 선 전부,
+                  줄이면 건수 상위만, 125% 이상은 2단계 바깥 선까지. 강조 · 고른 선은 늘). 라벨끼리나
+                  노드 이름과 겹치면 선을 따라 옮기고, 못 옮기면 뺀다 (2026-09-28 최현서 5번).
+                  마우스를 올리면(선이든 라벨이든) 바탕이 한 단계 밝고 테두리가 관계 색이 된다 (최현서 1번)
+                */}
+                {graph.edges.map(({ v }) => {
+                  const at = labelAt.get(v.rel.id);
+                  if (!at) return null;
+                  const on = focus?.rel.id === v.rel.id;
+                  const picked = sel?.rel.id === v.rel.id;
+                  const hover = hoverEdge === v.rel.id;
+                  const name = KIND_NAME[v.rel.kind];
+                  const w = labelWidth(v);
+                  return (
+                    <g
+                      key={`l-${v.rel.id}`}
+                      transform={`translate(${at.x.toFixed(1)} ${at.y.toFixed(1)})`}
+                      className="cursor-pointer transition-opacity duration-[var(--dur-base)] ease-[var(--ease-out)]"
+                      opacity={focus && !on ? (hover ? 0.75 : 0.3) : 1}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (p.pair) p.onPairPick(v);
+                        else p.onSelect(picked ? null : v.rel.id);
+                      }}
+                      {...edgeHover(v.rel.id)}
+                    >
+                      {/*
+                        확대하면 알약은 화면에서 설계 크기까지만 커지고 그다음은 그 크기를 지킨다
+                        (`labelScale`). 판의 줌 전환과 같은 시간으로 번져 바뀌어 도중에 튀지 않는다. 자리
+                        옮김(바깥 g)은 전환에 안 넣는다 — 중심이 바뀔 때 라벨이 날아다니지 않게
+                      */}
+                      <g
+                        style={{
+                          transform: `scale(${labelK})`,
+                          transformBox: "fill-box",
+                          transformOrigin: "center",
+                          transition: "transform var(--dur-base) var(--ease-out)",
+                        }}
+                      >
+                        <g transform={`translate(${(-w / 2).toFixed(1)} ${-LABEL_H / 2})`}>
+                          <rect
+                            width={w}
+                            height={LABEL_H}
+                            rx={6}
+                            fill={
+                              picked
+                                ? `var(--t-rel-${v.rel.kind})`
+                                : hover
+                                  ? "var(--t-surface-track)"
+                                  : "var(--t-surface-panel)"
+                            }
+                            stroke={on || hover ? `var(--t-rel-${v.rel.kind})` : "var(--t-border-card)"}
+                            strokeWidth={on && !picked ? 2 : hover && !picked ? 1.5 : 1}
+                            className="transition-[fill,stroke,stroke-width] duration-[var(--dur-fast)] ease-[var(--ease-out)]"
+                          />
+                          {!picked && <circle cx={13} cy={13} r={3.5} fill={`var(--t-rel-${v.rel.kind})`} />}
+                          <text x={picked ? 12 : 23} y={17.5} fontSize={13} fontWeight={600}>
+                            <tspan fill={picked ? "var(--t-text-on-accent)" : "var(--t-text-title)"}>{name}</tspan>
+                            <tspan dx={6} fontSize={12} fontWeight={400} fill={picked ? "var(--t-text-on-accent)" : "var(--t-text-label)"}>
+                              {v.count}건
+                            </tspan>
+                          </text>
+                        </g>
+                      </g>
+                    </g>
+                  );
+                })}
+
+                {/*
+                  노드. 누를 수 있는 노드(중심이 아닌 것)에 마우스를 올리면 테두리가 지도 영토와 같은
+                  밝은 색(`--t-hex-hover-edge`)으로 굵어지고, 흐려진 노드도 반쯤 살아난다 (최현서 1번)
+                */}
+                {[...graph.nodes.values()].map((n) => {
+                  const isCenter = n.id === p.center && !p.pair;
+                  const c = `var(--t-island-${n.t.token})`;
+                  const faded = focus && !onFocus(n.id);
+                  const hover = !isCenter && hoverNode === n.id;
+                  return (
+                    <g
+                      key={n.id}
+                      className={
+                        isCenter
+                          ? "transition-opacity duration-[var(--dur-base)] ease-[var(--ease-out)]"
+                          : "cursor-pointer transition-opacity duration-[var(--dur-base)] ease-[var(--ease-out)]"
+                      }
+                      opacity={faded ? (hover ? 0.7 : 0.35) : 1}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!isCenter) p.onCenter(n.id);
+                      }}
+                      onMouseEnter={isCenter ? undefined : () => setHoverNode(n.id)}
+                      // 떠나기는 중심 노드에도 단다 — 노드를 눌러 중심이 되면 떠나기 듣개가 빠져 hover 가
+                      // 남았다가, 다시 이웃이 되면 마우스가 없는데도 밝게 그려졌다 (2026-09-28 검토)
+                      onMouseLeave={() => setHoverNode((h) => (h === n.id ? null : h))}
+                    >
+                      <title>{isCenter ? n.t.name : `${n.t.name} — 눌러서 중심으로`}</title>
+                      {isCenter && (
+                        <polygon points={hexPoints(n.x, n.y, n.r + 6)} fill="none" stroke={c} strokeWidth={2} opacity={0.9} />
+                      )}
+                      {n.actor ? (
+                        <>
+                          <polygon
+                            points={hexPoints(n.x, n.y, n.r)}
+                            fill="var(--t-surface-card)"
+                            stroke={hover ? "var(--t-hex-hover-edge)" : c}
+                            strokeWidth={hover ? 2.5 : 1.5}
+                            className="transition-[stroke,stroke-width] duration-[var(--dur-fast)] ease-[var(--ease-out)]"
+                          />
+                          <TeamMark cx={n.x} cy={n.y} size={n.r} />
+                        </>
+                      ) : (
+                        <polygon
+                          points={hexPoints(n.x, n.y, n.r)}
+                          fill={c}
+                          stroke={hover ? "var(--t-hex-hover-edge)" : "var(--t-border-hex)"}
+                          strokeWidth={hover ? 2 : 1}
+                          strokeDasharray={empty && isCenter ? "4 3" : undefined}
+                          fillOpacity={empty && isCenter ? 0.25 : 1}
+                          className="transition-[stroke,stroke-width] duration-[var(--dur-fast)] ease-[var(--ease-out)]"
+                        />
+                      )}
+                      {n.side === "below" && n.outer ? (
+                        <text x={n.x} y={n.y + n.r + 16} textAnchor="middle" fontSize={12} fontWeight={600} fill="var(--t-text-title)">
+                          {n.t.name}
+                        </text>
+                      ) : n.side === "below" ? (
+                        <>
+                          <text
+                            x={n.x}
+                            y={n.y + n.r + 20}
+                            textAnchor="middle"
+                            fontSize={isCenter ? 16 : 14}
+                            fontWeight={700}
+                            fill={isCenter ? c : "var(--t-text-title)"}
+                          >
+                            {n.t.name}
+                          </text>
+                          <text x={n.x} y={n.y + n.r + 37} textAnchor="middle" fontSize={12} fill="var(--t-text-label)">
+                            {n.islandName} · 활동도 {n.t.metrics.activity}
+                          </text>
+                        </>
+                      ) : (
+                        <text
+                          x={n.side === "left" ? n.x - n.r - 10 : n.x + n.r + 10}
+                          y={n.y + 4}
+                          textAnchor={n.side === "left" ? "end" : "start"}
+                          fontSize={13}
+                          fontWeight={700}
+                          fill="var(--t-text-title)"
+                        >
+                          {n.t.name}
+                          <tspan dx={6} fontSize={11} fontWeight={400} fill="var(--t-text-label)">
+                            활동도 {n.t.metrics.activity}
+                          </tspan>
+                        </text>
+                      )}
+                    </g>
+                  );
+                })}
+              </g>
+            </svg>
+          </div>
+        </div>
+
+        {/*
+          범례 — 관계 종류 일곱, 신뢰도 셋 (설계서 4.3.6). 접었다 펼 수 있다 — 펼친 채로는 1366 급
+          창에서 1단계 왼쪽 노드를 덮었다 (2026-09-28 코드 분석). 접기 단추는 두 모양이 한 요소다 —
+          눌러서 모양이 바뀌어도 초점이 그 자리에 남는다
+        */}
+        <div
+          className={
+            legendOpen
+              ? "pointer-events-none absolute left-s4 top-s4 flex w-[190px] flex-col gap-s3 rounded-[12px] border border-edge bg-panel px-s4 py-s4"
+              : "absolute left-s4 top-s4"
+          }
+        >
+          <div className="flex items-center justify-between gap-s2">
+            {legendOpen && <h3 className="text-[11px] text-label">관계 유형</h3>}
+            <button
+              type="button"
+              aria-expanded={legendOpen}
+              aria-label={legendOpen ? "범례 접기" : undefined}
+              title={legendOpen ? "범례 접기" : "범례 펼치기"}
+              onClick={() => setLegendOpen(!legendOpen)}
+              className={
+                legendOpen
+                  ? "pointer-events-auto -my-s1 flex size-[22px] items-center justify-center rounded-[6px] border border-edge bg-panel text-[12px] leading-none text-label hover-edge"
+                  : "flex items-center gap-s2 rounded-[10px] border border-edge bg-panel px-s3 py-s2 text-[12px] text-body hover-edge"
+              }
+            >
+              {legendOpen ? (
+                <span aria-hidden>‹</span>
+              ) : (
+                <>
+                  관계 유형
+                  <span aria-hidden>›</span>
+                </>
+              )}
+            </button>
+          </div>
+          {legendOpen && (
+            <>
+              <ul className="flex flex-col gap-s2">
+                {KIND_ORDER.map((k) => (
+                  <li key={k} className="flex items-center gap-s2 text-[12px] text-body">
+                    <KindDot kind={k} />
+                    {KIND_NAME[k]}
+                  </li>
+                ))}
+              </ul>
+              <div className="h-px bg-divider" />
+              <ul className="flex flex-col gap-s2">
+                {(["confirmed", "high", "estimated"] as const).map((c) => (
+                  <li key={c} className="flex items-center gap-s3 text-[12px] text-body">
+                    <svg aria-hidden width="34" height="2" viewBox="0 0 34 2" className="shrink-0 overflow-visible">
+                      <line x1="0" y1="1" x2="34" y2="1" stroke="var(--t-text-label)" strokeWidth="1.5" strokeDasharray={CONF_DASH[c] || undefined} strokeLinecap="round" />
+                    </svg>
+                    {CONF_LABEL[c]}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </div>
 
         {/*
@@ -680,10 +916,25 @@ export default function RelationTab(p: RelationTabProps) {
           </div>
         )}
 
-        {/* 근거 팝오버 — 피그마 ⑦-8e 「선택한 관계 · Evidence」. 도구 줄 아래에 띄운다 */}
+        {/*
+          근거 팝오버 — 피그마 ⑦-8e 「선택한 관계 · Evidence」. 도구 줄 아래에 띄운다.
+          닫기(×)를 둔다 — 전에는 닫을 길이 빈 곳 클릭뿐이라 오른쪽 노드를 덮은 채 남았다. 같은
+          내용이 오른쪽 패널에도 있어 폭을 330 → 300 으로 줄이고, 길어지면 줌 단추 위에서 끊어
+          안에서 스크롤한다 (2026-09-28 코드 분석)
+        */}
         {sel && (
-          <div className="absolute right-s4 top-[64px] flex w-[330px] flex-col gap-s3 rounded-[12px] border border-edge bg-panel px-s5 py-s4 shadow-lg">
-            <p className="text-[11px] text-label">선택한 관계 · Evidence</p>
+          <div className="absolute right-s4 top-[64px] flex max-h-[calc(100%-142px)] w-[300px] flex-col gap-s3 overflow-y-auto rounded-[12px] border border-edge bg-panel px-s5 py-s4 shadow-lg">
+            <div className="flex items-center justify-between gap-s2">
+              <p className="text-[11px] text-label">선택한 관계 · Evidence</p>
+              <button
+                type="button"
+                aria-label="근거 닫기"
+                onClick={() => p.onSelect(null)}
+                className="-my-s1 -mr-s2 flex size-[24px] shrink-0 items-center justify-center rounded-[6px] text-[15px] leading-none text-label hover-seg"
+              >
+                ×
+              </button>
+            </div>
             <div className="flex items-center gap-s2">
               <span className="text-[15px] font-semibold text-title">
                 {nameOf(sel.rel.from)} → {nameOf(sel.rel.to)}
@@ -758,22 +1009,69 @@ export default function RelationTab(p: RelationTabProps) {
           </div>
         )}
 
+        {/*
+          힌트 알약. 오른쪽 줌 단추 자리를 비워 두고 넘치면 말줄임한다 — 좁은 창에서 2단계 문구가
+          줌 단추 밑으로 들어갔다. 배율에 따라 라벨이 줄고 느는 것도 여기서 알린다 (2026-09-28 최현서 5번)
+        */}
         <div
-          className="pointer-events-none absolute left-s5 flex items-center gap-s2 rounded-full border border-edge bg-panel px-s4 text-[12px] text-body"
+          className="pointer-events-none absolute left-s5 flex max-w-[calc(100%-310px)] items-center gap-s2 rounded-full border border-edge bg-panel px-s4 text-[12px] text-body"
           style={{ bottom: "var(--s-5)", height: "var(--h-hint)" }}
         >
-          <span aria-hidden className="size-[6px] rounded-full" style={{ background: "var(--t-accent)" }} />
-          {empty
-            ? "관계 없음 상태 · 액션으로 탐색 확장"
-            : p.pair
-              ? "섬 간 보기 · 선을 누르면 그 관계로 이동"
-              : sel
-                ? "선택한 관계선 강조 · 나머지 흐리게 · 근거 팝오버"
-                : hi
-                  ? "강조된 관계선 클릭 → 근거(Evidence) 표시"
-                  : p.depth === 2
-                    ? `2단계 확장 · 바깥 선은 누르면 라벨과 근거 표시${rest ? ` · 건수가 적은 ${rest}곳은 뺐습니다` : ""}`
-                    : "관계선 클릭 → 근거(Evidence) 표시"}
+          <span aria-hidden className="size-[6px] shrink-0 rounded-full" style={{ background: "var(--t-accent)" }} />
+          <span className="min-w-0 truncate">
+            {empty
+              ? "관계 없음 상태 · 액션으로 탐색 확장"
+              : p.pair
+                ? "섬 간 보기 · 선을 누르면 그 관계로 이동"
+                : sel
+                  ? "선택한 관계선 강조 · 나머지 흐리게 · 근거 팝오버"
+                  : hi
+                    ? "강조된 관계선 클릭 → 근거(Evidence) 표시"
+                    : view.zoom < 100
+                      ? "줄여 보는 중 · 건수가 큰 관계만 라벨 표시"
+                      : p.depth === 2
+                        ? view.zoom >= 125
+                          ? `2단계 확장 · 바깥 선 라벨까지 표시${rest ? ` · 건수가 적은 ${rest}곳은 뺐습니다` : ""}`
+                          : `2단계 확장 · 바깥 선은 누르거나 125% 이상 확대하면 라벨 표시${rest ? ` · 건수가 적은 ${rest}곳은 뺐습니다` : ""}`
+                        : "관계선 클릭 → 근거(Evidence) 표시"}
+          </span>
+        </div>
+
+        {/*
+          줌 단추 — 지도와 같은 모양과 자리 (− 배율 + · 전체 보기) (2026-09-28 최현서 5번).
+          관계 없음일 때도 둔다 — 키운 채 관계가 비면 되돌릴 단추가 없어진다
+        */}
+        <div className="absolute right-s5 flex items-center gap-s3" style={{ bottom: "var(--s-5)" }}>
+          <div className="flex items-center rounded-full border border-edge bg-panel" style={{ height: "var(--h-zoom)" }}>
+            <button
+              type="button"
+              aria-label="축소"
+              disabled={view.zoom <= ZOOM_MIN}
+              onClick={() => zoomBy(-ZOOM_STEP)}
+              className="h-full rounded-l-full px-s4 text-[13px] text-body hover-seg disabled:text-disabled"
+            >
+              −
+            </button>
+            <span className="w-[52px] text-center text-[12px] tabular-nums text-body">{view.zoom}%</span>
+            <button
+              type="button"
+              aria-label="확대"
+              disabled={view.zoom >= ZOOM_MAX}
+              onClick={() => zoomBy(ZOOM_STEP)}
+              className="h-full rounded-r-full px-s4 text-[13px] text-body hover-seg disabled:text-disabled"
+            >
+              +
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => setView(VIEW_HOME)}
+            className="flex items-center gap-s2 rounded-full border border-edge bg-panel px-s4 text-[12px] text-body hover-edge"
+            style={{ height: "var(--h-zoom)" }}
+          >
+            <span aria-hidden>⛶</span>
+            전체 보기
+          </button>
         </div>
       </div>
     </div>

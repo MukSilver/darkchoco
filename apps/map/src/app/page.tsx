@@ -170,6 +170,8 @@ export default function Page() {
   // 패널 [사건] 탭 기간. 다른 영토를 골라도 그대로 둔다 (설계서 4.3.2)
   const [period, setPeriod] = useState<Period>(DEFAULT_PERIOD);
   const [mapView, setMapView] = useState<MapView>(MAP_VIEW_HOME);
+  // 타임라인 지도(Historical Map · 시점 비교 A/B) 줌 · 이동. 지도 탭과 따로 든다 (G-10 묶음 5)
+  const [tlView, setTlView] = useState<MapView>(MAP_VIEW_HOME);
   // 화면 밖이면 보이게 옮길 영토. 고를 때 채우고 지도가 보고 나면 비운다 (설계서 4.2.3)
   const [reveal, setReveal] = useState<string | null>(null);
   const [tab, setTab] = useState<ViewTabKey>("map");
@@ -612,6 +614,7 @@ export default function Page() {
     setPeriod(DEFAULT_PERIOD);
     setHideScam(false);
     setMapView(MAP_VIEW_HOME);
+    setTlView(MAP_VIEW_HOME);
     setYm(TO);
     setPlaying(false);
     setCompare(null);
@@ -1195,6 +1198,11 @@ export default function Page() {
                 onSpeed={setSpeed}
                 nameOf={nameOf}
                 mapSize={mapSize}
+                selection={liveSelection}
+                onSelect={select}
+                lastSeenAt={(q) => seenDays(MAP.events, quarterEnd(q, TODAY))}
+                view={tlView}
+                onView={setTlView}
               />
             ) : tab === "map" ? (
               <MapCanvas
