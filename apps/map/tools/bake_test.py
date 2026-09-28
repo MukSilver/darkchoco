@@ -201,6 +201,43 @@ def test_연결된_사건은_목록_안_사건끼리만():
     assert len(bake.check(base)) == 2, bake.check(base)
 
 
+def test_텔레그램_채널은_게시_플랫폼_원문_URL_핸들_순서로_찾는다():
+    # 설계서 3.3 「텔레그램 재유포 사건의 채널 정하는 방법」, 2026-09-28 G-7
+    a, b, c = _cand("TELEGRAM", "chanA"), _cand("TELEGRAM", "chanB"), _cand("TELEGRAM", "chanC")
+    f = _cand("FORUM", "Darkforums")
+    ix = bake.RegistryIndex([a, b, c, f])
+    read = lambda v: v  # noqa: E731 — 시험 줄은 노션 prop 대신 값 그대로다
+
+    def row(plat=None, url=None, handle=None):
+        return {"게시 플랫폼": plat, "원문 URL": url, "게시자 핸들": handle}
+
+    ch = bake.tg_channel
+    assert ch(ix, read, row("https://t.me/chanA", "https://t.me/chanB/12", "chanC")) is a, \
+        "게시 플랫폼이 먼저 — 지금 붙은 사건은 그대로"
+    assert ch(ix, read, row("darkforums.st", "https://t.me/s/chanB/12", "chanC")) is b
+    assert ch(ix, read, row("darkforums.st", "https://darkforums.st/Thread-x", "chanC")) is c
+    assert ch(ix, read, row(None, "https://t.me/unknownchan/3", "chanC")) is c, \
+        "텔레그램 DB 에 없는 채널이면 다음 단서"
+    assert ch(ix, read, row("darkforums.st", "https://kit.me/chanB", "Darkforums")) is None, \
+        "t.me 로 끝나는 다른 도메인 · 포럼 이름 핸들은 짐작하지 않는다"
+
+
+def test_원문_URL_은_t_me_채널_이름만_돌려준다():
+    read = lambda v: v  # noqa: E731
+    tme = bake.col_tme
+    assert tme(read, {"원문 URL": "https://t.me/leakchan/77"}, "원문 URL") == "leakchan"
+    for url in ["https://darkforums.st/Thread-x", "https://www.ganada.co.kr/", "https://t.me/+AbCdEf",
+                "https://t.me/c/1234567/8", "https://kit.me/leakchan", None]:
+        assert tme(read, {"원문 URL": url}, "원문 URL") is None, url
+    for reader in (lambda: bake.col(read, {}, "원문 URL"), lambda: bake.col_match(read, {}, "원문 URL"),
+                   lambda: bake.col_tme(read, {}, "게시 플랫폼")):
+        try:
+            reader()
+        except SystemExit:
+            continue
+        raise AssertionError("원문 URL 은 col_tme() 로만 읽는다")
+
+
 def json_copy(x):
     import json
     return json.loads(json.dumps(x))
