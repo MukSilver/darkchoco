@@ -1331,6 +1331,8 @@ export default function Page() {
                 onChange={setYm}
                 playing={playing}
                 onPlaying={setPlaying}
+                speed={speed}
+                onSpeed={setSpeed}
               />
             )}
           </main>
