@@ -14,6 +14,10 @@
 **토큰 값을 환경변수로 받지 않는다.** 값을 넣으면 `docker inspect` 와
 셸 히스토리에 남는다. 파일을 마운트하고 그 경로를 준다.
 
+**DB id 는 환경변수로 받을 수 있다 (2026-09-25).** id 는 비밀이 아니다. `NOTION_VERIFY_DB` 에
+검증 DB 의 id(또는 노션 주소)를 넣어 두면 이름 검색을 건너뛴다. 없으면 지금처럼 이름으로 찾는다.
+`db_from_env()` 를 본다.
+
     python tools/notion.py search 검증
     python tools/notion.py blocks <page_id>
     python tools/notion.py md <page_id> out/page.md
@@ -21,6 +25,8 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -89,6 +95,50 @@ def search(query: str = "", page_size: int = 100) -> list[dict]:
     if query:
         body["query"] = query
     return _call("/search", "POST", body)["results"]
+
+
+# 이름 검색을 건너뛸 DB 와 그 환경변수 (2026-09-25 최현서 결정).
+#
+# 이름 검색은 같은 이름이 여럿이면 멈춘다. 「랜섬웨어 DB, 참고용」 에 걸려 멈춘 적이 있다.
+# 검증 DB 는 코드 어디에도 id 가 없어 늘 이름으로 찾았다. **id 를 코드에 적지 않는다.**
+# 이 스킬은 떼어 가 다른 워크스페이스에서도 돌아야 한다. 환경변수가 없으면 검색으로 물러난다.
+DB_ENV = {"검증": "NOTION_VERIFY_DB", "검증 DB": "NOTION_VERIFY_DB"}
+
+_ID = re.compile(r"[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}", re.I)
+
+
+def db_from_env(name: str) -> tuple[str, str] | None:
+    """환경변수에 적힌 DB 의 (data_source id, 이름). 변수가 없으면 None.
+
+    값은 data_source id · database id · 노션 주소 어느 것이든 받는다. 주소면 처음 나오는
+    id 를 쓴다(뒤의 `?v=` 는 보기 id 다). database id 면 첫 data_source 로 옮겨 간다.
+    **변수가 있는데 못 열면 검색으로 물러나지 않고 멈춘다.** 잘못 적은 값을 조용히 넘기면
+    엉뚱한 DB 를 검색으로 집을 수 있다.
+    """
+    env = DB_ENV.get((name or "").strip())
+    raw = (os.environ.get(env) or "").strip() if env else ""
+    if not raw:
+        return None
+    m = _ID.search(raw)
+    if not m:
+        raise SystemExit(f"{env} 에서 노션 id 를 못 읽었다. id 나 노션 주소를 넣는다. 비우면 이름으로 찾는다")
+    ident = m.group(0)
+    까닭 = ""
+    for path in (f"/data_sources/{ident}", f"/databases/{ident}"):
+        try:
+            d = _call(path)
+        except (Exception, SystemExit) as e:  # noqa: BLE001  _call 은 실패를 SystemExit 로 던진다
+            까닭 = str(e)
+            continue
+        if d.get("object") == "database":
+            dss = d.get("data_sources") or []
+            if not dss:
+                까닭 = "database 에 data_source 가 없다"
+                continue
+            return dss[0]["id"], title_of(d)
+        return d.get("id") or ident, title_of(d)
+    raise SystemExit(f"{env} 가 가리키는 DB 를 못 열었다: {ident}\n{까닭}\n"
+                     f"값을 확인하거나 {env} 를 비우면 이름으로 찾는다")
 
 
 def latest(query: str) -> dict | None:

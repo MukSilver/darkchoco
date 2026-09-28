@@ -349,6 +349,11 @@ chmod 600 ~/.config/darkchoco/notion_token
 토큰은 notion.so/my-integrations 에서 Internal integration 으로 발급한다.
 쓸 페이지에서 Connections 에 그 integration 을 추가한다. 안 하면 404가 난다.
 
+**검증 DB 는 id 를 환경변수로 줄 수 있다 (2026-09-25).** 이름 검색은 같은 이름이 여럿이면
+멈춘다. `NOTION_VERIFY_DB` 에 검증 DB 의 id 나 노션 주소를 넣어 두면 검색을 건너뛴다.
+id 는 비밀이 아니라 환경변수로 받는다. 비워 두면 지금처럼 이름으로 찾는다.
+값이 있는데 못 열면 검색으로 물러나지 않고 멈춘다.
+
 ## 출력 방식
 
 ⑥ 은 로그 전부를 md 로 쓰고 화면에는 요약 네 절만 낸다.
