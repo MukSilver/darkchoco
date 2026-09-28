@@ -115,6 +115,16 @@ body {
  * `@layer base` 에 둔 것은 부품의 Tailwind 클래스(`w-full` 따위)가 이기게 하려는 것이다.
  */
 @layer base {
+  /*
+   * 눌리는 것은 손가락 커서. **Tailwind v4 는 button 에 pointer 를 주지 않는다** (v3 는 줬다) —
+   * 그래서 모든 단추가 화살표 커서라 눌리는지 알 수 없었다 (2026-09-28 최현서 1 · 9번).
+   * 꺼진 단추는 기본 커서로 둔다. 부품 클래스(`cursor-default` 따위)가 이긴다
+   */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+
   input[type="range"] {
     --range-line: 4px;
     --range-knob: 16px;

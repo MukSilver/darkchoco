@@ -210,6 +210,22 @@ export default function Page() {
   /** 기준일에 그릴 관계. 세 화면이 이 목록 하나를 쓴다 (설계서 3.9) */
   const present = useMemo(() => new Set(layout.territories.map((t) => t.territoryId)), [layout]);
   const rels = useMemo(() => relationsAt(ALL_RELS, MAP.events, d, present), [d, present]);
+
+  /**
+   * 기준일 지도에 있는 선택. **기준일을 옮겨 고른 영토 · 섬이 그 분기 지도에서 빠졌으면 없던
+   * 것으로 본다** — 남겨 두면 지도가 없는 영토만 진하게 두느라 전체가 흐려지고, 힌트는 「X
+   * 선택됨」인데 X 가 안 보인다. 사건 없는 명부 영토는 이번 분기에만 나와서 그런 영토를 고르고
+   * 과거로 가면 늘 생겼다 (2026-09-28 코드 분석). 상태(`selection`)는 그대로 둔다 — 기준일을
+   * 되돌리면 다시 산다. [연결] 행의 `liveLinkSel` 과 같은 규칙이다.
+   * 지도 · 힌트 · 패널 · [사건] · [연결] · 엔티티 탭은 이것을 본다
+   */
+  const liveSelection: MapSelection = useMemo(() => {
+    if (selection.kind === "territory") return present.has(selection.id) ? selection : { kind: "none" };
+    if (selection.kind === "island") {
+      return layout.islands.some((i) => i.islandKey === selection.key) ? selection : { kind: "none" };
+    }
+    return selection;
+  }, [selection, present, layout]);
   /** 관계 탭이 그리는 관계. 「추정 관계 포함」을 끄면 추정을 뺀다 (피그마 ⑦-8g) */
   const relShown = useMemo(() => withEstimated(rels, relEst), [rels, relEst]);
   const terr = useMemo(() => new Map(layout.territories.map((t) => [t.territoryId, t])), [layout]);
@@ -235,14 +251,14 @@ export default function Page() {
 
   const view = useMemo(() => {
     const input = { layout, result, events: MAP.events, d, rels, lastSeen, registry: registryOf, snapshot: past };
-    if (selection.kind === "island") {
-      return islandView(input, selection.key) ?? ecosystemView(input);
+    if (liveSelection.kind === "island") {
+      return islandView(input, liveSelection.key) ?? ecosystemView(input);
     }
-    if (selection.kind === "territory") {
-      return territoryView(input, selection.id) ?? ecosystemView(input);
+    if (liveSelection.kind === "territory") {
+      return territoryView(input, liveSelection.id) ?? ecosystemView(input);
     }
     return ecosystemView(input);
-  }, [layout, result, d, rels, lastSeen, selection, past]);
+  }, [layout, result, d, rels, lastSeen, liveSelection, past]);
 
   /**
    * 지도 위 관계선 (설계서 4.2.3 · 4.3.3).
@@ -282,12 +298,12 @@ export default function Page() {
    */
   const eventIds: Set<string> = useMemo(
     () =>
-      selection.kind === "territory"
-        ? new Set([selection.id])
-        : selection.kind === "island"
-          ? new Set(layout.territories.filter((t) => t.islandKey === selection.key).map((t) => t.territoryId))
+      liveSelection.kind === "territory"
+        ? new Set([liveSelection.id])
+        : liveSelection.kind === "island"
+          ? new Set(layout.territories.filter((t) => t.islandKey === liveSelection.key).map((t) => t.territoryId))
           : present,
-    [selection, layout, present],
+    [liveSelection, layout, present],
   );
   const periodList = useMemo(
     () =>
@@ -331,8 +347,8 @@ export default function Page() {
       const lit = new Set(lines.flatMap((v) => [v.rel.from, v.rel.to]));
       return { lines, lit, raised: lit, litIslands: new Set([liveLinkSel.from, liveLinkSel.to]) };
     }
-    if (selection.kind !== "territory") return null;
-    const id = selection.id;
+    if (liveSelection.kind !== "territory") return null;
+    const id = liveSelection.id;
     // 행위자는 활동 관계만 그린다 — [연결] 목록과 같게 (설계서 4.3.8)
     let lines = linksOf(rels, id, isActor(id));
     let raised: Set<string> | undefined;
@@ -346,7 +362,7 @@ export default function Page() {
     const lit = new Set([id, ...lines.map((v) => partnerOf(v, id))]);
     const litIslands = new Set([...lit].map((x) => islandOf(x)).filter((x): x is string => !!x));
     return { lines, lit, raised, litIslands };
-  }, [rels, selection, liveLinkSel, islandOf, isActor, liveEvent, present]);
+  }, [rels, liveSelection, liveLinkSel, islandOf, isActor, liveEvent, present]);
 
   /**
    * 관계 탭 중심. 고른 영토가 없거나, 기준일을 옮겨 그 영토가 지도에서 빠졌으면
@@ -372,7 +388,7 @@ export default function Page() {
     // 다른 영토를 골라도 열려 있던 패널 탭은 그대로 둔다 (4.2.3). 행 선택만 푼다.
     // **아무것도 안 고른 데서 처음 고르면 [개요]로 연다** (4.2.3 「영토 클릭 → 패널
     // [개요] 열림」). 전에는 선택을 풀기 전 탭이 남아 새로 고른 영토가 [사건]으로 열렸다
-    if (selection.kind === "none" && s.kind !== "none") setPanelTab("overview");
+    if (liveSelection.kind === "none" && s.kind !== "none") setPanelTab("overview");
     // 화면 밖이면 지도가 옮긴다 (4.2.3 「화면 밖이면 보이는 위치로 이동」)
     setReveal(s.kind === "territory" ? s.id : null);
     setLinkSel(null);
@@ -471,8 +487,8 @@ export default function Page() {
 
   /** [연결] 행 더블클릭 — 중심은 상대 영토, 그 관계를 강조한다 (4.3.3 ①) */
   const openRel = (v: RelView) => {
-    if (selection.kind !== "territory") return;
-    enterFromLinks({ center: partnerOf(v, selection.id), hi: v.rel.id, pair: null });
+    if (liveSelection.kind !== "territory") return;
+    enterFromLinks({ center: partnerOf(v, liveSelection.id), hi: v.rel.id, pair: null });
   };
 
   /** 유형 간 행 더블클릭 — 섬 간 보기 (4.3.3 ②) */
@@ -945,7 +961,7 @@ export default function Page() {
    * 섬 [연결] 탭과 같은 줄이라 행 동작(4.3.3)도 같다
    */
   const links = (() => {
-    if (selection.kind === "none") {
+    if (liveSelection.kind === "none") {
       return (
         <LinksTab
           mode="island"
@@ -961,12 +977,12 @@ export default function Page() {
         />
       );
     }
-    if (selection.kind === "island") {
+    if (liveSelection.kind === "island") {
       return (
         <LinksTab
           mode="island"
           rows={[]}
-          pairs={islandPairs(rels, islandOf, selection.key)}
+          pairs={islandPairs(rels, islandOf, liveSelection.key)}
           nameOf={terrName}
           islandOf={islandOf}
           islandInfo={islandInfo}
@@ -977,14 +993,14 @@ export default function Page() {
         />
       );
     }
-    const t = terr.get(selection.id);
+    const t = terr.get(liveSelection.id);
     if (!t) return null;
     const actor = layout.islands.find((i) => i.islandKey === t.islandKey)?.islandId === "ACTOR";
     return (
       <LinksTab
         mode={actor ? "actor" : "territory"}
-        selfId={selection.id}
-        rows={linkRows(rels, selection.id)}
+        selfId={liveSelection.id}
+        rows={linkRows(rels, liveSelection.id)}
         pairs={islandPairs(rels, islandOf, t.islandKey)}
         nameOf={terrName}
         islandOf={islandOf}
@@ -1130,7 +1146,7 @@ export default function Page() {
             ) : tab === "map" ? (
               <MapCanvas
                 layout={layout}
-                selection={selection}
+                selection={liveSelection}
                 onSelect={select}
                 lastSeen={lastSeen}
                 view={mapView}
@@ -1140,7 +1156,7 @@ export default function Page() {
                 raised={mapRel?.raised}
                 litIslands={mapRel?.litIslands}
                 hint={
-                  toast && selection.kind === "territory"
+                  toast && liveSelection.kind === "territory"
                     ? `검색 결과 영토 자동 선택 · 관련 섬 ${mapRel?.litIslands.size ?? 1}곳 표시`
                     : liveEvent
                       ? mapRel?.lines.length
@@ -1204,11 +1220,11 @@ export default function Page() {
                 lastSeen={lastSeen}
                 seenAt={seenAt}
                 islandKey={
-                  selection.kind === "island"
-                    ? selection.key
-                    : selection.kind === "territory"
+                  liveSelection.kind === "island"
+                    ? liveSelection.key
+                    : liveSelection.kind === "territory"
                       ? layout.territories.find(
-                          (x) => x.territoryId === selection.id,
+                          (x) => x.territoryId === liveSelection.id,
                         )?.islandKey
                       : undefined
                 }
@@ -1217,7 +1233,7 @@ export default function Page() {
                   if (i) select({ kind: "island", key, name: i.name });
                 }}
                 selectedTerritory={
-                  selection.kind === "territory" ? selection.id : undefined
+                  liveSelection.kind === "territory" ? liveSelection.id : undefined
                 }
                 onPickTerritory={(id) => {
                   const t = layout.territories.find(
