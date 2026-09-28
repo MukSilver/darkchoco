@@ -6,7 +6,7 @@
  * 그린다.
  */
 
-import type { QuarterKey } from "./quarter.ts";
+import { quarterText, type QuarterKey } from "./quarter.ts";
 
 export type Pt = { x: number; y: number };
 export type Size = { w: number; h: number };
@@ -151,5 +151,5 @@ export function fitTicks(n: number, width: number, labelW: number, max: number):
  * 「기준일로」가 돌아가는 가장 최근 분기는 스냅샷이 아니라 지금이라 안 적는다.
  */
 export function pastSnapshot(value: QuarterKey, latest: QuarterKey): string | null {
-  return value === latest ? null : value.replace("-", " ");
+  return value === latest ? null : quarterText(value);
 }

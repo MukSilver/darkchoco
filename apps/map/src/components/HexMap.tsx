@@ -292,6 +292,12 @@ export default function HexMap({
   /** 이름표와 관계선 끝 자리. 떠오른 영토는 윗면이 올라간 만큼 같이 올린다 */
   const anchor = (t: TerritoryShape) =>
     isUp(t) ? { x: t.label.x, y: t.label.y - LIFT } : t.label;
+  /**
+   * 키보드로 고를 수 있게 — Tab 으로 옮겨 Enter · Space (`MapCanvas` 가 받는다, 2026-09-28 코드 분석).
+   * 떠오른 영토는 윗면에만 단다(옆면까지 달면 같은 영토에 두 번 멈춘다)
+   */
+  const keyProps = (name: string) =>
+    interactive ? { tabIndex: 0, role: "button" as const, "aria-label": name } : {};
   const hoverProps = (id: string) => ({
     onMouseEnter: () => onHoverTerritory?.(id),
     onMouseLeave: () => onHoverTerritory?.(null),
@@ -375,7 +381,8 @@ export default function HexMap({
       ref={svgRef}
       viewBox={frame}
       className="size-full"
-      role="img"
+      // 누를 수 있는 지도면 안의 영토 · 섬 이름표가 단추라 그림 한 장(img)이 아니다
+      role={interactive ? "group" : "img"}
       aria-label="다크웹 섬 지도"
     >
       <defs>
@@ -435,6 +442,7 @@ export default function HexMap({
             stroke="var(--t-border-hex)"
             strokeWidth={1}
             className={`${pointer} transition-colors`}
+            {...keyProps(t.name)}
             {...hoverProps(t.territoryId)}
           />
         ))}
@@ -508,6 +516,8 @@ export default function HexMap({
               }
               strokeWidth={t.territoryId === selectedTerritory ? 2 : t.territoryId === hovered ? 1.4 : 1}
               className={pointer}
+              {...keyProps(t.name)}
+              aria-pressed={interactive ? t.territoryId === selectedTerritory : undefined}
               {...hoverProps(t.territoryId)}
             />
             </g>
@@ -587,6 +597,7 @@ export default function HexMap({
               transform={`translate(${i.label.x - w / 2} ${i.label.y - 9})`}
               opacity={dimIsland(i.islandKey) ? 0.4 : 1}
               className={pointer}
+              {...keyProps(`${i.name} 섬 · ${i.eventCount}건`)}
               onMouseEnter={interactive ? () => setHoverIsland(i.islandKey) : undefined}
               onMouseLeave={interactive ? () => setHoverIsland(null) : undefined}
             >

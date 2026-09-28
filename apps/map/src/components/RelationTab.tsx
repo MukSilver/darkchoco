@@ -49,6 +49,7 @@ import {
   CONF_CHIP,
   CONF_DASH,
   CONF_LABEL,
+  KIND_LABEL,
   KIND_NAME,
   KIND_ORDER,
   centerChips,
@@ -615,7 +616,8 @@ export default function RelationTab(p: RelationTabProps) {
             <svg
               viewBox={`0 0 ${W} ${H}`}
               className="block size-full"
-              role="img"
+              // 안의 선 · 노드가 단추라 그림 한 장(img)이 아니다
+              role="group"
               aria-label={p.pair ? "섬 간 관계 그래프" : `${centerName} 중심 관계 그래프`}
             >
               <defs>
@@ -654,7 +656,24 @@ export default function RelationTab(p: RelationTabProps) {
                     else p.onSelect(picked ? null : v.rel.id);
                   };
                   return (
-                    <g key={v.rel.id} className="cursor-pointer" onClick={pick} {...edgeHover(v.rel.id)}>
+                    <g
+                      key={v.rel.id}
+                      className="cursor-pointer"
+                      onClick={pick}
+                      // 키보드로도 고른다 — Tab 으로 옮겨 Enter · Space (2026-09-28 코드 분석)
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`${KIND_LABEL[v.rel.kind]} · ${nameOf(v.rel.from)} → ${nameOf(v.rel.to)}`}
+                      aria-pressed={picked}
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter" && e.key !== " ") return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (p.pair) p.onPairPick(v);
+                        else p.onSelect(picked ? null : v.rel.id);
+                      }}
+                      {...edgeHover(v.rel.id)}
+                    >
                       <path d={d} fill="none" stroke="transparent" strokeWidth={16} />
                       <path
                         d={d}
@@ -764,6 +783,20 @@ export default function RelationTab(p: RelationTabProps) {
                         e.stopPropagation();
                         if (!isCenter) p.onCenter(n.id);
                       }}
+                      // 이웃 노드는 키보드로도 중심으로 삼는다 — Tab 으로 옮겨 Enter · Space
+                      tabIndex={isCenter ? undefined : 0}
+                      role={isCenter ? undefined : "button"}
+                      aria-label={isCenter ? undefined : `${n.t.name} — 중심으로`}
+                      onKeyDown={
+                        isCenter
+                          ? undefined
+                          : (e) => {
+                              if (e.key !== "Enter" && e.key !== " ") return;
+                              e.preventDefault();
+                              e.stopPropagation();
+                              p.onCenter(n.id);
+                            }
+                      }
                       onMouseEnter={isCenter ? undefined : () => setHoverNode(n.id)}
                       // 떠나기는 중심 노드에도 단다 — 노드를 눌러 중심이 되면 떠나기 듣개가 빠져 hover 가
                       // 남았다가, 다시 이웃이 되면 마우스가 없는데도 밝게 그려졌다 (2026-09-28 검토)

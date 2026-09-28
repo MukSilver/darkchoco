@@ -66,7 +66,7 @@ import {
   type Recent,
   type SearchFilter,
 } from "@/lib/search";
-import { quarterEnd, quarterOfDate, spanOf, type QuarterKey } from "@/lib/quarter";
+import { quarterEnd, quarterOfDate, quarterText, spanOf, type QuarterKey } from "@/lib/quarter";
 import { boxSize, centerBox, quartersOf, snapshots, type Compare } from "@/lib/timeline";
 
 /**
@@ -1117,7 +1117,7 @@ export default function Page() {
               >
                 <span>
                   검색 결과 &apos;{toast.label}&apos;{josa(toast.label, "으로", "로")} 이동했어요
-                  {toast.moved && ` · 기준일을 ${toast.moved}로 옮겼어요`}
+                  {toast.moved && ` · 기준일을 ${quarterText(toast.moved)}로 옮겼어요`}
                 </span>
                 <button
                   type="button"
@@ -1163,10 +1163,10 @@ export default function Page() {
                     : tab === "relation"
                       ? relSubtitle()
                       : compare
-                        ? `시점 비교 · A ${compare.a} ↔ B ${compare.b}`
+                        ? `시점 비교 · A ${quarterText(compare.a)} ↔ B ${quarterText(compare.b)}`
                         : playing
-                          ? `재생 중 · ${quarters[0]} → ${quarters[quarters.length - 1]} (${speed}×)`
-                          : `누적 · ${quarters[0]} → ${quarters[quarters.length - 1]}`}
+                          ? `재생 중 · ${quarterText(quarters[0])} → ${quarterText(quarters[quarters.length - 1])} (${speed}×)`
+                          : `누적 · ${quarterText(quarters[0])} → ${quarterText(quarters[quarters.length - 1])}`}
               </p>
               <div className="flex-1" />
               {/*

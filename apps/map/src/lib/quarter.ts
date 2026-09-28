@@ -70,11 +70,21 @@ export function spanOf(
 }
 
 /**
+ * 화면에 적는 분기 — `2025 Q3`. 설계서 화면 문구(4.2.5 눈금, 4.3.3 「2024 Q1부터 관계 확인」, 4.3.4
+ * 기준일 「2026 Q3」)와 스냅샷 바가 이 꼴이다. 전에는 타임라인 탭만 열쇠 그대로 「2025-Q3」 이라
+ * 화면마다 달랐다 (2026-09-28 코드 분석). 열쇠(`QuarterKey`)는 그대로 둔다
+ */
+export function quarterText(k: QuarterKey): string {
+  const { year, q } = parseQuarter(k);
+  return `${year} Q${q}`;
+}
+
+/**
  * 눈금 이름표. 연도가 바뀌는 자리에만 연도를 붙인다 (설계서 4.2.5
  * 「연도 경계에 연도 표시」).
  */
 export function tickLabel(k: QuarterKey, prev?: QuarterKey): string {
   const { year, q } = parseQuarter(k);
-  if (!prev) return `${year} Q${q}`;
+  if (!prev) return quarterText(k);
   return parseQuarter(prev).year === year ? `Q${q}` : `${year} Q${q}`;
 }

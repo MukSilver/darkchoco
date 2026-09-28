@@ -21,7 +21,7 @@
 import type { ReactNode } from "react";
 
 import { Chip, IslandChip } from "./RelBits";
-import { CONF_CHIP, CONF_LABEL, KIND_NAME, dayText, partnerOf, type IslandPairRow, type RelView } from "@/lib/relations";
+import { CONF_CHIP, CONF_LABEL, KIND_LABEL, dayText, partnerOf, type IslandPairRow, type RelView } from "@/lib/relations";
 
 /** [연결] 탭에서 고른 행. 지도가 이것만 그린다 */
 export type LinkSel =
@@ -188,8 +188,8 @@ export default function LinksTab(p: LinksTabProps) {
                 title={<Arrow from={p.nameOf(v.rel.from)} to={p.nameOf(v.rel.to)} />}
                 meta={
                   v.fromRegistry
-                    ? `${KIND_NAME[v.rel.kind]} · 근거 사건 없음`
-                    : `${KIND_NAME[v.rel.kind]} · ${ym(v.first)} → ${ym(v.last)}`
+                    ? `${KIND_LABEL[v.rel.kind]} · 근거 사건 없음`
+                    : `${KIND_LABEL[v.rel.kind]} · ${ym(v.first)} → ${ym(v.last)}`
                 }
               />
             );
@@ -221,7 +221,7 @@ export default function LinksTab(p: LinksTabProps) {
                 }
                 count={r.count}
                 title={<Arrow from={p.islandInfo(r.from).name} to={p.islandInfo(r.to).name} />}
-                meta={`${KIND_NAME[r.topKind]}${r.last ? ` · 최근 ${dayText(r.last)}` : ""}`}
+                meta={`${KIND_LABEL[r.topKind]}${r.last ? ` · 최근 ${dayText(r.last)}` : ""}`}
               />
             );
           })

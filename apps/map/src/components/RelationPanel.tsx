@@ -27,7 +27,7 @@ import EventRow from "./EventRow";
 import PanelShell from "./PanelShell";
 import { Chip, KindDot } from "./RelBits";
 import type { MapLayout } from "@/lib/layout";
-import { quarterOfDate } from "@/lib/quarter";
+import { quarterOfDate, quarterText } from "@/lib/quarter";
 import {
   CONF_CHIP,
   CONF_LABEL,
@@ -72,7 +72,7 @@ export type RelationPanelProps = {
 };
 
 function quarterLabel(iso: string): string {
-  return quarterOfDate(new Date(iso)).replace("-", " ");
+  return quarterText(quarterOfDate(new Date(iso)));
 }
 
 export default function RelationPanel(p: RelationPanelProps) {

@@ -211,6 +211,22 @@ export default function MapCanvas({
   // 50% ↔ 200% 끝까지 튀었다 (2026-09-28 코드 분석). 둘레 칸 스크롤은 막는다 (`useWheelSteps`)
   useWheelSteps(pad, (n) => step(n * ZOOM_STEP));
 
+  /** 누른 도형으로 고른다 — 섬 이름표 · 영토, 둘 다 아니면 빈 곳이라 선택 해제 (설계서 4.2.3) */
+  const pickHit = (hit: Element | null) => {
+    const id = hit?.getAttribute("data-id") ?? "";
+    if (hit?.getAttribute("data-pick") === "island") {
+      const i = layout.islands.find((x) => x.islandKey === id);
+      if (i) onSelect({ kind: "island", key: id, name: i.name });
+      return;
+    }
+    if (hit?.getAttribute("data-pick") === "territory") {
+      const tt = layout.territories.find((x) => x.territoryId === id);
+      if (tt) onSelect({ kind: "territory", id, name: tt.name });
+      return;
+    }
+    onSelect({ kind: "none" });
+  };
+
   return (
     <div
       ref={box}
@@ -281,24 +297,20 @@ export default function MapCanvas({
         onClick={(e) => {
           // 끌고 놓은 것은 클릭이 아니다
           if (moved.current) return;
-          const hit =
-            e.target instanceof Element
-              ? e.target.closest("[data-pick]")
-              : null;
-          const id = hit?.getAttribute("data-id") ?? "";
-
-          if (hit?.getAttribute("data-pick") === "island") {
-            const i = layout.islands.find((x) => x.islandKey === id);
-            if (i) onSelect({ kind: "island", key: id, name: i.name });
-            return;
-          }
-          if (hit?.getAttribute("data-pick") === "territory") {
-            const tt = layout.territories.find((x) => x.territoryId === id);
-            if (tt) onSelect({ kind: "territory", id, name: tt.name });
-            return;
-          }
-          // 설계서 4.2.3 — 빈 곳 클릭이면 선택 해제
-          onSelect({ kind: "none" });
+          pickHit(e.target instanceof Element ? e.target.closest("[data-pick]") : null);
+        }}
+        onKeyDown={(e) => {
+          // 키보드로도 고른다 — 영토 · 섬 이름표에 Tab 으로 옮겨 Enter · Space (2026-09-28 코드 분석)
+          if (e.key !== "Enter" && e.key !== " ") return;
+          const hit = e.target instanceof Element ? e.target.closest("[data-pick]") : null;
+          if (!hit) return;
+          e.preventDefault();
+          pickHit(hit);
+          // 고른 영토는 떠오른 겹으로 옮겨 그려져 초점을 잃는다. 다시 그린 뒤 새 도형으로 옮긴다
+          const id = hit.getAttribute("data-id") ?? "";
+          setTimeout(() => {
+            box.current?.querySelector<SVGElement>(`[data-id="${CSS.escape(id)}"][tabindex]`)?.focus();
+          }, 0);
         }}
       >
         {layout.islands.length === 0 && (

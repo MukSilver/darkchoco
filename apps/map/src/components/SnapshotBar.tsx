@@ -18,7 +18,7 @@ import { useEffect, useRef, useState } from "react";
 
 import PlayGlyph from "./PlayGlyph";
 import { fitTicks, labelTicks } from "@/lib/mapui";
-import { quarterRange, tickLabel, type QuarterKey } from "@/lib/quarter";
+import { quarterRange, quarterText, tickLabel, type QuarterKey } from "@/lib/quarter";
 
 export { quarterEnd as snapshotBasis } from "@/lib/quarter";
 
@@ -161,7 +161,7 @@ export default function SnapshotBar({
       <div className="shrink-0">
         <div className="text-[9px] tracking-[0.18em] text-label">SNAPSHOT</div>
         <div className="whitespace-nowrap text-[20px] font-semibold leading-tight tabular-nums text-title">
-          {value.replace("-", " ")}
+          {quarterText(value)}
         </div>
       </div>
 
