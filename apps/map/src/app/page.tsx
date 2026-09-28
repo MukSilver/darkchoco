@@ -133,7 +133,7 @@ type Origin = {
   linkSel: LinkSel;
   mapView: MapView;
   ym: QuarterKey;
-  /** 패널이 펼쳐져 있었나. 엔티티 · 타임라인 탭은 접혀 있다 (goTab) — 돌아갈 때 그대로 되살린다 */
+  /** 패널이 펼쳐져 있었나. 관계 탭에 들어갈 때 펼치므로(`enterFromLinks`) 돌아갈 때 되살린다 */
   panelOpen: boolean;
 };
 
@@ -151,7 +151,14 @@ function presentIn(d: Date): Set<string> {
 export default function Page() {
   const [ym, setYm] = useState<QuarterKey>(TO);
   const [selection, setSelection] = useState<MapSelection>({ kind: "none" });
+  /**
+   * 상세 패널 펼침. **화면 전체에 하나다** (2026-09-28 최현서 2번 — 설계서 4.2.4 와 다르다,
+   * README 「설계서와 다른 곳」). 사람이 핸들로 바꾼 값이 기준이고 탭을 옮겨도 그대로다.
+   * 섬 · 영토 · 관계를 고르면 펼치되 선택을 풀어도 접지 않는다. 첫 화면은 펼침이다
+   */
   const [panelOpen, setPanelOpen] = useState(true);
+  // 엔티티 탭 섬 필터. 표만 거른다 — 전역 선택과 패널을 안 건드린다 (null 이면 선택한 섬 · 영토의 섬)
+  const [entityIsland, setEntityIsland] = useState<string | null>(null);
   const [panelTab, setPanelTab] = useState<PanelTabKey>("overview");
   const [linkSel, setLinkSel] = useState<LinkSel>(null);
   // 패널 [사건] 탭 기간. 다른 영토를 골라도 그대로 둔다 (설계서 4.3.2)
@@ -382,9 +389,17 @@ export default function Page() {
           : defaultCenter(rels, terrName),
     [relPair, relCenter, present, rels, terrName],
   );
-  /** 설계서 4.2.4 — 섬이나 영토를 고르면 패널이 자동으로 펼쳐진다 */
-  const select = (s: MapSelection) => {
+  /**
+   * 섬 · 영토 고르기. 고르면 패널을 펼친다 (설계서 4.2.4 「자동 펼침」). **선택을 풀어도
+   * 접지는 않는다** — 펼침은 사람이 핸들로 정한 값이다 (2026-09-28 최현서 2번).
+   *
+   * `open` 이 거짓이면 펼치지 않는다. 사람이 고른 것이 아니라 탭을 옮기며 저절로 고르는
+   * 자리(관계 탭 → 지도 탭의 중심 영토)가 쓴다 — 탭을 옮겨도 펼침은 그대로다
+   */
+  const select = (s: MapSelection, open = true) => {
     setSelection(s);
+    // 엔티티 탭 섬 필터는 고른 것의 섬을 따라간다
+    setEntityIsland(null);
     // 다른 영토를 골라도 열려 있던 패널 탭은 그대로 둔다 (4.2.3). 행 선택만 푼다.
     // **아무것도 안 고른 데서 처음 고르면 [개요]로 연다** (4.2.3 「영토 클릭 → 패널
     // [개요] 열림」). 전에는 선택을 풀기 전 탭이 남아 새로 고른 영토가 [사건]으로 열렸다
@@ -399,7 +414,7 @@ export default function Page() {
     setPickedEvent(null);
     // 「검색 결과로 이동했어요」 안내도 걷는다. 검색 결과를 고를 때는 이 뒤에 다시 띄운다
     setToast(null);
-    if (s.kind !== "none") setPanelOpen(true);
+    if (open && s.kind !== "none") setPanelOpen(true);
   };
 
   /* ── 관계 탭 오가기 (설계서 4.3.3 · 4.3.6) ───────────── */
@@ -466,8 +481,9 @@ export default function Page() {
     seqRef.current += 1;
     const seq = `${OPENED_AT}-${seqRef.current}`;
     setOrigin({ seq, tab, selection, panelTab, linkSel, mapView, ym, panelOpen });
-    // goTab 을 안 거치고 관계 탭으로 가므로 탭별 정리를 여기서 한다 — 관계 탭은 패널을 펼치고
-    // (연혁 강조가 보여야 한다), 타임라인을 떠나면 시점 비교를 푼다
+    // goTab 을 안 거치고 관계 탭으로 가므로 탭별 정리를 여기서 한다. 관계를 골라서 들어온
+    // 것이라 패널을 펼치고(연혁 강조가 보여야 한다 — 고르면 펼친다는 규칙과 같다), 타임라인을
+    // 떠나면 시점 비교를 푼다
     setPanelOpen(true);
     if (tab === "timeline") setCompare(null);
     setRelCenter(next.center);
@@ -537,21 +553,19 @@ export default function Page() {
    * 관계 탭에 들어가면 지도에서 고른 영토가 중심이다. 없으면 관계가 가장 많은
    * 영토다 (4.3.6). 관계 탭에서 지도로 가면 중심 영토를 고른 지도다 (4.3.3 예외 표).
    *
-   * **엔티티 · 타임라인 탭에서는 상세 패널을 접는다.** 피그마 ⑦-7 · ⑦-9b 가 오른쪽을
-   * 「‹ 상세패널」 접힘 레일로 두고 가운데 표와 지도를 넓게 쓴다. 거기서 행이나 섬을
-   * 고르면 `select` 가 다시 편다 (설계서 4.2.4 「섬 또는 영토 클릭 → 자동으로 펼침」).
-   * 지도 · 관계 탭으로 오면 편다 — ⑦-1 · ⑦-8 은 패널이 펼쳐진 화면이다
+   * **상세 패널 펼침은 건드리지 않는다.** 전에는 엔티티 · 타임라인 탭에서 접고 지도 · 관계
+   * 탭에서 펼쳐서(피그마 ⑦-7 · ⑦-9b · ⑦-1 · ⑦-8) 탭마다 화면 탭 단추 자리가 옮겨 다녔다.
+   * 이제 한 탭에서 펼쳤으면 다른 탭에서도 펼쳐져 있다 (2026-09-28 최현서 2번)
    */
   const goTab = (k: ViewTabKey) => {
     if (k === tab) return;
-    setPanelOpen(k === "map" || k === "relation");
     if (k === "relation") {
       const picked = selection.kind === "territory" && present.has(selection.id) ? selection.id : null;
       setRelCenter(picked);
       clearRel();
     } else if (tab === "relation") {
       if (k === "map" && center && terr.has(center)) {
-        select({ kind: "territory", id: center, name: terrName(center) });
+        select({ kind: "territory", id: center, name: terrName(center) }, false);
       }
       dropOurEntry();
       clearRel();
@@ -584,6 +598,7 @@ export default function Page() {
     setPickedEvent(null);
     setReport([]);
     setPanelOpen(true);
+    setEntityIsland(null);
     setPanelTab("overview");
     setPeriod(DEFAULT_PERIOD);
     setHideScam(false);
@@ -1118,17 +1133,17 @@ export default function Page() {
                           : `누적 · ${quarters[0]} → ${quarters[quarters.length - 1]}`}
               </p>
               <div className="flex-1" />
-              {results !== null ? (
-                <button
-                  type="button"
-                  onClick={() => setResults(null)}
-                  className="shrink-0 whitespace-nowrap rounded-[10px] border border-edge px-s3 py-s2 text-[12px] text-body hover:text-title"
-                >
-                  검색 결과 닫기 ×
-                </button>
-              ) : (
-                <ViewTabs current={tab} onChange={goTab} />
-              )}
+              {/*
+                화면 탭은 늘 같은 자리에 둔다. 검색 결과 화면에서 탭을 누르면 결과를 닫고 그 탭으로
+                간다. 「검색 결과 닫기 ×」는 결과 목록 머리로 옮겼다 (2026-09-28 코드 분석)
+              */}
+              <ViewTabs
+                current={tab}
+                onChange={(k) => {
+                  setResults(null);
+                  goTab(k);
+                }}
+              />
             </div>
 
             {results !== null ? (
@@ -1140,6 +1155,7 @@ export default function Page() {
                 onFilter={setFilter}
                 onPick={(h) => pickHit(h, results)}
                 onOpenEvent={openFromSearch}
+                onClose={() => setResults(null)}
               />
             ) : tab === "timeline" ? (
               <TimelineTab
@@ -1231,18 +1247,20 @@ export default function Page() {
                 lastSeen={lastSeen}
                 seenAt={seenAt}
                 islandKey={
-                  liveSelection.kind === "island"
-                    ? liveSelection.key
-                    : liveSelection.kind === "territory"
-                      ? layout.territories.find(
-                          (x) => x.territoryId === liveSelection.id,
-                        )?.islandKey
-                      : undefined
+                  entityIsland && layout.islands.some((i) => i.islandKey === entityIsland)
+                    ? entityIsland
+                    : liveSelection.kind === "island"
+                      ? liveSelection.key
+                      : liveSelection.kind === "territory"
+                        ? layout.territories.find(
+                            (x) => x.territoryId === liveSelection.id,
+                          )?.islandKey
+                        : undefined
                 }
-                onPickIsland={(key) => {
-                  const i = layout.islands.find((x) => x.islandKey === key);
-                  if (i) select({ kind: "island", key, name: i.name });
-                }}
+                // 섬 필터는 표만 거른다 — 전에는 전역 선택을 그 섬으로 바꾸고 접어 둔 패널을
+                // 펼쳐 표가 264px 좁아졌다 (2026-09-28 코드 분석). 설계서 4.3.5 도 행 클릭 때만
+                // 패널 내용을 말한다
+                onPickIsland={setEntityIsland}
                 selectedTerritory={
                   liveSelection.kind === "territory" ? liveSelection.id : undefined
                 }
