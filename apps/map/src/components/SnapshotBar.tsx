@@ -32,10 +32,17 @@ export type SnapshotBarProps = {
   onChange: (q: QuarterKey) => void;
   playing: boolean;
   onPlaying: (v: boolean) => void;
+  /**
+   * 재생 속도 (1 · 2 · 4). 타임라인 탭과 같은 값이다 — 전에는 스냅샷 바가 1초 고정이라 타임라인에서
+   * 고른 속도가 여기서는 안 먹었다 (2026-09-28 코드 분석). 없으면 1
+   */
+  speed?: number;
+  onSpeed?: (v: number) => void;
 };
 
-/** 재생 간격. 설계서 4.2.5 는 속도를 안 정했다. 타임라인 1× 와 맞춘다 */
+/** 1× 재생 간격. 설계서 4.2.5 는 속도를 안 정했다. 타임라인 1× 와 맞춘다 */
 const TICK_MS = 1000;
+const SPEEDS = [1, 2, 4] as const;
 
 /** 눈금에 이름표를 몇 개까지 낼까. 분기가 많으면 건너뛴다 */
 const MAX_TICKS = 8;
@@ -55,6 +62,8 @@ export default function SnapshotBar({
   onChange,
   playing,
   onPlaying,
+  speed = 1,
+  onSpeed,
 }: SnapshotBarProps) {
   const list = quarterRange(from, to);
   const i = Math.max(0, list.indexOf(value));
@@ -73,9 +82,9 @@ export default function SnapshotBar({
       onPlaying(false);
       return;
     }
-    const id = setTimeout(() => onChange(list[i + 1]), TICK_MS);
+    const id = setTimeout(() => onChange(list[i + 1]), TICK_MS / speed);
     return () => clearTimeout(id);
-  }, [playing, i, list, onChange, onPlaying]);
+  }, [playing, i, list, onChange, onPlaying, speed]);
 
   /*
    * 눈금은 분기마다 긋고 이름표만 빽빽하면 건너뛴다 (설계서 4.2.5 「눈금은
@@ -107,6 +116,34 @@ export default function SnapshotBar({
         {/* 글자(⏸ ▶)는 윈도에서 컬러 이모지가 된다. 타임라인 탭과 같은 그림을 쓴다 */}
         <PlayGlyph kind={playing ? "pause" : "play"} />
       </button>
+      {onSpeed && (
+        // 재생 속도 — 타임라인 탭과 같은 값 · 같은 모양(펼침). 재생 중에는 테두리가 강조색이다
+        <div
+          className={[
+            "relative h-[30px] shrink-0 rounded-[8px] border",
+            playing ? "border-accent" : "border-edge hover:border-edge-strong",
+          ].join(" ")}
+        >
+          <select
+            aria-label="재생 속도"
+            value={speed}
+            onChange={(e) => onSpeed(Number(e.target.value))}
+            className="h-full cursor-pointer appearance-none rounded-[8px] bg-transparent pl-[9px] pr-[20px] text-[12px] tabular-nums text-body"
+          >
+            {SPEEDS.map((v) => (
+              <option key={v} value={v} className="bg-panel text-body">
+                {v}×
+              </option>
+            ))}
+          </select>
+          <span
+            aria-hidden
+            className="pointer-events-none absolute right-[8px] top-1/2 -translate-y-1/2 text-[8px] text-body"
+          >
+            ▾
+          </span>
+        </div>
+      )}
 
       <div className="shrink-0">
         <div className="text-[9px] tracking-[0.18em] text-label">SNAPSHOT</div>

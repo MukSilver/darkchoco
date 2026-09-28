@@ -9,9 +9,10 @@
  * 한 경로에 담으면 칸 경계가 안 보이므로, 채움용 경로와 격자용 경로를 나눈다.
  */
 
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { cellToXY, hexPoints } from "@/lib/hex";
 import type { MapLayout, TerritoryShape } from "@/lib/layout";
+import { boxOrigin, flipFrom, growFrom, islandBoxes, parseMs, type IslandBox } from "@/lib/motion";
 import { CONF_DASH, KIND_NAME, type RelView } from "@/lib/relations";
 
 /** 칸 하나의 육각 경로 */
@@ -185,6 +186,40 @@ export default function HexMap({
   // 마우스를 올린 섬 이름표. 테두리를 섬 색으로 바꾼다 (2026-09-28 코드 분석 — hover 가 없었다)
   const [hoverIsland, setHoverIsland] = useState<string | null>(null);
 
+  /*
+   * 시점을 옮길 때 섬이 옮겨 간다 (2026-09-28 최현서 7번 — 「지구본에서 대륙이 이동하는 것처럼」,
+   * `lib/motion.ts`). 판(layout)이 바뀌면 섬마다 새 모양을 앞 분기 자리 · 크기에 놓고 시작해
+   * `--dur-slow` 동안 제자리로 돌아온다. 새로 생긴 섬은 번져 나오고, 관계선은 다시 번져 나온다.
+   * 움직임 줄이기를 켠 사람은 `--dur-slow` 가 0 이라 안 움직인다. 웹 애니메이션 API 를 써서
+   * 다시 그리지 않는다 — 판이 바뀐 직후 한 번만 돈다
+   */
+  const frame = viewBox ?? layout.viewBox;
+  const svgRef = useRef<SVGSVGElement>(null);
+  const prevFrame = useRef<{ boxes: Map<string, IslandBox>; origin: { x: number; y: number } } | null>(null);
+  useLayoutEffect(() => {
+    const svg = svgRef.current;
+    const now = { boxes: islandBoxes(layout), origin: boxOrigin(frame) };
+    const before = prevFrame.current;
+    prevFrame.current = now;
+    if (!svg || !before || typeof svg.animate !== "function") return;
+    const ms = parseMs(getComputedStyle(svg).getPropertyValue("--dur-slow"));
+    if (ms <= 0) return;
+    const opts: KeyframeAnimationOptions = { duration: ms, easing: "cubic-bezier(0.2, 0, 0, 1)" };
+    for (const [key, box] of now.boxes) {
+      const was = before.boxes.get(key);
+      const frames: Keyframe[] = was
+        ? [{ transform: flipFrom(was, box, before.origin, now.origin) }, { transform: "none" }]
+        : [{ transform: growFrom(box), opacity: 0 }, { transform: "none", opacity: 1 }];
+      svg.querySelectorAll<SVGElement>(`[data-island="${CSS.escape(key)}"]`).forEach((el) => {
+        el.getAnimations().forEach((a) => a.cancel());
+        el.animate(frames, opts);
+      });
+    }
+    svg.querySelectorAll<SVGElement>('[data-flip="fade"]').forEach((el) => {
+      el.animate([{ opacity: 0 }, { opacity: 1 }], opts);
+    });
+  }, [layout, frame]);
+
   /** 떠오르는가 — 고른 영토, 이어진 영토, [연결] 행의 상대 영토 */
   const isUp = (t: TerritoryShape) =>
     t.territoryId === selectedTerritory ||
@@ -271,7 +306,8 @@ export default function HexMap({
 
   return (
     <svg
-      viewBox={viewBox ?? layout.viewBox}
+      ref={svgRef}
+      viewBox={frame}
       className="size-full"
       role="img"
       aria-label="다크웹 섬 지도"
@@ -305,6 +341,7 @@ export default function HexMap({
         {layout.islands.map((i) => (
           <path
             key={i.islandKey}
+            data-island={i.islandKey}
             d={i.outline}
             fill="none"
             stroke={`var(--t-island-${i.token})`}
@@ -326,6 +363,7 @@ export default function HexMap({
             key={t.territoryId}
             data-pick="territory"
             data-id={t.territoryId}
+            data-island={t.islandKey}
             d={cellsPath(t, layout.size)}
             fill={dim(t) ? `var(--t-island-${t.token}-dim)` : `var(--t-island-${t.token})`}
             stroke="var(--t-border-hex)"
@@ -345,6 +383,7 @@ export default function HexMap({
         {hoveredFlat && (
           <path
             aria-hidden
+            data-island={hoveredFlat.islandKey}
             d={cellsPath(hoveredFlat, layout.size)}
             fill={`var(--t-island-${hoveredFlat.token}-hover)`}
             stroke="var(--t-hex-hover-edge)"
@@ -367,23 +406,26 @@ export default function HexMap({
         <g>
           <g filter="url(#raise-shadow)">
             {up.map((t) => (
-              <path
-                key={t.territoryId}
-                data-pick="territory"
-                data-id={t.territoryId}
-                d={cellsPath(t, layout.size)}
-                transform={`translate(0 ${DEPTH})`}
-                fill={`var(--t-island-${t.token}-side)`}
-                stroke={`var(--t-island-${t.token}-side)`}
-                strokeWidth={1}
-                className={pointer}
-                {...hoverProps(t.territoryId)}
-              />
+              // 시점을 옮길 때 섬째 움직이는 겹(`data-island`). transform 속성이 있는 도형은 CSS
+              // 움직임이 그 속성을 덮으므로 한 겹 감싼다
+              <g key={t.territoryId} data-island={t.islandKey}>
+                <path
+                  data-pick="territory"
+                  data-id={t.territoryId}
+                  d={cellsPath(t, layout.size)}
+                  transform={`translate(0 ${DEPTH})`}
+                  fill={`var(--t-island-${t.token}-side)`}
+                  stroke={`var(--t-island-${t.token}-side)`}
+                  strokeWidth={1}
+                  className={pointer}
+                  {...hoverProps(t.territoryId)}
+                />
+              </g>
             ))}
           </g>
           {up.map((t) => (
+            <g key={t.territoryId} data-island={t.islandKey}>
             <path
-              key={t.territoryId}
               data-pick="territory"
               data-id={t.territoryId}
               d={cellsPath(t, layout.size)}
@@ -402,6 +444,7 @@ export default function HexMap({
               className={pointer}
               {...hoverProps(t.territoryId)}
             />
+            </g>
           ))}
           {/*
             마우스를 올린 떠오른 영토의 밝은 테두리를 맨 위에 한 겹 더 긋는다 — 나중에 그려지는
@@ -410,16 +453,17 @@ export default function HexMap({
           {up
             .filter((t) => t.territoryId === hovered && t.territoryId !== selectedTerritory)
             .map((t) => (
-              <path
-                key={`hover-${t.territoryId}`}
-                aria-hidden
-                d={cellsPath(t, layout.size)}
-                transform={`translate(0 ${-LIFT})`}
-                fill="none"
-                stroke="var(--t-hex-hover-edge)"
-                strokeWidth={1.4}
-                className="pointer-events-none"
-              />
+              <g key={`hover-${t.territoryId}`} data-island={t.islandKey}>
+                <path
+                  aria-hidden
+                  d={cellsPath(t, layout.size)}
+                  transform={`translate(0 ${-LIFT})`}
+                  fill="none"
+                  stroke="var(--t-hex-hover-edge)"
+                  strokeWidth={1.4}
+                  className="pointer-events-none"
+                />
+              </g>
             ))}
         </g>
       )}
@@ -430,7 +474,8 @@ export default function HexMap({
         클릭은 안 받는다 — 선 위를 눌러도 아래 영토가 골라진다
       */}
       {drawn.length > 0 && (
-        <g aria-hidden className="pointer-events-none">
+        // 시점을 옮기면 선은 섬을 따라가지 않고 다시 번져 나온다 (`data-flip="fade"`)
+        <g aria-hidden className="pointer-events-none" data-flip="fade">
           {drawn.map(({ v, d }) => (
             <path
               key={v.rel.id}
@@ -469,8 +514,8 @@ export default function HexMap({
         {layout.islands.map((i) => {
           const w = textWidth(i.name, 9) + textWidth(`${i.eventCount}건`, 8) + 30;
           return (
+            <g key={i.islandKey} data-island={i.islandKey}>
             <g
-              key={i.islandKey}
               data-pick="island"
               data-id={i.islandKey}
               transform={`translate(${i.label.x - w / 2} ${i.label.y - 9})`}
@@ -494,6 +539,7 @@ export default function HexMap({
                 </tspan>
               </text>
             </g>
+            </g>
           );
         })}
       </g>
@@ -512,10 +558,8 @@ export default function HexMap({
             const w = textWidth(t.name, 8) + 12;
             const at = anchor(t);
             return (
-              <g
-                key={t.territoryId}
-                transform={`translate(${at.x - w / 2} ${at.y - 7})`}
-              >
+              <g key={t.territoryId} data-island={t.islandKey}>
+              <g transform={`translate(${at.x - w / 2} ${at.y - 7})`}>
                 <rect
                   width={w}
                   height={14}
@@ -533,6 +577,7 @@ export default function HexMap({
                 >
                   {t.name}
                 </text>
+              </g>
               </g>
             );
           })}
