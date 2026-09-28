@@ -7,7 +7,8 @@
  *
  * ## 하는 일
  *
- *   /data/dash.js    노션을 읽어 화면이 쓰는 데이터를 만들어 냅니다. 60초 캐시
+ *   /data/dash.js    노션을 읽어 화면이 쓰는 데이터를 만들어 냅니다. 60초 캐시.
+ *                    게시처 DB 셋은 건수만 담습니다 (2026-09-25, 명부읽기)
  *   /api/review      O/X 를 노션 「검토 여부」 에 쓰고 규칙대로 「DB 반영」 을 맞춥니다
  *   /api/run         GitHub Actions 수집을 시작시킵니다
  *   /api/status      그 실행이 어디까지 갔는지 봅니다
@@ -367,7 +368,18 @@ function _첫줄(v) {
   return (typeof v === "string" ? v : "").split("\n")[0].slice(0, 120);
 }
 
-const 접개 = { 사람자동: _사람자동, 있없: _있없, 첫줄: _첫줄 };
+/** 시각을 KST 날짜로. UTC 15시 이후 글이 하루 앞서지 않게. reader.py 의 _KST날 과 같습니다 */
+function _KST날(v) {
+  const s = typeof v === "string" ? v.trim() : "";
+  if (s.length <= 10) return s;
+  // 시간대가 적혀 있을 때만 옮깁니다. 없으면 파이썬처럼 적힌 날을 그대로 씁니다
+  if (!/(Z|[+-]\d{2}:?\d{2})$/i.test(s)) return s.slice(0, 10);
+  const t = Date.parse(s);
+  if (Number.isNaN(t)) return s.slice(0, 10);
+  return new Date(t + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+const 접개 = { 사람자동: _사람자동, 있없: _있없, 첫줄: _첫줄, KST날: _KST날 };
 
 /** 노션 페이지 하나를 `dbs.json` 이 적은 대로 옮깁니다. */
 function 줄(페이지, 칸들) {
@@ -392,6 +404,63 @@ function DB하나(열쇠) {
   const d = (레지스트리.DB || []).find((x) => x.열쇠 === 열쇠);
   if (!d) throw new Error(`dbs.json 에 ${열쇠} 가 없습니다`);
   return d;
+}
+
+// ── 게시처 DB 집계 (2026-09-25). reader.py 의 명부셈 과 같습니다 ──
+const 확인일갈래 = ["7일 안", "30일 안", "30일 넘음", "빈칸"];
+const _날꼴 = /^\d{4}-\d{2}-\d{2}$/;
+const _자리표시 = new Set(["미기입", "해당 없음", "없음", "-", "모름", "n/a"]);
+
+function _갈래값(v) {
+  return typeof v === "string" && v.trim() ? v.trim() : "빈칸";
+}
+
+/** 'YYYY-MM-DD' 를 날 수로. 없는 날(2026-13-45)은 NaN — Date.UTC 가 넘겨 버리므로 되돌려 봅니다 */
+function _날수(s) {
+  const [y, m, d] = s.split("-").map(Number);
+  const t = Date.UTC(y, m - 1, d);
+  if (new Date(t).toISOString().slice(0, 10) !== s) return NaN;
+  return t / 86400000;
+}
+
+function _확인일갈래(v, 오늘) {
+  const s = typeof v === "string" ? v.slice(0, 10) : "";
+  if (!_날꼴.test(s)) return "빈칸";
+  const 며칠 = _날수(오늘) - _날수(s);
+  if (Number.isNaN(며칠)) return "빈칸";
+  return 며칠 <= 7 ? "7일 안" : 며칠 <= 30 ? "30일 안" : "30일 넘음";
+}
+
+/** 한국 관련 유출에 실제로 무엇이 적혀 있나. 자리표시 · 「0건」 뿐인 기계 줄은 안 셉니다 */
+function 한국유출있나(v) {
+  if (typeof v !== "string") return false;
+  // 파이썬 splitlines() 와 같은 줄 경계입니다
+  for (const 한줄 of v.split(/\r\n|[\n\r\v\f\x1c-\x1e\x85\u2028\u2029]/)) {
+    const s = 한줄.trim();
+    if (!s || _자리표시.has(s.toLowerCase())) continue;
+    const 수들 = [...s.matchAll(/(\d[\d,]*)\s*건/g)].map((m) => Number(m[1].replace(/,/g, "")));
+    if (수들.length && !수들.some((x) => x)) continue;
+    return true;
+  }
+  return false;
+}
+
+/** 게시처 DB 줄들을 **건수로만** 셉니다. 이름 · 주소 · 담당자는 읽지도 않습니다 */
+function 명부셈(페이지들, 칸, 오늘) {
+  const out = { 줄수: 0, 상태: {}, 조사단계: {}, 확인일: {}, 한국유출: 0, DB반영: 0 };
+  for (const k of 확인일갈래) out.확인일[k] = 0;
+  for (const pg of 페이지들) {
+    const p = pg.properties || {};
+    out.줄수 += 1;
+    for (const 열쇠 of ["상태", "조사단계"]) {
+      const k = _갈래값(값(p[칸[열쇠]]));
+      out[열쇠][k] = (out[열쇠][k] || 0) + 1;
+    }
+    out.확인일[_확인일갈래(값(p[칸.확인일]), 오늘)] += 1;
+    if (한국유출있나(값(p[칸.한국유출]))) out.한국유출 += 1;
+    if (값(p[칸.DB반영]) === true) out.DB반영 += 1;
+  }
+  return out;
 }
 
 /** 한 번에 읽을 판 수. 100줄씩이라 2000줄입니다. */
@@ -439,6 +508,47 @@ async function 사건읽기(token) {
   return { 줄들: out, 잘림 };
 }
 
+/** 게시처 DB 한 갈래에서 읽을 판 수. 판상한 20 + 8 × 3 갈래 = 44 ≤ 무료 요금제 50 */
+const 명부판상한 = 8;
+
+/**
+ * 게시처 DB 셋을 **건수로만** 셉니다 (2026-09-25). `apps/dash/build.py` 의 `명부()` 와 같습니다.
+ * 줄은 세고 바로 버립니다. 이름 · 주소 · 담당자는 브라우저로 안 갑니다(반출경계표 7-1).
+ */
+async function 명부읽기(token, 오늘) {
+  const m = 레지스트리.명부;
+  const 갈래 = [];
+  for (const g of m.갈래) {
+    const 페이지들 = [];
+    let cursor = null;
+    let 잘림 = 0;
+    for (let i = 0; i < 명부판상한; i++) {
+      const body = { page_size: 100 };
+      if (cursor) body.start_cursor = cursor;
+      const r = await fetch(`https://api.notion.com/v1/data_sources/${g.id}/query`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Notion-Version": 노션판,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) {
+        const 몸 = await r.text();
+        throw new Error(`노션 ${r.status}: ${몸.slice(0, 200)}`);
+      }
+      const res = await r.json();
+      페이지들.push(...(res.results || []));
+      if (!res.has_more) break;
+      cursor = res.next_cursor;
+      if (i === 명부판상한 - 1) 잘림 = 페이지들.length;
+    }
+    갈래.push({ 열쇠: g.열쇠, 이름: g.이름, 잘림, ...명부셈(페이지들, m.칸, 오늘) });
+  }
+  return { 오늘, 갈래 };
+}
+
 /**
  * 화면이 그대로 쓰는 `window.DASH` 를 만듭니다.
  *
@@ -455,6 +565,13 @@ async function 데이터만들기(env, now) {
   const { 줄들: 사건, 잘림 } = await 사건읽기(env.NOTION_TOKEN);
   const 검토별 = {};
   for (const e of 사건) 검토별[e.검토 || "미검토"] = (검토별[e.검토 || "미검토"] || 0) + 1;
+  // 게시처 DB 집계는 따로 잡습니다. 여기서 죽어도(하위 요청 한도 등) 사건 화면은 보여야 합니다
+  let 명부;
+  try {
+    명부 = await 명부읽기(env.NOTION_TOKEN, 이제(now).slice(0, 10));
+  } catch (e) {
+    명부 = { 오류: String((e && e.message) || e).slice(0, 200) };
+  }
   return {
     구운때: 이제(now) + " (노션에서 방금 읽음)",
     // 상한에 걸려 뒷줄을 못 읽었습니다. 화면이 이것을 보고 경고를 냅니다
@@ -484,6 +601,7 @@ async function 데이터만들기(env, now) {
     요약: { 자리: {}, 자리합: 0, 지도날: "" },
     사건: 사건,
     검토별: 검토별,
+    명부: 명부,
     노션읽음: true,
   };
 }

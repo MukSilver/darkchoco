@@ -23,12 +23,22 @@
                              레지스트리 밖 DB 의 줄을 짚는 열쇠가 나갑니다
     **people**               **「기입됨 / 미기입」.** 실명이 들어가는 자리입니다
     files                    개수만. 파일 이름에 값이 섞입니다
+
+## 게시처 DB 는 센 것만 냅니다 (2026-09-25)
+
+`명부셈()` 이 게시처 DB 셋(포럼 · 랜섬웨어 · 텔레그램)의 줄을 받아 **건수만** 돌려줍니다.
+이름 · 주소 · 담당자 · 한국 관련 유출 글은 화면과 구운 파일로 안 갑니다(반출경계표 7-1).
+`deploy/worker.js` 에 같은 짝이 있고 `packages/tests/test_명부집계.py` 가 둘을 맞춰 봅니다.
 """
 from __future__ import annotations
 
 import json
+import re
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+
+KST = timezone(timedelta(hours=9))
 
 HERE = Path(__file__).resolve().parent
 레지스트리자리 = HERE / "dbs.json"
@@ -136,7 +146,20 @@ def _첫줄(v: Any) -> str:
     return s.split("\n")[0][:120]
 
 
-접개 = {"사람자동": _사람자동, "있없": _있없, "첫줄": _첫줄}
+def _KST날(v: Any) -> str:
+    """시각을 KST 날짜(YYYY-MM-DD)로. 텔레그램 · 집계처 시각은 UTC 라 그대로 자르면
+    UTC 15시 이후 글이 하루 앞섭니다. 날짜만 있으면 그대로, 시간대가 없으면 앞 열 글자입니다."""
+    s = v.strip() if isinstance(v, str) else ""
+    if len(s) <= 10:
+        return s
+    try:
+        d = datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except ValueError:
+        return s[:10]
+    return (d.astimezone(KST) if d.tzinfo else d).date().isoformat()
+
+
+접개 = {"사람자동": _사람자동, "있없": _있없, "첫줄": _첫줄, "KST날": _KST날}
 
 
 def 줄(페이지: dict, 칸들: list) -> dict:
@@ -163,3 +186,68 @@ def 줄(페이지: dict, 칸들: list) -> dict:
 def 열이름들(칸들: list) -> list:
     """표의 열로 그릴 이름만. `안그림` 인 칸은 뺍니다 (거르개만 씁니다)."""
     return [c["낼"] for c in 칸들 if not c.get("안그림")]
+
+
+# ── 게시처 DB 집계 (2026-09-25) ─────────────────────────────────────
+확인일갈래 = ("7일 안", "30일 안", "30일 넘음", "빈칸")
+_날꼴 = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+# 「한국 관련 유출」 에 적힌 자리표시. 이것만 있는 줄은 안 셉니다
+_자리표시 = frozenset({"미기입", "해당 없음", "없음", "-", "모름", "n/a"})
+_건수꼴 = re.compile(r"(\d[\d,]*)\s*건")
+
+
+def _갈래값(v: Any) -> str:
+    """선택지 이름. 비었거나 모르는 꼴이면 「빈칸」."""
+    return v.strip() if isinstance(v, str) and v.strip() else "빈칸"
+
+
+def _확인일갈래(v: Any, 오늘: str) -> str:
+    """오늘에서 며칠 지났나. 7일 안(앞날 포함) · 30일 안 · 30일 넘음 · 빈칸(없거나 틀린 날)."""
+    s = v[:10] if isinstance(v, str) else ""
+    if not _날꼴.match(s):
+        return "빈칸"
+    try:
+        며칠 = (date.fromisoformat(오늘) - date.fromisoformat(s)).days
+    except ValueError:
+        return "빈칸"
+    return "7일 안" if 며칠 <= 7 else "30일 안" if 며칠 <= 30 else "30일 넘음"
+
+
+def 한국유출있나(v: Any) -> bool:
+    """「한국 관련 유출」 에 실제로 무엇이 적혀 있나.
+
+    자리표시(미기입 · 해당 없음)만 있는 줄, **「N건」 의 N 이 모두 0 인 기계 줄**은 안 셉니다
+    (2026-09-25 최현서 「0건 줄은 빼고 셈」). 사람이 쓴 글은 셉니다.
+    """
+    if not isinstance(v, str):
+        return False
+    for 한줄 in v.splitlines():
+        s = 한줄.strip()
+        if not s or s.lower() in _자리표시:
+            continue
+        수들 = [int(x.replace(",", "")) for x in _건수꼴.findall(s)]
+        if 수들 and not any(수들):
+            continue
+        return True
+    return False
+
+
+def 명부셈(페이지들: list, 칸: dict, 오늘: str) -> dict:
+    """게시처 DB 줄들을 **건수로만** 셉니다. 이름 · 주소 · 담당자는 읽지도 않습니다.
+
+    `칸` 은 dbs.json 「명부」.칸 — 상태 · 확인일 · 조사단계 · 한국유출 · DB반영 의 노션 칸 이름.
+    """
+    out = {"줄수": 0, "상태": {}, "조사단계": {}, "확인일": {k: 0 for k in 확인일갈래},
+           "한국유출": 0, "DB반영": 0}
+    for pg in 페이지들:
+        p = pg.get("properties") or {}
+        out["줄수"] += 1
+        for 열쇠 in ("상태", "조사단계"):
+            k = _갈래값(값(p.get(칸[열쇠])))
+            out[열쇠][k] = out[열쇠].get(k, 0) + 1
+        out["확인일"][_확인일갈래(값(p.get(칸["확인일"])), 오늘)] += 1
+        if 한국유출있나(값(p.get(칸["한국유출"]))):
+            out["한국유출"] += 1
+        if 값(p.get(칸["DB반영"])) is True:
+            out["DB반영"] += 1
+    return out

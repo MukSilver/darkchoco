@@ -18,6 +18,8 @@
     제어판   수집 실행 이력 · 표 현황 · 설정 점검 · 자주 쓰는 명령
     사건     수집 DB 줄. 검토 여부 · 소스 · 한국 관련 · 근거
     요약     자리 수 (굽기 산출물에서) · 사건 수 · 미검토 수
+    명부     게시처 DB 셋의 **건수만** (2026-09-25). 상태 · 확인일 · 조사 단계 · 한국 관련 유출 ·
+             DB 반영. 줄 이름 · 주소 · 담당자는 안 담습니다
 
 ## 무엇을 안 담나
 
@@ -164,6 +166,23 @@ def 사건(수집DB: str | None = None) -> list:
     return [reader.줄(r, db["칸"]) for r in n.query_all(수집DB or db["id"])]
 
 
+def 명부(오늘: str) -> dict:
+    """게시처 DB 셋을 **건수로만** 셉니다 (2026-09-25). 줄은 세고 바로 버립니다.
+
+    이름 · 주소 · 담당자는 `reader.명부셈()` 이 읽지도 않습니다. 구운 파일에는 숫자와 상태 ·
+    조사 단계 선택지 이름만 남습니다. 무엇을 읽을지는 `dbs.json` 「명부」 가 정합니다.
+    """
+    from dc_notion import Notion
+
+    m = reader.레지스트리()["명부"]
+    n = Notion(verbose=False, allow_env_token=False)
+    갈래 = []
+    for g in m["갈래"]:
+        셈 = reader.명부셈(n.query_all(g["id"]), m["칸"], 오늘)
+        갈래.append({"열쇠": g["열쇠"], "이름": g["이름"], "잘림": 0, **셈})
+    return {"오늘": 오늘, "갈래": 갈래}
+
+
 def 요약(지도: Path) -> dict:
     """첫 화면 숫자. **자리 수는 굽기 산출물에서 가져옵니다.** 새로 안 읽습니다."""
     d = {"자리": {}, "자리합": 0, "지도날": ""}
@@ -206,6 +225,12 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as e:  # noqa: BLE001  노션이 없어도 제어판은 보여야 합니다
             d["노션오류"] = "%s: %s" % (type(e).__name__, str(e)[:200])
             print("  노션을 못 읽었다: %s" % d["노션오류"])
+        # 게시처 DB 집계는 따로 잡습니다. 여기서 죽어도 사건 화면은 보여야 합니다
+        try:
+            d["명부"] = 명부(d["구운때"][:10])
+        except Exception as e:  # noqa: BLE001
+            d["명부"] = {"오류": "%s: %s" % (type(e).__name__, str(e)[:200])}
+            print("  게시처 DB 를 못 셌다: %s" % d["명부"]["오류"])
 
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(
@@ -220,6 +245,9 @@ def main(argv: list[str] | None = None) -> int:
     print("    표      %s줄 (%s) · 관측 %s건"
           % (ev["줄수"], " · ".join("%s %s" % kv for kv in ev["소스별"].items()) or "빔", ev["관측"]))
     print("    사건    %d줄%s" % (len(d["사건"]), "" if d["노션읽음"] else "  (노션 안 읽음)"))
+    if "명부" in d:
+        print("    게시처  %s" % (d["명부"].get("오류") or " · ".join(
+            "%s %d줄" % (g["이름"], g["줄수"]) for g in d["명부"]["갈래"])))
     빠짐 = [s["이름"] for s in ev["설정"] if not s["있음"]]
     if 빠짐:
         # 엠대시를 쓰면 윈도 기본 코드페이지(cp949)에서 찍다가 죽는다.

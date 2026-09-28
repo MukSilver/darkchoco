@@ -131,6 +131,9 @@
   .거르개 input{background:var(--판);border:1px solid var(--줄);color:var(--글);
                 border-radius:var(--둥2);padding:var(--틈1) var(--틈4);font:inherit;
                 font-size:13px;min-width:190px}
+  /* 기간 거르개. 날짜 칸은 찾기 칸만큼 넓을 까닭이 없고, 달력 단추가 어두운 바탕에서 보여야 한다 */
+  .거르개 input[type=date]{min-width:0;color-scheme:dark}
+  .거르개 .사이{color:var(--더흐린);font-size:12px}
   .일감줄{display:flex;gap:var(--틈3);align-items:center;margin:var(--틈1) 0;flex-wrap:wrap}
   /* 무리 이름. 아홉이 늘어서면 사건과 명부가 구분이 안 된다 */
   .무리{margin:var(--틈4) 0 var(--틈2);font-size:12px;font-weight:600;
@@ -219,10 +222,12 @@
   <nav>
     <button data-탭="제어판" class="켬">제어판</button>
     <button data-탭="사건">사건</button>
+    <button data-탭="명부">게시처 DB</button>
   </nav>
 
   <section id="제어판"></section>
   <section id="사건" hidden></section>
+  <section id="명부" hidden></section>
   <section id="포럼사건" hidden></section>
 
   <footer>
@@ -526,6 +531,112 @@
   }
   그리기();
 
+  // ── 게시처 DB (2026-09-25) ────────────────────────
+  // 위는 게시처 DB 셋의 **건수만** 입니다. 줄 이름 · 주소 · 담당자는 서버가 세고 버려서
+  // 여기로 안 옵니다(dbs.json 「명부」). 아래는 사건 줄로 게시처마다 한국 관련 사건을 셉니다.
+  //
+  //   관문        DB 반영 켬 · 미검토와 사건 X 가 아님. 지도 굽기와 같다(빈 검토는 사건 O)
+  //   한국 관련    국가 한국 · 한국 관련 직접 · 공급망 중 하나. 행위자 자동 등록(actor.py)과 같다
+  //   날짜        게시 시각, 없으면 발견일. 서버가 KST 로 바꿔 보낸다(dbs.json 의 KST날)
+  //
+  // 대시보드로 올린 포럼 줄은 한국 관련이 「미확인」 으로 들어와 한국 관련만 세면 적게 나온다.
+  // 그래서 관문만 통과한 수를 옆 칸에 같이 둔다(최현서 「두 칸 다 보이기」).
+  const 명부 = D.명부;
+  let 게시처소스 = "포럼", 기간시작 = "", 기간끝 = "";
+
+  function 관문통과(x){ return x.반영 === true && x.검토 !== "미검토" && x.검토 !== "사건 X"; }
+  function 한국표시(x){ return x.국가 === "한국" || x.한국 === "직접" || x.한국 === "공급망"; }
+
+  // 열 이름을 모두 모아 많은 것부터. 같으면 이름 차례(localeCompare 는 판마다 다를 수 있어 안 쓴다)
+  function 열차례(갈래들, 열쇠){
+    const 합 = {};
+    갈래들.forEach(g=>Object.entries(g[열쇠]||{}).forEach(([k,n])=>{ 합[k] = (합[k]||0) + n; }));
+    return Object.keys(합).sort((a,b)=> 합[b]-합[a] || (a<b?-1:a>b?1:0));
+  }
+
+  function 갈래표(갈래들, 열쇠, 제목){
+    const 열 = 열차례(갈래들, 열쇠);
+    if (!열.length) return "";
+    return '<h2>'+제목+'</h2><div class="감쌈"><table><thead><tr><th>게시처 DB</th>'
+      + 열.map(k=>'<th class="짧음 수">'+안전(k)+'</th>').join("") + '</tr></thead><tbody>'
+      + 갈래들.map(g=>'<tr><td>'+안전(g.이름)+'</td>'
+          + 열.map(k=>'<td class="수">'+매김((g[열쇠]||{})[k]||0)+'</td>').join("")+'</tr>').join("")
+      + '</tbody></table></div>';
+  }
+
+  function 명부그리기(){
+    let s = '';
+    if (!명부){
+      s += '<div class="빔">게시처 DB 집계가 없습니다. 다시 구우십시오 (<code>python apps/dash/build.py</code>).</div>';
+    } else if (명부.오류){
+      s += '<div class="경고">게시처 DB 를 못 셌습니다: '+안전(명부.오류)+'</div>';
+    } else {
+      const 갈래들 = 명부.갈래 || [];
+      const 잘린 = 갈래들.filter(g=>g.잘림);
+      if (잘린.length) s += '<div class="경고">'+잘린.map(g=>안전(g.이름)+' '+매김(g.잘림)).join(" · ")
+        + '줄까지만 읽었습니다. 그만큼만 센 것입니다 (worker.js 의 명부판상한)</div>';
+      s += '<h2>게시처 DB 집계 <span class="더흐림">— 건수만 냅니다. 확인일은 '+안전(명부.오늘)
+        + ' 기준. 한국 관련 유출은 자리표시와 「0건」 줄을 뺀 것입니다</span></h2>'
+        + '<div class="감쌈"><table><thead><tr><th>게시처 DB</th><th class="짧음 수">줄</th>'
+        + '<th class="짧음 수">확인일 7일 안</th><th class="짧음 수">30일 안</th>'
+        + '<th class="짧음 수">30일 넘음</th><th class="짧음 수">확인일 빈칸</th>'
+        + '<th class="짧음 수">한국 관련 유출 적힘</th><th class="짧음 수">DB 반영 켜짐</th></tr></thead><tbody>'
+        + 갈래들.map(g=>{ const k = g.확인일 || {};
+            return '<tr><td>'+안전(g.이름)+'</td><td class="수">'+매김(g.줄수)+'</td>'
+              + ["7일 안","30일 안","30일 넘음","빈칸"].map(x=>'<td class="수">'+매김(k[x]||0)+'</td>').join("")
+              + '<td class="수">'+매김(g.한국유출)+'</td><td class="수">'+매김(g.DB반영)+'</td></tr>'; }).join("")
+        + '</tbody></table></div>'
+        + 갈래표(갈래들, "상태", "상태")
+        + 갈래표(갈래들, "조사단계", "조사 단계");
+    }
+
+    // 게시처별 한국 관련 사건
+    const 기간있음 = !!(기간시작 || 기간끝);
+    let 날없음 = 0;
+    const 무리 = {};
+    사건.forEach(x=>{
+      if (게시처소스 !== "전부" && (x.소스||"") !== 게시처소스) return;
+      if (!관문통과(x)) return;
+      const 날 = x.게시날 || x.발견날 || "";
+      if (기간있음){
+        if (!날){ 날없음 += 1; return; }
+        if (기간시작 && 날 < 기간시작) return;
+        if (기간끝 && 날 > 기간끝) return;
+      }
+      const k = x.게시처 || "(게시처 빈칸)";
+      const m = 무리[k] || (무리[k] = { 한국: 0, 관문: 0 });
+      m.관문 += 1;
+      if (한국표시(x)) m.한국 += 1;
+    });
+    const 줄들 = Object.entries(무리).sort((a,b)=> b[1].한국-a[1].한국 || b[1].관문-a[1].관문
+        || (a[0]<b[0]?-1:a[0]>b[0]?1:0));
+    const 합한국 = 줄들.reduce((n,[,m])=>n+m.한국, 0), 합관문 = 줄들.reduce((n,[,m])=>n+m.관문, 0);
+    s += '<h2>게시처별 한국 관련 사건 <span class="더흐림">— 사건 줄에서 셉니다. 날짜는 게시 시각(없으면 발견일), KST</span></h2>'
+      + '<div class="거르개">'
+      + 소스값.map(v=>'<button data-게시처소스="'+v+'" class="'+(v===게시처소스?"켬":"")+'">'+v+'</button>').join("")
+      + '<span style="width:10px"></span>'
+      + '<input type="date" data-기간="시작" value="'+안전(기간시작)+'" aria-label="기간 시작">'
+      + '<span class="사이">부터</span>'
+      + '<input type="date" data-기간="끝" value="'+안전(기간끝)+'" aria-label="기간 끝">'
+      + '<span class="사이">까지 (비우면 전체)</span></div>';
+    if (!줄들.length){
+      s += '<div class="빔">고른 조건에 맞는 사건이 없습니다.</div>';
+    } else {
+      s += '<div class="감쌈"><table><thead><tr><th>게시처</th>'
+        + '<th class="짧음 수">한국 관련 사건</th><th class="짧음 수">관문 통과</th></tr></thead><tbody>'
+        + 줄들.map(([k,m])=>'<tr><td>'+안전(k)+'</td><td class="수">'+매김(m.한국)+'</td><td class="수">'+매김(m.관문)+'</td></tr>').join("")
+        + '<tr><td class="흐림">합</td><td class="수">'+매김(합한국)+'</td><td class="수">'+매김(합관문)+'</td></tr>'
+        + '</tbody></table></div>';
+    }
+    s += '<div class="더흐림" style="margin-top:8px">관문: DB 반영 켜짐 · 미검토와 사건 X 가 아님 (지도와 같음). '
+      + '한국 관련: 국가 한국이거나 한국 관련이 직접 · 공급망. 대시보드로 올린 포럼 줄은 한국 관련이 미확인으로 들어와 '
+      + '관문 통과에만 셉니다.'
+      + (기간있음 && 날없음 ? ' 날짜 없는 사건 '+매김(날없음)+'줄은 기간을 정하면 뺍니다.' : '')
+      + '</div>';
+    $("#명부").innerHTML = s;
+  }
+  명부그리기();
+
   // ── 검토 여부 고르기 ──────────────────────────────
   // 서버가 대신 노션에 씁니다. 토큰은 서버 자리에만 있고 여기로 안 옵니다.
   async function 고르기(b){
@@ -545,6 +656,9 @@
       // 화면과 손에 든 데이터를 같이 고칩니다. 다시 구울 때까지 이 값이 맞습니다.
       const 줄 = 사건.find(x=>x.id===줄id);
       if (줄) 줄.검토 = 값;
+      // 서버가 맞춘 공개(DB 반영)도 들고 있는 줄에 반영합니다. 게시처별 한국 건수가 그것을 봅니다
+      if (줄 && typeof d.DB반영 === "boolean") 줄.반영 = d.DB반영;
+      명부그리기();
       const 표 = document.getElementById("표"+줄id);
       if (표){
         표.textContent = 값;
@@ -655,6 +769,7 @@
     document.querySelectorAll("nav button").forEach(x=>x.classList.remove("켬"));
     $("#제어판").hidden = true;
     $("#사건").hidden = true;
+    $("#명부").hidden = true;
     포럼자리.hidden = false;
     포럼그리기();
   }
@@ -781,6 +896,10 @@
   document.addEventListener("change", (e)=>{
     const t = e.target;
     if (t && t.id === "포럼파일") 포럼파일읽기(t.files && t.files[0]);
+    if (t && t.dataset && t.dataset.기간){
+      if (t.dataset.기간 === "시작") 기간시작 = t.value || ""; else 기간끝 = t.value || "";
+      명부그리기();
+    }
     if (t && t.dataset && t.dataset.포럼줄 != null && 포럼받음){
       const r = 포럼받음.줄[Number(t.dataset.포럼줄)];
       if (r) r.고름 = t.checked;
@@ -811,6 +930,7 @@
       document.querySelectorAll("nav button").forEach(x=>x.classList.toggle("켬", x===b));
       document.querySelector("#제어판").hidden = b.dataset.탭!=="제어판";
       document.querySelector("#사건").hidden   = b.dataset.탭!=="사건";
+      document.querySelector("#명부").hidden   = b.dataset.탭!=="명부";
       포럼자리.hidden = true;
     }
     if (b.dataset.손 === "#forum-rows") 포럼열기();
@@ -838,6 +958,7 @@
     }
     if (b.dataset.검토){ 검토거르개 = b.dataset.검토; 그리기(); }
     if (b.dataset.소스){ 소스거르개 = b.dataset.소스; 그리기(); }
+    if (b.dataset.게시처소스){ 게시처소스 = b.dataset.게시처소스; 명부그리기(); }
     if (b.dataset.값){ 고르기(b); }
     if (b.dataset.일감){ 돌리기(b); }
   });
