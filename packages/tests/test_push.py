@@ -103,7 +103,7 @@ def test_발견일은_raw_에서_온다():
 
 
 def test_발견일은_영문_키도_읽는다():
-    """팀 어댑터(hub/events/sources/ransom_kr.py)는 raw["discovered"] 로 넣는다."""
+    """옛 팀 어댑터(ransom_kr, 2026-09-26 에 legacy/ 로 뗌)는 raw["discovered"] 로 넣었다."""
     p = push.만들기(_기본(raw=json.dumps({"discovered": "2026-08-30 12:00:00"})))
     assert p["발견일"]["date"]["start"] == "2026-08-30"
     # 둘 다 있으면 한글 키가 먼저다

@@ -50,8 +50,10 @@ for _s in (sys.stdout, sys.stderr):
 # .venv 를 리눅스에서 만들면 심볼릭 링크가 들어 있어 윈도우 파이썬이
 # rglob 중에 죽습니다 — OSError: [WinError 1920]. 실제로 WSL 에서
 # .venv 를 만든 뒤 윈도우에서 dc.py 가 통째로 안 돌았습니다.
+# **legacy 도 안 뒤집니다** (2026-09-26, 인계 E-1). 뗀 옛 수집기(kr-leak-alarm · tg-korea-alert)가
+# 도구 목록과 README 도구표에 다시 나오지 않게 합니다. 코드는 그 폴더에 남아 있습니다.
 _안뒤짐 = {".git", ".venv", "venv", "node_modules", "__pycache__",
-        "site-packages", ".tox", ".mypy_cache", ".pytest_cache"}
+        "site-packages", ".tox", ".mypy_cache", ".pytest_cache", "legacy"}
 
 
 def _tool_json찾기():
@@ -310,8 +312,6 @@ def _한도구(t: dict) -> int:
 def _어떻게(t: dict, 걸림: list[str]) -> str:
     if not 걸림:
         return ""
-    if t["name"] == "kr-leak-alarm":
-        return "apps\\kr-leak-alarm\\scripts\\run.bat"
     조각 = []
     if "설치" in 걸림:
         조각.append(f"pip install -r {t['_rel']}/{(t.get('install') or {}).get('requirements')}")

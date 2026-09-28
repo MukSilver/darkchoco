@@ -164,7 +164,7 @@ def _load_exclusions() -> list[str]:
 
     이것이 없으면 북한 관련 게시물(`north korea`, `pyongyang`)과 지명이 겹치는
     해외 표현(`koreatown`, `kia ora`)이 전부 한국 관련 후보로 잡힌다.
-    apps/kr-leak-alarm 이 같은 이유로 같은 축을 두고 있고 CI 에서 시험한다."""
+    kr-leak-alarm 이 같은 이유로 같은 축을 두었다(2026-09-26 에 legacy/ 로 떼어 지금은 안 돈다)."""
     return [줄[1:].strip() for 줄 in _키워드_줄들() if 줄.startswith("!") and 줄[1:].strip()]
 
 
@@ -176,7 +176,7 @@ def _낱말_정규식(term: str) -> re.Pattern[str]:
     r"""낱말 경계를 보는 정규식. `kia` 가 `nokia` 에 걸리지 않게 한다.
 
     한글에는 `\b` 가 제대로 걸리지 않으므로 경계 조건을 나눈다.
-    apps/kr-leak-alarm/collector/kr_filter.py 의 _compile_boundary() 와 같은 방식이다."""
+    legacy/kr-leak-alarm/collector/kr_filter.py 의 _compile_boundary() 와 같은 방식이다."""
     escaped = re.escape(term)
     if _한글_RE.search(term):
         return re.compile(escaped, re.IGNORECASE)

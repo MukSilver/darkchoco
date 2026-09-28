@@ -19,12 +19,12 @@ async def main():
     try:
         if not await client.is_user_authorized():
             # 이 폴더에는 test.py 가 없습니다. 세션을 만드는 것은
-            # apps/tg-korea-alert/test.py 이고, 세션 파일은 그 앱 폴더에
+            # legacy/tg-korea-alert/test.py 이고, 세션 파일은 그 앱 폴더에
             # 생깁니다. 여기서 보는 자리는 SESSION_PATH 입니다.
             raise RuntimeError(
                 f"로그인된 세션이 없습니다. 이 스크립트가 보는 세션 파일은 "
                 f"{SESSION_PATH} 입니다. 세션을 만드는 스크립트는 "
-                f"apps/tg-korea-alert/test.py 이고 세션을 그 앱 폴더에 만듭니다.")
+                f"legacy/tg-korea-alert/test.py 이고 세션을 그 앱 폴더에 만듭니다.")
 
         print(f"{'ID':>16}  {'종류':<10}  {'username':<32}  이름")
         print("-" * 90)

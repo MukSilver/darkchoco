@@ -1,6 +1,10 @@
 """랜섬웨어 유출 사이트에서 한국 관련 피해를 골라 옵니다.
 
-원래 도구는 apps/kr-leak-alarm 입니다. 안유빈 님이 만든 것이고, 여기서는
+**2026-09-26 에 legacy/ 로 뗐습니다(최현서 결정 E-1).** 전에는 hub/events/sources/ 에 있어
+`dc.py run/auto` 가 찾아 돌렸습니다. 이제 등록 목록에 안 잡히고 CI 도 안 봅니다. 대체한 것은
+skills/collect/sources/ransomlive.py(집계처 kr) + hub/events/push.py 입니다. legacy/README.md 를 봅니다.
+
+원래 도구는 legacy/kr-leak-alarm(전에는 apps/kr-leak-alarm) 입니다. 안유빈 님이 만든 것이고, 여기서는
 그 소스들을 부르고 결과를 표 모양으로 바꾸기만 합니다.
 
 **API 를 직접 치지 않습니다.** 그 앱에는 겪어서 얻은 방어가 들어 있습니다.
@@ -28,9 +32,10 @@ OWNER = "안유빈"
 EVERY = 360
 RUNS_IN = "host"
 
-ROOT = Path(__file__).resolve().parents[3]   # hub/events/sources/ 에서 세 칸
-APP = ROOT / "apps" / "kr-leak-alarm"
+ROOT = Path(__file__).resolve().parents[1]   # legacy/ 에서 한 칸
+APP = ROOT / "legacy" / "kr-leak-alarm"
 sys.path.insert(0, str(APP))
+sys.path.insert(0, str(ROOT))                # hub.events.contract 를 찾으려고
 
 from hub.events.contract import Ctx, Item, Needs, Skip  # noqa: E402
 

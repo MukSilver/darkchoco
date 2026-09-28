@@ -1,6 +1,9 @@
 """두 랜섬 어댑터가 같은 사건을 같은 줄로 만드는지 본다. 밖에 요청을 안 보낸다.
 
-    python packages/tests/test_열쇠맞춤.py
+    python legacy/tests/test_열쇠맞춤.py
+
+**2026-09-26 에 legacy/ 로 옮겼다(E-1).** 옛 팀 어댑터(ransom_kr)를 떼면서 CI 에서 뺐다.
+지금 어댑터(skills/collect/sources/ransomlive.py)는 test_ransomlive.py 가 본다.
 
 2026-09-07. 어댑터가 둘인데 표에서 서로 다른 줄로 쌓이고 있었다. uid 는 KEY 여섯을
 이어 만드는데 그중 셋(src_id · venue · title)이 달랐다. 여기서 그것을 못박는다.
@@ -16,12 +19,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "packages"))
 sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(ROOT / "apps" / "kr-leak-alarm"))
+sys.path.insert(0, str(ROOT / "legacy" / "kr-leak-alarm"))
+sys.path.insert(0, str(ROOT / "legacy"))
 sys.path.insert(0, str(ROOT / "skills"))
 
 from collector.sources.base import LeakRecord  # noqa: E402
 from dc_store import KEY  # noqa: E402
-from hub.events.sources.ransom_kr import _항목으로  # noqa: E402
+from ransom_kr import _항목으로  # noqa: E402
 
 from collect.sources import ransomlive  # noqa: E402
 

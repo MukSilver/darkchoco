@@ -10,7 +10,7 @@ Copyright 2026 TEAM 다크초코 — 화이트햇 스쿨 4기
 아래 폴더는 각자 따로 만들어져 이 저장소로 들어온 것입니다. 그 폴더 안에
 LICENSE 가 있으면 그것이 먼저입니다.
 
-  apps/kr-leak-alarm/        MIT License        apps/kr-leak-alarm/LICENSE
+  legacy/kr-leak-alarm/      MIT License        legacy/kr-leak-alarm/LICENSE
 
 나머지 폴더에는 따로 둔 라이선스가 없으므로 루트의 Apache 2.0 을 따릅니다.
 
@@ -24,8 +24,8 @@ apps/ 아래 다섯과 skills/ 는 각자 다른 저장소에서 `git subtree` �
 
 지금 있는 것
 
-  apps/kr-leak-alarm       안유빈
-  apps/tg-korea-alert      성민서
+  legacy/kr-leak-alarm     안유빈   (2026-09-26 에 apps/ 에서 legacy/ 로 옮김. 안 돌림)
+  legacy/tg-korea-alert    성민서   (같음)
   skills                   최현서
 
 2026-08-30 에 지운 것 (커밋 기록에는 남아 있습니다)

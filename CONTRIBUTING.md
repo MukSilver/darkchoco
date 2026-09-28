@@ -73,9 +73,6 @@ grep -rn "from dc_notion" --include=*.py apps skills
 python packages/tests/test_dc_notion.py
 ```
 
-```bash
-cd apps/kr-leak-alarm && python -m tests.test_all
-```
 
 ---
 
