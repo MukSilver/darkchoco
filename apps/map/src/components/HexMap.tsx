@@ -18,6 +18,13 @@ import { CONF_DASH, KIND_NAME, type RelView } from "@/lib/relations";
 /** 섬이 옮겨 가는 이징. 토큰 `--ease-out` 과 같은 곡선이다 */
 const EASE = "cubic-bezier(0.2, 0, 0, 1)";
 
+/**
+ * 관계선 번짐 — 섬이 60% 옮겨 온 뒤에 나온다(이징 뒤 진행도라 곧 섬이 옮겨 온 몫이다). 선은 처음부터
+ * 새 자리라 먼저 보이면 선 끝이 허공에 떴다. 80% 로 두면 4× 재생(250ms)에서 거의 안 보여 60% 로 낮췄다
+ * (2026-09-29 검토)
+ */
+const FADE: Keyframe[] = [{ opacity: 0 }, { opacity: 0, offset: 0.6 }, { opacity: 1 }];
+
 /** 요소에 지금 걸린 CSS 행렬. 없으면 null */
 function matrixOf(el: Element): DOMMatrixReadOnly | null {
   const t = getComputedStyle(el).transform;
@@ -246,11 +253,10 @@ export default function HexMap({
       }
     }
     motion.current = { start: performance.now(), ms, frames };
-    // 관계선은 섬이 80% 옮겨 온 뒤에 번져 나온다(이징 뒤 진행도라 곧 섬이 옮겨 온 몫이다). 선은
-    // 처음부터 새 자리라 먼저 보이면 선 끝이 허공에 떴다. 앞 번짐은 끊는다 (2026-09-29 묶음 6 검토)
+    // 관계선은 섬이 옮겨 온 뒤에 번져 나온다(`FADE`). 앞 번짐은 끊는다 (2026-09-29 묶음 6 검토)
     svg.querySelectorAll<SVGElement>('[data-flip="fade"]').forEach((el) => {
       el.getAnimations().forEach((a) => a.cancel());
-      el.animate([{ opacity: 0 }, { opacity: 0, offset: 0.8 }, { opacity: 1 }], opts);
+      el.animate(FADE, opts);
     });
   }, [layout, frame]);
 
@@ -272,6 +278,13 @@ export default function HexMap({
       const a = el.animate([{ transform: f[0] }, { transform: f[1] }], { duration: m.ms, easing: EASE });
       a.currentTime = t;
     });
+    // 도중에 처음 영토를 골라 새로 붙은 관계선 묶음도 같은 번짐에 태운다 — 안 그러면 바로 진하게 나와
+    // 선 끝이 옮겨 오는 섬과 떨어져 보였다
+    svg.querySelectorAll<SVGElement>('[data-flip="fade"]').forEach((el) => {
+      if (el.getAnimations().length > 0) return;
+      const a = el.animate(FADE, { duration: m.ms, easing: EASE });
+      a.currentTime = t;
+    });
   });
 
   /** 떠오르는가 — 고른 영토, 이어진 영토, [연결] 행의 상대 영토 */
@@ -289,15 +302,20 @@ export default function HexMap({
         Number(b.territoryId === selectedTerritory),
     );
   const hoveredFlat = flat.find((t) => t.territoryId === hovered);
+  // Tab 멈춤은 지도 하나에 하나 — 고른 영토, 없으면 첫 영토. 나머지 영토 · 섬 이름표는 화살표로 옮긴다
+  // (`MapCanvas`). 전에는 도형 186개가 다 Tab 차례라 줌 단추 · 스냅샷 바에 닿기 어려웠다 (2026-09-29 검토)
+  const entryId =
+    up.find((t) => t.territoryId === selectedTerritory)?.territoryId ?? flat[0]?.territoryId ?? up[0]?.territoryId;
   /** 이름표와 관계선 끝 자리. 떠오른 영토는 윗면이 올라간 만큼 같이 올린다 */
   const anchor = (t: TerritoryShape) =>
     isUp(t) ? { x: t.label.x, y: t.label.y - LIFT } : t.label;
   /**
-   * 키보드로 고를 수 있게 — Tab 으로 옮겨 Enter · Space (`MapCanvas` 가 받는다, 2026-09-28 코드 분석).
-   * 떠오른 영토는 윗면에만 단다(옆면까지 달면 같은 영토에 두 번 멈춘다)
+   * 키보드로 고를 수 있게 — Enter · Space 로 고르고 화살표로 옮긴다 (`MapCanvas` 가 받는다, 2026-09-28
+   * 코드 분석). `entry` 만 Tab 차례(0)이고 나머지는 −1 이다. 떠오른 영토는 윗면에만 단다(옆면까지 달면
+   * 같은 영토에 두 번 멈춘다)
    */
-  const keyProps = (name: string) =>
-    interactive ? { tabIndex: 0, role: "button" as const, "aria-label": name } : {};
+  const keyProps = (name: string, entry = false) =>
+    interactive ? { tabIndex: entry ? 0 : -1, role: "button" as const, "aria-label": name } : {};
   const hoverProps = (id: string) => ({
     onMouseEnter: () => onHoverTerritory?.(id),
     onMouseLeave: () => onHoverTerritory?.(null),
@@ -444,7 +462,7 @@ export default function HexMap({
             stroke="var(--t-border-hex)"
             strokeWidth={1}
             className={`${pointer} transition-colors`}
-            {...keyProps(t.name)}
+            {...keyProps(t.name, t.territoryId === entryId)}
             {...hoverProps(t.territoryId)}
           />
         ))}
@@ -458,6 +476,8 @@ export default function HexMap({
         */}
         {hoveredFlat && (
           <path
+            // 영토마다 새 요소 — 같은 요소를 다시 쓰면 다른 섬으로 옮겨 가도 앞 섬의 움직임이 남았다
+            key={hoveredFlat.territoryId}
             aria-hidden
             data-island={hoveredFlat.islandKey}
             d={cellsPath(hoveredFlat, layout.size)}
@@ -518,7 +538,7 @@ export default function HexMap({
               }
               strokeWidth={t.territoryId === selectedTerritory ? 2 : t.territoryId === hovered ? 1.4 : 1}
               className={pointer}
-              {...keyProps(t.name)}
+              {...keyProps(t.name, t.territoryId === entryId)}
               aria-pressed={interactive ? t.territoryId === selectedTerritory : undefined}
               {...hoverProps(t.territoryId)}
             />

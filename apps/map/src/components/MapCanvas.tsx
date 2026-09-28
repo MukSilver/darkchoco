@@ -248,6 +248,12 @@ export default function MapCanvas({
     <div
       ref={box}
       aria-label={label}
+      // 판 밖에 걸친 영토에 초점이 가면 브라우저가 이 틀을 스스로 굴려 힌트 · 줌 단추가 밀렸다.
+      // 굴림은 줌 · 끌기(`view`)로만 한다 (2026-09-29 검토)
+      onScroll={(e) => {
+        e.currentTarget.scrollTop = 0;
+        e.currentTarget.scrollLeft = 0;
+      }}
       className={
         "@container relative flex-1 overflow-hidden " + (framed ? "rounded-[14px] border border-edge bg-canvas" : "")
       }
@@ -321,16 +327,41 @@ export default function MapCanvas({
           pickHit(e.target instanceof Element ? e.target.closest("[data-pick]") : null);
         }}
         onKeyDown={(e) => {
-          // 키보드로도 고른다 — 영토 · 섬 이름표에 Tab 으로 옮겨 Enter · Space (2026-09-28 코드 분석)
-          if (e.key !== "Enter" && e.key !== " ") return;
+          // 키보드로도 고른다 — 지도에 Tab 으로 들어와 화살표로 영토 · 섬 이름표를 옮기고 Enter · Space
+          // 로 고른다 (2026-09-28 코드 분석). Tab 멈춤은 지도 하나에 하나다(`HexMap` entryId)
           const hit = e.target instanceof Element ? e.target.closest("[data-pick]") : null;
           if (!hit) return;
+          const id = hit.getAttribute("data-id") ?? "";
+          // 고르거나 풀면 도형이 떠오른 겹 ↔ 평지로 옮겨 그려져 초점을 잃는다. 다시 그린 뒤 같은
+          // 영토의 새 도형으로 옮긴다
+          const refocus = () =>
+            setTimeout(() => {
+              if (document.activeElement && document.activeElement !== document.body) return;
+              box.current
+                ?.querySelector<SVGElement>(`[data-id="${CSS.escape(id)}"][tabindex]`)
+                ?.focus({ preventScroll: true });
+            }, 0);
+          if (e.key.startsWith("Arrow")) {
+            const all = [...(box.current?.querySelectorAll<SVGElement>("[data-pick][tabindex]") ?? [])];
+            const i = all.indexOf(hit as SVGElement);
+            if (i < 0) return;
+            e.preventDefault();
+            const by = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : all.length - 1;
+            all[(i + by) % all.length]?.focus({ preventScroll: true });
+            return;
+          }
+          // Esc 는 화면 공통 처리(`page.tsx`)가 선택을 푼다. 여기서는 초점만 되살린다
+          if (e.key === "Escape") {
+            refocus();
+            return;
+          }
+          if (e.key !== "Enter" && e.key !== " ") return;
           e.preventDefault();
           pickHit(hit);
-          // 고른 영토는 떠오른 겹으로 옮겨 그려져 초점을 잃는다. 다시 그린 뒤 새 도형으로 옮긴다
-          const id = hit.getAttribute("data-id") ?? "";
           setTimeout(() => {
-            box.current?.querySelector<SVGElement>(`[data-id="${CSS.escape(id)}"][tabindex]`)?.focus();
+            box.current
+              ?.querySelector<SVGElement>(`[data-id="${CSS.escape(id)}"][tabindex]`)
+              ?.focus({ preventScroll: true });
           }, 0);
         }}
       >

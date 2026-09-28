@@ -26,7 +26,7 @@ import { recentOf, type SearchCtx } from "@/components/SearchRows";
 import SnapshotBar from "@/components/SnapshotBar";
 import TimelineTab from "@/components/TimelineTab";
 import ViewTabs, { type ViewTabKey } from "@/components/ViewTabs";
-import { DARK_ISLANDS, islandToken } from "@/lib/islands";
+import { DARK_ISLANDS, islandName, islandToken } from "@/lib/islands";
 import { layoutMap } from "@/lib/layout";
 import { MAP, isBaked } from "@/lib/mapData";
 import { latestSeen, seenDays } from "@/lib/entity";
@@ -259,7 +259,7 @@ export default function Page() {
   const islandInfo = useCallback(
     (key: string) => {
       const i = layout.islands.find((x) => x.islandKey === key);
-      return { name: i?.name ?? key, token: i?.token ?? "actor" };
+      return { name: i?.name ?? islandName(key), token: i?.token ?? "actor" };
     },
     [layout],
   );
@@ -964,6 +964,8 @@ export default function Page() {
   const relFromReport = (relId: string) => {
     const rel = ALL_RELS.find((r) => r.id === relId);
     if (!rel || !reportEv) return;
+    // 재생을 멈춘다 — 관계 탭에도 스냅샷 바가 생겨, 옮긴 기준일을 다음 분기가 곧 덮어썼다
+    setPlaying(false);
     setReport([]);
     setResults(null);
     openRelation(rel, rel.from === reportEv.territoryId ? rel.to : rel.from);
@@ -1116,7 +1118,8 @@ export default function Page() {
                 role="status"
                 className={
                   "absolute left-1/2 z-20 flex w-max max-w-[90%] -translate-x-1/2 items-center gap-s3 rounded-[12px] px-s4 py-s2 text-[12px] shadow-xl " +
-                  (tab === "relation" ? "bottom-[76px]" : "top-[76px]")
+                  // 관계 탭은 스냅샷 바(아래 24~84px) 위에 띄운다 — 바가 생긴 뒤 76px 이면 바를 덮었다
+                  (tab === "relation" ? "bottom-[96px]" : "top-[76px]")
                 }
                 style={{ background: "var(--t-text-title)", color: "var(--t-surface-panel)" }}
               >

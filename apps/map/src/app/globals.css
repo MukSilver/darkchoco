@@ -181,6 +181,27 @@ body {
     outline-offset: 2px;
   }
 
+  /*
+   * SVG 도형은 외곽선이 도형을 감싼 상자로 그려져 이웃 영토 · 선을 가로질렀다 (2026-09-29 검토).
+   * 지도 영토는 윤곽을 밝히고, 관계선은 선을 굵게 한다. 섬 이름표 · 관계도 노드는 상자가 곧 모양이라
+   * 외곽선 그대로다
+   */
+  svg path[data-pick]:focus-visible {
+    outline: none;
+    stroke: var(--t-hex-selected-edge);
+    stroke-width: 2.5px;
+  }
+  svg g[data-edge]:focus-visible {
+    outline: none;
+  }
+  svg g[data-edge]:focus-visible > path + path {
+    stroke-width: 4px;
+    opacity: 1;
+  }
+  svg[role="group"]:focus-visible {
+    outline-offset: -2px;
+  }
+
   input[type="range"] {
     --range-line: 4px;
     --range-knob: 16px;

@@ -27,6 +27,7 @@ import EventRow from "./EventRow";
 import PanelShell from "./PanelShell";
 import { Chip, KindDot } from "./RelBits";
 import type { MapLayout } from "@/lib/layout";
+import { islandName } from "@/lib/islands";
 import { quarterOfDate, quarterText } from "@/lib/quarter";
 import {
   CONF_CHIP,
@@ -96,8 +97,8 @@ export default function RelationPanel(p: RelationPanelProps) {
   /* ── 섬 간 보기 ─────────────────────────────────────── */
 
   if (p.pair) {
-    const a = islands.get(p.pair.from)?.name ?? "";
-    const b = islands.get(p.pair.to)?.name ?? "";
+    const a = islands.get(p.pair.from)?.name ?? islandName(p.pair.from);
+    const b = islands.get(p.pair.to)?.name ?? islandName(p.pair.to);
     const total = p.views.reduce((s, v) => s + v.count, 0);
     return (
       <PanelShell

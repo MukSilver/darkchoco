@@ -6,7 +6,8 @@
  * 검토). 창이 화면 최소 높이보다 낮아 페이지가 굴러갈 때도 같다. passive 를 끈 듣개를 직접 단다.
  *
  * 줌이 그쪽 끝(`atEnd`)이면 휠을 막지 않고 칸 스크롤에 넘긴다 — 50% 에서도 휠을 먹으면 타임라인 왼쪽
- * 칸이 지도 위에서 안 굴러갔다 (2026-09-29 묶음 7 검토). `dir` 는 +1 이 확대(휠 위로), −1 이 축소다
+ * 칸이 지도 위에서 안 굴러갔다 (2026-09-29 묶음 7 검토). `dir` 는 +1 이 확대(휠 위로), −1 이 축소다.
+ * Ctrl+휠 · 트랙패드 핀치(`ctrlKey`)는 끝이어도 막는다 — 넘기면 브라우저가 페이지 전체를 키웠다
  */
 
 import { useEffect, useEffectEvent, useRef, type RefObject } from "react";
@@ -21,7 +22,7 @@ export function useWheelSteps(
   // 문턱을 못 넘은 휠 양. 모아서 넘을 때 한 단계씩 (`wheelSteps`)
   const acc = useRef(0);
   const fire = useEffectEvent((e: WheelEvent) => {
-    if (e.deltaY !== 0 && atEnd?.(e.deltaY < 0 ? 1 : -1)) {
+    if (!e.ctrlKey && e.deltaY !== 0 && atEnd?.(e.deltaY < 0 ? 1 : -1)) {
       acc.current = 0;
       return;
     }
