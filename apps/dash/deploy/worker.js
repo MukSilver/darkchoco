@@ -658,8 +658,9 @@ async function 검토쓰기(request, env) {
  * `packages/tests/test_포럼사건.py` 가 둘과 `dc_store.Item.uid()` 를 맞춰 봅니다.
  */
 
-// 한 번에 받는 줄. 무료 요금제는 요청 하나에 바깥 요청이 50번까지라, 겹침 조회 한 번과
-// 줄마다 만들기 한 번을 더해 그 밑에 둡니다. 화면이 이만큼씩 나눠 보냅니다
+// 한 번에 받는 줄. 무료 요금제는 요청 하나에 바깥 요청이 50번까지라, 게시처 재료(포럼 명부 셋 ·
+// 선택지 하나로 넷쯤)와 겹침 조회 한 번, 줄마다 만들기 한 번을 더해 그 밑에 둡니다(20줄이면 25번).
+// 화면이 이만큼씩 나눠 보냅니다. 포럼 명부가 300줄을 넘으면 읽기가 한 번씩 늡니다
 const 포럼줄상한 = 20;
 const 포럼본문값 = new Set(["받음", "안 봄", "403"]);
 
@@ -766,6 +767,107 @@ function 포럼줄속성(x, uid, 오늘) {
   return p;
 }
 
+// ── 게시처 (2026-09-25) ──
+// `hub/events/publisher.py` 의 포럼 쪽을 옮긴 것입니다. 포럼 명부의 주소 · 이전 주소 · 어니언
+// 주소로 게시 플랫폼(호스트)을 맞추고, 안 되면 이름과 별칭으로 맞춥니다. 못 맞추면 비웁니다.
+// **두 벌입니다.** `packages/tests/test_게시처.py` 가 파이썬과 같은 값을 내는지 봅니다
+const 포럼명부DS = "a3b4df76-b1f0-4464-9139-1c42ac55bf87";
+const 게시처호스트꼴 = /\b[a-z0-9][a-z0-9-]*(?:\.[a-z0-9-]+)+\b/gi;
+// t.me 를 열쇠로 쓰면 채널 주소가 전부 한 곳에 붙습니다. 집계처와 블로그 호스팅도 게시처가 아닙니다
+const 안쓰는호스트 = new Set(["t.me", "telegram.me", "ransomware.live", "wordpress.com"]);
+
+function 호스트들(s) {
+  const 밖 = [];
+  // 사람이 명부에 `abc[.]onion` 처럼 적은 주소를 점으로 읽습니다. 파이썬 쪽과 같습니다
+  for (const m of String(s || "").split("[.]").join(".").matchAll(게시처호스트꼴)) {
+    let h = m[0].toLowerCase();
+    if (h.startsWith("www.")) h = h.slice(4);
+    if (h.includes(".") && !안쓰는호스트.has(h) && !밖.includes(h)) 밖.push(h);
+  }
+  return 밖;
+}
+
+/** 대소문자 · 공백 · 기호 · 0/o 를 견디는 열쇠. `Cl0p` 와 `clop` 이 같아집니다 */
+function 민키(s) {
+  return String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "").replace(/0/g, "o");
+}
+
+function 속성글자(p, 칸) {
+  const v = ((p && p.properties) || {})[칸] || {};
+  if (v.type === "title" || v.type === "rich_text") return (v[v.type] || []).map((x) => x.plain_text || "").join("");
+  if (v.type === "select" || v.type === "status") return ((v[v.type] || {}).name) || "";
+  if (v.type === "url") return v.url || "";
+  return "";
+}
+
+function 포럼명부표(페이지들) {
+  const 표 = { 주소: new Map(), 이름: new Map(), 민: new Map() };
+  const 넣기 = (m, k, v) => { if (!m.has(k)) m.set(k, v); };
+  for (const p of 페이지들) {
+    const 이름 = 속성글자(p, "포럼 이름").trim();
+    if (!이름 || 속성글자(p, "담당자") === "자동") continue;
+    넣기(표.이름, 이름.toLowerCase(), 이름);
+    for (const c of [이름, ...속성글자(p, "이전 이름·별칭").split(/[/·,]/).map((x) => x.trim())]) {
+      const k = 민키(c);
+      if (k.length >= 4) 넣기(표.민, k, 이름);
+    }
+    for (const c of ["주소", "이전 주소", "어니언 주소"]) {
+      for (const h of 호스트들(속성글자(p, c))) 넣기(표.주소, h, 이름);
+    }
+  }
+  return 표;
+}
+
+/** 이미 있는 선택지 중 열쇠가 같은 것이 있으면 그 이름을 씁니다. 같은 곳이 선택지 둘로 갈리지 않게 */
+function 선택지맞춤(이름, 선택지) {
+  if (!이름 || 선택지.includes(이름)) return 이름;
+  const k = 민키(이름);
+  // 열쇠가 네 글자보다 짧으면(한글 이름은 빈 글자) 대소문자만 무시하고 통째로 견줍니다
+  if (k.length < 4) {
+    const 낮춤 = 이름.trim().toLowerCase();
+    return 선택지.find((o) => o.trim().toLowerCase() === 낮춤) || 이름;
+  }
+  return 선택지.find((o) => 민키(o) === k) || 이름;
+}
+
+/** 노션 선택지 이름에는 쉼표가 못 들어갑니다. 넣으면 줄 만들기 전체가 거부됩니다 */
+function 선택지글(s) {
+  return String(s || "").replace(/\s*,\s*/g, " · ").trim();
+}
+
+function 포럼게시처칸(표기, 표, 선택지) {
+  if (!표) return {};
+  let 이름 = "";
+  for (const h of 호스트들(표기)) {
+    if (표.주소.has(h)) { 이름 = 표.주소.get(h); break; }
+  }
+  const t = String(표기 || "").trim();
+  if (!이름 && 표.이름.has(t.toLowerCase())) 이름 = 표.이름.get(t.toLowerCase());
+  if (!이름) 이름 = 표.민.get(민키(t.replace(/\(.*?\)/g, " "))) || "";
+  이름 = 앞글자(선택지맞춤(선택지글(이름), 선택지), 100);
+  return 이름 ? { 게시처: { select: { name: 이름 } } } : {};
+}
+
+/** 포럼 명부 전부와 게시처 선택지. 요청이 네 번쯤이라 한 판에 한 번만 읽습니다 */
+async function 게시처재료(머리) {
+  const 페이지들 = [];
+  let 커서;
+  do {
+    const r = await fetch(`https://api.notion.com/v1/data_sources/${포럼명부DS}/query`, {
+      method: "POST", headers: 머리,
+      body: JSON.stringify(커서 ? { page_size: 100, start_cursor: 커서 } : { page_size: 100 }),
+    });
+    if (!r.ok) throw new Error(`포럼 명부 ${r.status}`);
+    const d = await r.json();
+    페이지들.push(...(d.results || []));
+    커서 = d.has_more ? d.next_cursor : undefined;
+  } while (커서);
+  const g = await fetch(`https://api.notion.com/v1/data_sources/${수집DS}`, { headers: 머리 });
+  if (!g.ok) throw new Error(`수집 DB ${g.status}`);
+  const 칸 = (((await g.json()).properties || {}).게시처 || {}).select || {};
+  return { 표: 포럼명부표(페이지들), 선택지: (칸.options || []).map((o) => o.name) };
+}
+
 async function 포럼사건받기(request, env) {
   if (남의자리인가(request)) return json(403, { 오류: "다른 자리에서 온 요청입니다" });
   if (!(request.headers.get("Content-Type") || "").includes("application/json")) {
@@ -816,6 +918,11 @@ async function 포럼사건받기(request, env) {
     }
   }
 
+  // **게시처는 못 읽어도 줄은 올립니다.** 게시처는 나중에 채울 수 있지만 안 올린 줄은 사람이
+  // 다시 킷을 눌러야 합니다
+  let 재료 = { 표: null, 선택지: [] };
+  try { 재료 = await 게시처재료(머리); } catch { /* 게시처만 비웁니다 */ }
+
   const 결과 = [];
   let 썼다 = 0;
   for (const { x, uid } of 줄들) {
@@ -828,7 +935,7 @@ async function 포럼사건받기(request, env) {
       headers: 머리,
       body: JSON.stringify({
         parent: { type: "data_source_id", data_source_id: 수집DS },
-        properties: 포럼줄속성(x, uid, 오늘),
+        properties: { ...포럼줄속성(x, uid, 오늘), ...포럼게시처칸(x.곳, 재료.표, 재료.선택지) },
       }),
     });
     if (r.ok) {

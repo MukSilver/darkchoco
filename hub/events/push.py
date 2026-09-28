@@ -35,6 +35,9 @@ CLAUDE.md 의 「나가는 것은 필드명, 패턴, 건수뿐이다」와도 �
 같이 올리는 칸 여덟: 검토 여부 · 수집자 · 소스 · UID · 주장 규모 · 규모 출처 ·
 발견일 · 한국 관련(+근거).
 
+**게시처(+명부 없음)도 같이 씁니다** (2026-09-25). 명부 셋으로 맞추고 규칙은
+`hub/events/publisher.py` 에 있습니다. 명부를 못 읽으면 그 칸만 비우고 줄은 올립니다.
+
 **빈 규모는 「없음」 이 아니라 모르는 것입니다.** 칸을 아예 안 보냅니다. `-` 나 `n/a` 처럼
 없다는 표시로 온 것도 같이 봅니다. 발견일은 UTC 를 KST 로 옮긴 뒤에 자릅니다.
 
@@ -64,6 +67,7 @@ sys.path.insert(0, str(ROOT))
 
 from dc_kr import KrClassifier, normalize_country  # noqa: E402
 from dc_notion import Notion  # noqa: E402
+from hub.events import publisher  # noqa: E402
 
 _clf: KrClassifier | None = None
 
@@ -319,6 +323,18 @@ def 외국인가(줄) -> bool:
     if not c or c in ("KR", "UNKNOWN", "N/A", "-"):
         return False
     return _한국관련(줄)[0] != "직접"
+
+
+def 게시처칸(표, 선택지: list[str], 줄) -> dict:
+    """「게시처」 · 「명부 없음」 (2026-09-25). 규칙은 `publisher.py` 한 곳에 있습니다.
+
+    전에는 이 칸을 9/22 에 한 번 채운 뒤로 아무도 안 써서, 그 뒤 들어온 45줄이 비어
+    있었습니다. 명부를 못 읽었으면(`표` 가 None) 칸을 비워 둡니다.
+    """
+    if 표 is None:
+        return {}
+    return publisher.속성(표, 선택지, 소스.get(_값(줄, "source").strip()) or "",
+                        _값(줄, "venue"), _값(줄, "actor"))
 
 
 def 만들기(줄) -> dict:
@@ -616,6 +632,21 @@ def main(argv: list[str] | None = None) -> int:
     print("  겹치는 %d줄을 뺐습니다. 올릴 것은 %d줄입니다" % (겹침, len(새것)))
     print()
 
+    # 게시처를 정할 명부 셋. **못 읽으면 게시처만 비워 두고 나머지는 올립니다.** 게시처는
+    # 나중에 채울 수 있지만 올리지 못한 줄은 다음 판까지 안 보입니다
+    표, 선택지 = None, []
+    if 새것:
+        try:
+            표 = publisher.명부표.노션에서(n)
+            선택지 = publisher.선택지읽기(n, 수집DB)
+        except Exception as e:  # noqa: BLE001
+            print("  명부를 못 읽어 게시처는 비워 둡니다 (%s)" % type(e).__name__)
+        정함 = [게시처칸(표, 선택지, r) for r in 새것]
+        print("  게시처 — 명부 이름 %d · 명부에 없어 핸들 그대로 %d · 못 정함 %d" % (
+            sum(1 for x in 정함 if x and publisher.없음칸 not in x),
+            sum(1 for x in 정함 if publisher.없음칸 in x),
+            sum(1 for x in 정함 if not x)))
+
     if not a.apply:
         print("  미리보기입니다. 노션에 안 씁니다. --apply 를 주면 씁니다.")
         print()
@@ -623,6 +654,7 @@ def main(argv: list[str] | None = None) -> int:
         print("    자료 제목 · 대상 조직 · 게시자 핸들 · 게시 플랫폼 · 원문 URL")
         print("    게시 시각 · 수집일 · 국가 · 게시 성격")
         print("    검토 여부(미검토) · 수집자(자동) · 소스 · UID · 주장 규모 · 규모 출처 · 발견일 · 한국 관련(+근거)")
+        print("    게시처(+명부 없음) — 명부 셋으로 맞춥니다. 칸 수에는 안 셉니다")
         print()
         print("  안 올라가는 것")
         print("    body · raw · clues · sample_path — 수집 DB 에 그 칸이 없습니다")
@@ -645,7 +677,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             n.request("POST", "/pages", {
                 "parent": {"type": "data_source_id", "data_source_id": 수집DB},
-                "properties": 만들기(r),
+                "properties": {**만들기(r), **게시처칸(표, 선택지, r)},
             })
             쓴것 += 1
         except Exception as e:  # noqa: BLE001

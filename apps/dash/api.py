@@ -232,6 +232,14 @@ def 포럼줄속성(x: dict, uid: str, 오늘: str) -> dict:
     return p
 
 
+def 포럼게시처칸(곳: str, 표, 선택지: list[str]) -> dict:
+    """게시처 칸. worker.js 의 포럼게시처칸() 과 같습니다. 포럼 줄은 「명부 없음」 을 안 켭니다."""
+    if 표 is None:
+        return {}
+    from hub.events import publisher
+    return publisher.속성(표, 선택지, "포럼", 곳, "")
+
+
 def 포럼사건받기(d) -> dict:
     from datetime import datetime, timedelta, timezone
 
@@ -251,6 +259,13 @@ def 포럼사건받기(d) -> dict:
             v = "".join(t.get("plain_text", "") for t in ((칸.get(k) or {}).get("rich_text") or []))
             if v:
                 본것.add(v)
+    # 게시처 — 포럼 명부로 맞춘다 (hub/events/publisher.py). **못 읽어도 줄은 올린다**
+    from hub.events import publisher
+    try:
+        표 = publisher.명부표.노션에서(n, 갈래들=("포럼",))
+        선택지 = publisher.선택지읽기(n, _수집DB())
+    except Exception:  # noqa: BLE001
+        표, 선택지 = None, []
     결과, 썼다 = [], 0
     for x, uid in 줄들:
         if uid in 본것 or x["URL"] in 본것:
@@ -259,7 +274,7 @@ def 포럼사건받기(d) -> dict:
         try:
             n.request("POST", "/pages", {
                 "parent": {"type": "data_source_id", "data_source_id": _수집DB()},
-                "properties": 포럼줄속성(x, uid, 오늘)})
+                "properties": {**포럼줄속성(x, uid, 오늘), **포럼게시처칸(x["곳"], 표, 선택지)}})
             썼다 += 1
             본것.update((uid, x["URL"]))
             결과.append({"제목": x["제목"][:80], "결과": "올림"})
