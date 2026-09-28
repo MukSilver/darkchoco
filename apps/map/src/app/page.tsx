@@ -12,7 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import AppHeader from "@/components/AppHeader";
 import DetailPanel, { type PanelTabKey } from "@/components/DetailPanel";
-import EntityTab from "@/components/EntityTab";
+import EntityTab, { SORT_LABEL, type SortKey } from "@/components/EntityTab";
 import EventReport from "@/components/EventReport";
 import EventsTab from "@/components/EventsTab";
 import Legend from "@/components/Legend";
@@ -141,6 +141,11 @@ type Origin = {
   ym: QuarterKey;
   /** 패널이 펼쳐져 있었나. 관계 탭에 들어갈 때 펼치므로(`enterFromLinks`) 돌아갈 때 되살린다 */
   panelOpen: boolean;
+  /**
+   * 타임라인 시점 비교. 관계 탭에 갔다 돌아가면 되살린다 — 전에는 타임라인을 떠나며 꺼 둔 채
+   * 돌아와 비교가 풀려 있었다 (2026-09-28 코드 분석)
+   */
+  compare: Compare | null;
 };
 
 /** 뒤로 가기 기록에 우리가 넣은 칸이라는 표시 */
@@ -165,6 +170,8 @@ export default function Page() {
   const [panelOpen, setPanelOpen] = useState(true);
   // 엔티티 탭 섬 필터. 표만 거른다 — 전역 선택과 패널을 안 건드린다 (null 이면 선택한 섬 · 영토의 섬)
   const [entityIsland, setEntityIsland] = useState<string | null>(null);
+  // 엔티티 표 정렬. 탭을 다녀와도 남는다 (2026-09-28 코드 분석)
+  const [entitySort, setEntitySort] = useState<{ key: SortKey; asc: boolean }>({ key: "activity", asc: false });
   const [panelTab, setPanelTab] = useState<PanelTabKey>("overview");
   const [linkSel, setLinkSel] = useState<LinkSel>(null);
   // 패널 [사건] 탭 기간. 다른 영토를 골라도 그대로 둔다 (설계서 4.3.2)
@@ -455,6 +462,7 @@ export default function Page() {
     setMapView(o.mapView);
     setYm(o.ym);
     setPanelOpen(o.panelOpen);
+    setCompare(o.tab === "timeline" ? o.compare : null);
     setToast(null);
     setRelSel(null);
     setRelHi(null);
@@ -488,7 +496,7 @@ export default function Page() {
   const enterFromLinks = (next: { center: string | null; hi: string | null; pair: RelPair | null }) => {
     seqRef.current += 1;
     const seq = `${OPENED_AT}-${seqRef.current}`;
-    setOrigin({ seq, tab, selection, shown: liveSelection, panelTab, linkSel, mapView, ym, panelOpen });
+    setOrigin({ seq, tab, selection, shown: liveSelection, panelTab, linkSel, mapView, ym, panelOpen, compare });
     // goTab 을 안 거치고 관계 탭으로 가므로 탭별 정리를 여기서 한다. 관계를 골라서 들어온
     // 것이라 패널을 펼치고(연혁 강조가 보여야 한다 — 고르면 펼친다는 규칙과 같다), 타임라인을
     // 떠나면 시점 비교를 푼다
@@ -1151,7 +1159,7 @@ export default function Page() {
                   : tab === "map"
                   ? `섬 유형 ${layout.islands.length} · 엔티티 ${activeTerritories.length} · 사건 ${eventCount}건${past ? ` · ${past} 스냅샷` : ""}`
                   : tab === "entity"
-                    ? `엔티티 ${activeTerritories.length} · 유형별 목록 · 활동도 순`
+                    ? `엔티티 ${activeTerritories.length} · 유형별 목록 · ${SORT_LABEL[entitySort.key]} ${entitySort.asc ? "오름차순" : "순"}`
                     : tab === "relation"
                       ? relSubtitle()
                       : compare
@@ -1315,6 +1323,9 @@ export default function Page() {
                   goTab("map");
                 }}
                 onOpenEvent={openReport}
+                sort={entitySort.key}
+                asc={entitySort.asc}
+                onSort={(key, asc) => setEntitySort({ key, asc })}
               />
             )}
 

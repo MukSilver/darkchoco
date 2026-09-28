@@ -22,7 +22,15 @@ import type { Status } from "@/lib/score";
 import type { Ev } from "@/lib/types";
 
 /** 표에서 정렬 가능한 열 (설계서 4.3.5) */
-type SortKey = "activity" | "delta" | "events" | "lastSeen";
+export type SortKey = "activity" | "delta" | "events" | "lastSeen";
+
+/** 정렬 열 이름 — 제목 옆 설명(「활동도 순」 따위)이 쓴다 */
+export const SORT_LABEL: Record<SortKey, string> = {
+  activity: "활동도",
+  delta: "30일 변화",
+  events: "사건 수",
+  lastSeen: "최근 관측",
+};
 
 /** 상태 칩. 설계서 3.7 의 두 값이고 피그마 `⑦-7` 의 칩 모양이다 */
 const STATUS_CHIP: Record<Status, string> = {
@@ -49,6 +57,13 @@ export type EntityTabProps = {
   onGoToMap: (id: string) => void;
   /** 「최근 주요 이벤트」 사건 누르기 — 보고서 팝업 (설계서 4.3.5 L745 · 4.3.4, 한 번 클릭) */
   onOpenEvent?: (id: string) => void;
+  /**
+   * 표 정렬. 부모가 들고 있다 — 부품 안에 두면 탭을 다녀올 때마다 활동도 순으로 돌아갔다
+   * (2026-09-28 코드 분석). 제목 옆 설명도 이 값을 읽는다
+   */
+  sort: SortKey;
+  asc: boolean;
+  onSort: (sort: SortKey, asc: boolean) => void;
 };
 
 export default function EntityTab({
@@ -63,9 +78,10 @@ export default function EntityTab({
   onPickTerritory,
   onGoToMap,
   onOpenEvent,
+  sort,
+  asc,
+  onSort,
 }: EntityTabProps) {
-  const [sort, setSort] = useState<SortKey>("activity");
-  const [asc, setAsc] = useState(false);
   const [pickedEv, setPickedEv] = useState<string | null>(null);
 
   // 섬을 안 고른 채 들어오면 첫 섬을 연다. 설계서는 「기본 포럼」인데
@@ -135,11 +151,8 @@ export default function EntityTab({
       <button
         type="button"
         onClick={() => {
-          if (sort === key) setAsc((v) => !v);
-          else {
-            setSort(key);
-            setAsc(false);
-          }
+          if (sort === key) onSort(key, !asc);
+          else onSort(key, false);
         }}
         className="-mx-s1 flex items-center gap-s1 whitespace-nowrap rounded-[6px] px-s1 hover-seg"
       >

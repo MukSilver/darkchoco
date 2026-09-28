@@ -34,6 +34,7 @@ import {
   growth,
   peakOf,
   stepYear,
+  canPick,
   centerBox,
   thumbBoxes,
   yearCards,
@@ -190,7 +191,10 @@ export default function TimelineTab({
     onPlaying(false);
   };
 
-  /** 연도 칩. 비교 중이면 첫 클릭이 A, 두 번째가 B 다 (L812) */
+  /**
+   * 연도 칩. 비교 중이면 지금 고르는 쪽(A · B 고르기 단추)을 그 시점으로 바꾼다 — 설계서 L812 는
+   * 「첫 번째 클릭이 A, 두 번째가 B」였다 (2026-09-28 최현서 8번). 못 찍는 칩은 꺼져 있다
+   */
   const pickYear = (q: string) => {
     if (!compare) {
       onPick(q);
@@ -264,15 +268,25 @@ export default function TimelineTab({
                   ].filter(Boolean)
                 : [];
               const on = compare ? marks.length > 0 : now.year === year;
+              // 지금 고르는 쪽에 못 찍는 칩 — 같은 시점이거나 A 가 B 보다 늦어진다. 꺼 두고, 마우스를
+              // 올리면 붉게 바뀌어 안 된다는 것을 알린다 (최현서 8번 「해제 전에 안 된다는 것을 색 변화로」)
+              const side = compare?.active ?? "a";
+              const own = compare ? (side === "a" ? compare.a : compare.b) === snap.ym : false;
+              const blocked = compare ? !own && !canPick(compare, snap.ym) : false;
               return (
                 <button
                   key={year}
                   type="button"
                   aria-current={on ? "page" : undefined}
+                  disabled={blocked}
                   onClick={() => pickYear(snap.ym)}
                   title={
                     compare
-                      ? `${compare.next === "a" ? "A" : "B"} 시점으로 찍기 · ${snap.ym}`
+                      ? blocked
+                        ? side === "a"
+                          ? `A 는 B(${compare.b})보다 앞선 시점이어야 합니다 · B 를 먼저 옮기세요`
+                          : `B 는 A(${compare.a})보다 뒤 시점이어야 합니다 · A 를 먼저 옮기세요`
+                        : `${side === "a" ? "A" : "B"} 시점으로 찍기 · ${snap.ym}`
                       : snap.ym
                   }
                   // 고른 칸은 화면 탭(`ViewTabs`)처럼 테두리 있는 패널색 칸이다 — 전에는 bg-selected 가
@@ -281,6 +295,7 @@ export default function TimelineTab({
                   className={[
                     "shrink-0 rounded-[10px] border px-s4 py-s2 text-center",
                     on ? "border-edge bg-panel" : "border-transparent text-label hover-seg",
+                    "disabled:cursor-not-allowed disabled:text-disabled disabled:hover:border-danger-edge disabled:hover:text-danger",
                   ].join(" ")}
                 >
                   <div
@@ -304,6 +319,44 @@ export default function TimelineTab({
               );
             })}
           </nav>
+
+          {/*
+            시점 비교에서 연도 칩이 채울 쪽 — A 고르기 · B 고르기 (2026-09-28 최현서 8번 「A · B 각각의
+            버튼을 두거나」). 고른 쪽은 테두리 있는 패널색 칸이다
+          */}
+          {compare && (
+            <div
+              role="group"
+              aria-label="연도 칩이 채울 쪽"
+              className="flex shrink-0 items-center gap-s1 rounded-[10px] bg-track p-[3px]"
+            >
+              {(["a", "b"] as const).map((k) => {
+                const onSide = compare.active === k;
+                return (
+                  <button
+                    key={k}
+                    type="button"
+                    aria-pressed={onSide}
+                    onClick={() => onCompare({ ...compare, active: k })}
+                    title={`연도 칩이 ${k.toUpperCase()} 시점을 바꿉니다`}
+                    className={[
+                      "flex items-center gap-s2 whitespace-nowrap rounded-[8px] border px-s3 py-[5px] text-[12px] tabular-nums",
+                      onSide ? "border-edge bg-panel font-semibold text-strong" : "border-transparent text-label hover-seg",
+                    ].join(" ")}
+                  >
+                    <span
+                      aria-hidden
+                      className="grid size-[16px] place-items-center rounded-[4px] text-[10px] font-bold text-on-accent"
+                      style={{ background: "var(--t-accent)" }}
+                    >
+                      {k.toUpperCase()}
+                    </span>
+                    {k === "a" ? compare.a : compare.b} 고르기
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
           <div className="flex-1" />
 
@@ -445,7 +498,8 @@ export default function TimelineTab({
                 tone={now.delta > 0 ? "up" : now.delta < 0 ? "down" : undefined}
               />
             )}
-            {now.fresh !== null && <Chip label="신규" value={String(now.fresh)} />}
+            {/* 직전 분기 대비 새로 사건이 생긴 영토 (`freshIds` — 비교의 「신규 영토」와 같은 기준) */}
+            {now.fresh !== null && <Chip label="신규 · 직전 분기 대비" value={String(now.fresh)} />}
           </header>
 
           <span
@@ -825,7 +879,7 @@ function ChangeSummary({ d }: { d: Diff }) {
       {d.fresh.length > 0 && (
         <div className="shrink-0 rounded-[12px] border border-edge bg-card px-s4 py-s3">
           <div className="text-[11px] text-label">
-            신규 엔티티 ({d.a.ym} 이후)
+            신규 영토 ({d.a.ym} 뒤 첫 사건)
           </div>
           <p className="mt-s2 text-[12px] leading-[1.7] text-body">
             {d.fresh.join(" · ")}
