@@ -303,6 +303,9 @@ ALLOWED_COLS = frozenset({
     "상태",
     "규모",
     "이전 이름·별칭",  # 사건을 영토에 맞추는 데만 쓴다. 밖에 안 낸다
+    # 날짜 칸이라 조직명이 못 든다. 끝난 곳을 종료 날짜가 든 분기까지만 보인다
+    # (2026-09-30 최현서 — 압수된 곳은 압수 전 분기에만. score.ts presentAt)
+    "운영 종료 날짜",
     "핸들",            # 행위자 DB. 행위자 영토 이름이 된다 (2026-09-25 22시 최현서)
     "다른 이름",       # 행위자 DB. 사건 핸들을 맞추는 데만 쓴다. 밖에 안 낸다
     # ↓ 명부 DB. 근거 사건 없이 이 칸에서 만든 관계선은 **이 칸의 원문을 보인다**
@@ -496,6 +499,8 @@ TERRITORY_KEYS = frozenset({
     "id", "name", "islandId", "web",
     # 활동도 원자료(숫자)와 처음 나온 날 (설계서 3.3, score.ts presentAt)
     "raw", "posts", "threads", "since",
+    # 게시처 DB 「운영 종료 날짜」. 이 날짜가 든 분기까지만 지도에 있다 (score.ts presentAt)
+    "until",
     # 행위자 섬만. 행위자 DB 정보 칸 (설계서 4.3.8, 2026-09-26). 속 키는 ACTOR_INFO_KEYS
     "actor",
 })
@@ -911,7 +916,7 @@ def scan_strings(node, path: str, bad: list[str]) -> None:
             scan_strings(v, f"{path}[{i}]", bad)
     elif isinstance(node, str):
         # 게시 시각은 ISO 문자열이라 콜론과 숫자가 많다. 날짜는 건너뛴다
-        if path.endswith((".postedAt", ".generatedAt", ".since", ".firstSeen", ".occurredAt")):
+        if path.endswith((".postedAt", ".generatedAt", ".since", ".until", ".firstSeen", ".occurredAt")):
             return
         if RE_AT.search(node):
             bad.append(f"{path}: @ 가 들어 있습니다")
@@ -985,6 +990,8 @@ def check(data: dict) -> list[str]:
         extra = set(t) - TERRITORY_KEYS
         if extra:
             bad.append(f"영토에 허용 밖 칸이 있습니다: {sorted(extra)}")
+        if "until" in t and not (isinstance(t["until"], str) and RE_ISO_DAY.fullmatch(t["until"])):
+            bad.append(f"영토 {t['id']} 의 운영 종료 날짜가 날짜가 아닙니다")
         a = t.get("actor")
         if a is None:
             continue
@@ -1401,6 +1408,14 @@ def bake_relations(n, ds: str, find_tid, events: list[dict],
 # ── 굽기 ────────────────────────────────────────────────────────────────────
 
 
+def end_day(v) -> str | None:
+    """게시처 DB 「운영 종료 날짜」 값을 `YYYY-MM-DD` 로 줄인다. 날짜가 아니면 None.
+
+    노션 날짜는 시각과 시간대가 붙어 오기도 한다. 화면은 분기로만 견주므로 날짜만 싣는다.
+    """
+    return v[:10] if isinstance(v, str) and RE_ISO_DAY.match(v) else None
+
+
 def read_registry(n, sources: dict[str, str], read, log) -> list[dict]:
     """게시처 DB 셋(포럼 · 랜섬웨어 · 텔레그램)과 행위자 DB 를 읽어 영토 후보를 만든다. 거르기는 사건을 붙인 뒤에 한다.
 
@@ -1454,6 +1469,8 @@ def read_registry(n, sources: dict[str, str], read, log) -> list[dict]:
             # 「미확인」 은 죽은 것이 아니라 못 본 것이다 — 조사 쪽 두드리기가 앞단 검사(403 · 검사 화면)에 막히면
             # 이 값을 적는다. 포럼 예외(`keep_place`)가 쓴다
             unknown = status == "미확인"
+            # 운영 종료 날짜 — 행위자 DB 에는 이 칸이 없다
+            until = None if island == "ACTOR" else end_day(col(read, p, "운영 종료 날짜"))
             k = (island, raw_name.casefold())
             if k in by_name:
                 c = by_name[k]
@@ -1463,13 +1480,15 @@ def read_registry(n, sources: dict[str, str], read, log) -> list[dict]:
                 if not c["on"]:
                     # 먼저 들어온 꺼진 줄을 켜진 줄로 갈아 끼운다
                     c.update({"aliases": aliases, "on": True, "online": online, "unknown": unknown,
-                              "links": links, "info": info})
+                              "until": until, "links": links, "info": info})
                     for s in ("raw", "posts", "threads"):
                         c.pop(s, None)
                     c.update(size)
                     continue
                 c["online"] = c["online"] or online
                 c["unknown"] = c.get("unknown", False) or unknown
+                # 같은 곳을 두 줄에 적었으면 늦은 종료 날짜를 따른다 — 마지막 주소가 닫힌 날이다
+                c["until"] = max((x for x in (c.get("until"), until) if x), default=None)
                 for s, v in size.items():
                     c[s] = max(c.get(s) or 0, v)
                 c["aliases"] += [a for a in aliases if a not in c["aliases"]]
@@ -1477,7 +1496,8 @@ def read_registry(n, sources: dict[str, str], read, log) -> list[dict]:
                 continue
             c = {
                 "island": island, "rawName": raw_name, "aliases": aliases,
-                "on": on, "online": online, "unknown": unknown, "order": len(out), "links": links, **size,
+                "on": on, "online": online, "unknown": unknown, "until": until,
+                "order": len(out), "links": links, **size,
                 "info": info,
             }
             by_name[k] = c
@@ -2121,12 +2141,17 @@ def bake(n, sources: dict[str, str], log) -> dict:
     def keep_place(c: dict) -> bool:
         if not c["on"]:
             return False
+        if c.get("until"):
+            # 운영 종료 날짜가 적힌 곳 — 섬과 상태에 상관없이 한국 관련 사건이 있으면 남긴다. 화면이
+            # 종료 날짜가 든 분기까지만 보인다 (2026-09-30 최현서 — 압수된 곳은 압수 전 분기에만,
+            # score.ts presentAt). 끝난 곳이라 지금 상태 · 규모로는 가르지 않는다
+            return counted[id(c)] > 0
         isl = c["island"]
         if isl == "FORUM":
             # 포럼 예외 — 상태가 「미확인」 이고 한국 관련 사건이 있으면 남긴다 (2026-09-30 최현서). 조사 쪽
             # 두드리기가 앞단 검사(403 · 검사 화면)에 막히면 상태를 「미확인」 으로 적는데, 그 한 칸 때문에
-            # Darkforums(사건 44건)가 통째로 빠졌다. offline · 압수로 확인된 곳은 설계서 2.5 대로 뺀다 — 압수된
-            # 원본 BreachForums 를 압수 전 분기에만 보이려면 포럼 DB 에 닫힌 날짜 칸이 있어야 한다(없다)
+            # Darkforums(사건 44건)가 통째로 빠졌다. offline · 압수로 확인된 곳은 설계서 2.5 대로 뺀다.
+            # 압수된 곳은 「운영 종료 날짜」 를 적으면 위에서 남는다
             live = c["online"] and any((c.get(k) or 0) > 0 for k in ("raw", "posts", "threads"))
             return live or (c.get("unknown", False) and counted[id(c)] > 0)
         if isl == "TELEGRAM":
@@ -2136,6 +2161,15 @@ def bake(n, sources: dict[str, str], log) -> dict:
         return (c["online"] and (c.get("raw") or 0) > 0) or counted[id(c)] > 0
 
     places = {id(c) for c in cands if c["island"] != "ACTOR" and keep_place(c)}
+    ended = [c for c in cands if c["on"] and c.get("until")]
+    if ended:
+        # 값(이름)은 안 찍는다. 수만 센다. 종료 날짜 뒤 사건은 그 분기 지도에 영토가 없어 안 센다
+        after = sum(
+            1 for e in raw_events
+            if id(e["cand"]) in places and e["cand"].get("until") and (e["postedAt"] or "")[:10] > e["cand"]["until"]
+        )
+        log(f"운영 종료 날짜가 적힌 곳 {len(ended)}곳 — 남김 {sum(1 for c in ended if id(c) in places)} · "
+            f"한국 관련 사건이 없어 뺌 {sum(1 for c in ended if id(c) not in places)} · 종료 날짜 뒤 사건 {after}건")
 
     # 행위자는 영토를 거른 뒤에 잇는다 (2026-09-25 22시 최현서). **행위자 DB 에
     # 등록되고 켜진 줄 가운데, 지도에 남은 영토에 올라온 사건의 게시자 핸들과
@@ -2223,6 +2257,8 @@ def bake(n, sources: dict[str, str], log) -> dict:
                 t[k] = c[k]
         if it["_since"]:
             t["since"] = it["_since"]
+        if c.get("until"):
+            t["until"] = c["until"]
         if c["island"] == "ACTOR":
             info, dropped = actor_info(c, org_tok)
             actor_dropped += dropped

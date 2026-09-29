@@ -45,6 +45,7 @@ function pickTerritory(t: Territory): Territory {
     ...(typeof t.posts === "number" ? { posts: t.posts } : {}),
     ...(typeof t.threads === "number" ? { threads: t.threads } : {}),
     ...(t.since ? { since: t.since } : {}),
+    ...(t.until ? { until: t.until } : {}),
     ...(t.islandId === "ACTOR" && t.actor ? pickActor(t.actor) : {}),
   };
 }

@@ -305,6 +305,28 @@ test('영토는 첫 사건이 있는 때부터 나온다. 사건이 없는 명�
   assert.deepEqual(r.territories.map((m) => m.cells), [800, 0], '없는 영토는 칸을 안 받는다');
 });
 
+test('운영 종료 날짜가 있으면 그 날짜가 든 분기까지만 나온다', () => {
+  // 2026-09-30 최현서 — 압수된 곳은 압수 전 분기에만
+  const today = new Date('2026-09-22T12:00:00Z');
+  const seized = territory('seized', 'FORUM', 'dark', { since: '2024-03-01T00:00:00Z', until: '2025-05-15' });
+  assert.equal(presentAt(seized, endOfMonthUTC(2025, 3), today), true, '종료 전 분기에는 있다');
+  assert.equal(presentAt(seized, endOfMonthUTC(2025, 6), today), true, '종료 날짜가 든 분기(끝이 날짜 뒤)에도 있다');
+  assert.equal(presentAt(seized, endOfMonthUTC(2025, 9), today), false, '다음 분기부터 없다');
+  assert.equal(presentAt(seized, D, today), false, '이번 분기에도 없다');
+  assert.equal(presentAt(seized, endOfMonthUTC(2025, 9)), false, '오늘을 몰라도 종료 날짜는 지킨다');
+  assert.equal(presentAt(seized, endOfMonthUTC(2023, 12), today), false, '첫 사건 전에는 여전히 없다');
+  const quarterEdge = territory('edge', 'FORUM', 'dark', { since: '2024-03-01T00:00:00Z', until: '2025-07-01' });
+  assert.equal(presentAt(quarterEdge, endOfMonthUTC(2025, 9), today), true, '분기 첫날에 끝나면 그 분기까지 있다');
+
+  const r = computeMap(
+    { islands: [island('FORUM')], territories: [seized], events: evs(2, 'seized', '2025-04-01T00:00:00Z', 'high'), today },
+    endOfMonthUTC(2025, 9),
+  );
+  assert.equal(r.territories[0].present, false);
+  assert.equal(r.territories[0].cells, 0, '끝난 분기 뒤에는 칸도 사건도 없다');
+  assert.equal(r.territories[0].eventCount, 0);
+});
+
 test('분기가 바뀌어 새 분기 사건이 아직 없어도 이번 분기를 고를 수 있고, 명부 영토가 남는다', () => {
   // 2026-09-23 검토에서 나온 것. 마지막 사건의 분기에서 끊으면 10월 1일부터
   // 기본 화면이 지난 분기가 되어 사건 없는 명부 영토가 모두 빠졌다

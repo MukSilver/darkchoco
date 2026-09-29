@@ -430,14 +430,16 @@ export default function Page() {
   );
   /** 고른 중심이 이 기준일 지도에 아직 없다(첫 사건이 뒤다). 관계도 · 패널이 그렇게 알린다 */
   const centerAbsent = !!center && !present.has(center);
-  // 왜 없나 — 첫 사건이 뒤 분기인지, 사건이 없어 가장 최근 분기에만 나오는 명부 영토인지 (검토)
+  // 왜 없나 — 운영이 끝났는지, 첫 사건이 뒤 분기인지, 사건이 없어 가장 최근 분기에만 나오는 명부 영토인지 (검토)
   const centerAbsentWhy = useMemo(() => {
     if (!centerAbsent || !center) return undefined;
-    const since = REGISTRY.get(center)?.since;
-    return since
-      ? `첫 사건이 ${quarterText(quarterOfDate(new Date(since)))}`
+    const t = REGISTRY.get(center);
+    const endQ = t?.until ? quarterOfDate(new Date(t.until)) : null;
+    if (endQ && ym > endQ) return `${quarterText(endQ)}에 운영 종료`;
+    return t?.since
+      ? `첫 사건이 ${quarterText(quarterOfDate(new Date(t.since)))}`
       : "사건이 없어 가장 최근 분기에만 나오는 영토";
-  }, [centerAbsent, center]);
+  }, [centerAbsent, center, ym]);
   /**
    * 섬 · 영토 고르기. 고르면 패널을 펼친다 (설계서 4.2.4 「자동 펼침」). **선택을 풀어도
    * 접지는 않는다** — 펼침은 사람이 핸들로 정한 값이다 (2026-09-28 최현서 2번).
