@@ -80,6 +80,10 @@ on:
         description: "갈래마다 최대 몇 줄까지. 0 은 전부"
         type: string
         default: "0"
+      page:
+        description: "노션 page_id 하나만 본다(쉬는 줄이라도). 비우면 전부. 미리보기와 같이 쓴다"
+        type: string
+        default: ""
 
 concurrency:
   group: places
@@ -220,11 +224,15 @@ jobs:
           TOR_SOCKS_PROXY: http://127.0.0.1:9080
           ONLY_INPUT: ${{ inputs.only }}
           LIMIT_INPUT: ${{ inputs.limit }}
+          PAGE_INPUT: ${{ inputs.page }}
         run: |
           set -e
           # 문자열로 들어오므로 숫자가 아니면 버립니다. argparse 가 죽습니다
           LIMIT="${LIMIT_INPUT:-0}"
           case "$LIMIT" in ''|*[!0-9]*) LIMIT=0;; esac
+          # page_id 꼴(16진수와 대시)만 받습니다. 아니면 버리고 전부 봅니다
+          PAGE="${PAGE_INPUT:-}"
+          case "$PAGE" in *[!0-9a-fA-F-]*) PAGE="";; esac
 
           case "${ONLY_INPUT:-all}" in
             forum)  ONLY=forum ;;
@@ -234,11 +242,11 @@ jobs:
 
           # **--요약만 을 빼지 마십시오.** 머리말에 이유가 있습니다
           if [ "$WRITE" = "yes" ]; then
-            python dc.py crawl --only "$ONLY" --요약만 --limit "$LIMIT" --apply
+            python dc.py crawl --only "$ONLY" --요약만 --limit "$LIMIT" ${PAGE:+--page=$PAGE} --apply
           else
             # `cmd_crawl` 이 같은 말을 자기가 찍습니다. 여기서 또 찍으면
             # 화면에 두 줄이 나란히 떠서 「두 번 도는 건가」 로 읽힙니다
-            python dc.py crawl --only "$ONLY" --요약만 --limit "$LIMIT"
+            python dc.py crawl --only "$ONLY" --요약만 --limit "$LIMIT" ${PAGE:+--page=$PAGE}
           fi
 
       - name: 죽은 곳 쉬기 기록 넣어 두기
