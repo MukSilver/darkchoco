@@ -415,7 +415,7 @@ def cmd_crawl(args) -> int:
 
     결과 = 크롤.여러갈래(대상, apply=args.apply, limit=args.limit,
                      tor=os.environ.get("TOR_SOCKS_PROXY"),
-                     때된것만=args.due)
+                     때된것만=args.due, page=(args.page or "").strip())
     print()
     print(크롤.표로(결과, apply=args.apply, 요약만=args.요약만))
     print()
@@ -752,6 +752,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="주기가 찬 갈래만. 스케줄러가 이것을 씁니다")
     p.add_argument("--요약만", action="store_true",
                    help="이름과 호스트를 안 찍습니다. 공개된 로그에 쓸 때 켭니다")
+    p.add_argument("--page", default="",
+                   help="노션 page_id 하나만 봅니다. 쉬는 줄이라도 봅니다. 미리보기와 같이 씁니다")
     p.set_defaults(fn=cmd_crawl)
 
     p = sub.add_parser("auto", help="수집과 명부 조사를 한 번에 (스케줄러용)")

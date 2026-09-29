@@ -106,6 +106,16 @@ class 기록:
         남음 = (시도 + 쉴날 * _하루 - now) / _하루
         return max(0.0, 남음)
 
+    def 연속실패(self, 갈래: str, page_id: str) -> int:
+        """지금까지 연달아 못 본 횟수. 기록이 없으면 0 입니다.
+
+        run.py 가 online 을 내릴지 정할 때 씁니다(내림연속, 2026-09-29).
+        """
+        줄 = self.conn.execute(
+            "SELECT 연속실패 FROM 두드림 WHERE 갈래=? AND page_id=?",
+            (갈래, page_id)).fetchone()
+        return int(줄[0] or 0) if 줄 else 0
+
     def 거를것(self, 갈래: str, 줄들, now: float):
         """(볼것, 쉰것) 으로 가릅니다. 쉰 것은 노션을 안 건드립니다."""
         볼것, 쉰것 = [], []

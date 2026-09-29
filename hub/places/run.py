@@ -63,6 +63,37 @@ def 기본_두드림() -> Path:
     return ROOT / "hub" / "data" / "backoff.db"
 
 
+# **online 을 한 번 못 봤다고 내리지 않습니다** (2026-09-29, 인계 H-0).
+#
+# 9/29 09:36 UTC 판에서 포럼 29줄이 HTTP 403 을 받았습니다. 403 은 「응답을 받았다」 로 쳐서
+# 상태 미확인이 그대로 노션에 갔고, 지도에서 포럼 한 곳의 영토와 사건 51건이 같이 빠졌습니다.
+# 클라우드플레어 검사나 Tor 출구 사정으로 한 번 막히는 것은 흔합니다. 5xx 가 offline 으로
+# 가는 것도 같습니다. 그래서 노션이 online 인 줄은 **연달아 이만큼 못 봐야** 내립니다.
+#
+# 그 전에는 노션을 아예 안 건드립니다 — 상태도 확인일도. 「두드리지도 못한 줄」 과 같게 둡니다.
+# 쉬기(backoff.py)와 맞물려 셋째 실패는 첫 실패에서 하루 반쯤 뒤입니다. 쉬기 기록이 없는
+# 판(캐시가 없는 첫 판 · 기록이 깨진 판)은 이번 한 번으로 세므로 내리지 않습니다. 모를 때는 안 덮습니다.
+# 텔레그램은 넣지 않습니다. 「미리보기가 꺼진 채널」 은 한 번 봐도 확실한 미확인입니다.
+내림연속 = 3
+버팀갈래 = frozenset({"forum", "ransom"})
+
+
+def 버텨야하나(갈래: str, 줄, p: Place, 자취) -> bool:
+    """노션이 online 인데 이번에 못 봤고, 연달아 못 본 것이 내림연속보다 적으면 True.
+
+    자취.적기() 가 이번 실패를 이미 센 뒤에 부릅니다.
+    """
+    if 갈래 not in 버팀갈래 or not p.두드림 or p.봤나() or p.상태 == "online":
+        return False
+    if (getattr(줄, "상태", "") or "") != "online":
+        return False
+    try:
+        n = 자취.연속실패(갈래, getattr(줄, "page_id", "") or "")
+    except Exception:  # noqa: BLE001  기록을 못 읽으면 모르는 것입니다. 안 덮습니다
+        return True
+    return n < 내림연속
+
+
 _시계열 = """
 CREATE TABLE IF NOT EXISTS 규모 (
     갈래   TEXT NOT NULL,
@@ -84,6 +115,7 @@ class 갈래결과:
     바뀐줄: int = 0
     건너뜀: int = 0          # 주소가 없어 조사 못 한 줄
     쉰것: int = 0            # 연속 실패로 이번 판은 안 두드린 줄
+    버팀: int = 0            # online 인데 이번에 못 봐서 노션을 안 건드린 줄(내림연속)
     문제: list = field(default_factory=list)
     상태셈: dict = field(default_factory=dict)   # online 몇 · offline 몇 …
     이유셈: dict = field(default_factory=dict)   # 못 본 까닭별로
@@ -427,8 +459,8 @@ def 이음사전만들기(갈래들목록=None) -> dict:
 def 한갈래(갈래: str, *, apply: bool = False, limit: int = 0,
          db: Path | None = None, tor: str | None = None,
          이음사전: dict | None = None,
-         조용히: bool = False) -> 갈래결과:
-    """한 갈래를 돕니다. 예외를 밖으로 안 냅니다."""
+         조용히: bool = False, page: str = "") -> 갈래결과:
+    """한 갈래를 돕니다. 예외를 밖으로 안 냅니다. page 를 주면 그 노션 줄 하나만 봅니다."""
     r = 갈래결과(갈래=갈래)
     t0 = time.time()
     try:
@@ -474,8 +506,13 @@ def 한갈래(갈래: str, *, apply: bool = False, limit: int = 0,
             옮겨오기(자취, 기본_표())      # 로컬의 옛 기록. 새 파일이 비었을 때 한 번만
         except Exception:  # noqa: BLE001  옛 기록을 못 가져와도 조사는 돕니다
             pass
+    # 줄 하나만 볼 때(`dc.py crawl --page`). 쉬는 줄이라도 봅니다 — 사람이 콕 집어 부른 것입니다
+    if page:
+        열쇠 = page.replace("-", "").lower()
+        볼것 = [x for x in 볼것
+              if (getattr(x, "page_id", "") or "").replace("-", "").lower() == 열쇠]
     try:
-        볼것, 쉰것 = 자취.거를것(갈래, 볼것, 지금때)
+        볼것, 쉰것 = (볼것, []) if page else 자취.거를것(갈래, 볼것, 지금때)
     except Exception:  # noqa: BLE001  자취가 깨져도 조사는 돕니다
         쉰것 = []
     r.쉰것 = len(쉰것)
@@ -531,6 +568,12 @@ def 한갈래(갈래: str, *, apply: bool = False, limit: int = 0,
                     지금때, getattr(p, "걸린초", 0.0))
         except Exception:  # noqa: BLE001  자취가 깨져도 조사는 돕니다
             pass
+        # online 을 한 번 못 봤다고 내리지 않습니다(머리의 내림연속). 두드리지도 못한 줄처럼
+        # 만들어 노션값() 이 빈 것을 내게 합니다. 「살펴볼 것」 은 그대로 올라갑니다
+        if 버텨야하나(갈래, 줄, p, 자취):
+            r.버팀 += 1
+            p.두드림 = False
+            p.상태 = "미확인"
         if 미룰것:
             continue            # 깊은 판이 한 번만 씁니다
         try:
@@ -674,7 +717,7 @@ def 됐다고_적기(결과: list[갈래결과], db: Path | None = None) -> None
 def 여러갈래(대상: list[str] | None = None, *, apply: bool = False,
           limit: int = 0, db: Path | None = None,
           tor: str | None = None, 때된것만: bool = False,
-          조용히: bool = False) -> list[갈래결과]:
+          조용히: bool = False, page: str = "") -> list[갈래결과]:
     """갈래들을 차례로 돕니다.
 
     때된것만=True 면 주기가 찬 갈래만 돕니다. 스케줄러가 자주 부르는데
@@ -718,10 +761,11 @@ def 여러갈래(대상: list[str] | None = None, *, apply: bool = False,
     out = []
     for 갈래 in 돌것:
         out.append(한갈래(갈래, apply=apply, limit=limit, db=db, tor=tor,
-                        이음사전=사전, 조용히=조용히))
+                        이음사전=사전, 조용히=조용히, page=page))
     # 미리보기는 차례를 안 건드립니다. 안 썼는데 돌았다고 적으면
     # 다음 실제 반영이 주기만큼 밀립니다.
-    if apply and out:
+    # 줄 하나만 본 판(page)은 갈래를 돈 것이 아닙니다
+    if apply and out and not page:
         됐다고_적기(out, db)
     return out
 
@@ -774,6 +818,9 @@ def 표로(결과: list[갈래결과], *, apply: bool, 요약만: bool = False) 
         # 적습니다.
         if r.쉰것:
             조각.append(f"쉰 줄 {r.쉰것}")
+        # 한 번 못 봐서 online 을 그대로 둔 줄. 이것이 없으면 「못 본 줄이 왜 안 바뀌었나」 가 안 보입니다
+        if r.버팀:
+            조각.append(f"online 그대로 둔 줄 {r.버팀}")
         줄.append(f"  {이름:<12} {' · '.join(조각)}  {r.초:.0f}초")
         if r.상태셈:
             셈 = " · ".join(f"{k} {v}" for k, v in
