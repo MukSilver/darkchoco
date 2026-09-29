@@ -183,6 +183,24 @@ def 명부(오늘: str) -> dict:
     return {"오늘": 오늘, "갈래": 갈래}
 
 
+def 둘째단(수집줄들: list) -> dict:
+    """㉮ 2단계 — 검증 · 사고 · 행위자 DB 를 `dbs.json` 이 적은 칸만 읽어 수집 줄과 잇습니다 (2026-09-29).
+
+    목적은 자동으로 들어온 내용을 확인하는 것입니다(최현서). 잇는 규칙은 `reader.둘째단()` 에 있고
+    `deploy/worker.js` 에 같은 짝이 있습니다. 실명은 기입됨/미기입, 연락처는 있음/없음, 서술 칸은 주소를
+    뗍니다(dbs.json 의 접기). 검증의 「수집 줄」 은 page id 대신 LEAK 번호로 바꿉니다.
+    """
+    from dc_notion import Notion
+
+    n = Notion(verbose=False, allow_env_token=False)
+    이음 = reader.이음표(수집줄들)
+    줄들 = {}
+    for 열쇠 in ("검증", "사고", "행위자"):
+        db = reader.DB하나(열쇠)
+        줄들[열쇠] = [reader.줄(r, db["칸"], 이음) for r in n.query_all(db["id"])]
+    return reader.둘째단(수집줄들, 줄들["검증"], 줄들["사고"], 줄들["행위자"])
+
+
 def 요약(지도: Path) -> dict:
     """첫 화면 숫자. **자리 수는 굽기 산출물에서 가져옵니다.** 새로 안 읽습니다."""
     d = {"자리": {}, "자리합": 0, "지도날": ""}
@@ -231,6 +249,13 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as e:  # noqa: BLE001
             d["명부"] = {"오류": "%s: %s" % (type(e).__name__, str(e)[:200])}
             print("  게시처 DB 를 못 셌다: %s" % d["명부"]["오류"])
+        # ㉮ 2단계도 따로 잡습니다. 여기서 죽어도 사건 · 게시처 화면은 보여야 합니다
+        if d["노션읽음"]:
+            try:
+                d["둘째단"] = 둘째단(d["사건"])
+            except Exception as e:  # noqa: BLE001
+                d["둘째단"] = {"오류": "%s: %s" % (type(e).__name__, str(e)[:200])}
+                print("  검증 · 사고 · 행위자 DB 를 못 읽었다: %s" % d["둘째단"]["오류"])
 
     a.out.parent.mkdir(parents=True, exist_ok=True)
     a.out.write_text(
@@ -248,6 +273,10 @@ def main(argv: list[str] | None = None) -> int:
     if "명부" in d:
         print("    게시처  %s" % (d["명부"].get("오류") or " · ".join(
             "%s %d줄" % (g["이름"], g["줄수"]) for g in d["명부"]["갈래"])))
+    if "둘째단" in d:
+        셈 = d["둘째단"].get("셈") or {}
+        print("    2단계   %s" % (d["둘째단"].get("오류") or "검증 %d줄 · 사고 발표 %d건 · 행위자 %d줄" % (
+            셈.get("검증", {}).get("줄", 0), 셈.get("사고", {}).get("발표", 0), 셈.get("행위자", {}).get("줄", 0))))
     빠짐 = [s["이름"] for s in ev["설정"] if not s["있음"]]
     if 빠짐:
         # 엠대시를 쓰면 윈도 기본 코드페이지(cp949)에서 찍다가 죽는다.

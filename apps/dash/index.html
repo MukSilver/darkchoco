@@ -104,7 +104,8 @@
      판정을 마친 줄과 안 한 줄이 같은 색 가족에 있으면 안 된다 */
   .사건X,
   .고르기 button.지금X{background:#272c37;color:#b7bccb;border-color:#333846}
-  .직접{background:#302c3e;color:#c3bbe8;border-color:#3f394f}
+  /* 「새로」(7일 안에 들어온 줄, 2026-09-29 ㉮ 2단계)는 판정이 아니라 새 줄 표시라 직접과 같은 보라를 같이 쓴다 */
+  .직접,.새로{background:#302c3e;color:#c3bbe8;border-color:#3f394f}
   .없음{background:#3a2a2c;color:#e0a3a3;border-color:#4d3639}
   /* 「모른다」는 판정이 아니라 판정의 부재다. 채움을 빼고 테두리만 남긴다 */
   .미확인{background:none;color:var(--흐린글);border-color:var(--줄)}
@@ -223,11 +224,17 @@
     <button data-탭="제어판" class="켬">제어판</button>
     <button data-탭="사건">사건</button>
     <button data-탭="명부">게시처 DB</button>
+    <button data-탭="검증">검증 DB</button>
+    <button data-탭="사고">사고 DB</button>
+    <button data-탭="행위자">행위자 DB</button>
   </nav>
 
   <section id="제어판"></section>
   <section id="사건" hidden></section>
   <section id="명부" hidden></section>
+  <section id="검증" hidden></section>
+  <section id="사고" hidden></section>
+  <section id="행위자" hidden></section>
   <section id="포럼사건" hidden></section>
 
   <footer>
@@ -637,6 +644,116 @@
   }
   명부그리기();
 
+  // ── ㉮ 2단계: 검증 · 사고 · 행위자 (2026-09-29) ─────────
+  // **목적은 자동으로 들어온 내용을 확인하는 것입니다(최현서).** 그래서 탭마다 새로 들어온 줄이 먼저이고
+  // (만든 때 최신순, 서버가 세워 보냅니다), 어디서 왔는지와 관련 LEAK 번호를 같이 냅니다.
+  // 실명은 기입됨/미기입, 연락처는 있음/없음, 서술 칸은 주소를 뗀 채로 옵니다(dbs.json 의 접기).
+  const 둘 = D.둘째단;
+  let 사고거르개 = "전부", 행위자거르개 = "전부";
+  const 이레 = 7 * 86400000;
+  const 새로 = (v)=> !!v && (Date.now() - Date.parse(v)) <= 이레;
+  const 만든날 = (v)=> v ? new Date(Date.parse(v) + 9*3600*1000).toISOString().slice(0,10) : "";
+  const 노션링크 = (x)=> x.id ? '<a href="https://www.notion.so/'+안전(x.id.replace(/-/g,""))
+      +'" target="_blank" rel="noopener">노션</a>' : '';
+  const 칸그림 = (v, 꼴)=> '<td class="'+(꼴||"흐림 짧음")+'">'+안전(Array.isArray(v) ? v.join(" · ") : (v==null||v===""?"-":v))+'</td>';
+  const 반영표 = (v)=> v===true ? '<span class="표 있음">켜짐</span>' : '<span class="표 미확인">꺼짐</span>';
+
+  function 둘머리(열쇠){
+    if (!둘) return '<div class="빔">검증 · 사고 · 행위자 DB 가 없습니다. 다시 구우십시오 (<code>python apps/dash/build.py</code>).</div>';
+    if (둘.오류) return '<div class="경고">검증 · 사고 · 행위자 DB 를 못 읽었습니다: '+안전(둘.오류)+'</div>';
+    const 잘린 = (둘.잘림||{})[열쇠];
+    return 잘린 ? '<div class="경고">'+매김(잘린)+'줄까지만 읽었습니다. 그만큼만 센 것입니다 (dbs.json 의 판상한)</div>' : '';
+  }
+
+  function 검증그리기(){
+    let s = 둘머리("검증");
+    if (둘 && !둘.오류){
+      const 줄들 = 둘.검증 || [];
+      const 새것 = 줄들.filter(x=>새로(x.만든때)).length;
+      s += '<h2>검증 DB <span class="더흐림">— 검증 스킬(⑨-2)이 채운 판정 '+매김(줄들.length)+'줄 · 7일 안에 들어온 것 '
+        + 매김(새것)+'. 최근 만든 것부터</span></h2>';
+      if (!줄들.length) s += '<div class="빔">줄이 없습니다.</div>';
+      else s += '<div class="감쌈"><table><thead><tr><th class="짧음">만든 날</th><th class="짧음"></th>'
+        + '<th class="짧음">번호</th><th class="짧음">수집 줄</th><th class="짧음">수집 줄 검토 · 상태</th>'
+        + '<th class="짧음">진위</th><th class="짧음">분류</th><th class="짧음">신규성</th><th class="짧음">신뢰도</th>'
+        + '<th class="짧음">악용</th><th class="짧음">신선도</th><th class="짧음">범위</th><th class="짧음">확산</th>'
+        + '<th>요약 첫 줄</th><th class="짧음">검증일</th><th class="짧음">검증자</th><th class="짧음">반영</th>'
+        + '<th class="짧음"></th></tr></thead><tbody>'
+        + 줄들.map(x=>'<tr>'
+            + 칸그림(만든날(x.만든때)) + '<td class="짧음">'+(새로(x.만든때)?'<span class="표 새로">새로</span>':'')+'</td>'
+            + 칸그림(x.번호, "더흐림 짧음")
+            + 칸그림((x.사건||[]).concat(x.사건밖 ? ["밖 "+x.사건밖] : []), "흐림 짧음")
+            + 칸그림([x.수집검토, x.수집상태].filter(Boolean).join(" · "))
+            + 칸그림(x.진위) + 칸그림(x.분류) + 칸그림(x.신규성) + 칸그림(x.신뢰도)
+            + 칸그림(x.악용) + 칸그림(x.신선도) + 칸그림(x.범위) + 칸그림(x.확산)
+            + 칸그림(x.요약, "제목") + 칸그림(x.검증일) + 칸그림(x.검증자, "더흐림 짧음")
+            + '<td class="짧음">'+반영표(x.반영)+'</td><td>'+노션링크(x)+'</td></tr>').join("")
+        + '</tbody></table></div>'
+        + '<div class="더흐림" style="margin-top:8px">위험도 네 칸의 「-」 는 <b>안 매김</b>입니다(확인불가가 아닙니다). '
+        + '검증 DB 에는 「확정됨」 칸이 없어 이어진 수집 줄의 검토 여부를 옆에 둡니다. 검증자는 기입 여부만 냅니다.</div>';
+    }
+    $("#검증").innerHTML = s;
+  }
+
+  function 사고그리기(){
+    let s = 둘머리("사고");
+    if (둘 && !둘.오류){
+      const 셈 = (둘.셈||{}).사고 || {};
+      const 줄들 = (둘.사고 || []).filter(x=> 사고거르개==="전부" || x.갈래===사고거르개);
+      s += '<h2>유출 사고 DB <span class="더흐림">— 공식 확인 사고 명단(기준선). 발표 '+매김(셈.발표)+'건 · 공식 '
+        + 매김(셈.공식)+' · 주장 기록 '+매김(셈["주장 기록"])+'. 발표 단위라 조직 수가 아닙니다</span></h2>'
+        + '<div class="거르개">' + ["전부","공식","주장 기록"].map(v=>'<button data-사고갈래="'+v+'" class="'
+          + (v===사고거르개?"켬":"")+'">'+v+'</button>').join("") + '</div>';
+      if (!줄들.length) s += '<div class="빔">고른 조건에 맞는 줄이 없습니다.</div>';
+      else s += '<div class="감쌈"><table><thead><tr><th class="짧음">만든 날</th><th class="짧음">번호</th>'
+        + '<th class="짧음">갈래</th><th class="짧음">외부 확인</th><th>조직</th><th class="짧음">국가</th>'
+        + '<th class="짧음">업종</th><th class="항목">유출 항목</th><th class="짧음">규모</th><th class="짧음">보도된 행위자</th>'
+        + '<th class="짧음">공표</th><th class="짧음">사고</th><th class="짧음">메모에서 뽑은 LEAK</th>'
+        + '<th class="짧음">기록자</th><th class="짧음">반영</th><th class="짧음"></th></tr></thead><tbody>'
+        + 줄들.map(x=>'<tr>'
+            + 칸그림(만든날(x.만든때)) + 칸그림(x.번호, "더흐림 짧음")
+            + '<td class="짧음"><span class="표 '+(x.갈래==="공식"?"사건O":"미확인")+'">'+안전(x.갈래)+'</span></td>'
+            + 칸그림(x.외부확인) + 칸그림(x.조직, "제목") + 칸그림(x.국가) + 칸그림(x.업종) + 칸그림(x.항목, "더흐림 항목")
+            + 칸그림(x.규모) + 칸그림(x.행위자) + 칸그림(x.공표) + 칸그림(x.사고) + 칸그림(x.메모LEAK) + 칸그림(x.기록자, "더흐림 짧음")
+            + '<td class="짧음">'+반영표(x.반영)+'</td><td>'+노션링크(x)+'</td></tr>').join("")
+        + '</tbody></table></div>'
+        + '<div class="더흐림" style="margin-top:8px">공식은 외부 확인이 조직 공식 발표 · 규제기관 확정 · 언론 보도인 줄입니다. '
+        + '주장 기록(게시글만 · 연구자 발견)은 DB 반영이 꺼져 지도 · RAG 에서 빠집니다. 새 사고는 넣지 않습니다(게시 2026-01-01 ~ 08-19 기준선). '
+        + '메모의 LEAK 번호는 글에서 뽑은 것이라 확인이 아닙니다.</div>';
+    }
+    $("#사고").innerHTML = s;
+  }
+
+  function 행위자그리기(){
+    let s = 둘머리("행위자");
+    if (둘 && !둘.오류){
+      const 셈 = (둘.셈||{}).행위자 || {};
+      const 줄들 = (둘.행위자 || []).filter(x=> 행위자거르개==="전부" || x.들어온길===행위자거르개);
+      s += '<h2>행위자 DB <span class="더흐림">— '+매김(셈.줄)+'줄 · 자동 수집 '+매김(셈["자동 수집"])+' · 검증 스킬 · 사람 '
+        + 매김(셈["검증 스킬 · 사람"])+'. 최근 만든 것부터. 「누구인가」 보다 「어디까지 봤나」</span></h2>'
+        + '<div class="거르개">' + ["전부","자동 수집","검증 스킬 · 사람"].map(v=>'<button data-행위자길="'+v+'" class="'
+          + (v===행위자거르개?"켬":"")+'">'+v+'</button>').join("") + '</div>';
+      if (!줄들.length) s += '<div class="빔">고른 조건에 맞는 줄이 없습니다.</div>';
+      else s += '<div class="감쌈"><table><thead><tr><th class="짧음">만든 날</th><th class="짧음"></th>'
+        + '<th class="짧음">핸들</th><th class="짧음">들어온 길</th><th class="짧음">첫 사건</th><th class="짧음 수">사건</th>'
+        + '<th class="짧음">역할</th><th class="짧음">국가</th><th class="짧음">상태</th><th class="짧음">조사 단계</th>'
+        + '<th class="짧음">출처</th><th class="짧음">처음 본 날</th><th>연결된 곳</th><th>한국 관련 유출</th>'
+        + '<th class="짧음">텔레그램</th><th class="짧음">담당자</th><th class="짧음">반영</th><th class="짧음"></th></tr></thead><tbody>'
+        + 줄들.map(x=>'<tr>'
+            + 칸그림(만든날(x.만든때)) + '<td class="짧음">'+(새로(x.만든때)?'<span class="표 새로">새로</span>':'')+'</td>'
+            + 칸그림(x.핸들, "짧음") + 칸그림(x.들어온길) + 칸그림(x.첫사건, "더흐림 짧음") + '<td class="수">'+매김(x.사건수)+'</td>'
+            + 칸그림(x.역할) + 칸그림(x.국가) + 칸그림(x.상태) + 칸그림(x.조사단계) + 칸그림(x.출처) + 칸그림(x.처음)
+            + 칸그림(x.연결, "제목") + 칸그림(x.한국유출, "제목") + 칸그림(x.텔레그램==="기입됨" ? "있음" : "-")
+            + 칸그림(x.담당자, "더흐림 짧음") + '<td class="짧음">'+반영표(x.반영)+'</td><td>'+노션링크(x)+'</td></tr>').join("")
+        + '</tbody></table></div>'
+        + '<div class="더흐림" style="margin-top:8px">들어온 길은 비고의 자동 등록 표지로 가릅니다. 첫 사건은 수집 줄의 '
+        + '게시자 핸들로 맞춘 것이라 확인이 아닙니다. 국가에는 추정이 섞여 있습니다. 연락 창구는 있음 여부만 내고 값은 노션에서 봅니다. '
+        + '연결된 곳 · 한국 관련 유출은 주소를 뗐습니다.</div>';
+    }
+    $("#행위자").innerHTML = s;
+  }
+  검증그리기(); 사고그리기(); 행위자그리기();
+
   // ── 검토 여부 고르기 ──────────────────────────────
   // 서버가 대신 노션에 씁니다. 토큰은 서버 자리에만 있고 여기로 안 옵니다.
   async function 고르기(b){
@@ -928,11 +1045,15 @@
     if (!b) return;
     if (b.dataset.탭){
       document.querySelectorAll("nav button").forEach(x=>x.classList.toggle("켬", x===b));
-      document.querySelector("#제어판").hidden = b.dataset.탭!=="제어판";
-      document.querySelector("#사건").hidden   = b.dataset.탭!=="사건";
-      document.querySelector("#명부").hidden   = b.dataset.탭!=="명부";
+      // 탭이 여섯이 되어(2026-09-29) 하나씩 적지 않고 nav 의 단추 목록으로 돕니다
+      document.querySelectorAll("nav button[data-탭]").forEach(x=>{
+        const 칸 = document.getElementById(x.dataset.탭);
+        if (칸) 칸.hidden = x.dataset.탭 !== b.dataset.탭;
+      });
       포럼자리.hidden = true;
     }
+    if (b.dataset.사고갈래){ 사고거르개 = b.dataset.사고갈래; 사고그리기(); }
+    if (b.dataset.행위자길){ 행위자거르개 = b.dataset.행위자길; 행위자그리기(); }
     if (b.dataset.손 === "#forum-rows") 포럼열기();
     if (b.dataset.포럼 === "닫기"){
       포럼자리.hidden = true;
