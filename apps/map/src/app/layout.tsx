@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { STALE_RELOAD } from "./staleReload";
 
 export const metadata: Metadata = {
   title: "생태계 지도",
@@ -35,6 +36,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="ko" data-mode="black" className="h-full overflow-hidden antialiased">
+      <head>
+        {/* 배포 직후 옛 HTML 이 없는 청크를 가리키면 한 번만 새로 부른다 (`staleReload.ts`) */}
+        <script dangerouslySetInnerHTML={{ __html: STALE_RELOAD }} />
+      </head>
       <body className="h-full overflow-auto">{children}</body>
     </html>
   );
