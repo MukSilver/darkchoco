@@ -214,12 +214,27 @@ def from_post(chunk: tuple, head: dict, clues: dict, venue_hint: str) -> Item | 
     )
 
 
-def from_tsv(row: dict, head: dict, venue_hint: str) -> Item | None:
+# 체크한 게시판 훑기(v2.9)는 게시판마다 `### 이름 — n건 …` 다음 줄에 게시판 주소를 적는다.
+# 머리의 `출처 :` 는 단추를 누른 쪽이라, 다른 게시판 글의 「알게 된 곳」 으로 쓰면 틀린다(2026-09-30 검토)
+BOARD_HEAD = re.compile(r"^###\s+(.+)\s+—\s+\d+건[^\n]*\n(https?://\S+)\s*$", re.M)
+
+
+def boards_of(md: str) -> dict:
+    """훑기 결과의 게시판 이름 → 게시판 주소. 훑기가 아니면 빈 dict."""
+    out = {}
+    for name, url in BOARD_HEAD.findall(md):
+        out.setdefault(name.strip(), url.strip())
+    return out
+
+
+def from_tsv(row: dict, head: dict, venue_hint: str, boards: dict | None = None) -> Item | None:
     """목록 줄 하나. 본문이 없다. **`안 봄` 이다.**"""
     url = row.get("URL", "")
     venue = host_of(url) or venue_hint or head["venue"]
     if not venue:
         return None
+    board_url = (boards or {}).get((row.get("게시판") or "").strip())
+    via = [board_url] if board_url else ([head["from"]] if head["from"] else [])
     return Item(
         source="forum",
         src_id=src_id_of(url, venue),
@@ -232,7 +247,7 @@ def from_tsv(row: dict, head: dict, venue_hint: str) -> Item | None:
         body_via="",
         posted_at=row.get("날짜", ""),
         post_url=url,
-        via=[head["from"]] if head["from"] else [],
+        via=via,
         raw={"게시판": row.get("게시판", ""), "답글": row.get("답글", ""),
              "조회": row.get("조회", ""),
              "본문": "안 봄. 목록만 받았다"},
@@ -252,8 +267,9 @@ def read(md: str, venue_hint: str = "") -> tuple[list[Item], dict]:
             items.append(it)
     # 목록 줄은 본문이 안 온 것만 넣는다. 같은 글을 두 줄로 만들지 않는다
     listed = 0
+    boards = boards_of(md)
     for row in tsv_of(md):
-        it = from_tsv(row, head, venue_hint)
+        it = from_tsv(row, head, venue_hint, boards)
         if it and it.src_id not in seen:
             seen.add(it.src_id)
             items.append(it)

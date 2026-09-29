@@ -361,6 +361,16 @@ check("훑기 · 글 번호", sorted(i.src_id for i in s_items),
 check("훑기 · 알게 된 곳", s_items[0].via, ["https://example-forum.test/forum-1"])
 for it in s_items:
     check("훑기 · 안 봄", it.raw["본문"], "안 봄. 목록만 받았다")
+# 알게 된 곳은 게시판마다다. 머리의 `출처 :` 는 단추를 누른 쪽이라 다른 게시판 글에 쓰면 틀린다(2026-09-30)
+db_item = [i for i in s_items if i.raw["게시판"] == "Databases"][0]
+check("훑기 · 둘째 게시판의 알게 된 곳", db_item.via, ["https://example-forum.test/forum-2"])
+
+# 두 곳이 잇달아 실패해 멈춘 판. 까닭은 머리의 `멈춘 까닭 :` 줄이고 「못 가져온 것」 에는 실패한 게시판만 있다
+SWEEP_STOP = SWEEP.replace(
+    "대상 3건 · 새 1건\n",
+    "대상 3건 · 새 1건\n멈춘 까닭 : 게시판 두 곳이 잇달아 실패했다. 로그인이 풀렸을 수 있어 남은 게시판을 안 부르고 멈춤\n")
+_, stop_note = read(SWEEP_STOP)
+check("훑기 · 멈춘 까닭은 못 가져온 것에 안 센다", stop_note["못 가져온 것"], 2)
 
 # ── 결과 ────────────────────────────────────────
 if fails:
