@@ -22,6 +22,32 @@ import { belongsTo } from "@/lib/panel";
 import type { Status } from "@/lib/score";
 import type { Ev } from "@/lib/types";
 
+/**
+ * 「최근 주요 이벤트」 · KPI 를 접었나. 머리 줄을 누르면 접히고, 접은 상태를 이 브라우저에 기억한다.
+ * 기억한 것이 없으면 창 높이 800 미만일 때 처음부터 접는다 — 1280×720 에서 표가 첫 화면 아래로
+ * 밀렸다 (2026-09-29 최현서 결정, 10번 「이벤트를 맨 위로」는 그대로). 브라우저 저장이 막혀 있으면
+ * 기억만 못 한다
+ */
+type Fold = { events: boolean; kpi: boolean };
+const FOLD_KEY = "dcMapEntityFold";
+function readFold(): Fold {
+  try {
+    const v = JSON.parse(localStorage.getItem(FOLD_KEY) ?? "null");
+    if (v && typeof v.events === "boolean" && typeof v.kpi === "boolean") return v;
+  } catch {
+    // 저장소를 못 읽으면 창 높이로 정한다
+  }
+  const short = typeof window !== "undefined" && window.innerHeight < 800;
+  return { events: short, kpi: short };
+}
+function saveFold(f: Fold) {
+  try {
+    localStorage.setItem(FOLD_KEY, JSON.stringify(f));
+  } catch {
+    // 기억만 못 한다
+  }
+}
+
 /** 표에서 정렬 가능한 열 (설계서 4.3.5) */
 export type SortKey = "activity" | "delta" | "events" | "lastSeen";
 
@@ -84,6 +110,13 @@ export default function EntityTab({
   onSort,
 }: EntityTabProps) {
   const [pickedEv, setPickedEv] = useState<string | null>(null);
+  // 엔티티 탭은 첫 화면(지도 탭) 뒤에 붙으므로 브라우저 값을 바로 읽어도 미리 구운 화면과 안 어긋난다
+  const [fold, setFold] = useState<Fold>(readFold);
+  const toggleFold = (k: keyof Fold) => {
+    const next = { ...fold, [k]: !fold[k] };
+    setFold(next);
+    saveFold(next);
+  };
 
   // 섬을 안 고른 채 들어오면 첫 섬을 연다. 설계서는 「기본 포럼」인데
   // 포럼이 0건인 기준일도 있으므로 목록 첫 섬으로 둔다
@@ -215,8 +248,29 @@ export default function EntityTab({
         picked={pickedEv}
         onPick={setPickedEv}
         onOpen={onOpenEvent}
+        folded={fold.events}
+        onToggle={() => toggleFold("events")}
       />
 
+      {/* KPI 머리 줄 — 누르면 접히고, 접으면 한 줄 요약만 (최현서 결정) */}
+      <button
+        type="button"
+        aria-expanded={!fold.kpi}
+        onClick={() => toggleFold("kpi")}
+        className="-mb-s2 flex shrink-0 items-center gap-s2 self-start rounded-[8px] px-s2 py-[2px] text-[12px] text-label hover-row hover:text-title"
+      >
+        <span aria-hidden className="w-[10px] text-[10px]">
+          {fold.kpi ? "▸" : "▾"}
+        </span>
+        요약 지표
+        {fold.kpi && (
+          <span className="tabular-nums text-body">
+            평균 활동도 {avg} · 활성 {live.length}/{rows.length} · 최근 30일 {recent.count}건 · 최고{" "}
+            {top ? `${top.metrics.activity} ${top.name}` : "—"}
+          </span>
+        )}
+      </button>
+      {!fold.kpi && (
       <div className="grid shrink-0 grid-cols-4 gap-s4">
         <Kpi label="평균 활동도" value={String(avg)} />
         <Kpi
@@ -243,6 +297,7 @@ export default function EntityTab({
           note={top?.name ?? ""}
         />
       </div>
+      )}
 
       {/*
         표는 고정 배치다 — 열 폭을 머리가 정하고 엔티티 이름 열이 남는 폭을 받아 말줄임한다.
@@ -392,6 +447,8 @@ function RecentEvents({
   picked,
   onPick,
   onOpen,
+  folded,
+  onToggle,
 }: {
   title: string;
   list: Ev[];
@@ -399,14 +456,41 @@ function RecentEvents({
   picked: string | null;
   onPick: (id: string | null) => void;
   onOpen?: (id: string) => void;
+  /** 접혔나 — 접히면 머리 줄에 한 줄 요약만 (최현서 결정) */
+  folded: boolean;
+  onToggle: () => void;
 }) {
   return (
-    <section className="flex shrink-0 flex-col gap-s3 rounded-[14px] border border-edge px-s5 py-s4">
+    <section
+      className={
+        "flex shrink-0 flex-col gap-s3 rounded-[14px] border border-edge px-s5 " + (folded ? "py-s2" : "py-s4")
+      }
+    >
       <div className="flex items-baseline justify-between gap-s3">
-        <h3 className="text-[12px] text-label">{title}</h3>
-        {onOpen && list.length > 0 && <span className="text-[11px] text-label">사건 클릭 → 상세 팝업</span>}
+        {/* 머리 줄을 누르면 접고 편다 */}
+        <button
+          type="button"
+          aria-expanded={!folded}
+          onClick={onToggle}
+          className="-mx-s2 flex min-w-0 items-baseline gap-s2 rounded-[8px] px-s2 py-[2px] text-left text-[12px] text-label hover-row hover:text-title"
+        >
+          <span aria-hidden className="w-[10px] shrink-0 text-[10px]">
+            {folded ? "▸" : "▾"}
+          </span>
+          <span className="shrink-0">{title}</span>
+          {folded && (
+            <span className="truncate tabular-nums text-body">
+              {list.length
+                ? `${list.length}건 · 가장 최근 ${list[0].postedAt.slice(5, 10)} · ${nameOf(list[0].territoryId)}`
+                : "이 기준일까지 올라온 사건 없음"}
+            </span>
+          )}
+        </button>
+        {!folded && onOpen && list.length > 0 && (
+          <span className="shrink-0 text-[11px] text-label">사건 클릭 → 상세 팝업</span>
+        )}
       </div>
-      {list.length === 0 ? (
+      {folded ? null : list.length === 0 ? (
         <p className="text-[12px] text-label">이 기준일까지 이 섬에 올라온 사건이 없습니다.</p>
       ) : (
         <div className="grid grid-cols-3 gap-s4">
