@@ -45,7 +45,7 @@ from dc_console import use_utf8  # noqa: E402
 
 use_utf8()
 from collect.fetch import Fetcher  # noqa: E402
-from collect.sources.telegram_web import parse, to_item  # noqa: E402
+from collect.sources.telegram_web import to_item, 쪽들  # noqa: E402
 from collect.store import Store  # noqa: E402
 
 VER = "collect.main v1"
@@ -79,17 +79,13 @@ def channels(given: str) -> list[str]:
 
 def one(f: Fetcher, s: Store, chan: str, today: str, dry: bool) -> dict:
     """채널 하나. 못 본 것도 왜인지 적어 돌려준다."""
-    r = {"채널": chan, "글": 0, "새 것": 0, "종류": {}, "막힌 것": ""}
+    r = {"채널": chan, "글": 0, "새 것": 0, "종류": {}, "막힌 것": "", "쪽": 0}
+    # 첫 쪽이 꽉 찼고 12시간 안이면 거슬러 한 쪽씩 더 읽는다(채널당 8쪽). telegram_web.쪽들 (2026-09-29)
     try:
-        code, body, _ = f.get("https://t.me/s/" + chan, accept="text/html")
+        posts, why, r["쪽"] = 쪽들(f, chan)
     except Exception as e:
         r["막힌 것"] = "요청 실패: %s" % e
         return r
-    if code != 200:
-        r["막힌 것"] = "HTTP %s" % code
-        return r
-
-    posts, why = parse(body.decode("utf-8", errors="replace"), chan)
     if not posts:
         r["막힌 것"] = why
         return r
@@ -144,7 +140,8 @@ def main() -> int:
             else:
                 kinds = " · ".join("%s %d" % (k, v)
                                    for k, v in sorted(r["종류"].items(), key=lambda x: -x[1]))
-                print("  %-18s 글 %2d · 새 것 %2d   %s" % (c, r["글"], r["새 것"], kinds))
+                쪽 = " · %d쪽" % r["쪽"] if r["쪽"] > 1 else ""
+                print("  %-18s 글 %2d · 새 것 %2d%s   %s" % (c, r["글"], r["새 것"], 쪽, kinds))
         s.close()
         print()
         print(f.report())
