@@ -46,6 +46,8 @@ export type LinksTabProps = {
   onSelect: (s: LinkSel) => void;
   onOpenRel: (v: RelView) => void;
   onOpenPair: (p: IslandPairRow) => void;
+  /** 줄에 마우스를 올린 것(뗄 때 null) — 지도에 그 관계선만 잠깐 (v2 6번) */
+  onHover?: (s: LinkSel) => void;
 };
 
 function ym(iso: string | null): string {
@@ -81,6 +83,7 @@ function Row({
   on,
   onClick,
   onOpen,
+  onHover,
   chips,
   count,
   title,
@@ -89,6 +92,7 @@ function Row({
   on: boolean;
   onClick: () => void;
   onOpen: () => void;
+  onHover?: (on: boolean) => void;
   chips: ReactNode;
   count: number;
   title: ReactNode;
@@ -101,6 +105,8 @@ function Row({
       aria-pressed={on}
       onClick={onClick}
       onDoubleClick={onOpen}
+      onMouseEnter={onHover ? () => onHover(true) : undefined}
+      onMouseLeave={onHover ? () => onHover(false) : undefined}
       onKeyDown={(e) => {
         if (e.key === "Enter") onOpen();
         if (e.key === " ") {
@@ -178,6 +184,7 @@ export default function LinksTab(p: LinksTabProps) {
                 on={on}
                 onClick={() => p.onSelect(on ? null : { type: "rel", id: v.rel.id })}
                 onOpen={() => p.onOpenRel(v)}
+                onHover={p.onHover ? (h) => p.onHover?.(h ? { type: "rel", id: v.rel.id } : null) : undefined}
                 chips={
                   <>
                     {info && <IslandChip token={info.token}>{info.name}</IslandChip>}
@@ -213,6 +220,7 @@ export default function LinksTab(p: LinksTabProps) {
                 on={on}
                 onClick={() => p.onSelect(on ? null : { type: "pair", from: r.from, to: r.to })}
                 onOpen={() => p.onOpenPair(r)}
+                onHover={p.onHover ? (h) => p.onHover?.(h ? { type: "pair", from: r.from, to: r.to } : null) : undefined}
                 chips={
                   <>
                     <Chip tone="neutral">유형 간</Chip>

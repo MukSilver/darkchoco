@@ -66,6 +66,7 @@ export default function EventsTab({
   scamCount,
   hideScam,
   onHideScam,
+  onHover,
 }: {
   /** 지금 기간의 사건. 최신순 (`eventsIn`). 사기 의심을 숨겼으면 뺀 뒤다 */
   list: Ev[];
@@ -91,6 +92,8 @@ export default function EventsTab({
   scamCount: number;
   hideScam: boolean;
   onHideScam: (hide: boolean) => void;
+  /** 사건 줄에 마우스를 올린 사건(뗄 때 null) — 지도에 그것만 잠깐 (v2 6번) */
+  onHover?: (id: string | null) => void;
 }) {
   useEffect(() => {
     if (!focus) return;
@@ -207,6 +210,28 @@ export default function EventsTab({
             }}
           >
             <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-s2 gap-y-s1 text-[11px] text-label">
+              {/*
+                한 달 고르기 — 달을 고르면 그달 첫날 ~ 끝날로 채운다. 날짜 칸만 있으면 시작일이 가장 이른 사건
+                날짜(몇 해 전)로 채워져, 달만 바꾸면 해가 그대로 남아 두 해가 통째로 걸렸다 (2026-09-29 최현서
+                v2 7번). 끝날은 기준일을 안 넘는다
+              */}
+              <span aria-hidden>한 달</span>
+              <input
+                type="month"
+                aria-label="한 달 고르기"
+                value={fromIn.slice(0, 7) === toIn.slice(0, 7) ? fromIn.slice(0, 7) : ""}
+                max={isoDay(d.getTime()).slice(0, 7)}
+                onChange={(ev) => {
+                  const m = ev.target.value;
+                  if (!/^\d{4}-\d{2}$/.test(m)) return;
+                  const [y, mo] = m.split("-").map(Number);
+                  const last = new Date(Date.UTC(y, mo, 0)).toISOString().slice(0, 10);
+                  const cap = isoDay(d.getTime());
+                  setFromIn(`${m}-01`);
+                  setToIn(last < cap ? last : cap);
+                }}
+                className="w-full min-w-0 rounded-[6px] border border-edge-input bg-input px-s2 py-[2px] text-[12px] text-body"
+              />
               <span aria-hidden>시작</span>
               <input
                 name="from"
@@ -254,6 +279,7 @@ export default function EventsTab({
                 where={whereOf(e)}
                 on={picked === e.id}
                 onClick={() => onPick(picked === e.id ? null : e.id)}
+                onHover={onHover ? (h) => onHover(h ? e.id : null) : undefined}
                 // 누르면 그 줄을 강조하고 팝업을 연다 (한 번 클릭). Space 는 강조만 켜고 끈다
                 onOpen={() => {
                   onPick(e.id);

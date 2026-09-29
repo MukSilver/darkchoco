@@ -333,42 +333,41 @@ export default function TimelineTab({
           </nav>
 
           {/*
-            시점 비교에서 연도 칩이 채울 쪽 — A 고르기 · B 고르기 (2026-09-28 최현서 8번 「A · B 각각의
-            버튼을 두거나」). 고른 쪽은 테두리 있는 패널색 칸이다
+            「시점 비교」 스위치 — 연도 칩 바로 뒤에 고정한다. 전에는 재생 조작 끝에 있어 비교를 켜면
+          A · B 고르기 묶음이 칩 뒤에 끼어들며 스위치가 다음 줄로 밀려 자리가 바뀌었다 (2026-09-29 최현서
+          v2 8번 「A · B 선택 단추와 자리를 바꾸면」). 마우스를 올리면 글자가 밝아지고 통이 한 단계 진해진다 — 전에는
+            아무것도 안 바뀌었다 (2026-09-28 코드 분석, 최현서 1번). 글자색은 단추가 들고 글이
+            물려받는다. 꺼진 단추는 안 바뀐다(`enabled`). 손잡이 · 통 전환은 토큰 시간이다
           */}
-          {compare && (
-            <div
-              role="group"
-              aria-label="연도 칩이 채울 쪽"
-              className="flex shrink-0 items-center gap-s1 rounded-[10px] bg-track p-[3px]"
+          {/* 높이 30 칸 — 재생 조작과 한 줄이든 혼자 한 줄이든 같은 자리에 앉는다 */}
+          <div className="flex h-[30px] shrink-0 items-center">
+          <button
+            type="button"
+            onClick={toggleCompare}
+            disabled={snaps.length < 2}
+            aria-pressed={compare !== null}
+            className={[
+              "group flex items-center gap-s2 text-[12px] enabled:hover:text-title disabled:text-disabled",
+              compare ? "text-strong" : "text-label",
+            ].join(" ")}
+          >
+            <span
+              aria-hidden
+              className={[
+                "relative h-[16px] w-[30px] rounded-full transition-[background-color,filter] duration-[var(--dur-base)] ease-[var(--ease-out)]",
+                compare
+                  ? "bg-accent group-enabled:group-hover:brightness-110"
+                  : "bg-track group-enabled:group-hover:bg-edge-strong",
+              ].join(" ")}
             >
-              {(["a", "b"] as const).map((k) => {
-                const onSide = compare.active === k;
-                return (
-                  <button
-                    key={k}
-                    type="button"
-                    aria-pressed={onSide}
-                    onClick={() => onCompare({ ...compare, active: k })}
-                    title={`연도 칩이 ${k.toUpperCase()} 시점을 바꿉니다`}
-                    className={[
-                      "flex items-center gap-s2 whitespace-nowrap rounded-[8px] border px-s3 py-[5px] text-[12px] tabular-nums",
-                      onSide ? "border-edge bg-panel font-semibold text-strong" : "border-transparent text-label hover-seg",
-                    ].join(" ")}
-                  >
-                    <span
-                      aria-hidden
-                      className="grid size-[16px] place-items-center rounded-[4px] text-[10px] font-bold text-on-accent"
-                      style={{ background: "var(--t-accent)" }}
-                    >
-                      {k.toUpperCase()}
-                    </span>
-                    {quarterText(k === "a" ? compare.a : compare.b)} 고르기
-                  </button>
-                );
-              })}
-            </div>
-          )}
+              <span
+                className="absolute top-[2px] size-[12px] rounded-full bg-white transition-[left] duration-[var(--dur-base)] ease-[var(--ease-out)]"
+                style={{ left: compare ? 16 : 2 }}
+              />
+            </span>
+            <span>시점 비교</span>
+          </button>
+          </div>
 
           <div className="flex-1" />
 
@@ -445,36 +444,43 @@ export default function TimelineTab({
               </span>
             </div>
             {/*
-              「시점 비교」 스위치. 마우스를 올리면 글자가 밝아지고 통이 한 단계 진해진다 — 전에는
-              아무것도 안 바뀌었다 (2026-09-28 코드 분석, 최현서 1번). 글자색은 단추가 들고 글이
-              물려받는다. 꺼진 단추는 안 바뀐다(`enabled`). 손잡이 · 통 전환은 토큰 시간이다
+              시점 비교에서 연도 칩이 채울 쪽 — A 고르기 · B 고르기 (2026-09-28 최현서 8번 「A · B 각각의
+              버튼을 두거나」). 고른 쪽은 테두리 있는 패널색 칸이다. 재생 조작 끝에 둔다(v2 8번 — 스위치와 자리를 바꿈)
             */}
-            <button
-              type="button"
-              onClick={toggleCompare}
-              disabled={snaps.length < 2}
-              aria-pressed={compare !== null}
-              className={[
-                "group flex items-center gap-s2 text-[12px] enabled:hover:text-title disabled:text-disabled",
-                compare ? "text-strong" : "text-label",
-              ].join(" ")}
-            >
-              <span
-                aria-hidden
-                className={[
-                  "relative h-[16px] w-[30px] rounded-full transition-[background-color,filter] duration-[var(--dur-base)] ease-[var(--ease-out)]",
-                  compare
-                    ? "bg-accent group-enabled:group-hover:brightness-110"
-                    : "bg-track group-enabled:group-hover:bg-edge-strong",
-                ].join(" ")}
+            {compare && (
+              <div
+                role="group"
+                aria-label="연도 칩이 채울 쪽"
+                className="flex shrink-0 items-center gap-s1 rounded-[10px] bg-track p-[3px]"
               >
-                <span
-                  className="absolute top-[2px] size-[12px] rounded-full bg-white transition-[left] duration-[var(--dur-base)] ease-[var(--ease-out)]"
-                  style={{ left: compare ? 16 : 2 }}
-                />
-              </span>
-              <span>시점 비교</span>
-            </button>
+                {(["a", "b"] as const).map((k) => {
+                  const onSide = compare.active === k;
+                  return (
+                    <button
+                      key={k}
+                      type="button"
+                      aria-pressed={onSide}
+                      onClick={() => onCompare({ ...compare, active: k })}
+                      title={`연도 칩이 ${k.toUpperCase()} 시점을 바꿉니다`}
+                      className={[
+                        // 높이 30 을 안 넘게(재생 조작 줄과 같은 높이) — 넘으면 줄 높이가 바뀌어 옆 단추가 들썩인다
+                      "flex items-center gap-s2 whitespace-nowrap rounded-[8px] border px-s3 py-[2px] text-[12px] leading-[16px] tabular-nums",
+                        onSide ? "border-edge bg-panel font-semibold text-strong" : "border-transparent text-label hover-seg",
+                      ].join(" ")}
+                    >
+                      <span
+                        aria-hidden
+                        className="grid size-[16px] place-items-center rounded-[4px] text-[10px] font-bold text-on-accent"
+                        style={{ background: "var(--t-accent)" }}
+                      >
+                        {k.toUpperCase()}
+                      </span>
+                      {quarterText(k === "a" ? compare.a : compare.b)} 고르기
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 
@@ -488,10 +494,14 @@ export default function TimelineTab({
             </SideMap>
           </div>
         ) : (
-        <section className="relative flex h-[400px] shrink-0 flex-col rounded-[14px] border border-edge bg-canvas p-s5">
+        <section
+          className="relative flex h-[min(100cqw,640px)] min-h-[320px] shrink-0 resize-y flex-col overflow-hidden rounded-[14px] border border-edge bg-canvas p-s5"
+          title="오른쪽 아래 모서리를 끌어 높이를 바꿀 수 있습니다"
+        >
           {/*
-            블록 높이를 고정한다. 전에는 최소 높이만 있어 지도 틀 비율을 따라 시점마다 들쭉날쭉했다
-            (2026-09-28 최현서 3번). 틀도 모든 분기를 합친 크기라 축척이 같다
+            블록 높이는 기본이 정사각형(칸 폭, 640 까지)이고, 오른쪽 아래 모서리를 끌어 바꿀 수 있다(resize).
+            아래 추이 · 성장 요약은 칸을 굴려 본다 (2026-09-29 최현서 v2 4번 — 전에는 400 고정이라 지도가
+            작게 들어갔다). 시점마다 들쭉날쭉하지 않은 것은 그대로다(3번). 틀도 모든 분기를 합친 크기라 축척이 같다
           */}
           <header className="z-10 flex shrink-0 flex-wrap items-center gap-s3">
             <h2 className="whitespace-nowrap text-[15px] font-semibold text-title">

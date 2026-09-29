@@ -204,6 +204,9 @@ export default function Page() {
   const [focusEvent, setFocusEvent] = useState<string | null>(null);
   // 패널 [사건]에서 한 번 누른 사건. 지도가 그 사건의 관계선만 그린다 (피그마 ⑦-4)
   const [pickedEvent, setPickedEvent] = useState<string | null>(null);
+  // 패널 줄(사건 · 연결)에 마우스를 올린 것 — 지도가 뗄 때까지 그것만 보인다 (2026-09-29 최현서 v2 6번)
+  const [hoverEvent, setHoverEvent] = useState<string | null>(null);
+  const [hoverLink, setHoverLink] = useState<LinkSel>(null);
   // 패널 [사건] 「사기 의심 숨기기」 (설계서 2.3 L98 — 칩 없이 필터에서만)
   const [hideScam, setHideScam] = useState(false);
   // 보고서 팝업 (설계서 4.3.4). 연 사건 번호를 쌓는다 — 맨 뒤가 지금 사건, 앞은 「‹ 이전 사건」 자리
@@ -358,9 +361,22 @@ export default function Page() {
     [panelTab, pickedEvent, eventList],
   );
 
+  // 마우스를 올린 패널 줄이 고른 것보다 앞선다 — 떼면 고른 것으로 돌아간다 (v2 6번)
+  const shownEvent = useMemo(
+    () => (panelTab === "events" && hoverEvent ? (eventList.find((e) => e.id === hoverEvent) ?? null) : liveEvent),
+    [panelTab, hoverEvent, eventList, liveEvent],
+  );
+  const shownLinkSel: LinkSel = useMemo(() => {
+    if (panelTab !== "links" || !hoverLink) return liveLinkSel;
+    if (hoverLink.type === "pair") return pairViews(rels, islandOf, hoverLink.from, hoverLink.to).length ? hoverLink : liveLinkSel;
+    return rels.some((v) => v.rel.id === hoverLink.id) ? hoverLink : liveLinkSel;
+  }, [panelTab, hoverLink, liveLinkSel, rels, islandOf]);
+
   const mapRel = useMemo(() => {
     // [사건] 행을 고름 — 그 사건이 근거인 관계선만 (행위자 사건이면 행위자 → 영토 활동 관계 포함).
     // 관계선이 없으면 올라온 영토(와 행위자)만 진하다
+    const liveEvent = shownEvent;
+    const liveLinkSel = shownLinkSel;
     if (liveEvent) {
       const ev = liveEvent;
       const lines = rels.filter((v) => touchesEvent(v.rel, ev));
@@ -389,7 +405,7 @@ export default function Page() {
     const lit = new Set([id, ...lines.map((v) => partnerOf(v, id))]);
     const litIslands = new Set([...lit].map((x) => islandOf(x)).filter((x): x is string => !!x));
     return { lines, lit, raised, litIslands };
-  }, [rels, liveSelection, liveLinkSel, islandOf, isActor, liveEvent, present]);
+  }, [rels, liveSelection, shownLinkSel, islandOf, isActor, shownEvent, present]);
 
   /**
    * 관계 탭 중심. 고른 영토가 없거나, 기준일을 옮겨 그 영토가 지도에서 빠졌으면
@@ -1011,6 +1027,7 @@ export default function Page() {
       scamCount={scamCount}
       hideScam={hideScam}
       onHideScam={setHideScam}
+      onHover={setHoverEvent}
     />
   );
 
@@ -1032,6 +1049,7 @@ export default function Page() {
           onSelect={setLinkSel}
           onOpenRel={openRel}
           onOpenPair={openPair}
+          onHover={setHoverLink}
         />
       );
     }
@@ -1048,6 +1066,7 @@ export default function Page() {
           onSelect={setLinkSel}
           onOpenRel={openRel}
           onOpenPair={openPair}
+          onHover={setHoverLink}
         />
       );
     }
@@ -1067,6 +1086,7 @@ export default function Page() {
         onSelect={setLinkSel}
         onOpenRel={openRel}
         onOpenPair={openPair}
+        onHover={setHoverLink}
       />
     );
   })();
@@ -1236,10 +1256,14 @@ export default function Page() {
                 hint={
                   toast && liveSelection.kind === "territory"
                     ? `검색 결과 영토 자동 선택 · 관련 섬 ${mapRel?.litIslands.size ?? 1}곳 표시`
-                    : liveEvent
+                    : shownEvent
                       ? mapRel?.lines.length
-                        ? "선택한 사건의 관계선만 표시 중"
-                        : "선택한 사건에 이어진 관계선이 없습니다"
+                        ? shownEvent === liveEvent
+                          ? "선택한 사건의 관계선만 표시 중"
+                          : "마우스를 올린 사건의 관계선만 표시 중"
+                        : shownEvent === liveEvent
+                          ? "선택한 사건에 이어진 관계선이 없습니다"
+                          : "마우스를 올린 사건에 이어진 관계선이 없습니다"
                       : undefined
                 }
                 snapshot={past}

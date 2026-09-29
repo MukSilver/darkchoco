@@ -35,6 +35,7 @@ export default function EventRow({
   onClick,
   onOpen,
   side,
+  onHover,
 }: {
   e: Ev;
   /** 올라온 곳 이름. 행위자 사건이면 「행위자 → 영토」 */
@@ -46,12 +47,16 @@ export default function EventRow({
   onOpen?: () => void;
   /** 칩 줄 오른쪽 끝에 둘 것 */
   side?: ReactNode;
+  /** 마우스를 올리고 뗄 때 — 지도에 그 사건의 관계선만 잠깐 보인다 (v2 6번) */
+  onHover?: (on: boolean) => void;
 }) {
   return (
     <button
       type="button"
       data-ev={e.id}
       onClick={() => (onOpen ? onOpen() : onClick())}
+      onMouseEnter={onHover ? () => onHover(true) : undefined}
+      onMouseLeave={onHover ? () => onHover(false) : undefined}
       onKeyDown={(ev) => {
         // Space 는 강조만. 단추 기본 동작(누르기 = 팝업)을 막는다
         if (ev.key === " " && onOpen) {
