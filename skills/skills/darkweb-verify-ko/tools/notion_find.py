@@ -23,6 +23,8 @@ from notion import _call, db_from_env, search, title_of
 
 PAGE = 100
 MAX_ROWS = 1000
+# 행위자 DB 에서 기계가 만든 줄의 표지. notion_row.자동표지 · hub/events/actor.표지 와 같아야 한다
+자동표지 = "수집 DB 게시자 핸들에서"
 TEXTY = {"title", "rich_text", "select", "multi_select", "url", "number", "unique_id"}
 
 
@@ -436,6 +438,9 @@ def main() -> None:
         print(f"  링크  {r.get('url', '')}")
         for k, s in matched:
             print(f"  일치  {k}: {s[:90]}")
+        # ③ 이 「기계가 만든 줄」 을 가를 수 있게 알린다. 비고는 아래 목록에 없어 안 보였다(2026-09-25 검토)
+        if 자동표지 in as_text(props.get("비고", {})):
+            print(f"  기계가 만든 줄: 예 — 비고에 「{자동표지}」. ⑨-3 에서 빈 칸만 채운다")
         for k in ("대상 조직", "게시 플랫폼", "원문 URL", "게시자 핸들", "상태",
                   "수집일", "게시 시각", "주장 규모", "샘플",
                   "검증 분류", "진위 판정", "검증일"):

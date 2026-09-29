@@ -4,6 +4,10 @@
 **미리보기가 기본이다.** `--commit` 을 붙여야 실제로 쓴다.
 기존 행을 고치지 않는다. 새 행만 만든다.
 
+**예외가 하나 있다 (2026-09-25).** 행위자 DB 에 같은 핸들이 이미 있고 그 줄 비고에
+「수집 DB 게시자 핸들에서」 가 있으면 기계가 만든 얇은 줄이다. 그때는 새 줄을 만들지 않고
+**그 줄의 빈 칸만** 채운다. 사람이 만든 줄이면 지금처럼 건드리지 않고 멈춘다.
+
     python tools/notion_row.py 검증 out9.txt
     python tools/notion_row.py 검증 out9.txt --exclude "검증 자료,한계"
     python tools/notion_row.py 검증 out9.txt --set "검증자=이름"
@@ -20,6 +24,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from notion import _call, db_from_env, search, title_of
@@ -117,6 +122,89 @@ def 겹치는가(ds_id: str, body: dict) -> tuple[bool, str]:
                 "원문 URL" if 글("원문 URL").strip() else "제목|게시 플랫폼",
                 r.get("url") or r["id"])
     return False, ""
+
+
+# 행위자 DB 에서 기계가 만든 줄의 표지 (2026-09-25). `hub/events/actor.py` 가 수집 DB 를
+# 훑어 판매 · 공개 핸들을 올리면서 비고에 이 말을 단다. 9/25 소급 줄도 같다.
+# ⑨-3 은 이 줄을 만나면 빈 칸만 채운다. 검증하며 알아낸 별칭 · 국가 · 지갑이 들어갈 자리다.
+자동표지 = "수집 DB 게시자 핸들에서"
+
+
+def _키(s: str) -> str:
+    """핸들 열쇠. **`hub/events/actor.py` 의 `키()` 와 같아야 한다.**
+
+    이 스킬은 `cp -R` 로 떼어 갈 수 있어야 해서 가져오지 않고 옮겨 적는다.
+    """
+    return re.sub(r"[^a-z0-9가-힣]", "", (s or "").lower()).replace("0", "o")
+
+
+def _조각(s: str) -> list[str]:
+    """다른 이름을 이름 조각으로. **괄호 안(어디서 쓰는 닉인지)은 이름이 아니라 떼고 자른다.**
+
+    괄호까지 세면 「(Signal)」 · 「(breached.st)」 가 별칭이 되어 남의 줄과 맞았다(2026-09-25 검토).
+    `hub/events/actor.py` 의 `조각()` 과 같아야 한다.
+    """
+    s = re.sub(r"\([^)]*\)", " ", s or "")
+    return [x.strip(" .'\"") for x in re.split(r"[,·/|;\n]|\s+또는\s+", s) if x.strip(" .'\"")]
+
+
+def _보낼글(v: dict) -> str:
+    """노션에 보낼 꼴의 title · rich_text 에서 글자를 꺼낸다."""
+    for t in ("title", "rich_text"):
+        if t in v:
+            return "".join(x.get("text", {}).get("content", "") for x in v[t])
+    return ""
+
+
+def _읽은글(v: dict) -> str:
+    """노션이 돌려준 꼴의 title · rich_text 에서 글자를 꺼낸다."""
+    t = (v or {}).get("type")
+    if t in ("title", "rich_text"):
+        return "".join(x.get("plain_text", "") for x in v.get(t) or [])
+    return ""
+
+
+def _비었나(v: dict) -> bool:
+    """이미 있는 줄의 칸이 비었나. 체크 칸은 끔도 값이라 빈 칸으로 안 본다."""
+    t = (v or {}).get("type")
+    if t is None or t == "checkbox":
+        return t is None
+    x = v.get(t)
+    if t in ("title", "rich_text"):
+        return not _읽은글(v).strip()
+    return x in (None, "", [], {})
+
+
+def 행위자_기존줄(ds_id: str, props: dict, body: dict) -> list[dict]:
+    """행위자 DB 에서 같은 핸들(또는 다른 이름)을 가진 줄 **전부.** 없으면 빈 목록.
+
+    첫 줄만 돌려주면 줄 차례에 따라 사람 줄에서 멈추기도 하고 기계 줄을 고치기도 했다
+    (2026-09-25 검토). 여럿이면 부르는 쪽이 멈춘다.
+    """
+    제목 = next((k for k, v in props.items() if v["type"] == "title"), "")
+    내것 = [_보낼글(body.get(제목) or {})] + _조각(_보낼글(body.get("다른 이름") or {}))
+    내키 = {_키(x) for x in 내것 if _키(x)}
+    if not 내키:
+        return []
+    맞음 = []
+    for r in _모든줄(ds_id):
+        pr = r.get("properties") or {}
+        그쪽 = [_읽은글(pr.get(제목))] + _조각(_읽은글(pr.get("다른 이름")))
+        if 내키 & {_키(x) for x in 그쪽 if _키(x)}:
+            맞음.append(r)
+    return 맞음
+
+
+def 빈칸만(기존: dict, body: dict, 오늘: str) -> tuple[dict, list[str]]:
+    """기계가 만든 줄에 쓸 칸. (쓸 것, 이미 차서 안 쓰는 칸). 비고 끝에 채운 날을 붙인다."""
+    pr = 기존.get("properties") or {}
+    쓸것 = {k: v for k, v in body.items() if k in pr and _비었나(pr[k])}
+    안씀 = [k for k in body if k not in 쓸것]
+    if 쓸것 and "비고" in pr:
+        옛 = _읽은글(pr["비고"]).rstrip()
+        덧 = "%s ⑨-3 에서 빈 칸 채움 (%s)" % (오늘, " · ".join(쓸것))
+        쓸것["비고"] = {"rich_text": [{"text": {"content": (옛 + "\n" + 덧).strip()[:2000]}}]}
+    return 쓸것, 안씀
 
 
 def _모든줄(ds_id: str) -> list[dict]:
@@ -445,7 +533,37 @@ def main() -> None:
         elif 겹침말:
             warn.append(겹침말)
 
+    # 행위자 DB 는 같은 핸들이 있는지 본다. ⑨-3 을 돌리는 자리다 (2026-09-25).
+    기존 = None
+    if "행위자" in dbname or args.db.strip() == "행위자":
+        맞음 = 행위자_기존줄(ds_id, props, body)
+        사람줄 = [r for r in 맞음 if 자동표지 not in _읽은글((r.get("properties") or {}).get("비고"))]
+        if 사람줄:
+            show(dbname, props, body, skipped, warn, excluded, blocks)
+            print("\n**사람이 만든 줄이 이미 있다.** ⑨-3 은 그 줄을 건드리지 않는다.")
+            for r in 사람줄:
+                print(r.get("url") or r["id"])
+            raise SystemExit(1)
+        if len(맞음) > 1:
+            show(dbname, props, body, skipped, warn, excluded, blocks)
+            print("\n**기계가 만든 줄이 여럿 맞는다.** 어느 줄에 채울지 사람이 정한다. 아무것도 안 쓴다.")
+            for r in 맞음:
+                print(r.get("url") or r["id"])
+            raise SystemExit(1)
+        기존 = 맞음[0] if 맞음 else None
+        if 기존 is not None:
+            오늘 = datetime.now(timezone(timedelta(hours=9))).date().isoformat()
+            body, 안씀 = 빈칸만(기존, body, 오늘)
+            warn.append("기계가 만든 줄이 이미 있다. **새 줄을 안 만들고 빈 칸만 채운다.** "
+                        + (기존.get("url") or 기존["id"]))
+            if 안씀:
+                warn.append("이미 차 있어 안 쓰는 칸: " + ", ".join(안씀))
+
     show(dbname, props, body, skipped, warn, excluded, blocks)
+
+    if 기존 is not None and not body:
+        print("\n채울 빈 칸이 없다. 쓰지 않는다.")
+        return
 
     if 겹침:
         print("\n겹치는 줄이 있어 멈춘다. " + 겹침말)
@@ -458,6 +576,12 @@ def main() -> None:
         print("뺄 칸이 있으면  --exclude \"칸1,칸2\"")
         print("고칠 칸이 있으면 --set \"칸=값\"")
         print("그대로 올리려면 --commit")
+        return
+
+    if 기존 is not None:
+        _call(f"/pages/{기존['id']}", "PATCH", {"properties": body})
+        print(f"\n기계가 만든 줄의 빈 칸 {len(body)}개를 채웠다")
+        print(기존.get("url") or 기존["id"])
         return
 
     page = _call("/pages", "POST",
