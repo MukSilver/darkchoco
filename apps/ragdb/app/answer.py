@@ -83,7 +83,8 @@ def cost_of(usage):
             + g("cache_read_input_tokens") * cfg.PRICE_CACHE_READ + g("output_tokens") * cfg.PRICE_OUTPUT) / 1e6
 
 
-def _request(question, chunks):
+def request(question, chunks):
+    """모델에 보낼 요청. 즉석 질의와 사전 답변 만들기(F-17)가 같은 요청을 쓴다."""
     req = dict(
         model=cfg.ANSWER_MODEL,
         max_tokens=cfg.ANSWER_MAX_TOKENS,
@@ -106,7 +107,7 @@ def generate(question, chunks, stream_factory=None):
     """
     import anthropic
 
-    req = _request(question, chunks)
+    req = request(question, chunks)
     open_stream = stream_factory or (lambda **kw: client().messages.stream(**kw))
     try:
         with open_stream(**req) as stream:
@@ -126,7 +127,11 @@ def generate(question, chunks, stream_factory=None):
 
     if msg.stop_reason == "refusal":
         raise AnswerError("refused")
+    yield "result", result_of(msg, len(chunks))
 
+
+def result_of(msg, n_chunks, discount=1.0):
+    """모델이 돌려준 메시지에서 글과 출처를 꺼낸다. discount 는 배치 호출의 할인 (0.5)."""
     blocks = []
     for b in msg.content:
         if getattr(b, "type", None) != "text":
@@ -134,13 +139,13 @@ def generate(question, chunks, stream_factory=None):
         cites = []
         for c in getattr(b, "citations", None) or []:
             i = getattr(c, "document_index", None)
-            if i is None or not (0 <= i < len(chunks)):
+            if i is None or not (0 <= i < n_chunks):
                 continue
             cites.append({"n": i + 1, "cited_text": getattr(c, "cited_text", "") or "",
                           "start": getattr(c, "start_char_index", None), "end": getattr(c, "end_char_index", None)})
         blocks.append({"text": b.text, "cites": cites})
-    yield "result", {"blocks": blocks, "usage": msg.usage, "cost": cost_of(msg.usage),
-                     "stop_reason": msg.stop_reason, "model": msg.model}
+    return {"blocks": blocks, "usage": msg.usage, "cost": cost_of(msg.usage) * discount,
+            "stop_reason": msg.stop_reason, "model": msg.model}
 
 
 _END = re.compile(r"(?<=[.!?。])\s+|\n+")

@@ -122,7 +122,8 @@ def bake(version):
 
     answers = [{"question": a["question"], "answer": json.loads(a["answer"]), "sources": json.loads(a["sources"] or "[]"),
                 "created_at": a["created_at"]}
-               for a in con.execute("SELECT * FROM answers WHERE reviewed = 1 ORDER BY created_at")]
+               for a in con.execute("SELECT * FROM answers WHERE reviewed = 1 ORDER BY created_at").fetchall()
+               if store.answer_holds(con, a)]
     con.close()
 
     list_bytes = write(os.path.join(out, "list.json"), {"version": version, "documents": listing})
@@ -203,6 +204,52 @@ def gate(version):
                         if k not in allow.get(d.get("kind"), []):
                             problems.append({"file": rel, "where": "attributes/%s" % k, "what": "반출하는 칸 목록 밖의 칸"})
     return problems
+
+
+def excluded_names(version):
+    """빠진 줄 명부에만 있는 이름이 스냅샷에 나오는가 (F-22 처리 2 의 마지막 항목).
+
+    돌려주는 것: {names(명부에만 있는 이름 수), files(그 이름이 나온 파일 수), by_kind}. 명부가 없으면 None.
+    이름은 돌려주지 않는다.
+
+    명세서는 하나라도 나오면 멈추라고 한다. 지금은 세기만 하고 멈추지 않는다 (GATE_EXCLUDED_NAMES=warn).
+    꺼진 줄 가운데는 내보내면 안 되는 곳과 아직 조사하지 않은 곳이 섞여 있고, 뒤쪽은 다른 문서의 본문에
+    이름이 나오는 것이 자연스럽다. 막을지는 사람이 정한다. block 으로 바꾸면 관문에서 멈춘다.
+    """
+    path = os.path.join(cfg.DATA_DIR, "excluded_rows.json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            rows = json.load(f).get("rows") or []
+    except (OSError, ValueError, AttributeError):
+        return None
+    docs = C.load_docs()
+    con = store.connect()
+    live = {r[0] for r in con.execute("SELECT document_id FROM documents WHERE visibility = 1")}
+    con.close()
+    shown = set()
+    for d in docs:
+        if d["document_id"] in live:
+            shown.add(norm(d.get("title")))
+            shown.add(norm(re.sub(r"\s*[(（].*$", "", d.get("title") or "")))
+            shown.update(norm(a) for a in (d.get("aliases") or []) if isinstance(a, str))
+    only, kind_of = [], {}
+    for r in rows:
+        for n in [r.get("name")] + list(r.get("aliases") or []):
+            if isinstance(n, str) and norm(n) and norm(n) not in shown:
+                only.append(n)
+                kind_of[norm(n)] = r.get("kind")
+    g = guard.Guard(names=only, keep=guard.COMMON_PLATFORMS)
+    root = os.path.join(cfg.SNAPSHOT_ROOT, version, "doc")
+    files, by_kind = 0, {}
+    for fn in os.listdir(root) if os.path.isdir(root) else []:
+        with open(os.path.join(root, fn), encoding="utf-8") as f:
+            text = f.read()
+        hit = g.find_name(text)
+        if hit:
+            files += 1
+            k = kind_of.get(norm(hit)) or "기타"
+            by_kind[k] = by_kind.get(k, 0) + 1
+    return {"names": len(g.names), "files": files, "by_kind": by_kind}
 
 
 def publish_current(version, baked_at):

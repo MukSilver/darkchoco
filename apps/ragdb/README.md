@@ -16,7 +16,7 @@
 | 가리기, 가리기 검사, 조각 (F-03, F-05) | scripts/chunk.py, app/guard.py, app/pii.py | 됨 |
 | 금지어 검사, 색인, 넓히기 사전 (F-06) | scripts/build_index.py, scripts/masking.py | 됨 |
 | 스냅샷 굽기와 반출 관문 (F-22) | scripts/snapshot.py | 됨. 올리기는 아직 |
-| 재조사 추출 (F-20) | scripts/recheck.py | 됨. 빠진 줄 명부는 아직 |
+| 재조사 추출 (F-20) | scripts/recheck.py | 됨. 빠진 줄 명부는 받기가 같이 받아 옴 |
 | 받기부터 갈아 끼우기까지 한 번에 | scripts/refresh.py | 됨 |
 | 조각 검색 (F-12) | app/search.py, app/expand.py, app/kinds.py, app/rerank.py | 됨 |
 | 답변과 출처, 근거 없음 (F-13, F-14, F-15) | app/answer.py, app/prompts/system.md | 됨 |
@@ -25,7 +25,8 @@
 | 질의 한 건의 순서 (명세 5.5) | app/pipeline.py | 됨 |
 | 터미널에서 묻기 | scripts/ask.py | 됨 |
 | 예비 측정 (명세 7.2) | scripts/measure.py | 됨 |
-| 사전 답변 만들기 (F-17) | | 아직. 문제집이 있어야 합니다 |
+| 사전 답변 만들기와 검토 (F-17) | scripts/prepare_answers.py, scripts/review_answers.py | 됨. 문제집이 있어야 돕니다 |
+| 문제집 평가 (명세 7.2) | scripts/evaluate.py, app/questions.py | 됨. 문제집이 있어야 돕니다 |
 | 질의 서버, 사람 확인, 관리 서버 (F-18 나머지) | | 아직 |
 | 화면 다섯 | | 아직 |
 | 이미지 (F-08) | | 내보내지 않기로 했습니다 |
@@ -66,6 +67,18 @@ copy .env.example .env                                  값을 채웁니다. .en
 .venv\Scripts\python scripts\ask.py --search "질문"      검색까지만 (0원)
 .venv\Scripts\python -m pytest tests -q                 시험 (0원, 열쇠 없이 돕니다)
 ```
+
+문제집을 받은 뒤
+
+```
+.venv\Scripts\python scripts\evaluate.py                문제집으로 검색을 세 벌 잼
+.venv\Scripts\python scripts\evaluate.py --answers      답변까지 잼 (모델을 부릅니다)
+.venv\Scripts\python scripts\prepare_answers.py --count 사전 답변을 몇 개 만들지, 얼마쯤 들지
+.venv\Scripts\python scripts\prepare_answers.py         사전 답변 만들기
+.venv\Scripts\python scriptseview_answers.py          검토 전 목록. show, pass, drop
+```
+
+문제집은 `data/questions.json` 에 둡니다. 모양은 `app/questions.py` 맨 위에 적혀 있습니다. 저장소에 넣지 않습니다.
 
 처음 한 번은 조직 이름 찾기가 문서 전체를 봅니다. 4달러쯤 듭니다. 그 뒤로는 바뀐 문서만 봅니다.
 

@@ -23,10 +23,18 @@ def fingerprint(text):
 
 
 def word_fingerprints(tokens):
-    """질문 낱말 지문 (F-19 처리 2). 낱말을 F-02 정규화로 키로 만들고 짧은 것은 버린다."""
+    """질문 낱말 지문 (F-19 처리 2). 낱말을 F-02 정규화로 키로 만들고 짧은 것은 버린다.
+
+    이어진 낱말 둘, 셋을 붙인 것도 함께 남긴다. 이름이 여러 낱말로 쪼개지기 때문이다(감마포럼 → 감마, 포럼).
+    지문에서 질문을 되살릴 수는 없다. 지문 키 없이는 같은 낱말인지도 알 수 없다.
+    """
+    keys = [norm(t) for t in tokens]
+    keys = [k for k in keys if k]
+    grams = list(keys)
+    for n in (2, 3):
+        grams.extend("".join(keys[i:i + n]) for i in range(len(keys) - n + 1))
     out = []
-    for t in tokens:
-        k = norm(t)
+    for k in grams:
         if len(k) < cfg.WORD_FP_MIN_CHARS:
             continue
         fp = fingerprint(k)

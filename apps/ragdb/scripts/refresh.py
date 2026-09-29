@@ -120,6 +120,10 @@ def main():
     # 5. 스냅샷과 반출 관문
     snap = snapshot.bake(version)
     bad = snapshot.gate(version)
+    ex = snapshot.excluded_names(version)
+    line["observed"]["excluded_names_in_snapshot"] = ex
+    if ex and ex["files"] and (os.getenv("GATE_EXCLUDED_NAMES") or "warn").strip() == "block":
+        bad = bad + [{"file": "doc/", "where": "%d개 파일" % ex["files"], "what": "빠진 줄 명부에만 있는 이름"}]
     line["observed"].update(snapshot_bytes=snap["bytes"], list_bytes=snap["list_bytes"],
                             snapshot_documents=snap["documents"], snapshot_chunks=snap["chunks"])
     if bad:

@@ -133,18 +133,27 @@ def chunks_by_id(con, ids):
 
 
 # ── 사전 답변 (F-16) ──
-def prepared_answer(con, key):
-    """검토를 통과했고, 근거 문서가 그대로이고, 근거 대상이 살아 있는 것만 돌려준다 (F-16 처리 3, TC-13)."""
-    r = con.execute("SELECT * FROM answers WHERE question_key = ? AND reviewed = 1", (key,)).fetchone()
-    if not r:
-        return None
-    hashes = json.loads(r["doc_hashes"] or "{}")
+def answer_holds(con, row):
+    """사전 답변을 아직 써도 되는가. 답에 쓰인 근거 문서가 만든 때 그대로여야 한다 (F-16 처리 3, F-07 처리 2).
+
+    상태가 offline 으로 바뀌면 내용 해시도 바뀌므로 따로 보지 않는다. 만들 때 이미 offline 이던 대상을
+    설명한 답은 그대로 써도 된다.
+    """
+    hashes = json.loads(row["doc_hashes"] or "{}")
     if not hashes:
-        return None
+        return False
     for did, h in hashes.items():
-        d = con.execute("SELECT content_hash, status, visibility FROM documents WHERE document_id = ?", (did,)).fetchone()
-        if not d or d["content_hash"] != h or d["status"] == "offline" or not d["visibility"]:
-            return None
+        d = con.execute("SELECT content_hash, visibility FROM documents WHERE document_id = ?", (did,)).fetchone()
+        if not d or d["content_hash"] != h or not d["visibility"]:
+            return False
+    return True
+
+
+def prepared_answer(con, key):
+    """검토를 통과했고 아직 써도 되는 것만 돌려준다 (TC-13)."""
+    r = con.execute("SELECT * FROM answers WHERE question_key = ? AND reviewed = 1", (key,)).fetchone()
+    if not r or not answer_holds(con, r):
+        return None
     return {"answer": json.loads(r["answer"]), "sources": json.loads(r["sources"] or "[]"),
             "model": r["model"], "created_at": r["created_at"]}
 

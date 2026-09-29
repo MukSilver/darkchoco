@@ -6,9 +6,9 @@
 질문 원문은 어디에도 없다. 남아 있는 것은 질문 낱말 지문(낱말을 지문 키로 해시한 값)뿐이고,
 같은 방법으로 만든 이름 지문과 맞춰 봐서 어느 줄과 겹치는지만 안다.
 
-빠진 줄 명부(data/excluded_rows.json)는 아직 없다. 「DB 반영」이 꺼진 줄의 이름을 받아야 만들 수 있는데
-이 시스템은 노션을 읽지 않는다 (판 1.6). 정제 배치가 넘겨 주면 그 파일을 읽는다. 없는 동안은
-반출 줄과 겹치지 않는 질문의 갈래를 「대조 못함」으로 둔다 (F-20 예외).
+빠진 줄 명부(data/excluded_rows.json)는 받기(fetch_docs.py)가 Supabase rag.excluded_rows 에서 받아 둔다.
+「DB 반영」이 꺼진 줄의 이름만 든 목록이다. 이 시스템은 노션을 읽지 않으므로 정제 배치가 만들어 넘긴다 (판 1.6).
+명부가 없으면 반출 줄과 겹치지 않는 질문의 갈래를 「대조 못함」으로 둔다 (F-20 예외).
 """
 import json
 import os
@@ -32,19 +32,34 @@ from snapshot import is_stale                       # noqa: E402
 EXCLUDED = os.path.join(cfg.DATA_DIR, "excluded_rows.json")
 
 
-def name_keys(name):
-    """이름 하나에서 나오는 키. 이름 통째와, 이름을 쪼갠 낱말."""
+def name_keys(name, common=()):
+    """이름 하나에서 나오는 키. 이름 통째와, 이름을 쪼갠 낱말 가운데 흔하지 않은 것."""
     keys = {norm(name)}
-    keys.update(norm(t) for t in T.tokens(name or ""))
+    keys.update(k for k in (norm(t) for t in T.tokens(name or "")) if k not in common)
     return {k for k in keys if len(k) >= cfg.WORD_FP_MIN_CHARS}
 
 
-def fingerprints(rows):
+def common_words(names):
+    """여러 이름에 두루 나오는 낱말. 「포럼」 「leaks」 같은 것은 어느 줄인지 가려 주지 못한다.
+
+    종류를 가리키는 낱말(kind_synonyms.json)과, 이름 셋 이상에 나오는 낱말이다.
+    """
+    from app import kinds
+    out = {k for forms in kinds.table().values() for f in forms for k in f}
+    seen = {}
+    for n in names:
+        for k in {norm(t) for t in T.tokens(n or "")}:
+            seen[k] = seen.get(k, 0) + 1
+    out.update(k for k, c in seen.items() if c >= 3)
+    return out
+
+
+def fingerprints(rows, common=()):
     """{지문: 줄 이름}. rows 는 (줄 이름, [이름과 별칭]) 의 목록."""
     out = {}
     for row_name, names in rows:
         for n in names:
-            for k in name_keys(n):
+            for k in name_keys(n, common):
                 fp = pipeline.fingerprint(k)
                 if fp:
                     out.setdefault(fp, row_name)
@@ -75,16 +90,27 @@ def run(quiet=False):
     con = store.connect()
     live = {r["document_id"]: r for r in con.execute("SELECT document_id, title, observed_at FROM documents WHERE visibility = 1")}
 
-    exported = fingerprints([(d["title"], [d["title"]] + [a for a in (d.get("aliases") or []) if isinstance(a, str)])
-                             for d in docs if d["document_id"] in live])
-    missing, have_list = {}, False
+    shown = [(d["title"], [d["title"]] + [a for a in (d.get("aliases") or []) if isinstance(a, str)])
+             for d in docs if d["document_id"] in live]
+    hidden, have_list = [], False
     try:
         with open(EXCLUDED, encoding="utf-8") as f:
             rows = json.load(f).get("rows") or []
-        missing = fingerprints([(r.get("name"), [r.get("name")] + list(r.get("aliases") or [])) for r in rows if r.get("name")])
+        hidden = [(r.get("name"), [r.get("name")] + list(r.get("aliases") or [])) for r in rows if r.get("name")]
         have_list = True
     except (OSError, ValueError, AttributeError):
         pass
+    common = common_words([n for _, names in shown + hidden for n in names])
+    exported = fingerprints(shown, common)
+    missing = fingerprints(hidden, common)
+
+    made_at = None
+    if have_list:
+        try:
+            with open(EXCLUDED, encoding="utf-8") as f:
+                made_at = json.load(f).get("made_at")
+        except (OSError, ValueError):
+            pass
 
     counts = {"반출 줄 겹침": 0, "빠진 줄 겹침": 0, "겹침 없음": 0, "대조 못함": 0, "오래됨": 0}
     with con:
@@ -125,7 +151,7 @@ def run(quiet=False):
     con.close()
 
     n = q["n"] or 0
-    stats = {"branches": counts, "excluded_rows": have_list, "queue": waiting,
+    stats = {"branches": counts, "excluded_rows": have_list, "excluded_rows_made_at": made_at, "queue": waiting,
              "rerank_not_applied": round(1 - (q["a"] or 0) / n, 3) if n else None,
              "rerank_ms_avg": round(q["ms"] or 0), "rerank_ms_max": q["mx"],
              "rerank_cost_share": round((u["r"] or 0) / ((u["r"] or 0) + (u["a"] or 0)), 3) if (u["r"] or u["a"]) else None,
