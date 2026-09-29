@@ -21,6 +21,7 @@ import re
 import sqlite3
 import sys
 import time
+import dataclasses
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -71,9 +72,13 @@ def 기본_두드림() -> Path:
 # 가는 것도 같습니다. 그래서 노션이 online 인 줄은 **연달아 이만큼 못 봐야** 내립니다.
 #
 # 그 전에는 노션을 아예 안 건드립니다 — 상태도 확인일도. 「두드리지도 못한 줄」 과 같게 둡니다.
-# 쉬기(backoff.py)와 맞물려 셋째 실패는 첫 실패에서 하루 반쯤 뒤입니다. 쉬기 기록이 없는
-# 판(캐시가 없는 첫 판 · 기록이 깨진 판)은 이번 한 번으로 세므로 내리지 않습니다. 모를 때는 안 덮습니다.
+# 쉬기(backoff.py)와 맞물려 셋째 실패는 예약 판 기준으로 첫 실패에서 36~48시간 뒤입니다(판이 늦게
+# 시작하면 쉼 창에 걸려 한 판 더 밀립니다). 사람이 page 판을 --apply 로 잇달아 돌리면 더 빨리 옵니다.
+# 쉬기 기록이 없는 판(캐시가 없는 첫 판 · 기록이 깨진 판)은 이번 한 번으로 세므로 내리지 않습니다.
+# 모를 때는 안 덮습니다.
 # 텔레그램은 넣지 않습니다. 「미리보기가 꺼진 채널」 은 한 번 봐도 확실한 미확인입니다.
+# **랜섬에서 집계처(ransomware.live)가 상태를 정했으면 버티지 않습니다** (2026-09-30 검토). 합치기(merge.py)가
+# 그 판정을 우리 연결 실패보다 믿으므로 #102 전처럼 바로 씁니다. 버티는 것은 우리 쪽 조사가 정한 상태뿐입니다.
 내림연속 = 3
 버팀갈래 = frozenset({"forum", "ransom"})
 
@@ -84,6 +89,8 @@ def 버텨야하나(갈래: str, 줄, p: Place, 자취) -> bool:
     자취.적기() 가 이번 실패를 이미 센 뒤에 부릅니다.
     """
     if 갈래 not in 버팀갈래 or not p.두드림 or p.봤나() or p.상태 == "online":
+        return False
+    if getattr(p, "집계처판정", False):
         return False
     if (getattr(줄, "상태", "") or "") != "online":
         return False
@@ -329,7 +336,12 @@ def _조사(갈래: str, 줄들, ctx: dict):
         # 조사기가 여럿 붙는 규칙은 merge.py 한 곳에만 둡니다.
         # dls-observatory 가 붙으면 **인자를 하나 더 줍니다.**
         #     return 합치기(q, 미리.get(...), DLS가준것)
-        return 합치기(q, 미리.get(r.page_id))
+        위 = 미리.get(r.page_id)
+        합친것 = 합치기(q, 위)
+        # 상태를 집계처가 정했나. merge.py 는 얹는 쪽이 두드렸으면 그 상태로 덮는다.
+        # 버텨야하나 가 이것을 보고 집계처 판정은 버티지 않는다(머리의 내림연속)
+        합친것.집계처판정 = bool(위 is not None and getattr(위, "두드림", False))
+        return 합친것
 
     동시 = 설정["동시"] or 최대동시
     if not 프록시:
@@ -518,6 +530,14 @@ def 한갈래(갈래: str, *, apply: bool = False, limit: int = 0,
         열쇠 = page.replace("-", "").lower()
         볼것 = [x for x in 볼것
               if (getattr(x, "page_id", "") or "").replace("-", "").lower() == 열쇠]
+        if not 볼것:
+            # 이 갈래 줄이 아닙니다. 조사기를 안 부릅니다 — 랜섬은 부르기만 해도 집계처를 여덟 번 칩니다
+            try:
+                자취.close()
+            except Exception:  # noqa: BLE001
+                pass
+            r.초 = time.time() - t0
+            return r
     try:
         볼것, 쉰것 = (볼것, []) if page else 자취.거를것(갈래, 볼것, 지금때)
     except Exception:  # noqa: BLE001  자취가 깨져도 조사는 돕니다
@@ -577,14 +597,15 @@ def 한갈래(갈래: str, *, apply: bool = False, limit: int = 0,
             pass
         # online 을 한 번 못 봤다고 내리지 않습니다(머리의 내림연속). 두드리지도 못한 줄처럼
         # 만들어 노션값() 이 빈 것을 내게 합니다. 「살펴볼 것」 은 그대로 올라갑니다
+        # 버틴 줄은 사본으로 씁니다. p 를 고치면 시계열(_쌓기)에 본 값 대신 미확인이 남습니다
+        쓸것 = p
         if 버텨야하나(갈래, 줄, p, 자취):
             r.버팀 += 1
-            p.두드림 = False
-            p.상태 = "미확인"
+            쓸것 = dataclasses.replace(p, 두드림=False, 상태="미확인")
         if 미룰것:
             continue            # 깊은 판이 한 번만 씁니다
         try:
-            res = m.반영(줄, p, apply=apply)
+            res = m.반영(줄, 쓸것, apply=apply)
         except Exception as e:  # noqa: BLE001  한 줄이 죽어도 나머지는 돕니다
             res = 반영결과(이름=줄.이름, 오류=str(e)[:160])
         r.줄별.append(res)
