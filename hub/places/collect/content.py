@@ -528,10 +528,16 @@ def crawl_site(
     category_seed: list[dict[str, str]],
     *,
     resume: bool = False,
+    마감: float | None = None,
 ) -> dict[str, Any]:
     """홈페이지에서 발견한 모든 카테고리(하위 서브포럼 포함)를 재귀적으로 다 돌며 게시글
     헤드라인(제목/작성자/날짜)만 모은다 — 개별 게시글 본문 페이지에는 들어가지 않는다.
 
+    - **마감(time.time() 값)을 넘으면 거기서 멈추고 모은 것까지 낸다** (2026-09-29, 인계 H-4).
+      깊은 판 미리보기에서 포럼 한 줄이 이 순회로 20분 넘게 걸려, 90분 상한이 줄 사이에서만
+      걸린 탓에 판이 187분이 됐다. 큐가 하위 게시판을 따라 늘어나 끝을 미리 알 수 없다.
+    - http · https 주소만 연다. 카테고리 목록에 `mailto:` 같은 것이 섞여 들어온다.
+    - **경고에 주소를 안 찍는다.** 깊은 판은 공개 Actions 로그에서 돈다. 주소는 debug 로만.
     - 카테고리 하나당 페이지네이션은 최대 config.SITE_MAP_MAX_PAGES_PER_CATEGORY 페이지까지.
     - 이미 방문한 URL은 다시 안 간다(무한 루프 방지).
     - 세션 만료/챌린지 감지 시 CrawlInterrupted를 던진다. 자동 재로그인은 하지 않는다
@@ -549,6 +555,10 @@ def crawl_site(
     try:
         from tqdm import tqdm      # 지연 import: 설치 전에도 --help 가 뜨게 한다
     except ImportError:
+        tqdm = _진행바없음
+    # 진행바는 포럼 이름과 게시판 이름을 찍는다. 사람이 보는 단말이 아니면(공개 Actions 로그) 안 띄운다
+    import sys                     # noqa: PLC0415
+    if not sys.stderr.isatty():
         tqdm = _진행바없음
 
     source_id = source.get("name") or source.get("url", "unknown")
@@ -590,19 +600,27 @@ def crawl_site(
     # 띄운다. 큐가 재귀적으로 늘어나(하위 서브포럼 발견) 총량을 미리 알 수 없으므로
     # total은 고정하지 않고, 방문+대기 합계로 매 카테고리마다 갱신해 대략치만 보여준다.
     page_bar = tqdm(desc=f"{source_id} 사이트맵 순회", unit="page")
+    끊김 = False
 
     try:
         while queue:
+            if 마감 and time.time() >= 마감:
+                끊김 = True
+                break
             entry = queue.pop(0)
             url = entry.get("url", "")
             if not url or url in visited:
+                continue
+            if not url.lower().startswith(("http://", "https://")):
+                visited.add(url)
                 continue
 
             _random_delay()
             try:
                 page.goto(url, timeout=config.PAGE_LOAD_TIMEOUT_MS, wait_until=config.PAGE_WAIT_UNTIL)
             except Exception:  # noqa: BLE001 - 개별 카테고리 접속 실패는 건너뛰고 계속 진행
-                logger.warning("카테고리 접속 실패, 건너뜀: %s", url)
+                logger.warning("카테고리 접속 실패, 건너뜀")
+                logger.debug("카테고리 접속 실패 주소: %s", url)
                 visited.add(url)
                 continue
 
@@ -649,6 +667,9 @@ def crawl_site(
 
                 if page_num >= config.SITE_MAP_MAX_PAGES_PER_CATEGORY:
                     break
+                if 마감 and time.time() >= 마감:
+                    끊김 = True
+                    break
                 next_href = _find_next_page_href(page, next_selector, page_num + 1)
                 if not next_href:
                     break
@@ -662,7 +683,8 @@ def crawl_site(
                         next_url, timeout=config.PAGE_LOAD_TIMEOUT_MS, wait_until=config.PAGE_WAIT_UNTIL
                     )
                 except Exception:  # noqa: BLE001 - 다음 페이지 접속 실패는 이 카테고리만 중단
-                    logger.warning("페이지네이션 접속 실패, 이 카테고리는 여기까지: %s", next_url)
+                    logger.warning("페이지네이션 접속 실패, 이 카테고리는 여기까지")
+                    logger.debug("페이지네이션 접속 실패 주소: %s", next_url)
                     break
 
                 reason = challenge.detect(page)
@@ -679,7 +701,8 @@ def crawl_site(
         try:
             page.goto(origin_url, timeout=config.PAGE_LOAD_TIMEOUT_MS, wait_until=config.PAGE_WAIT_UNTIL)
         except Exception:  # noqa: BLE001 - 원래 페이지 복귀 실패해도 다음 단계는 계속
-            logger.warning("사이트 전체 순회 후 원래 페이지로 복귀 실패: %s", origin_url)
+            logger.warning("사이트 전체 순회 후 원래 페이지로 복귀 실패")
+            logger.debug("복귀 실패 주소: %s", origin_url)
 
     _clear_checkpoint(source_id)  # 큐가 다 빌 때까지 끝까지 돌았으면 다음 실행은 새로 시작
     _save_headline_dump(source_id, posts)  # MD엔 집계만 남지만, 원본 헤드라인 목록도 따로 보존한다
@@ -687,9 +710,12 @@ def crawl_site(
     sample_note = (
         f"사이트 전체 {len(visited_categories)}개 카테고리 × 최대 "
         f"{config.SITE_MAP_MAX_PAGES_PER_CATEGORY}페이지 헤드라인 기준"
+        + (" · 시간 상한에서 끊김(모은 데까지)" if 끊김 else "")
     )
     result = summarize_posts(posts, sample_note)
     result["_표본_게시글"] = posts
     result["_사이트맵_방문_카테고리"] = visited_categories
     result["_사이트맵_방문_URL"] = visited_urls  # report_generator가 MD에 감사(audit)용으로 남김
+    # 글이 0건이면 sample_note 가 요약에 안 실린다. 끊겼다는 사실은 따로 둔다
+    result["_시간상한_끊김"] = 끊김
     return result

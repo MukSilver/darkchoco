@@ -146,7 +146,9 @@ def run(page: Page, source: dict[str, Any]) -> dict[str, Any]:
             try:
                 page.goto(origin_url, timeout=config.PAGE_LOAD_TIMEOUT_MS, wait_until=config.PAGE_WAIT_UNTIL)
             except Exception:  # noqa: BLE001 - 원래 페이지 복귀 실패해도 파이프라인은 계속
-                logger.warning("규칙 페이지 조회 후 원래 페이지로 복귀 실패: %s", origin_url)
+                # 주소는 debug 로만. 깊은 판은 공개 Actions 로그에서 돈다(2026-09-29)
+                logger.warning("규칙 페이지 조회 후 원래 페이지로 복귀 실패")
+                logger.debug("복귀 실패 주소: %s", origin_url)
     else:
         result["_들어가는_법_구조"] = {"state": "CONFIRMED_ABSENT"}
 

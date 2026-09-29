@@ -162,8 +162,11 @@ def _후보적기(p: Place, 모은것: dict, activity, content) -> None:
 
 
 def 모으기(연것, 이름: str, *, 갈래: str = "forum",
-        source: dict | None = None) -> Place:
-    """한 곳을 깊게 봅니다. investigate.py 의 차례 그대로입니다."""
+        source: dict | None = None, 마감: float | None = None) -> Place:
+    """한 곳을 깊게 봅니다. investigate.py 의 차례 그대로입니다.
+
+    마감(time.time() 값)은 사이트 전체 순회에만 겁니다. 나머지 수집기는 쪽을 몇 장만 엽니다.
+    """
     p = Place(갈래=갈래, 이름=이름, 주소=연것.최종주소 or 연것.주소)
     if not 연것.봤나():
         p.못본이유 = 연것.못본이유
@@ -234,7 +237,7 @@ def 모으기(연것, 이름: str, *, 갈래: str = "forum",
                 # **사이트 전체를 재귀로 돕니다.** 이것이 빠지면 홈페이지
                 # 한 장만 보고 끝나서 (5)(7) 이 빈손이 됩니다.
                 _돌리기(모은것, 못돈것, "content",
-                      lambda: content.crawl_site(page, src, 씨앗, resume=False))
+                      lambda: content.crawl_site(page, src, 씨앗, resume=False, 마감=마감))
             else:
                 _쉬기()
                 _돌리기(모은것, 못돈것, "stats", lambda: stats.run(page, src))
