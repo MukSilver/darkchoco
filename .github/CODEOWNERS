@@ -10,6 +10,11 @@
 /legacy/kr-leak-alarm/   @60secAgo @grute02
 /legacy/tg-korea-alert/  @minsmiths @grute02
 /skills/                 @grute02
+
+# 2026-09-29 에 따로 있던 저장소에서 옮겨 왔습니다
+/apps/guide/             @MukSilver
+/apps/ragdb/             @MukSilver
+
 /packages/               @MukSilver @minsmiths @60secAgo @leesubhin060-max @grute02
 
 # 통합 크롤러. 노션 다크웹 DB 811줄에 씁니다.

@@ -1,0 +1,37 @@
+name: 가이드라인 링크 점검
+
+# 한 달에 한 번 가이드라인(apps/guide)이 안내하는 기관 주소가 열리는지 봅니다.
+# 죽은 주소가 있으면 디스코드로 알립니다. **주소를 자동으로 고치지 않습니다.** 사람이 공식 자료를 보고 고칩니다.
+
+on:
+  schedule:
+    - cron: "0 19 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  links:
+    name: 기관 주소가 열리나
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/guide
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/guide/package-lock.json
+
+      - name: 부품 설치
+        run: npm ci --no-audit --no-fund && npx playwright install --with-deps chromium
+
+      - name: 확인
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.GUIDE_DISCORD_WEBHOOK }}
+        run: node scripts/check-links.mjs

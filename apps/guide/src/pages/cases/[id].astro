@@ -1,0 +1,11 @@
+---
+import Base from "../../layouts/Base.astro";
+import Sheet from "../../islands/Sheet";
+import { data } from "../../lib/data";
+export function getStaticPaths() { return data.cases.map((c) => ({ params: { id: String(c.id) }, props: { kase: c } })); }
+const { kase } = Astro.props;
+const desc = kase.gate === "fake" ? "허위로 판정된 사고예요." : `${kase.spread} 상태인 유출 사고예요. 유출된 항목에 맞춰 무엇부터 해야 할지 알려드려요.`;
+---
+<Base title={kase.title} description={desc}>
+  <Sheet kase={kase} client:load />
+</Base>

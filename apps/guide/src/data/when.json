@@ -1,0 +1,22 @@
+[
+ {
+  "id": "m3",
+  "label": "3개월 이내",
+  "stageIdx": 1
+ },
+ {
+  "id": "y1",
+  "label": "1년 이내",
+  "stageIdx": 1
+ },
+ {
+  "id": "y1p",
+  "label": "1년 이상",
+  "stageIdx": 2
+ },
+ {
+  "id": "unk",
+  "label": "모르겠어요",
+  "stageIdx": null
+ }
+]

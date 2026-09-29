@@ -1,0 +1,8 @@
+anthropic
+cohere
+bm25s
+kiwipiepy
+fastapi
+uvicorn
+httpx
+python-dotenv

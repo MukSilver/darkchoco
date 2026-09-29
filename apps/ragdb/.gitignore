@@ -1,0 +1,44 @@
+# 인증 정보 — SR-10. 저장소에 절대 넣지 않는다
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# 자료 — 노션에서 다시 만들 수 있다. 저장소에 담지 않는다
+data/standard/*.json
+data/bm25_index/*
+data/images/*
+data/export/*
+data/terms.json
+data/excluded_rows.json
+data/batch_log.jsonl
+data/sync_state.json
+data/source_version.txt
+data/ragdb.sqlite
+data/ragdb.sqlite-wal
+data/ragdb.sqlite-shm
+!data/**/.gitkeep
+
+# 백업 — DR-08. 운영 PC 밖으로 나갈 때는 암호를 건다(SR-17)
+backup/
+*.backup
+
+# 파이썬
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+
+# 프런트
+node_modules/
+dist/
+.vite/
+
+# 편집기 · OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

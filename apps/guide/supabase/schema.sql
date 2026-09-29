@@ -1,0 +1,2 @@
+-- 가이드 DB 표는 이제 darkchoco-data 저장소의 migrations/0003_guide.sql 이 원본입니다 (Supabase guide 스키마).
+-- 이 저장소는 그 표를 빌드 때 읽기만 합니다. 표를 바꾸려면 darkchoco-data 에 새 마이그레이션을 더하세요.

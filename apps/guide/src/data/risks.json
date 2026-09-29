@@ -1,0 +1,27 @@
+[
+ {
+  "id": "acct",
+  "label": "계정 도용",
+  "icon": "account"
+ },
+ {
+  "id": "phish",
+  "label": "사칭 전화와 문자",
+  "icon": "phone"
+ },
+ {
+  "id": "ident",
+  "label": "명의 도용",
+  "icon": "rrn"
+ },
+ {
+  "id": "money",
+  "label": "금전 피해",
+  "icon": "finance"
+ },
+ {
+  "id": "priv",
+  "label": "사생활 노출",
+  "icon": "internal"
+ }
+]

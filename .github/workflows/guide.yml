@@ -1,0 +1,146 @@
+name: 가이드라인 배포
+
+# 유출 대응 가이드라인(apps/guide)을 빌드해 Cloudflare 에 정적 파일로 올립니다. **로컬 PC 가 필요 없습니다.**
+#
+#   사고 목록 받기(Supabase guide 스키마) → 받은 파일 확인 → 시험 → 빌드 → 브라우저 시험 → 배포 → 배포 확인
+#
+# 2026-09-29 에 따로 있던 저장소(guide)를 이 저장소로 옮겼습니다.
+#
+# ## 언제 도나
+#
+#   push                 main 에 apps/guide 나 이 파일이 바뀌었을 때만
+#   repository_dispatch  정제 배치(darkchoco-data)가 Supabase 를 채운 뒤 보내는 신호 `data-updated`
+#   workflow_dispatch    손으로
+#
+# ## 노션을 읽지 않습니다
+#
+# 노션을 읽는 것은 정제 배치 하나입니다. 여기는 Supabase 의 guide 스키마를 익명 키로 읽기만 합니다.
+# guide 스키마에는 회사 이름, 게시 주소, 게시자가 없습니다 (업종, 게시 연월, 사건 번호뿐).
+#
+# ## 한 단계라도 실패하면 배포하지 않습니다
+#
+# 사고가 0건이면 멈춥니다. 저장소에는 사고 목록이 없어서, 받기가 실패한 채로 배포하면
+# 빈 목록이 실제 사이트를 덮습니다 (`ensure-data.mjs --baked`).
+#
+# ## 넣어야 하는 비밀값 다섯, 변수 하나
+#
+#   GUIDE_SUPABASE_URL            Supabase 프로젝트 주소
+#   GUIDE_SUPABASE_ANON_KEY       익명 키. guide 스키마는 익명 읽기가 열려 있습니다
+#   GUIDE_CLOUDFLARE_API_TOKEN    가이드라인을 올리는 Cloudflare 계정의 토큰.
+#   GUIDE_CLOUDFLARE_ACCOUNT_ID   **지도의 CLOUDFLARE_API_TOKEN 과 다른 계정입니다.** 이름을 나눠 둡니다
+#   GUIDE_DISCORD_WEBHOOK         실패 알림 (없으면 알림만 건너뜁니다)
+#   GUIDE_SITE_URL (변수)          사이트 주소. og:url 과 배포 확인이 씁니다
+#
+# 레포 Settings → Secrets and variables → Actions 에서 넣습니다.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/guide/**"
+      - ".github/workflows/guide.yml"
+  repository_dispatch:
+    types: [data-updated]
+  workflow_dispatch:
+    # 입력 이름은 영문만 됩니다 (collect.yml 주석, 2026-09-08)
+    inputs:
+      deploy:
+        description: "배포까지 할지. 끄면 받기, 시험, 빌드만 합니다"
+        type: boolean
+        default: true
+
+concurrency:
+  group: guide
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  # 손으로 돌릴 때만 inputs 가 있습니다. push 와 신호는 늘 배포합니다
+  DEPLOY: ${{ github.event_name != 'workflow_dispatch' && 'yes' || (inputs.deploy && 'yes' || 'no') }}
+  SITE_URL: ${{ vars.GUIDE_SITE_URL }}
+
+jobs:
+  build-deploy:
+    name: 받기, 시험, 배포
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: apps/guide
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/guide/package-lock.json
+
+      - name: 부품 설치
+        run: npm ci --no-audit --no-fund
+
+      - name: 사고 목록 받기
+        # 건수만 찍습니다. 비밀값이 없으면 빈 파일로 남고 다음 단계가 멈춥니다
+        env:
+          SUPABASE_URL: ${{ secrets.GUIDE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.GUIDE_SUPABASE_ANON_KEY }}
+        run: npm run fetch-db
+
+      - name: 받은 파일 확인
+        run: node scripts/ensure-data.mjs --baked
+
+      - name: 시험
+        run: npm test
+
+      - name: 빌드
+        run: npm run build
+
+      - name: 브라우저 시험
+        run: npx playwright install --with-deps chromium && npx playwright test
+
+      - name: 배포
+        if: env.DEPLOY == 'yes'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.GUIDE_CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.GUIDE_CLOUDFLARE_ACCOUNT_ID }}
+        # wrangler 는 package.json 에 4판으로 고정돼 있습니다 (3판은 Worker 코드 없는 설정을 모릅니다)
+        run: |
+          set -e
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::GUIDE_CLOUDFLARE_API_TOKEN 이 없습니다. 레포 Settings → Secrets 에 넣으십시오"
+            exit 1
+          fi
+          npx wrangler deploy
+
+      - name: 배포 확인
+        # 새 판이 퍼지는 데 몇 초 걸려 세 번까지 봅니다
+        if: env.DEPLOY == 'yes' && env.SITE_URL != ''
+        run: |
+          set -e
+          ok=""
+          for i in 1 2 3; do
+            sleep 10
+            code=$(curl -s -o /tmp/guide.html -w '%{http_code}' --max-time 20 "$SITE_URL/cases/" || true)
+            if [ "$code" = "200" ] && grep -q '/cases/[0-9]' /tmp/guide.html; then
+              ok=yes
+              break
+            fi
+          done
+          if [ -z "$ok" ]; then
+            echo "::error::배포 확인 실패: 사고 목록 페이지가 안 열리거나 사고가 하나도 없습니다"
+            exit 1
+          fi
+          echo "배포 확인: 사고 목록 페이지가 열리고 사고가 있습니다"
+
+      - name: 실패 알림
+        if: failure()
+        env:
+          HOOK: ${{ secrets.GUIDE_DISCORD_WEBHOOK }}
+        run: |
+          if [ -n "$HOOK" ]; then
+            curl -s -H "Content-Type: application/json" \
+              -d '{"content":"가이드라인 빌드나 배포가 실패했습니다. 사이트는 마지막 배포본으로 계속 뜹니다."}' \
+              "$HOOK" || true
+          fi
