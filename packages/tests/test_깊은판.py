@@ -178,6 +178,17 @@ def dataclasses_replace(x, **kw):
     return dataclasses.replace(x, **kw)
 
 
+def test_예약은_랜섬만_돌고_노션에_쓴다():
+    """2026-09-30. 랜섬 미리보기만 기준을 맞췄다. 포럼은 고르기 순서를 돌리기 전에는 예약에 안 넣는다."""
+    import re
+    글 = (ROOT / ".github" / "workflows" / "places-deep.yml").read_text(encoding="utf-8")
+    # CI 에 yaml 부품이 없다. 글자로 본다
+    assert re.findall(r'(?m)^\s*- cron: "([^"]+)"', 글) == ["0 19 * * *"], "예약 시각이 바뀌었다"
+    assert "github.event_name == 'schedule' && 'ransom'" in 글, "예약이 포럼까지 돈다"
+    assert "github.event_name == 'schedule' && 'yes'" in 글, "예약이 노션에 안 쓴다"
+    assert re.search(r"(?m)^concurrency:\s*\n\s+group: places\s*$", 글), "얕은 판과 동시에 쓸 수 있다"
+
+
 if __name__ == "__main__":
     시험 = [(k, v) for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     실패 = 0
