@@ -137,6 +137,28 @@ def test_한국_관련은_country_와_kr_도메인으로_본다():
     assert _select(p, "한국 관련") == "미확인"
 
 
+def test_집계처_국가만이_근거면_그렇게_표시한다():
+    """「직접」 은 두고 근거 맨 앞에 표시한다 (2026-09-29 최현서, 인계 H-5).
+
+    집계처가 국가 칸에 KR 을 적은 것 하나만으로 「직접」 이 된 줄이 있다. 도메인 · 이름 · 한글
+    신호가 하나도 없으면 사람이 그것을 알고 보게 한다."""
+    국가만 = _기본(country="KR", target_org="Acme Ltd", title="Acme Ltd", target_domain="acme.com")
+    p = push.만들기(국가만)
+    assert _select(p, "한국 관련") == "직접"
+    근거 = _글(p, "한국 관련 근거")
+    assert 근거.startswith("집계처 국가만 — 도메인·이름·한글 신호 없음 · "), 근거
+    assert "country=KR" in 근거
+    # 다른 신호가 하나라도 있으면 붙이지 않는다
+    # 판정기는 국가 칸이 KR 이면 대상 조직까지만 보고 설명문(제목 · 본문)은 안 본다
+    for 바꿈 in ({"target_domain": "acme.co.kr"}, {"target_org": "어떤 회사"}, {"target_org": "Samsung Electronics"}):
+        p = push.만들기(dict(국가만, **바꿈))
+        assert _select(p, "한국 관련") == "직접", 바꿈
+        assert "집계처 국가만" not in _글(p, "한국 관련 근거"), 바꿈
+    # 국가 칸이 없으면 당연히 안 붙는다
+    p = push.만들기(dict(국가만, country="", target_domain="acme.co.kr"))
+    assert "집계처 국가만" not in _글(p, "한국 관련 근거")
+
+
 def test_한국_기업명과_한글은_글에서도_잡는다():
     """텔레그램·포럼 글은 피해자 칸이 비어 본문만 있다. 그래도 근거는 남아야 한다.
 
