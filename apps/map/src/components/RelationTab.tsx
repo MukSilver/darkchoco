@@ -65,7 +65,7 @@ import {
 import {
   boardFit,
   labelScale,
-  legendShift,
+  legendFit,
   nodeBoxes,
   placeLabels,
   textWidth,
@@ -113,6 +113,10 @@ export type RelationTabProps = {
   centerAbsent?: boolean;
   /** 이 기준일 지도에 없는 영토의 이름 (명부). 칩 · 안내가 id 대신 쓴다 */
   fallbackName?: (id: string) => string;
+  /** 지도에 없는 영토의 섬 색 토큰 (명부) — 칩 색이 늘 행위자 회색이었다 (검토) */
+  fallbackToken?: (id: string) => string;
+  /** 중심이 지도에 없는 까닭 — 「첫 사건이 2026 Q1」 · 「사건이 없어 가장 최근 분기에만 나오는 영토」 */
+  absentWhy?: string;
 };
 
 /* 그래프 판 크기. viewBox 단위라 화면 크기와 무관하다 */
@@ -481,13 +485,15 @@ export default function RelationTab(p: RelationTabProps) {
   }, [graph, obstacles, view.zoom, fit, p.selected, p.highlight, p.pair, p.center]);
   // 알약은 확대해도 그림만큼 커지지 않는다 — 화면에서 설계 크기에 닿으면 그 크기를 지킨다 (`labelScale`)
   const labelK = labelScale(view.zoom, fit);
+  // 범례를 피해 민다. 밀기로 모자라면(섬 간 보기 · 2단계처럼 넓은 그래프) 범례 오른쪽에 맞게 조금 줄인다
+  // (`legendFit`) — 전에는 1280 창에서 왼쪽 노드가 범례 밑에 남았다 (G-10 남은 결함)
   const shift = useMemo(() => {
-    if (!legendOpen || obstacles.length === 0) return 0;
+    if (!legendOpen || obstacles.length === 0) return { dx: 0, dy: 0, s: 1 };
     const span = {
       min: Math.min(...obstacles.map((r) => r.x)),
       max: Math.max(...obstacles.map((r) => r.x + r.w)),
     };
-    return legendShift(board, LEGEND_COVER, span, { w: W, h: H });
+    return legendFit(board, LEGEND_COVER, span, { w: W, h: H });
   }, [legendOpen, obstacles, board]);
 
   // 출발 영토가 지도에 있으면 칩 줄에 둔다 — 점을 찍을 칩이 있어야 한다 (4.3.3 ①)
@@ -498,7 +504,7 @@ export default function RelationTab(p: RelationTabProps) {
   const emptyBody = !p.center
     ? "기준일을 옮기면 관계가 보일 수 있습니다."
     : p.centerAbsent
-      ? `${centerName}${josa(centerName, "은", "는")} 이 기준일에는 아직 지도에 없습니다(첫 사건이 뒤 분기다). ` +
+      ? `${centerName}${josa(centerName, "은", "는")} 이 기준일에는 아직 지도에 없습니다${p.absentWhy ? `(${p.absentWhy})` : ""}. ` +
         (p.moveTo ? "기준일을 옮기면 관계가 보입니다." : "위 칩 줄에서 다른 영토를 골라 보세요.")
     : p.hiddenEst > 0
       ? `${withName} 연결된 관계는 추정 관계 ${p.hiddenEst}개뿐입니다. 추정 관계를 포함하면 연결 후보를 확인할 수 있습니다.`
@@ -543,7 +549,7 @@ export default function RelationTab(p: RelationTabProps) {
               {chips.map((id) => {
                 const t = byId.get(id);
                 const on = id === p.center;
-                const token = t?.token ?? "actor";
+                const token = t?.token ?? p.fallbackToken?.(id) ?? "actor";
                 return (
                   <button
                     key={id}
@@ -668,7 +674,13 @@ export default function RelationTab(p: RelationTabProps) {
               </defs>
 
               {/* 펼친 범례를 비켜 민 자리 (`legendShift`). 접으면 0 이다 */}
-              <g transform={shift ? `translate(${shift.toFixed(1)} 0)` : undefined}>
+              <g
+                transform={
+                  shift.dx || shift.dy || shift.s !== 1
+                    ? `translate(${shift.dx.toFixed(1)} ${shift.dy.toFixed(1)})${shift.s !== 1 ? ` scale(${shift.s.toFixed(3)})` : ""}`
+                    : undefined
+                }
+              >
                 {/*
                   선. 마우스를 올리면 굵고 진해진다 — 흐려진 선도 반쯤 살아나 누를 수 있는 것이 보인다.
                   굵기 · 흐려짐은 번져 바뀐다 (최현서 1번). `d` 는 전환에 안 넣는다 — 중심이 바뀔 때

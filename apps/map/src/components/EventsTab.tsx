@@ -31,7 +31,7 @@
 import { useEffect, useState } from "react";
 
 import EventRow from "./EventRow";
-import { byMonth, periodDays, periodLabel, type Period } from "@/lib/events";
+import { byMonth, fullMonthOf, monthRange, periodDays, periodLabel, type Period } from "@/lib/events";
 import type { Ev } from "@/lib/types";
 
 const CHOICES: { label: string; p: Period }[] = [
@@ -109,6 +109,11 @@ export default function EventsTab({
   const earliest = list.length ? list[list.length - 1].postedAt.slice(0, 10) : toDay;
   const fromDay = start ?? (earliest < toDay ? earliest : toDay);
   const [fromIn, setFromIn] = useState(fromDay);
+  // 「한 달」 칸에 치는 중인 글. 달 모양이 되면 범위를 채우고 비운다 — 달 칸을 모르는 브라우저(글자 칸)에서도
+  // 칠 수 있게 (2026-09-29 검토)
+  const [monthDraft, setMonthDraft] = useState<string | null>(null);
+  // 목록이 사라지면(탭 · 선택이 바뀜) 마우스 올림을 비운다 — 사라진 줄은 떼기 신호를 안 보낸다 (검토)
+  useEffect(() => () => onHover?.(null), [onHover]);
   const [toIn, setToIn] = useState(end);
 
   return (
@@ -219,17 +224,19 @@ export default function EventsTab({
               <input
                 type="month"
                 aria-label="한 달 고르기"
-                value={fromIn.slice(0, 7) === toIn.slice(0, 7) ? fromIn.slice(0, 7) : ""}
+                value={monthDraft ?? fullMonthOf(fromIn, toIn, isoDay(d.getTime()))}
                 max={isoDay(d.getTime()).slice(0, 7)}
                 onChange={(ev) => {
-                  const m = ev.target.value;
-                  if (!/^\d{4}-\d{2}$/.test(m)) return;
-                  const [y, mo] = m.split("-").map(Number);
-                  const last = new Date(Date.UTC(y, mo, 0)).toISOString().slice(0, 10);
-                  const cap = isoDay(d.getTime());
-                  setFromIn(`${m}-01`);
-                  setToIn(last < cap ? last : cap);
+                  const r = monthRange(ev.target.value, isoDay(d.getTime()));
+                  if (!r) {
+                    setMonthDraft(ev.target.value);
+                    return;
+                  }
+                  setMonthDraft(null);
+                  setFromIn(r.from);
+                  setToIn(r.to);
                 }}
+                onBlur={() => setMonthDraft(null)}
                 className="w-full min-w-0 rounded-[6px] border border-edge-input bg-input px-s2 py-[2px] text-[12px] text-body"
               />
               <span aria-hidden>시작</span>

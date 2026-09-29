@@ -236,3 +236,28 @@ export function legendShift(
   const covered = (cover - off) / f;
   return Math.max(0, Math.min(covered - span.min, vb.w - span.max));
 }
+
+/**
+ * 범례를 피하는 그래프 옮기기 — 밀기만으로 모자라면 줄이기까지 (G-10 남은 결함, 2026-09-29).
+ *
+ * `legendShift` 는 오른쪽 끝이 viewBox 밖으로 나가지 않을 만큼만 밀어서, 섬 간 보기 · 2단계처럼 넓은
+ * 그래프는 1280 창에서 왼쪽 노드가 범례 밑에 남았다. 밀기로 다 비킬 수 있으면 그대로 밀고(`s` 1),
+ * 모자라면 그래프 폭을 범례 오른쪽 ~ viewBox 오른쪽 끝에 맞게 줄인다. 줄일 때는 세로 가운데를 지켜
+ * 위아래로 쏠리지 않게 한다. 너무 작아지지 않게 0.6 배에서 멈춘다. 그리기는
+ * `translate(dx dy) scale(s)` 다
+ */
+export function legendFit(
+  board: { w: number; h: number } | null,
+  cover: number,
+  span: { min: number; max: number },
+  vb: { w: number; h: number },
+): { dx: number; dy: number; s: number } {
+  const shift = legendShift(board, cover, span, vb);
+  if (!board || board.w <= 0 || board.h <= 0) return { dx: shift, dy: 0, s: 1 };
+  const f = boardFit(board, vb);
+  const off = (board.w - vb.w * f) / 2;
+  const covered = (cover - off) / f;
+  if (span.min + shift >= covered || span.max <= span.min) return { dx: shift, dy: 0, s: 1 };
+  const s = Math.max(0.6, Math.min(1, (vb.w - covered) / (span.max - span.min)));
+  return { dx: covered - s * span.min, dy: ((1 - s) * vb.h) / 2, s };
+}

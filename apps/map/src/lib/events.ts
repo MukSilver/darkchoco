@@ -173,6 +173,28 @@ export function periodBounds(p: Period, d: Date): { from: number; to: number } {
   return { from: Date.parse(`${r.from}T00:00:00Z`) - 1, to: Math.min(to, Date.parse(`${r.to}T23:59:59Z`)) };
 }
 
+/**
+ * 「한 달」 칸의 달(`YYYY-MM`)을 날짜 범위로 — 그달 첫날 ~ 끝날, 끝날은 기준일(`cap`)을 안 넘는다. 달 모양이
+ * 아니거나 기준일 뒤 달이면 null (v2 7번). 키보드로 기준일 뒤 달을 치면 시작이 끝보다 늦어졌다
+ */
+export function monthRange(m: string, cap: string): { from: string; to: string } | null {
+  if (!/^\d{4}-\d{2}$/.test(m)) return null;
+  const [y, mo] = m.split("-").map(Number);
+  if (mo < 1 || mo > 12 || m > cap.slice(0, 7)) return null;
+  const last = new Date(Date.UTC(y, mo, 0)).toISOString().slice(0, 10);
+  return { from: `${m}-01`, to: last < cap ? last : cap };
+}
+
+/**
+ * 날짜 범위가 꼭 한 달(그달 첫날 ~ 끝날, 이번 달이면 기준일까지)이면 그 달, 아니면 빈 글. 「한 달」 칸이 보일
+ * 값이다 — 7일 · 30일처럼 같은 달 안의 일부 기간을 그 달로 보이면 한 달이 골라진 줄 알고, 같은 달을 다시
+ * 골라도 값이 안 바뀌어 넓힐 수 없었다 (2026-09-29 검토)
+ */
+export function fullMonthOf(from: string, to: string, cap: string): string {
+  const r = monthRange(from.slice(0, 7), cap);
+  return r && r.from === from && r.to === to ? from.slice(0, 7) : "";
+}
+
 /** 화면에 적을 기간 양 끝 날짜 `[시작, 끝]`. 전체는 시작이 null */
 export function periodDays(p: Period, d: Date): [string | null, string] {
   const dd = dayOfDate(d);

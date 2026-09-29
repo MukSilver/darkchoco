@@ -207,6 +207,11 @@ export default function Page() {
   // 패널 줄(사건 · 연결)에 마우스를 올린 것 — 지도가 뗄 때까지 그것만 보인다 (2026-09-29 최현서 v2 6번)
   const [hoverEvent, setHoverEvent] = useState<string | null>(null);
   const [hoverLink, setHoverLink] = useState<LinkSel>(null);
+  // 마우스 올림 비우기 — 줄이 사라지면(관계 탭으로 · 선택 · 탭이 바뀜) 떼기 신호가 안 와 남았다 (2026-09-29 검토)
+  const clearHover = () => {
+    setHoverEvent(null);
+    setHoverLink(null);
+  };
   // 패널 [사건] 「사기 의심 숨기기」 (설계서 2.3 L98 — 칩 없이 필터에서만)
   const [hideScam, setHideScam] = useState(false);
   // 보고서 팝업 (설계서 4.3.4). 연 사건 번호를 쌓는다 — 맨 뒤가 지금 사건, 앞은 「‹ 이전 사건」 자리
@@ -425,6 +430,14 @@ export default function Page() {
   );
   /** 고른 중심이 이 기준일 지도에 아직 없다(첫 사건이 뒤다). 관계도 · 패널이 그렇게 알린다 */
   const centerAbsent = !!center && !present.has(center);
+  // 왜 없나 — 첫 사건이 뒤 분기인지, 사건이 없어 가장 최근 분기에만 나오는 명부 영토인지 (검토)
+  const centerAbsentWhy = useMemo(() => {
+    if (!centerAbsent || !center) return undefined;
+    const since = REGISTRY.get(center)?.since;
+    return since
+      ? `첫 사건이 ${quarterText(quarterOfDate(new Date(since)))}`
+      : "사건이 없어 가장 최근 분기에만 나오는 영토";
+  }, [centerAbsent, center]);
   /**
    * 섬 · 영토 고르기. 고르면 패널을 펼친다 (설계서 4.2.4 「자동 펼침」). **선택을 풀어도
    * 접지는 않는다** — 펼침은 사람이 핸들로 정한 값이다 (2026-09-28 최현서 2번).
@@ -433,6 +446,7 @@ export default function Page() {
    * 자리(관계 탭 → 지도 탭의 중심 영토)가 쓴다 — 탭을 옮겨도 펼침은 그대로다
    */
   const select = (s: MapSelection, open = true) => {
+    clearHover();
     setSelection(s);
     // 엔티티 탭 섬 필터는 고른 것의 섬을 따라간다
     setEntityIsland(null);
@@ -476,6 +490,8 @@ export default function Page() {
   };
 
   const restore = useCallback((o: Origin) => {
+    setHoverEvent(null);
+    setHoverLink(null);
     setTab(o.tab);
     setSelection(o.selection);
     setPanelTab(o.panelTab);
@@ -515,6 +531,7 @@ export default function Page() {
    * 테두리, 연혁 강조와 스크롤). 근거 화면은 그 선이나 「근거 보기」를 눌러야 뜬다
    */
   const enterFromLinks = (next: { center: string | null; hi: string | null; pair: RelPair | null }) => {
+    clearHover();
     seqRef.current += 1;
     const seq = `${OPENED_AT}-${seqRef.current}`;
     setOrigin({ seq, tab, selection, shown: liveSelection, panelTab, linkSel, mapView, ym, panelOpen, compare });
@@ -599,6 +616,7 @@ export default function Page() {
    */
   const goTab = (k: ViewTabKey) => {
     if (k === tab) return;
+    clearHover();
     if (k === "relation") {
       const picked = selection.kind === "territory" && present.has(selection.id) ? selection.id : null;
       setRelCenter(picked);
@@ -627,6 +645,7 @@ export default function Page() {
    * 기록도 걷는다. 최근 검색 · 검색 필터 · 재생 속도는 사람이 고른 설정이라 둔다
    */
   const goHome = () => {
+    clearHover();
     dropOurEntry();
     clearRel();
     setRelCenter(null);
@@ -1316,7 +1335,12 @@ export default function Page() {
                 onDepth={setRelDepth}
                 hiddenEst={relHiddenEst}
                 centerAbsent={centerAbsent}
+                absentWhy={centerAbsentWhy}
                 fallbackName={terrName}
+                fallbackToken={(id) => {
+                  const code = REGISTRY.get(id)?.islandId;
+                  return code ? islandToken(code) : "actor";
+                }}
               />
             ) : (
               <EntityTab
@@ -1398,6 +1422,7 @@ export default function Page() {
               onPairPick={pickFromPair}
               hiddenEst={relHiddenEst}
               absentName={centerAbsent && center ? terrName(center) : undefined}
+              absentActor={centerAbsent && center ? REGISTRY.get(center)?.islandId === "ACTOR" : undefined}
               onOpenEvent={openReport}
             />
           ) : (

@@ -443,45 +443,45 @@ export default function TimelineTab({
                 ▾
               </span>
             </div>
-            {/*
-              시점 비교에서 연도 칩이 채울 쪽 — A 고르기 · B 고르기 (2026-09-28 최현서 8번 「A · B 각각의
-              버튼을 두거나」). 고른 쪽은 테두리 있는 패널색 칸이다. 재생 조작 끝에 둔다(v2 8번 — 스위치와 자리를 바꿈)
-            */}
-            {compare && (
-              <div
-                role="group"
-                aria-label="연도 칩이 채울 쪽"
-                className="flex shrink-0 items-center gap-s1 rounded-[10px] bg-track p-[3px]"
-              >
-                {(["a", "b"] as const).map((k) => {
-                  const onSide = compare.active === k;
-                  return (
-                    <button
-                      key={k}
-                      type="button"
-                      aria-pressed={onSide}
-                      onClick={() => onCompare({ ...compare, active: k })}
-                      title={`연도 칩이 ${k.toUpperCase()} 시점을 바꿉니다`}
-                      className={[
-                        // 높이 30 을 안 넘게(재생 조작 줄과 같은 높이) — 넘으면 줄 높이가 바뀌어 옆 단추가 들썩인다
-                      "flex items-center gap-s2 whitespace-nowrap rounded-[8px] border px-s3 py-[2px] text-[12px] leading-[16px] tabular-nums",
-                        onSide ? "border-edge bg-panel font-semibold text-strong" : "border-transparent text-label hover-seg",
-                      ].join(" ")}
-                    >
-                      <span
-                        aria-hidden
-                        className="grid size-[16px] place-items-center rounded-[4px] text-[10px] font-bold text-on-accent"
-                        style={{ background: "var(--t-accent)" }}
-                      >
-                        {k.toUpperCase()}
-                      </span>
-                      {quarterText(k === "a" ? compare.a : compare.b)} 고르기
-                    </button>
-                  );
-                })}
-              </div>
-            )}
           </div>
+          {/*
+            시점 비교에서 연도 칩이 채울 쪽 — A 고르기 · B 고르기 (2026-09-28 최현서 8번 「A · B 각각의
+            버튼을 두거나」). 고른 쪽은 테두리 있는 패널색 칸이다. 재생 조작 뒤 따로 줄바꿈하는 칸이다(v2 8번 — 스위치와 자리를 바꿈). 재생 묶음 안에 두면 1280 창에서 넘쳤다 (검토)
+          */}
+          {compare && (
+            <div
+              role="group"
+              aria-label="연도 칩이 채울 쪽"
+              className="flex shrink-0 items-center gap-s1 rounded-[10px] bg-track p-[3px]"
+            >
+              {(["a", "b"] as const).map((k) => {
+                const onSide = compare.active === k;
+                return (
+                  <button
+                    key={k}
+                    type="button"
+                    aria-pressed={onSide}
+                    onClick={() => onCompare({ ...compare, active: k })}
+                    title={`연도 칩이 ${k.toUpperCase()} 시점을 바꿉니다`}
+                    className={[
+                      // 높이 30 을 안 넘게(재생 조작 줄과 같은 높이) — 넘으면 줄 높이가 바뀌어 옆 단추가 들썩인다
+                    "flex items-center gap-s2 whitespace-nowrap rounded-[8px] border px-s3 py-[2px] text-[12px] leading-[16px] tabular-nums",
+                      onSide ? "border-edge bg-panel font-semibold text-strong" : "border-transparent text-label hover-seg",
+                    ].join(" ")}
+                  >
+                    <span
+                      aria-hidden
+                      className="grid size-[16px] place-items-center rounded-[4px] text-[10px] font-bold text-on-accent"
+                      style={{ background: "var(--t-accent)" }}
+                    >
+                      {k.toUpperCase()}
+                    </span>
+                    {quarterText(k === "a" ? compare.a : compare.b)} 고르기
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {변화 ? (
@@ -496,7 +496,6 @@ export default function TimelineTab({
         ) : (
         <section
           className="relative flex h-[min(100cqw,640px)] min-h-[320px] shrink-0 resize-y flex-col overflow-hidden rounded-[14px] border border-edge bg-canvas p-s5"
-          title="오른쪽 아래 모서리를 끌어 높이를 바꿀 수 있습니다"
         >
           {/*
             블록 높이는 기본이 정사각형(칸 폭, 640 까지)이고, 오른쪽 아래 모서리를 끌어 바꿀 수 있다(resize).

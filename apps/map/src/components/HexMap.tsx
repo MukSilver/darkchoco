@@ -12,6 +12,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { cellToXY, hexPoints } from "@/lib/hex";
 import type { MapLayout, TerritoryShape } from "@/lib/layout";
+import { labelT } from "@/lib/mapui";
 import { boxOrigin, boxUnder, flipFrom, flipTo, growFrom, islandBoxes, parseMs, type IslandBox } from "@/lib/motion";
 import { CONF_DASH, KIND_NAME, type RelView } from "@/lib/relations";
 
@@ -150,9 +151,13 @@ function curve(
   const bend = len * 0.12 + k * 22;
   const cx = mx - (dy / len) * bend;
   const cy = my + (dx / len) * bend;
+  const lt = labelT(k);
   return {
     d: `M${a.x.toFixed(1)},${a.y.toFixed(1)}Q${cx.toFixed(1)},${cy.toFixed(1)} ${b.x.toFixed(1)},${b.y.toFixed(1)}`,
-    mid: { x: 0.25 * a.x + 0.5 * cx + 0.25 * b.x, y: 0.25 * a.y + 0.5 * cy + 0.25 * b.y },
+    mid: {
+      x: (1 - lt) ** 2 * a.x + 2 * lt * (1 - lt) * cx + lt ** 2 * b.x,
+      y: (1 - lt) ** 2 * a.y + 2 * lt * (1 - lt) * cy + lt ** 2 * b.y,
+    },
   };
 }
 
@@ -209,6 +214,8 @@ export default function HexMap({
   const pointer = interactive ? "cursor-pointer" : "";
   // 마우스를 올린 섬 이름표. 테두리를 섬 색으로 바꾼다 (2026-09-28 코드 분석 — hover 가 없었다)
   const [hoverIsland, setHoverIsland] = useState<string | null>(null);
+  // 키보드로 초점이 온 평지 영토 (`keyProps`)
+  const [focusFlat, setFocusFlat] = useState<string | null>(null);
 
   /*
    * 시점을 옮길 때 섬이 옮겨 간다 (2026-09-28 최현서 7번 — 「지구본에서 대륙이 이동하는 것처럼」,
@@ -263,8 +270,12 @@ export default function HexMap({
     motion.current = { start: performance.now(), ms, frames };
     // 관계선은 섬이 옮겨 온 뒤에 번져 나온다(`FADE`). 앞 번짐은 끊는다 (2026-09-29 묶음 6 검토)
     svg.querySelectorAll<SVGElement>('[data-flip="fade"]').forEach((el) => {
+      // 앞 번짐이 도는 중(빠른 재생)이면 0 으로 되돌리지 않고 지금 진하기에서 이어 간다 — 4× 재생(250ms)
+      // 에서는 다 번지기 전에 다음 분기가 와 선이 옅게 깜박였다 (G-10 남은 결함)
+      const running = el.getAnimations().length > 0;
+      const cur = getComputedStyle(el).opacity;
       el.getAnimations().forEach((a) => a.cancel());
-      el.animate(FADE, opts);
+      el.animate(running ? [{ opacity: cur }, { opacity: 1 }] : FADE, opts);
     });
   }, [layout, frame]);
 
@@ -322,8 +333,22 @@ export default function HexMap({
    * 코드 분석). `entry` 만 Tab 차례(0)이고 나머지는 −1 이다. 떠오른 영토는 윗면에만 단다(옆면까지 달면
    * 같은 영토에 두 번 멈춘다)
    */
-  const keyProps = (name: string, entry = false) =>
-    interactive ? { tabIndex: entry ? 0 : -1, role: "button" as const, "aria-label": name } : {};
+  const keyProps = (name: string, entry = false, id?: string) =>
+    interactive
+      ? {
+          tabIndex: entry ? 0 : -1,
+          role: "button" as const,
+          "aria-label": name,
+          // 키보드로 옮겨 온 평지 영토는 경계선 위에 윤곽을 한 겹 더 긋는다 — 경계선이 초점 윤곽을 덮었다 (검토)
+          ...(id
+            ? {
+                onFocus: (e: { currentTarget: Element }) =>
+                  setFocusFlat(e.currentTarget.matches(":focus-visible") ? id : null),
+                onBlur: () => setFocusFlat(null),
+              }
+            : {}),
+        }
+      : {};
   const hoverProps = (id: string) => ({
     onMouseEnter: () => onHoverTerritory?.(id),
     onMouseLeave: () => onHoverTerritory?.(null),
@@ -470,7 +495,7 @@ export default function HexMap({
             stroke="var(--t-border-hex)"
             strokeWidth={1}
             className={`${pointer} transition-colors`}
-            {...keyProps(t.name, t.territoryId === entryId)}
+            {...keyProps(t.name, t.territoryId === entryId, t.territoryId)}
             {...hoverProps(t.territoryId)}
           />
         ))}
@@ -486,10 +511,11 @@ export default function HexMap({
             data-island={t.islandKey}
             d={t.outline}
             fill="none"
-            stroke={`var(--t-island-${t.token}-side)`}
+            // 흐린 영토는 회색 — 옆면 색을 옅게 그으면 흐린 칸 둘레에 섬 색이 되살아났다 (검토)
+            stroke={dim(t) ? "var(--t-border-strong)" : `var(--t-island-${t.token}-side)`}
             strokeWidth={1.6}
             strokeLinejoin="round"
-            opacity={dim(t) ? 0.45 : 1}
+            opacity={dim(t) ? 0.7 : 1}
             className="pointer-events-none"
           />
         ))}
@@ -514,6 +540,22 @@ export default function HexMap({
             className="pointer-events-none"
           />
         )}
+        {(() => {
+          const f = focusFlat ? flat.find((t) => t.territoryId === focusFlat) : undefined;
+          return f ? (
+            <path
+              key={`focus-${f.territoryId}`}
+              aria-hidden
+              data-island={f.islandKey}
+              d={f.outline}
+              fill="none"
+              stroke="var(--t-hex-selected-edge)"
+              strokeWidth={2.5}
+              strokeLinejoin="round"
+              className="pointer-events-none"
+            />
+          ) : null;
+        })()}
       </g>
 
       {/*

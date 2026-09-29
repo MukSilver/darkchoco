@@ -18,7 +18,7 @@
 
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 
 import { Chip, IslandChip } from "./RelBits";
 import { CONF_CHIP, CONF_LABEL, KIND_LABEL, dayText, partnerOf, type IslandPairRow, type RelView } from "@/lib/relations";
@@ -49,6 +49,11 @@ export type LinksTabProps = {
   /** 줄에 마우스를 올린 것(뗄 때 null) — 지도에 그 관계선만 잠깐 (v2 6번) */
   onHover?: (s: LinkSel) => void;
 };
+
+/** 목록이 사라지면(관계 탭으로 · 선택이 바뀜) 마우스 올림을 비운다 — 사라진 줄은 떼기 신호를 안 보낸다 (검토) */
+function useClearHover(onHover?: (s: LinkSel) => void) {
+  useEffect(() => () => onHover?.(null), [onHover]);
+}
 
 function ym(iso: string | null): string {
   return iso ? iso.slice(0, 7) : "";
@@ -162,6 +167,7 @@ function Arrow({ from, to }: { from: string; to: string }) {
 }
 
 export default function LinksTab(p: LinksTabProps) {
+  useClearHover(p.onHover);
   const relRows = p.mode === "actor" ? p.rows.filter((v) => v.rel.kind === "activity") : p.rows;
   const partners = p.selfId ? new Set(relRows.map((v) => partnerOf(v, p.selfId as string))).size : 0;
 
