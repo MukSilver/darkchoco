@@ -1041,7 +1041,7 @@
       t.date || '', t.url].join('\t'))).join('\n') + '\n';
     if (FAILED.length) md += '\n## 못 가져온 것\n\n' + FAILED.map(f => '- ' + f).join('\n') + '\n';
 /* 칸 값. 목록만 훑었으므로 본문은 「안 봄」 이고 게시판 칸에 게시판 이름을 둔다 */
-    묶음.forEach(({ b, 글 }) => 글.forEach(t => 칸줄(t.title, t.url, t.author, t.date, b.이름, '', '안 봄')));
+    for (const { b, 글 } of 묶음) for (const t of 글) 칸줄(t.title, t.url, t.author, t.date, b.이름, '', '안 봄');
     return { md, empty: !합 && !FAILED.length,
              status: `훑기 · 게시판 ${묶음.length}/${볼것.length}곳 · 글 ${합}건 · 새 ${새합}건 · 요청 ${요청}번`
                      + (ABORT ? (FAILED.length ? ' · 중간에 멈춤(아래 「못 가져온 것」)' : ' · 중단 단추로 멈춤') : '') };
