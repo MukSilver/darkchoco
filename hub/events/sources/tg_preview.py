@@ -59,22 +59,18 @@ def _채널들(ctx: Ctx) -> list[str]:
 def collect(ctx: Ctx) -> Iterator[Item]:
     # 무거운 것은 여기서 부릅니다. 목록만 볼 때는 requests 가 필요 없습니다.
     from collect.fetch import Fetcher
-    from collect.sources.telegram_web import parse, to_item
+    from collect.sources.telegram_web import to_item, 쪽들
 
     채널 = _채널들(ctx)
     f = Fetcher(dry=ctx.dry)
 
     for chan in 채널:
+        # 첫 쪽이 꽉 찼고 12시간 안이면 거슬러 더 읽습니다(채널당 8쪽). Actions 쪽과 같은 함수입니다 (2026-09-29)
         try:
-            code, body, _ = f.get("https://t.me/s/" + chan, accept="text/html")
+            posts, why, _ = 쪽들(f, chan)
         except Exception as e:  # noqa: BLE001  한 채널이 막혀도 다음으로 갑니다
             print(f"    {chan}: 요청 실패 — {e}", file=sys.stderr)
             continue
-        if code != 200:
-            print(f"    {chan}: HTTP {code}", file=sys.stderr)
-            continue
-
-        posts, why = parse(body.decode("utf-8", errors="replace"), chan)
         if not posts:
             print(f"    {chan}: {why}", file=sys.stderr)
             continue

@@ -38,9 +38,11 @@ from __future__ import annotations
 
 import argparse
 import html as H
+import random
 import re
 import sys
-from datetime import date
+import time
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
@@ -118,24 +120,87 @@ def to_item(d: dict, chan: str, today: str):
         when=d["when"], perma=d["url"], got_by=VER, body_via="t.me/s")
 
 
+# ── 쪽 넘기기 (2026-09-29 최현서, 인계 H-2 · E-5) ────────────────
+#
+# 첫 쪽만 읽으면 글이 빠른 채널에서 놓친다. 9/26 에 재 보니 osint_cti 는 첫 쪽 20개가 1.6시간 안이라,
+# 6시간마다 읽으면 70개쯤 가운데 50개쯤을 놓쳤다. 그래서 **첫 쪽이 꽉 찼고 가장 오래된 글이
+# 「지금 − 12시간」 보다 새것이면** `before=<가장 오래된 글 번호>` 로 한 쪽 더 읽는다. 채널당 8쪽까지.
+# 12시간인 까닭: 수집은 6시간마다지만 한 판이 빠지면 12시간이 빈다. 겹쳐 읽은 글은 UID 가 거른다.
+# 한가한 채널은 첫 쪽에서 멈추므로 요청이 안 는다.
+되짚을시간 = 12      # 시간
+쪽상한 = 8          # 채널당. 첫 쪽을 센다
+꽉참 = 15           # 한 쪽이 이만큼 이상이면 꽉 찬 것으로 본다(t.me 는 한 쪽에 20개 안팎)
+넘김더쉬기 = (1.0, 3.0)   # 넘겨 읽는 쪽은 Fetcher 간격(t.me 2.5~5초)에 이만큼 더 쉰다
+
+
+def _시각(v: str):
+    try:
+        d = datetime.fromisoformat((v or "").replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+
+
+def _번호(d: dict) -> int:
+    try:
+        return int(d["post"].rsplit("/", 1)[-1])
+    except (ValueError, KeyError, AttributeError):
+        return 0
+
+
+def 쪽들(f, chan: str, 지금: datetime | None = None, 되짚을: float = 되짚을시간,
+        상한: int = 쪽상한, 쉬기=time.sleep) -> tuple[list[dict], str, int]:
+    """채널 첫 쪽부터 거슬러 읽는다. (글 목록, 첫 쪽이 빈 까닭, 읽은 쪽 수).
+
+    **첫 쪽은 예전과 같다.** 요청이 실패하면 예외를 그대로 올리고, HTTP 가 200 이 아니면
+    `([], "HTTP <코드>", 1)` 을 돌려준다. 부르는 쪽이 예전처럼 「막힌 것」 으로 적는다.
+    **넘긴 쪽은 실패해도 멈추기만 한다.** 받은 만큼 쓴다. 한 채널 때문에 한 판이 죽지 않게 한다."""
+    지금 = 지금 or datetime.now(timezone.utc)
+    기준 = 지금 - timedelta(hours=되짚을)
+    url = "https://t.me/s/" + chan
+    code, body, _ = f.get(url, accept="text/html")
+    if code != 200:
+        return [], "HTTP %s" % code, 1
+    글, 왜 = parse(body.decode("utf-8", errors="replace"), chan)
+    if not 글:
+        return [], 왜, 1
+
+    모은, 본번호, 쪽수 = list(글), {d["post"] for d in 글}, 1
+    while 쪽수 < 상한:
+        가장오래된 = min(글, key=_번호)
+        시각 = _시각(가장오래된["when"])
+        if len(글) < 꽉참 or 시각 is None or 시각 <= 기준 or _번호(가장오래된) <= 1:
+            break
+        쉬기(random.uniform(*넘김더쉬기))
+        쪽수 += 1
+        try:
+            code, body, _ = f.get("%s?before=%d" % (url, _번호(가장오래된)), accept="text/html")
+        except Exception:  # noqa: BLE001  넘긴 쪽은 받은 만큼 쓰고 멈춘다
+            break
+        if code != 200:
+            break
+        글, _ = parse(body.decode("utf-8", errors="replace"), chan)
+        새것 = [d for d in 글 if d["post"] not in 본번호 and _번호(d) < _번호(가장오래된)]
+        if not 새것:
+            break
+        모은 += 새것
+        본번호 |= {d["post"] for d in 새것}
+        글 = 새것
+    return 모은, "", 쪽수
+
+
 def d_ours(posts: list, kind: str) -> bool:
     return any(d["ours"] for d in posts if d["kind"] == kind)
 
 
 def run(chan: str, db: Path | None, dry: bool) -> int:
     f = Fetcher(dry=dry)
-    url = "https://t.me/s/" + chan
     try:
-        code, body, _ = f.get(url, accept="text/html")
+        posts, why, 쪽수 = 쪽들(f, chan)
     except Exception as e:
         print("%s  못 받았다: %s" % (chan, e))
         return 1
-    if code != 200:
-        print("%s  HTTP %s" % (chan, code))
-        return 1
-
-    posts, why = parse(body.decode("utf-8", errors="replace"), chan)
-    print("채널  t.me/%s" % chan)
+    print("채널  t.me/%s%s" % (chan, "  (%d쪽)" % 쪽수 if 쪽수 > 1 else ""))
     if not posts:
         print("글 0개 — %s" % why)
         return 1
