@@ -70,6 +70,8 @@ export type RelationPanelProps = {
   hiddenEst: number;
   /** 고른 중심이 이 기준일 지도에 아직 없으면 그 이름 — 머리글이 「선택 없음」 대신 쓴다 (v2 9번) */
   absentName?: string;
+  /** 그 영토가 행위자인가 — 머리글 「ACTOR」 (검토) */
+  absentActor?: boolean;
   /** 근거 사건 누르기 — 보고서 팝업 (설계서 4.3.4 · 4.3.6, 한 번 클릭) */
   onOpenEvent?: (id: string) => void;
 };
@@ -170,7 +172,7 @@ export default function RelationPanel(p: RelationPanelProps) {
         subtitle: `선택한 관계 ${nameOf(sel.rel.from)} → ${nameOf(sel.rel.to)} · ${KIND_LABEL[sel.rel.kind]}`,
       }
     : {
-        kindLabel: actor ? "ACTOR" : "TERRITORY",
+        kindLabel: actor || (!c && p.absentActor) ? "ACTOR" : "TERRITORY",
         kindToken: null,
         kindAccent: true,
         stateLabel: c || p.absentName ? "선택됨" : "선택 없음",

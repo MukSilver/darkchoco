@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { fitTicks, labelTicks, pastSnapshot, revealPan, tipPlace, toCanvas } from './mapui.ts';
+import { fitTicks, labelT, labelTicks, pastSnapshot, revealPan, tipPlace, toCanvas } from './mapui.ts';
 import { quarterText } from './quarter.ts';
 
 // 판 1000 × 680, 위 여백 16 · 아래 여백 64 → 지도 판은 1000 × 600
@@ -121,4 +121,13 @@ test('지나간 분기만 스냅샷 이름을 낸다', () => {
   // 화면 분기 표기는 한 꼴이다 — 타임라인 · 스냅샷 바 · 관계 패널이 같이 쓴다 (G-10 묶음 9)
   assert.equal(quarterText('2021-Q4'), '2021 Q4');
   assert.equal(pastSnapshot('2026-Q3', '2026-Q3'), null);
+});
+
+test('같은 두 영토 사이 선들의 알약 자리 — 가운데, 그다음 양옆으로 번갈아, 끝에서 멈춘다 (G-10 남은 결함)', () => {
+  assert.equal(labelT(0), 0.5);
+  assert.ok(Math.abs(labelT(1) - 0.33) < 1e-9);
+  assert.ok(Math.abs(labelT(2) - 0.67) < 1e-9);
+  assert.ok(Math.abs(labelT(3) - 0.16) < 1e-9);
+  assert.equal(labelT(9), 0.16, '많아도 앞쪽 끝 가까이에서 멈춘다');
+  assert.equal(labelT(10), 0.84, '뒤쪽 끝도');
 });

@@ -11,6 +11,7 @@ import {
   LABEL_TOP,
   boardFit,
   labelScale,
+  legendFit,
   legendShift,
   nodeBoxes,
   placeLabels,
@@ -183,4 +184,21 @@ test('범례 밀기 — 범례 밑으로 들어간 만큼, 오른쪽이 넘치�
   assert.equal(legendShift({ w: 700, h: 500 }, 218, { min: 70, max: 930 }, vb), 70);
   // 판이 넓어 범례가 그래프에 안 닿으면 안 민다
   assert.equal(legendShift({ w: 1600, h: 620 }, 218, { min: 185, max: 815 }, vb), 0);
+});
+
+test('범례 맞춤 — 밀기로 모자라면 범례 오른쪽에 맞게 줄이고, 세로 가운데를 지킨다 (G-10 남은 결함)', () => {
+  const vb = { w: 1000, h: 620 };
+  // 밀기로 비킬 수 있으면 밀기만
+  const a = legendFit({ w: 700, h: 500 }, 218, { min: 185, max: 815 }, vb);
+  assert.equal(a.s, 1);
+  assert.ok(Math.abs(a.dx - (218 / 0.7 - 185)) < 1e-9);
+  // 섬 간 보기처럼 넓은 그래프(210 ~ 990)는 밀기가 10 에서 막힌다 — 범례 오른쪽(311)부터 1000 까지로 줄인다
+  const covered = 218 / 0.7;
+  const b = legendFit({ w: 700, h: 500 }, 218, { min: 210, max: 990 }, vb);
+  assert.ok(b.s < 1 && b.s >= 0.6);
+  assert.ok(Math.abs(b.s * 210 + b.dx - covered) < 1e-9, '왼쪽 끝이 범례 오른쪽에 온다');
+  assert.ok(b.s * 990 + b.dx <= 1000 + 1e-9, '오른쪽 끝은 viewBox 안');
+  assert.ok(Math.abs(b.dy - ((1 - b.s) * 620) / 2) < 1e-9, '세로 가운데');
+  // 판 크기를 모르면 그대로
+  assert.deepEqual(legendFit(null, 218, { min: 210, max: 990 }, vb), { dx: 0, dy: 0, s: 1 });
 });

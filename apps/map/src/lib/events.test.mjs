@@ -12,6 +12,8 @@ import {
   RISK_TONE,
   byMonth,
   eventTitle,
+  fullMonthOf,
+  monthRange,
   eventsIn,
   gapText,
   periodBounds,
@@ -147,4 +149,16 @@ test('사건이 근거인 관계 — 근거 목록, 또는 행위자 → 영토 
   assert.ok(!touchesEvent(rel({ kind: 'leak', from: 'actor', to: 'forum' }), e), '활동 관계가 아니면 쌍만으로는 안 잇는다');
   const plain = ev('2026-09-01T00:00:00Z', { territoryId: 'forum' });
   assert.ok(!touchesEvent(rel({ kind: 'activity', from: 'actor', to: 'forum' }), plain), '행위자가 없는 사건');
+});
+
+test('한 달 칸 — 그달 첫날 ~ 끝날, 기준일을 안 넘고, 꼭 한 달일 때만 달을 보인다 (v2 7번 · 검토)', () => {
+  assert.deepEqual(monthRange('2026-08', '2026-09-29'), { from: '2026-08-01', to: '2026-08-31' });
+  assert.deepEqual(monthRange('2026-09', '2026-09-29'), { from: '2026-09-01', to: '2026-09-29' }, '이번 달은 기준일까지');
+  assert.deepEqual(monthRange('2024-02', '2026-09-29'), { from: '2024-02-01', to: '2024-02-29' }, '윤년 2월');
+  assert.equal(monthRange('2026-10', '2026-09-29'), null, '기준일 뒤 달');
+  assert.equal(monthRange('2026-1', '2026-09-29'), null, '치는 중인 글');
+  assert.equal(fullMonthOf('2026-08-01', '2026-08-31', '2026-09-29'), '2026-08');
+  assert.equal(fullMonthOf('2026-09-01', '2026-09-29', '2026-09-29'), '2026-09');
+  assert.equal(fullMonthOf('2026-09-23', '2026-09-29', '2026-09-29'), '', '7일은 한 달이 아니다');
+  assert.equal(fullMonthOf('2024-08-01', '2026-08-31', '2026-09-29'), '');
 });

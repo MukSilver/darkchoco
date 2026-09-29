@@ -153,3 +153,14 @@ export function fitTicks(n: number, width: number, labelW: number, max: number):
 export function pastSnapshot(value: QuarterKey, latest: QuarterKey): string | null {
   return value === latest ? null : quarterText(value);
 }
+
+/**
+ * 같은 두 영토 사이 k 번째 선의 알약 자리 — 곡선 위 진행도. 첫 선은 가운데(0.5), 다음은 0.33 · 0.67 · 0.16 …
+ * 로 번갈아 비킨다. 곡선을 더 휘기만 하면 알약 가운데가 11 만 비켜나 늘 겹쳐 둘째 알약이 안 나왔다
+ * (G-10 남은 결함). 0.16 ~ 0.84 안에서 멈춘다
+ */
+export function labelT(k: number): number {
+  if (k <= 0) return 0.5;
+  const step = Math.ceil(k / 2) * 0.17;
+  return Math.min(0.84, Math.max(0.16, 0.5 + (k % 2 === 1 ? -step : step)));
+}
