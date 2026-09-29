@@ -307,10 +307,65 @@ for name, eng, why, want in WHY_CASES:
 # 본문이 있으면 사유를 지어내지 않는다
 check("본문이 있으면 사유 없음", sell.raw.get("못 본 사유", "(없음)"), "(없음)")
 
+# ── 13. 체크한 게시판 훑기(v2.9)도 「글 목록」 꼴로 읽는다 ─
+# `forum_kit.js` 의 `modSweep` 끝에서 글자 그대로 옮겼다. 게시판 머리가 `###` 라
+# 글(`## `)로 안 읽혀야 하고, 「새」 는 번호 목록에만 붙어 TSV 제목에 안 섞인다.
+# 429 로 멈춘 게시판은 0건으로 남고 `못 가져온 것` 에 사유가 붙는다
+SWEEP = """# example-forum.test 글 목록
+
+forum kit v2.9
+출처 : https://example-forum.test/forum-1
+훑기 : 체크한 게시판 4곳 × 1쪽 · 요청 3번 · 24초 · **중간에 멈춤**
+확인 : 2026-09-29
+대상 3건 · 새 1건
+
+### Leaks — 2건 · 새 1건
+https://example-forum.test/forum-1
+1. [새] A new thread
+   https://example-forum.test/showthread.php?tid=2001
+2. An old thread
+   https://example-forum.test/showthread.php?tid=2000
+
+### Databases — 1건 · 첫 훑기라 「새」 표시 없음
+https://example-forum.test/forum-2
+3. Another board thread
+   https://example-forum.test/showthread.php?tid=3000
+
+### Gone — 0건 · 못 가져옴(HTTP 404)
+https://example-forum.test/forum-9
+
+### Busy — 0건 · 못 가져옴(HTTP 429)
+https://example-forum.test/forum-10
+
+---- TSV (게시판 · 제목 · 작성자 · 답글 · 조회 · 날짜 · URL) ----
+Leaks\tA new thread\tTestSeller\t0\t5\t2026-09-29\thttps://example-forum.test/showthread.php?tid=2001
+Leaks\tAn old thread\tTestActor\t3\t80\t2026-09-20\thttps://example-forum.test/showthread.php?tid=2000
+Databases\tAnother board thread\tTestSeller\t1\t12\t2026-09-28\thttps://example-forum.test/showthread.php?tid=3000
+
+## 못 가져온 것
+
+- https://example-forum.test/forum-9 — HTTP 404
+- https://example-forum.test/forum-10 — HTTP 429 레이트리밋 의심. 남은 게시판도 안 부르고 전부 멈춤
+"""
+s_items, s_note = read(SWEEP)
+check("훑기 · 세 줄", len(s_items), 3)
+check("훑기 · 본문 받은 글 없음", s_note["본문 받은 글"], 0)
+check("훑기 · 목록만 받은 글 셋", s_note["목록만 받은 글"], 3)
+check("훑기 · 못 가져온 것 둘", s_note["못 가져온 것"], 2)
+check("훑기 · 마스킹 해당 없음", s_note["마스킹"], None)
+check("훑기 · 게시판 칸", sorted({i.raw["게시판"] for i in s_items}), ["Databases", "Leaks"])
+check("훑기 · 「새」 가 제목에 안 섞인다", sorted(i.title for i in s_items),
+      sorted(["An old thread", "A new thread", "Another board thread"]))
+check("훑기 · 글 번호", sorted(i.src_id for i in s_items),
+      ["example-forum.test/2000", "example-forum.test/2001", "example-forum.test/3000"])
+check("훑기 · 알게 된 곳", s_items[0].via, ["https://example-forum.test/forum-1"])
+for it in s_items:
+    check("훑기 · 안 봄", it.raw["본문"], "안 봄. 목록만 받았다")
+
 # ── 결과 ────────────────────────────────────────
 if fails:
     print("실패 %d" % len(fails))
     for f in fails:
         print("  - %s" % f)
     sys.exit(1)
-print("통과. 시험 12 묶음")
+print("통과. 시험 13 묶음")

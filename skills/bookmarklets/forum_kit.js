@@ -7,6 +7,9 @@
  *   판정 실패      → 구조 진단
  * 결과가 0건이면 진단을 자동으로 붙인다. 그 화면을 그대로 공유하면 된다.
  * 여러 명이 같이 쓰므로 확인자 이름은 박아 두지 않는다. 상자의 「확인자」 칸에 적으면 결과에 들어간다.
+ * v2.9 — 「체크한 게시판 훑기」 (2026-09-29 · 인계 E-2 · H-9). 글 목록 쪽에서 「이 게시판 체크」 를 켜 두면
+ *         단추 하나로 체크한 게시판들의 목록을 차례로 훑는다. 간격 하한 5초 · 게시판 20곳 · 1~3쪽 · 두 곳 잇단
+ *         실패면 멈춤 · 지난 훑기 뒤 처음 본 글에 「새」 · 「체크 목록」 편집기. 목록 쪽 읽는 도구 넷을 modList 밖으로 뺐다.
  * v2.8 — 수집 DB 에 올릴 「칸 값」 을 따로 낸다 (2026-09-23 · 포럼 사건). 결과를 둘로 가른다.
  *         원문(.md)은 사람 PC 에 파일로만 떨군다. 칸 값(제목 · 주소 · 게시자 · 날짜 · 게시판 · 한국 신호)은
  *         대시보드로 넘기거나(호스트) 파일로 저장한다(VM). **본문은 칸 값에 안 들어간다.**
@@ -45,7 +48,7 @@
  * 2026-08-13 다크초코
  */
 (() => {
-  const VER = 'forum kit v2.8';
+  const VER = 'forum kit v2.9';
 /* 같은 페이지에서 다시 눌렀을 때. 버전이 같으면 있던 상자를 다시 보여주고, */
 /* 다르면 옛 상자를 걷어내고 새 코드로 다시 뜬다. 이게 없으면 북마크를 갱신해도 */
 /* 페이지를 새로 열기 전까지 옛 코드가 계속 돌아 갱신이 먹은 줄 모르게 된다 */
@@ -295,12 +298,23 @@
   const bHarv = mkBtn('본문 받기', () => run(() => modList(true)));
   const bPage = mkBtn('이 글 본문', () => run(modPage), KIND === 'page');
   const bDiag = mkBtn('구조 진단', () => run(modDiag), KIND === 'unknown');
+/* 체크한 게시판 훑기 (v2.9). 이름의 곳 수는 목록표시() 가 맞춘다 */
+  const bSweep = mkBtn('체크한 게시판 훑기', () => run(modSweep));
+  bSweep.title = '체크해 둔 게시판들의 글 목록을 차례로 훑는다. 누르면 요청 수와 걸릴 시간을 먼저 묻는다. 본문은 안 연다';
+  const iPages = num('훑기 쪽 수', 1, 2, '체크한 게시판마다 몇 쪽까지 볼지. 1~3');
+  const cBoard = KIND === 'list' ? chk('이 게시판 체크', false,
+    '켜면 이 게시판을 훑기 목록에 넣는다(이 브라우저에만 저장). 끄면 뺀다') : null;
+  if (cBoard) cBoard.__i.onchange = () => 체크바꿈(cBoard.__i.checked);
 /* 이 둘은 실행 중에도 눌려야 하므로 BUSY 가드를 타지 않는다 */
   const plain = (label, fn) => { const b = document.createElement('button'); b.textContent = label;
     b.style.cssText = 'padding:3px 9px;cursor:pointer;font:12px sans-serif;background:#422;color:#fdd;border:1px solid #855';
     b.onclick = fn; return b; };
   const bStop = plain('중단', () => { ABORT = true; say('중단 요청. 현재 건이 끝나면 멈춘다'); });
   const bClose = plain('닫기', () => box.remove());
+/* 체크 목록 편집기 (v2.9). 요청을 안 내므로 BUSY 가드를 안 탄다 */
+  const bBoards = plain('체크 목록', () => 목록편집());
+  bBoards.title = '누르면 결과 상자가 체크 목록 편집기가 된다. 고치고 「목록 저장」. 복사해 두면 Tor 브라우저를 닫은 뒤에도 되살린다';
+  bBoards.style.background = '#332'; bBoards.style.color = '#eec'; bBoards.style.borderColor = '#665';
 
 /* 결과를 내보내는 단추 셋 (v2.8). 요청을 안 내므로 BUSY 가드를 안 탄다.
    **원문은 PC 에 파일로만 떨군다.** 개인정보가 값째로 들어 있을 수 있어 서버로 안 보낸다 */
@@ -321,7 +335,7 @@
   const row3 = document.createElement('div'); row3.style.cssText = 'display:flex;gap:6px;align-items:center;flex-wrap:wrap';
   const note3 = document.createElement('span'); note3.style.cssText = 'color:#888;font:11px sans-serif';
   note3.textContent = '칸 값에는 본문이 안 들어간다. 대시보드에서 미리 보고 사람이 눌러야 노션에 올라간다';
-  row3.append(bSaveMd, bToDash, bSaveRows, note3);
+  row3.append(bBoards, bSaveMd, bToDash, bSaveRows, note3);
 
 /* 끌어서 옮기기. 붙잡는 손잡이를 따로 둔다 */
   const grip = document.createElement('span');
@@ -361,10 +375,12 @@
   bHome.style.background = '#234'; bHome.style.color = '#cde';
   bHome.style.borderColor = '#467';
 
-  row1.append(grip, bTree, bList, bHarv, bPage, bDiag, st, bStop, bMin);
+  row1.append(grip, bTree, bList, bHarv, bPage, bDiag);
+  if (cBoard) row1.append(cBoard);
+  row1.append(bSweep, st, bStop, bMin);
   if (window.__DKHOME) row1.append(bHome);
   row1.append(bClose);
-  row2.append(iN, iSort, iDelay, iWho, cMask, cScope, cSubs, cReplies);
+  row2.append(iN, iSort, iDelay, iWho, cMask, cScope, cSubs, cReplies, iPages);
   box.append(row1, row2, row3, ta);
 
   const run = async fn => {
@@ -605,38 +621,31 @@
     return { posts, 쪽수, 시작, 잘림, 막힘, fails };
   };
 
-  const modList = async withBodies => {
-    const t0 = Date.now();
-    const seen = new Set(), targets = [];
+  /* ===== 목록 쪽을 읽는 도구. 「글 목록」 과 「체크한 게시판 훑기」(v2.9) 가 같이 쓴다 =====
+     2026-09-29. 전에는 modList 안에 있었다. 훑기가 같은 규칙으로 읽어야 해서 밖으로 뺐다. 글자는 그대로다 */
 /* 목록 행에서 작성자·답글·조회·날짜를 같이 뽑는다. 본문을 안 열고도 셀 수 있게 하려는 것 */
-    const rowOf = a => { let e = a;
-      for (let i = 0; i < 8 && e.parentElement; i++) { e = e.parentElement;
-        if (/^(tr|li)$/i.test(e.tagName) || /structItem|inline_row|threadbit/i.test(e.className || '')) return e; }
-      return null; };
-    const metaOf = a => {
-      const r = rowOf(a); if (!r) return {};
-      const au = [...r.querySelectorAll('a[href]')]
-        .find(x => /\/User-|member\.php\?action=profile|\/members\/|finduser/i.test(x.href || ''));
-      const t = C(r.innerText || r.textContent);
+  const rowOf = a => { let e = a;
+    for (let i = 0; i < 8 && e.parentElement; i++) { e = e.parentElement;
+      if (/^(tr|li)$/i.test(e.tagName) || /structItem|inline_row|threadbit/i.test(e.className || '')) return e; }
+    return null; };
+  const metaOf = a => {
+    const r = rowOf(a); if (!r) return {};
+    const au = [...r.querySelectorAll('a[href]')]
+      .find(x => /\/User-|member\.php\?action=profile|\/members\/|finduser/i.test(x.href || ''));
+    const t = C(r.innerText || r.textContent);
 /* 숫자 칸을 훑는다. 표면 열, 아니면 행 전체에서 천단위 숫자를 줍는다 */
-      let nums = [...r.children].map(c => N(C(c.textContent))).filter(v => v != null);
-      if (nums.length < 2) nums = (t.match(/\b\d{1,3}(?:,\d{3})*\b/g) || []).map(N).filter(v => v != null);
-      const dm = t.match(/(Today|Yesterday|\d{4}-\d{2}-\d{2}|[A-Z][a-z]{2}\s\d{1,2},\s\d{4})/);
-      return { author: au ? C(au.textContent) : '', replies: nums[0] ?? null, views: nums[1] ?? null, date: dm ? dm[1] : '' };
-    };
+    let nums = [...r.children].map(c => N(C(c.textContent))).filter(v => v != null);
+    if (nums.length < 2) nums = (t.match(/\b\d{1,3}(?:,\d{3})*\b/g) || []).map(N).filter(v => v != null);
+    const dm = t.match(/(Today|Yesterday|\d{4}-\d{2}-\d{2}|[A-Z][a-z]{2}\s\d{1,2},\s\d{4})/);
+    return { author: au ? C(au.textContent) : '', replies: nums[0] ?? null, views: nums[1] ?? null, date: dm ? dm[1] : '' };
+  };
 /* 쿼리로 글을 가리키는 주소가 있다. showthread.php?tid=194121 에서 ?tid= 를 떼면 글이 사라진다. */
 /* 중복 판정에만 쓰는 열쇠와 실제로 받아올 주소를 갈라 놓는다 */
-    const idKey = u => {
-      const m = u.match(/[?&](tid|aid|pid)=(\d+)/i);
-      return m ? u.split('?')[0].toLowerCase() + '#' + m[1].toLowerCase() + m[2]
-               : u.split('#')[0].split('?')[0].replace(/\/$/, '').toLowerCase();
-    };
-    const grab = (doc, tag, base) => { for (const a of doc.querySelectorAll('a[href]')) {
-      if (!isThread(a)) continue;
-      let abs; try { abs = new URL(a.getAttribute('href'), base || location.href).href.split('#')[0]; } catch (e) { continue; }
-      const k = idKey(abs); if (seen.has(k)) continue;
-      seen.add(k); targets.push(Object.assign({ url: abs, title: (tag ? `[${tag}] ` : '') + C(a.textContent), tag: tag || '' }, metaOf(a)));
-    } };
+  const idKey = u => {
+    const m = u.match(/[?&](tid|aid|pid)=(\d+)/i);
+    return m ? u.split('?')[0].toLowerCase() + '#' + m[1].toLowerCase() + m[2]
+             : u.split('#')[0].split('?')[0].replace(/\/$/, '').toLowerCase();
+  };
 /* 목록 주소 만들기. 정렬을 고르면 그 순서로 다시 받는다 */
 /* 2026-09-07. 물음표 뒤를 통째로 버리고 있었다. 게시판 주소가 `/Forum-이름` 꼴이면 버릴 것이
    없어 멀쩡했는데, 검색 결과(`search.php?action=results&sid=…`)와 사용자 글 찾기
@@ -644,25 +653,34 @@
    그것을 버리니 2쪽 요청이 검색 폼을 받아 왔고, 글이 0건이라 「더 안 늘면 끝」에 걸려
    1쪽에서 멈췄다. 200 으로 오니 실패로도 안 남아 「글 없는 게시판」과 구별되지 않았다.
    이제 있던 조건은 그대로 두고 page 만 갈아 끼운다. */
-    const listUrl = (base, pg, sort) => {
-      const xf = base.includes('/forums/');
-      const hash = base.indexOf('#');
-      const noHash = hash < 0 ? base : base.slice(0, hash);
-      const qmark = noHash.indexOf('?');
-      let u = (qmark < 0 ? noHash : noHash.slice(0, qmark)).replace(/\/$/, '');
-      /* 원래 있던 조건을 살린다. page 와 정렬 칸만 우리가 다시 정한다 */
-      const drop = /^(page|sortby|order|direction|datecut|prefix)$/i;
-      const q = qmark < 0 ? [] : noHash.slice(qmark + 1).split('&')
-        .filter(s => s && !drop.test(s.split('=')[0]));
-      if (sort) {
-        if (xf) q.push('order=' + (sort === 'views' ? 'view_count' : sort === 'replies' ? 'reply_count' : 'last_post_date'), 'direction=desc');
-        else q.push('datecut=9999', 'prefix=0', 'sortby=' + sort, 'order=desc');
-      }
-      /* XenForo 는 쪽이 경로에 붙는다. 이어 받기로 /page-3 에서 시작하면 /page-3/page-4 가 되므로 먼저 뗀다 */
-      if (xf) u = u.replace(/\/page-\d+$/i, '');
-      if (pg > 1) { if (xf) u += '/page-' + pg; else q.push('page=' + pg); }
-      return u + (q.length ? '?' + q.join('&') : '');
-    };
+  const listUrl = (base, pg, sort) => {
+    const xf = base.includes('/forums/');
+    const hash = base.indexOf('#');
+    const noHash = hash < 0 ? base : base.slice(0, hash);
+    const qmark = noHash.indexOf('?');
+    let u = (qmark < 0 ? noHash : noHash.slice(0, qmark)).replace(/\/$/, '');
+    /* 원래 있던 조건을 살린다. page 와 정렬 칸만 우리가 다시 정한다 */
+    const drop = /^(page|sortby|order|direction|datecut|prefix)$/i;
+    const q = qmark < 0 ? [] : noHash.slice(qmark + 1).split('&')
+      .filter(s => s && !drop.test(s.split('=')[0]));
+    if (sort) {
+      if (xf) q.push('order=' + (sort === 'views' ? 'view_count' : sort === 'replies' ? 'reply_count' : 'last_post_date'), 'direction=desc');
+      else q.push('datecut=9999', 'prefix=0', 'sortby=' + sort, 'order=desc');
+    }
+    /* XenForo 는 쪽이 경로에 붙는다. 이어 받기로 /page-3 에서 시작하면 /page-3/page-4 가 되므로 먼저 뗀다 */
+    if (xf) u = u.replace(/\/page-\d+$/i, '');
+    if (pg > 1) { if (xf) u += '/page-' + pg; else q.push('page=' + pg); }
+    return u + (q.length ? '?' + q.join('&') : '');
+  };
+  const modList = async withBodies => {
+    const t0 = Date.now();
+    const seen = new Set(), targets = [];
+    const grab = (doc, tag, base) => { for (const a of doc.querySelectorAll('a[href]')) {
+      if (!isThread(a)) continue;
+      let abs; try { abs = new URL(a.getAttribute('href'), base || location.href).href.split('#')[0]; } catch (e) { continue; }
+      const k = idKey(abs); if (seen.has(k)) continue;
+      seen.add(k); targets.push(Object.assign({ url: abs, title: (tag ? `[${tag}] ` : '') + C(a.textContent), tag: tag || '' }, metaOf(a)));
+    } };
 /* threadUrl 과 쪽번호 는 밖으로 뺐다. 「이 글 본문」이 같이 쓴다 */
 /* 한 게시판에서 할당된 건수가 찰 때까지 쪽을 넘긴다. 새 글이 안 늘면 마지막 쪽으로 보고 멈춘다 */
     const crawl = async (base, tag, live, quota) => {
@@ -900,6 +918,182 @@
                      + ` · ${Math.round((Date.now() - t0) / 1000)}초` };
   };
 
+  /* ================= 2-1. 체크한 게시판 훑기 (v2.9 · 2026-09-29) =================
+     미리 체크해 둔 게시판들의 글 목록을 단추 하나로 차례로 훑는다. **자동 감시가 아니다.** 사람의 브라우저와
+     로그인 상태로 돌고, 글 본문은 안 연다. 최현서가 고른 다섯 가지(인계 E-2 · H-9)대로다.
+
+       간격     하한 5초, 기본 5~10초. 입력칸이 더 크면 입력칸
+       멈춤     429 · 503 · 챌린지면 그 자리에서 전부. 그 밖의 실패(403 · 404 · 네트워크 · 1쪽 0건)는 그 게시판만
+                건너뛰고, **두 곳이 잇달아 실패하면 전부** (로그인이 풀렸을 가능성)
+       상한     게시판 20곳, 쪽 수 1~3 (기본 1)
+       새 글    지난 훑기 뒤로 처음 본 글에 「새」. 게시판마다 **글 주소의 해시만** 200개까지 둔다. 제목은 안 둔다
+       목록     「체크 목록」 을 누르면 결과 상자가 편집기가 된다(지우기 · 붙여 넣기 · Tor 복구)
+
+     저장은 이 브라우저의 localStorage(이 호스트)뿐이다. 레포 · 킷 코드 · 서버로 안 간다. **포럼 쪽 스크립트도
+     같은 저장소를 읽을 수 있다** — 들어가는 것은 이 포럼의 게시판 주소와 해시뿐이다. Tor 브라우저는 창을 닫으면 지운다.
+     결과 꼴은 「글 목록」 과 똑같다(kit_in.py 가 읽는다). 게시판 머리는 `###`, 「새」 는 번호 목록에만 붙인다 */
+  const 목록열쇠 = 'dcfk.boards', 본열쇠 = 'dcfk.seen';
+  const 훑기상한 = 20, 훑기쪽상한 = 3, 본상한 = 200, 훑기하한 = 5000;
+  const 읽기 = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); return v == null ? d : v; } catch (e) { return d; } };
+  const 적기 = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } };
+/* 쪽 · 정렬 · 해시를 떼어 게시판 하나를 가리키는 주소로. 목록 주소 만들기와 같은 규칙이다 */
+  const 게시판주소 = u => listUrl(u, 1, '');
+  const 게시판들 = () => (읽기(목록열쇠, []) || [])
+    .filter(b => b && typeof b.주소 === 'string' && b.주소 && !위험링크.test(b.주소));
+  const 이게시판 = () => 게시판주소(location.href);
+  const 게시판이름 = () => C((document.querySelector('.p-title-value, .thead strong, h1') || {}).textContent) || C(document.title) || location.pathname;
+/* 글 주소를 짧은 해시로(FNV-1a 32비트). MyBB SEO 주소는 번호 없이 제목이 들어 있어서, 주소를 그대로 두면 제목이 남는다 */
+  const 해시 = s => { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16); };
+  const 훑기간격 = () => {
+    const v = (iDelay.__i.value || '').trim();
+    const r = v.match(/([\d.]+)\s*[~\-]\s*([\d.]+)/);
+    const one = !r && v.match(/^([\d.]+)$/);
+    const a = (r ? parseFloat(r[1]) : one ? parseFloat(one[1]) : 0) * 1000 || 0;
+    const b = (r ? parseFloat(r[2]) : one ? parseFloat(one[1]) : 0) * 1000 || 0;
+    const lo = Math.max(훑기하한, a);
+    return { lo, hi: Math.max(lo, 10000, b) };
+  };
+  const 훑기쉬기 = () => { const { lo, hi } = 훑기간격(); return sleep(lo + Math.random() * (hi - lo)); };
+
+  const modSweep = async () => {
+    const t0 = Date.now();
+    const 모두 = 게시판들();
+    if (!모두.length) return { md: '체크한 게시판이 없다. 글 목록 쪽에서 「이 게시판 체크」 를 켜거나 「체크 목록」 에 붙여 넣을 것\n',
+                              status: '체크한 게시판 0곳' };
+    const 볼것 = 모두.slice(0, 훑기상한);
+    const P = Math.min(훑기쪽상한, Math.max(1, N(iPages.__i.value) || 1));
+    const 지금 = 이게시판();
+    const 요청수 = 볼것.length * P - (볼것.some(b => b.주소 === 지금) ? 1 : 0);
+    const { lo, hi } = 훑기간격();
+    const 분 = Math.max(1, Math.round(요청수 * (lo + hi) / 2 / 60000));
+    if (!confirm(`게시판 ${볼것.length}곳을 ${P}쪽씩 훑는다.\n요청 ${요청수}번 · 간격 ${lo / 1000}~${hi / 1000}초 · ${분}분쯤 걸린다.\n`
+        + '글 본문은 안 연다. 시작할까?')) return { md: ta.value, status: '훑기를 안 했다' };
+    const 본것 = 읽기(본열쇠, {}) || {};
+    const 묶음 = [];
+    let 잇단실패 = 0, 요청 = 0, 합 = 0;
+    for (const b of 볼것) {
+      if (ABORT) break;
+      const 본 = new Set(), 글 = [];
+      let 실패 = '';
+      for (let pg = 1; pg <= P && !ABORT; pg++) {
+        const before = 글.length;
+        const u = listUrl(b.주소, pg, '');
+        let doc = null, base = u;
+        if (pg === 1 && b.주소 === 지금) { doc = document; base = location.href; }  /* 보고 있는 게시판 1쪽은 요청 없이 */
+        else {
+          if (위험링크.test(u)) { 실패 = '위험 링크라 안 부름'; FAILED.push(`${u} — ${실패}`); break; }
+          await 훑기쉬기();
+          if (ABORT) break;
+          try {
+            요청++;
+            const r = await fetch(u, { credentials: 'same-origin' });
+            if (r.status === 429 || r.status === 503) {
+              실패 = `HTTP ${r.status}`;
+              FAILED.push(`${u} — HTTP ${r.status} 레이트리밋 의심. 남은 게시판도 안 부르고 전부 멈춤`); ABORT = true; break;
+            }
+            if (!r.ok) { 실패 = `HTTP ${r.status}`; FAILED.push(`${u} — ${실패}`); break; }
+            const txt = await r.text();
+            if (CHL.test(txt.slice(0, 6000))) { 실패 = '챌린지'; FAILED.push(`${u} — 챌린지 화면. 전부 멈춤`); ABORT = true; break; }
+            doc = new DOMParser().parseFromString(txt, 'text/html');
+          } catch (e) { 실패 = (e && e.message) || '요청 실패'; FAILED.push(`${u} — ${실패}`); break; }
+        }
+        pickScope(doc).els.forEach(el => { for (const a of el.querySelectorAll('a[href]')) {
+          if (!isThread(a)) continue;
+          let abs; try { abs = new URL(a.getAttribute('href'), base).href.split('#')[0]; } catch (e) { continue; }
+          const k = idKey(abs); if (본.has(k)) continue;
+          본.add(k); 글.push(Object.assign({ url: abs, title: C(a.textContent), 열쇠: 해시(k) }, metaOf(a)));
+        } });
+        const got = 글.length - before;
+        say(`훑는 중 · ${b.이름} ${pg}쪽 · 새로 ${got}건 · 누적 ${합 + 글.length}건 · 요청 ${요청}번`);
+        if (pg === 1 && got === 0) { 실패 = '0건 — 로그인이나 권한 확인'; FAILED.push(`${b.주소} — 1쪽이 0건. 로그인이나 권한 확인`); break; }
+        if (pg > 1 && got === 0) break;       /* 더 안 늘면 마지막 쪽 */
+      }
+      const 옛 = 본것[b.주소];
+      const 첫훑기 = !Array.isArray(옛);
+      const 옛셋 = new Set(옛 || []);
+      글.forEach(t => { t.새 = !첫훑기 && !옛셋.has(t.열쇠); });
+      묶음.push({ b, 글, 실패, 첫훑기 });
+      합 += 글.length;
+      if (!실패 && !ABORT && 글.length) 본것[b.주소] = [...new Set([...글.map(t => t.열쇠), ...(옛 || [])])].slice(0, 본상한);
+      if (ABORT) break;
+      if (실패) { if (++잇단실패 >= 2) { FAILED.push('게시판 두 곳이 잇달아 실패했다. 로그인이 풀렸을 수 있어 남은 게시판을 안 부르고 멈춤'); ABORT = true; break; } }
+      else 잇단실패 = 0;
+    }
+    const 저장됨 = 적기(본열쇠, 본것);
+    const 새합 = 묶음.reduce((n, x) => n + x.글.filter(t => t.새).length, 0);
+    let md = `# ${location.hostname} 글 목록\n\n${VER}\n출처 : ${location.href}\n`
+      + `훑기 : 체크한 게시판 ${볼것.length}곳 × ${P}쪽 · 요청 ${요청}번 · ${Math.round((Date.now() - t0) / 1000)}초`
+      + (ABORT ? ' · **중간에 멈춤**' : '') + `\n확인 : ${stamp()}\n대상 ${합}건 · 새 ${새합}건\n`;
+    if (모두.length > 훑기상한) md += `\n체크한 게시판 ${모두.length}곳 중 앞 ${훑기상한}곳만 훑었다(상한).\n`;
+    if (!저장됨) md += `\n본 글 기록을 이 브라우저에 못 남겼다(저장소가 막혀 있다). 다음 훑기에 「새」 표시가 안 맞는다.\n`;
+    let i = 0;
+    for (const { b, 글, 실패, 첫훑기 } of 묶음) {
+      md += `\n### ${b.이름} — ${글.length}건`
+        + (실패 ? ` · 못 가져옴(${실패})` : 첫훑기 ? ' · 첫 훑기라 「새」 표시 없음' : ` · 새 ${글.filter(t => t.새).length}건`) + `\n${b.주소}\n`;
+      md += 글.map(t => `${++i}. ${t.새 ? '[새] ' : ''}${t.title}\n   ${t.url}`).join('\n') + (글.length ? '\n' : '');
+    }
+    const 안본 = 볼것.length - 묶음.length;
+    if (안본 > 0) md += `\n멈춰서 안 본 게시판 ${안본}곳 : ${볼것.slice(묶음.length).map(b => b.이름).join(' · ')}\n`;
+    md += `\n---- TSV (게시판 · 제목 · 작성자 · 답글 · 조회 · 날짜 · URL) ----\n`;
+    md += 묶음.flatMap(({ b, 글 }) => 글.map(t => [b.이름, t.title || '', t.author || '', t.replies ?? '', t.views ?? '',
+      t.date || '', t.url].join('\t'))).join('\n') + '\n';
+    if (FAILED.length) md += '\n## 못 가져온 것\n\n' + FAILED.map(f => '- ' + f).join('\n') + '\n';
+/* 칸 값. 목록만 훑었으므로 본문은 「안 봄」 이고 게시판 칸에 게시판 이름을 둔다 */
+    묶음.forEach(({ b, 글 }) => 글.forEach(t => 칸줄(t.title, t.url, t.author, t.date, b.이름, '', '안 봄')));
+    return { md, empty: !합 && !FAILED.length,
+             status: `훑기 · 게시판 ${묶음.length}/${볼것.length}곳 · 글 ${합}건 · 새 ${새합}건 · 요청 ${요청}번`
+                     + (ABORT ? ' · 중간에 멈춤(아래 「못 가져온 것」)' : '') };
+  };
+
+/* 체크 목록 편집기. 결과 상자를 편집기로 쓰고 단추가 「목록 저장」 으로 바뀐다 */
+  let 편집중 = false;
+  const 목록머리 = '# 체크 목록 — 한 줄에 게시판 하나. 「이름 ⇥ 주소」 나 주소만. # 로 시작하는 줄은 안 읽는다.\n'
+    + `# 이 호스트(${location.host}) 주소만 받는다. 위험 링크는 버린다. 최대 ${훑기상한}곳\n`;
+  const 목록편집 = () => {
+    if (!편집중) {
+      편집중 = true; bBoards.textContent = '목록 저장';
+      put(목록머리 + 게시판들().map(b => `${b.이름}\t${b.주소}`).join('\n') + '\n');
+      say('체크 목록을 고치고 「목록 저장」 을 누를 것. 복사해 두면 Tor 브라우저를 닫은 뒤에도 되살릴 수 있다');
+      return;
+    }
+    const 옛 = Object.fromEntries(게시판들().map(b => [b.주소, b]));
+    const 새목록 = [], 버림 = [];
+    for (const 줄 of ta.value.split('\n')) {
+      const s = 줄.trim(); if (!s || s.startsWith('#')) continue;
+      const 칸들 = s.split('\t');
+      const 주소글 = (칸들.length > 1 ? 칸들[칸들.length - 1] : 칸들[0]).trim();
+      let u; try { u = new URL(주소글, location.href); } catch (e) { 버림.push(s); continue; }
+      if (u.host !== location.host || 위험링크.test(u.href)) { 버림.push(s); continue; }
+      const 주소 = 게시판주소(u.href);
+      if (새목록.some(b => b.주소 === 주소)) continue;
+      if (새목록.length >= 훑기상한) { 버림.push(s); continue; }
+      const 이름 = 칸들.length > 1 ? C(칸들.slice(0, -1).join(' ')) : (옛[주소] ? 옛[주소].이름 : u.pathname);
+      새목록.push({ 이름: 이름 || u.pathname, 주소, 체크한날: 옛[주소] ? 옛[주소].체크한날 : TODAY });
+    }
+    const 됨 = 적기(목록열쇠, 새목록);
+    편집중 = false; bBoards.textContent = '체크 목록'; 목록표시();
+    say(됨 ? `체크 목록 ${새목록.length}곳을 저장했다` + (버림.length ? ` · 버린 줄 ${버림.length}개(다른 호스트 · 위험 링크 · 상한)` : '')
+          : '저장하지 못했다. 이 브라우저가 저장소를 막고 있다');
+  };
+/* 단추 이름과 체크 칸을 지금 목록에 맞춘다 */
+  const 목록표시 = () => {
+    const n = 게시판들().length;
+    bSweep.textContent = `체크한 게시판 훑기 · ${n}곳`;
+    bSweep.style.opacity = n ? '1' : '.5';
+    if (cBoard) cBoard.__i.checked = 게시판들().some(b => b.주소 === 이게시판());
+  };
+  const 체크바꿈 = on => {
+    const 목록 = 게시판들().filter(b => b.주소 !== 이게시판());
+    if (on) {
+      if (위험링크.test(location.href)) { say('이 주소는 위험 링크 꼴이라 체크하지 않는다'); 목록표시(); return; }
+      if (목록.length >= 훑기상한) { say(`체크는 ${훑기상한}곳까지다. 「체크 목록」 에서 지우고 다시 켤 것`); 목록표시(); return; }
+      목록.push({ 이름: 게시판이름(), 주소: 이게시판(), 체크한날: TODAY });
+    }
+    say(적기(목록열쇠, 목록) ? (on ? `이 게시판을 체크했다 · 모두 ${목록.length}곳` : `체크를 풀었다 · 남은 ${목록.length}곳`)
+                          : '저장하지 못했다. 이 브라우저가 저장소를 막고 있다');
+    목록표시();
+  };
+
   /* ===== 체크·엑스·무한 기호는 아이콘이라 텍스트로 안 나온다. 잠깐 글자로 바꿔 놓고 읽는다 ===== */
   const ICON_SEL = 'i,svg,img,span[class*="fa-"],span[class*="icon"]';
   const symOf = el => {
@@ -1096,6 +1290,7 @@
 
   /* ================= 시작 ================= */
   document.body.appendChild(box);
+  목록표시();       /* 훑기 단추의 곳 수와 체크 칸을 저장된 목록에 맞춘다 (v2.9) */
   window.__FK = { ver: VER, open: () => { if (!document.body.contains(box)) document.body.appendChild(box); }, destroy: () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); box.remove(); } };
   say(`${VER} · ${KNAME[KIND]}으로 판정 · 게시판 ${uF} · 스레드 ${uT} · 본문 ${nBody}`);
   ta.value = '실행 중';
