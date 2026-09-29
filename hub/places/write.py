@@ -150,12 +150,18 @@ class 명부:
         return out
 
     # ── 쓰기 ────────────────────────────────────────────────────────
-    def 반영(self, 줄: 줄, p: Place, *, apply: bool = False) -> 반영결과:
+    def 반영(self, 줄: 줄, p: Place, *, apply: bool = False,
+            칸만: set | frozenset | None = None) -> 반영결과:
+        """`칸만` 을 주면 그 칸만 씁니다 (2026-09-29, 깊은 판만 따로 돌 때 — deep.py).
+        그때는 바뀔 것이 없으면 노션을 아예 안 부릅니다. 안 주면 예전과 같습니다."""
         r = 반영결과(이름=줄.이름 or p.이름)
-        if 줄.현재.get("상태") in 사람판정_상태 and p.상태 in ("online", "offline"):
+        if (칸만 is None and 줄.현재.get("상태") in 사람판정_상태
+                and p.상태 in ("online", "offline")):
             r.사람판정 = (f"사람이 「{줄.현재['상태']}」 으로 판정한 줄입니다. "
                       f"기계는 {p.상태} 로 봤지만 상태를 안 건드립니다")
         값 = p.노션값(줄.현재 or 줄.규모)
+        if 칸만 is not None:
+            값 = {k: v for k, v in 값.items() if k in 칸만}
         if not 값:
             r.안바뀜 = True
             return r
@@ -256,6 +262,9 @@ class 명부:
             r.안바뀜 = True
             return r
         r.바뀐칸 = 달라진것
+        if 칸만 is not None and not 달라진것:
+            r.안바뀜 = True
+            return r
 
         if not apply:
             return r
