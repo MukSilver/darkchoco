@@ -381,13 +381,64 @@ function _KST날(v) {
   return new Date(t + 9 * 3600 * 1000).toISOString().slice(0, 10);
 }
 
-const 접개 = { 사람자동: _사람자동, 있없: _있없, 첫줄: _첫줄, KST날: _KST날 };
+/** 줄글에서 LEAK 번호만 뽑습니다(사고 DB 메모). reader.py 의 _LEAK뽑기 와 같습니다. 추정이라 화면이 그렇게 적습니다 */
+function _LEAK뽑기(v) {
+  const s = typeof v === "string" ? v : "";
+  const 수들 = new Set([...s.matchAll(/LEAK-?(\d+)/gi)].map((m) => Number(m[1])));
+  return [...수들].sort((a, b) => a - b).map((n) => `LEAK-${n}`);
+}
 
-/** 노션 페이지 하나를 `dbs.json` 이 적은 대로 옮깁니다. */
-function 줄(페이지, 칸들) {
+/** 수집이 행위자 DB 에 자동으로 만든 줄의 비고 표지. hub/events/actor.py 의 표지와 같습니다 */
+const 자동표지말 = "수집 DB 게시자 핸들에서";
+
+function _자동표지(v) {
+  return typeof v === "string" && v.includes(자동표지말) ? "자동 수집" : "검증 스킬 · 사람";
+}
+
+/** 서술 칸에서 주소 · 도메인 · 이메일 꼴을 「(주소)」 로 바꾸고 앞 120자만. `\b` 를 안 씁니다(파이썬과 한글 경계가 다름) */
+const _주소꼴 = [
+  /https?:\/\/[^\s,·)]+/gi,
+  /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,
+  /(?<![A-Za-z0-9-])(?:[A-Za-z0-9-]+\.)+(?:onion|[A-Za-z]{2,})(?![A-Za-z0-9-])/g,
+];
+
+function _주소뗌(v) {
+  let s = typeof v === "string" ? v : "";
+  for (const 꼴 of _주소꼴) s = s.replace(꼴, "(주소)");
+  // 파이썬은 앞뒤 공백을 떼고 자릅니다. 코드 단위로 자르는 JS 와 글자 수가 같게 Array.from 으로 셉니다
+  return Array.from(s.replace(/\n/g, " ").trim()).slice(0, 120).join("");
+}
+
+const 접개 = {
+  사람자동: _사람자동, 있없: _있없, 첫줄: _첫줄, KST날: _KST날,
+  LEAK뽑기: _LEAK뽑기, 자동표지: _자동표지, 주소뗌: _주소뗌,
+};
+
+function _id열쇠(s) {
+  return String(s || "").replace(/-/g, "").toLowerCase();
+}
+
+/**
+ * 노션 페이지 하나를 `dbs.json` 이 적은 대로 옮깁니다. reader.py 의 `줄()` 과 같습니다.
+ * `@` 로 시작하는 칸은 페이지 자체의 값(@created_time)이고, `잇기` 칸은 `이음` 이 있으면 relation 을
+ * 레지스트리 DB 의 번호로 바꿉니다. page id 는 안 냅니다.
+ */
+function 줄(페이지, 칸들, 이음) {
   const p = 페이지.properties || {};
   const out = { id: 페이지.id || "" };
   for (const c of 칸들) {
+    if (c.노션.startsWith("@")) {
+      out[c.낼] = 페이지[c.노션.slice(1)] || "";
+      continue;
+    }
+    if (c.잇기 && 이음) {
+      const 표 = 이음[c.잇기] || {};
+      const ids = ((p[c.노션] || {}).relation || []).map((x) => x.id || "");
+      const 번호들 = ids.filter((i) => _id열쇠(i) in 표).map((i) => 표[_id열쇠(i)]);
+      out[c.낼] = 번호들;
+      out[c.낼 + "밖"] = ids.length - 번호들.length;
+      continue;
+    }
     let v = 값(p[c.노션]);
     if (c.접기) {
       const f = 접개[c.접기];
@@ -465,8 +516,82 @@ function 명부셈(페이지들, 칸, 오늘) {
   return out;
 }
 
-/** 한 번에 읽을 판 수. 100줄씩이라 2000줄입니다. */
-const 판상한 = 20;
+// ── ㉮ 2단계: 검증 · 사고 · 행위자 (2026-09-29). reader.py 의 둘째단 과 같습니다 ──
+const 공식확인 = new Set(["조직 공식 발표", "규제기관 확정", "언론 보도"]);
+
+/** 대소문자 · 공백 · 기호 · 0/o 를 견디는 열쇠. actor.py 의 키() 와 같습니다 */
+function 핸들키(s) {
+  return (typeof s === "string" ? s : "").toLowerCase().replace(/[^a-z0-9가-힣]/g, "").replace(/0/g, "o");
+}
+
+function _번호수(s) {
+  const m = /(\d+)$/.exec(typeof s === "string" ? s : "");
+  return m ? Number(m[1]) : 0;
+}
+
+/** {수집: {page id 열쇠: LEAK 번호}}. 검증 DB 의 「수집 줄」 을 번호로 바꾸는 데 씁니다 */
+function 이음표(수집줄들) {
+  const 표 = {};
+  for (const x of 수집줄들) if (x.번호) 표[_id열쇠(x.id)] = x.번호;
+  return { 수집: 표 };
+}
+
+/** 만든 때 최신순. 같으면 id 로 — 파이썬 sorted(key=(만든때, id), reverse=True) 와 같습니다 */
+function _최신순(줄들) {
+  const 열쇠 = (x) => [x.만든때 || "", x.id || ""];
+  return [...줄들].sort((a, b) => {
+    const [a1, a2] = 열쇠(a), [b1, b2] = 열쇠(b);
+    return a1 < b1 ? 1 : a1 > b1 ? -1 : a2 < b2 ? 1 : a2 > b2 ? -1 : 0;
+  });
+}
+
+/** 세 DB 의 줄을 수집 줄과 잇습니다. 노션을 안 부르는 순수 함수입니다 */
+function 둘째단(수집줄들, 검증줄들, 사고줄들, 행위자줄들) {
+  const 번호로 = {};
+  for (const x of 수집줄들) if (x.번호) 번호로[x.번호] = x;
+  const 핸들로 = {};
+  for (const x of 수집줄들) {
+    const k = 핸들키(x.핸들);
+    if (k && x.번호) {
+      const 날 = x.게시날 || x.발견날 || x.수집일 || x.게시 || "9999";
+      (핸들로[k] = 핸들로[k] || []).push([날, _번호수(x.번호), x.번호]);
+    }
+  }
+  const 차례 = (a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] - b[1] || (a[2] < b[2] ? -1 : a[2] > b[2] ? 1 : 0));
+
+  const 검증 = 검증줄들.map((x) => {
+    const 사건 = Array.isArray(x.사건) ? x.사건 : [];
+    const 첫 = (사건.length && 번호로[사건[0]]) || {};
+    return { ...x, 수집검토: 첫.검토 || "", 수집상태: 첫.상태 || "" };
+  });
+  const 사고 = 사고줄들.map((x) => ({ ...x, 갈래: 공식확인.has(x.외부확인) ? "공식" : "주장 기록" }));
+  const 행위자 = 행위자줄들.map((x) => {
+    const 맞은것 = [...(핸들로[핸들키(x.핸들)] || [])].sort(차례);
+    return { ...x, 첫사건: 맞은것.length ? 맞은것[0][2] : "", 사건수: 맞은것.length };
+  });
+  const 셈 = {
+    검증: { 줄: 검증.length },
+    사고: {
+      발표: 사고.length,
+      공식: 사고.filter((x) => x.갈래 === "공식").length,
+      "주장 기록": 사고.filter((x) => x.갈래 === "주장 기록").length,
+    },
+    행위자: {
+      줄: 행위자.length,
+      "자동 수집": 행위자.filter((x) => x.들어온길 === "자동 수집").length,
+      "검증 스킬 · 사람": 행위자.filter((x) => x.들어온길 !== "자동 수집").length,
+    },
+  };
+  return { 검증: _최신순(검증), 사고: _최신순(사고), 행위자: _최신순(행위자), 셈 };
+}
+
+/** 한 번에 읽을 판 수. 100줄씩이라 1600줄입니다.
+ * (이 첫 줄의 꼴을 바꾸지 마십시오. 시험이 여기를 「노션 읽기」 구역의 끝으로 찾습니다)
+ * **요청 한 번에 노션을 부를 수 있는 수(무료 요금제 50)를 나눠 씁니다** (2026-09-29):
+ * 수집 16 + 게시처 8 × 3 + 2단계(검증 2 · 사고 4 · 행위자 2) = 48 ≤ 50. 전에는 수집이 20 이었습니다.
+ * 수집 DB 는 9/29 에 275줄이라 여유가 크고, 넘으면 화면이 「잘렸다」 고 알립니다.
+ */
+const 판상한 = 16;
 
 /**
  * 노션 수집 DB 를 줄 목록으로. **본문과 개인정보 값은 안 담습니다.**
@@ -510,7 +635,7 @@ async function 사건읽기(token) {
   return { 줄들: out, 잘림 };
 }
 
-/** 게시처 DB 한 갈래에서 읽을 판 수. 판상한 20 + 8 × 3 갈래 = 44 ≤ 무료 요금제 50 */
+/** 게시처 DB 한 갈래에서 읽을 판 수. 판상한 16 + 8 × 3 갈래 + 2단계 8 = 48 ≤ 무료 요금제 50 */
 const 명부판상한 = 8;
 
 /**
@@ -552,6 +677,47 @@ async function 명부읽기(token, 오늘) {
 }
 
 /**
+ * ㉮ 2단계 — 검증 · 사고 · 행위자 DB 를 `dbs.json` 이 적은 칸만 읽어 수집 줄과 잇습니다 (2026-09-29).
+ * `apps/dash/build.py` 의 `둘째단()` 과 같습니다. 판 수는 dbs.json 의 `판상한` 을 따르고, 다 못 읽은
+ * DB 는 `잘림` 에 적어 화면이 알립니다.
+ */
+async function 둘째단읽기(token, 수집줄들) {
+  const 이음 = 이음표(수집줄들);
+  const 줄들 = {};
+  const 잘림 = {};
+  for (const 열쇠 of ["검증", "사고", "행위자"]) {
+    const db = DB하나(열쇠);
+    const 상한 = db.판상한 || 1;
+    const out = [];
+    let cursor = null;
+    for (let i = 0; i < 상한; i++) {
+      const body = { page_size: 100 };
+      if (cursor) body.start_cursor = cursor;
+      const r = await fetch(`https://api.notion.com/v1/data_sources/${db.id}/query`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Notion-Version": 노션판,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) {
+        const 몸 = await r.text();
+        throw new Error(`노션 ${r.status}: ${몸.slice(0, 200)}`);
+      }
+      const res = await r.json();
+      for (const row of res.results || []) out.push(줄(row, db.칸, 이음));
+      if (!res.has_more) break;
+      cursor = res.next_cursor;
+      if (i === 상한 - 1) 잘림[열쇠] = out.length;
+    }
+    줄들[열쇠] = out;
+  }
+  return { ...둘째단(수집줄들, 줄들.검증, 줄들.사고, 줄들.행위자), 잘림 };
+}
+
+/**
  * 화면이 그대로 쓰는 `window.DASH` 를 만듭니다.
  *
  * **「수집 표」 절은 서버판에 안 냅니다.** 그 숫자는 최현서 PC 의 SQLite 를 센 것이라
@@ -573,6 +739,13 @@ async function 데이터만들기(env, now) {
     명부 = await 명부읽기(env.NOTION_TOKEN, 이제(now).slice(0, 10));
   } catch (e) {
     명부 = { 오류: String((e && e.message) || e).slice(0, 200) };
+  }
+  // ㉮ 2단계도 따로 잡습니다. 여기서 죽어도 사건 · 게시처 화면은 보여야 합니다
+  let 둘째 = null;
+  try {
+    둘째 = await 둘째단읽기(env.NOTION_TOKEN, 사건);
+  } catch (e) {
+    둘째 = { 오류: String((e && e.message) || e).slice(0, 200) };
   }
   return {
     구운때: 이제(now) + " (노션에서 방금 읽음)",
@@ -604,6 +777,7 @@ async function 데이터만들기(env, now) {
     사건: 사건,
     검토별: 검토별,
     명부: 명부,
+    둘째단: 둘째,
     노션읽음: true,
   };
 }
