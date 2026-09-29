@@ -56,9 +56,11 @@ import 레지스트리 from "../dbs.json";
 const 검토값 = new Set(["미검토", "사건 O", "사건 X"]);
 const 노션판 = "2025-09-03";
 
-/** 노션 수집 DB 의 데이터 소스 id. `hub/events/push.py` 의 `수집DB` · `dbs.json` 과
- *  같은 값입니다. 이 값만으로는 아무것도 못 읽습니다 — 토큰이 있어야 합니다. */
-const 수집DS = "5160ce53-7ce2-4271-879e-06f3ad9957cf";
+/** 노션 수집 DB 의 데이터 소스 id. **`dbs.json` 「수집」 에서 읽습니다** (2026-09-29).
+ *  전에는 여기에도 손으로 적혀 `push.py` · `dbs.json` 과 세 곳이었고, 한쪽이 바뀌면 다른 쪽이 조용히 틀렸습니다.
+ *  `push.py` 의 기본값이 dbs.json 과 같은지는 시험이 봅니다. 이 값만으로는 아무것도 못 읽습니다 — 토큰이 있어야 합니다. */
+const 수집DS = (레지스트리.DB.find((d) => d.열쇠 === "수집") || {}).id;
+if (!수집DS) throw new Error("dbs.json 에 「수집」 DB id 가 없습니다");
 
 const 레포 = "MukSilver/darkchoco";
 

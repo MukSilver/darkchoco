@@ -389,6 +389,45 @@ def test_노션_줄에서_uid_와_열쇠를_읽는다():
     assert push._노션줄의_열쇠(페이지) == ("", "t|v")
 
 
+# ── 수집 DB id 는 한 곳에서 (2026-09-29) ──────────────────────────────
+#
+# 전에는 push.py · 대시보드 dbs.json · worker.js 세 곳에 손으로 적혀, 한쪽이 바뀌면 다른 쪽이 조용히 틀렸다.
+# 이제 push.py 는 NOTION_COLLECT_DB 가 있으면 그것을 쓰고, 기본값은 dbs.json 과 같아야 한다. worker.js 는 dbs.json 을 읽는다.
+
+def test_수집DB_는_환경변수가_없으면_기본값이다():
+    assert push.수집DB_읽기({}) == push._수집DB_기본
+    assert push.수집DB_읽기({"NOTION_COLLECT_DB": "  "}) == push._수집DB_기본
+
+
+def test_수집DB_환경변수는_id_를_받아_하이픈_꼴로_맞춘다():
+    맞춘것 = "01234567-89ab-cdef-0123-456789abcdef"
+    for 값 in ("0123456789abcdef0123456789abcdef", "01234567-89AB-cdef-0123-456789abcdef", " %s " % 맞춘것):
+        assert push.수집DB_읽기({"NOTION_COLLECT_DB": 값}) == 맞춘것, 값
+
+
+def test_수집DB_환경변수가_id_꼴이_아니면_멈춘다():
+    """노션 주소의 id 는 database id 라 data_source 와 다르다. 이름이나 주소를 조용히 받지 않는다."""
+    for 값 in ("수집 DB", "https://www.notion.so/x/0123456789abcdef0123456789abcdef?v=1", "0123"):
+        try:
+            push.수집DB_읽기({"NOTION_COLLECT_DB": 값})
+        except SystemExit as e:
+            assert "NOTION_COLLECT_DB" in str(e), 값
+        else:
+            raise AssertionError("멈추지 않았다: %r" % 값)
+
+
+def test_수집DB_기본값은_대시보드_레지스트리와_같다():
+    레지스트리 = json.loads((ROOT / "apps" / "dash" / "dbs.json").read_text(encoding="utf-8"))
+    assert [d["id"] for d in 레지스트리["DB"] if d.get("열쇠") == "수집"] == [push._수집DB_기본]
+
+
+def test_배포판은_수집DB_id_를_따로_안_적는다():
+    글 = (ROOT / "apps" / "dash" / "deploy" / "worker.js").read_text(encoding="utf-8")
+    assert push._수집DB_기본 not in 글
+    선언 = [줄 for 줄 in 글.split("\n") if 줄.startswith("const 수집DS")]
+    assert len(선언) == 1 and "레지스트리" in 선언[0], 선언
+
+
 # ── 텔레그램 줄의 원문 URL 은 전한 메시지 주소 (2026-09-28, F-1) ──────────
 #
 # 설계서 「텔레그램 재유포 사건의 채널 정하는 방법」. 지도는 원문 URL 의 t.me 로 채널을 찾는다.

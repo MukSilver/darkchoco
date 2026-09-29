@@ -59,6 +59,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sqlite3
 import sys
@@ -113,7 +114,30 @@ def 확인된_조직들(노션줄들: list[dict]) -> list[str]:
             out.add(v)
     return sorted(out)
 
-수집DB = "5160ce53-7ce2-4271-879e-06f3ad9957cf"
+# 수집 DB 의 data_source id. **`NOTION_COLLECT_DB` 가 있으면 그것을 쓴다** (2026-09-29).
+#
+# 전에는 이 파일 · 대시보드 `apps/dash/dbs.json` · `deploy/worker.js` 세 곳에 손으로 적혀, 한쪽이 바뀌면
+# 다른 쪽이 조용히 틀렸다. 이제 worker.js 는 dbs.json 을 읽고, 이 기본값은 dbs.json 「수집」 과 같아야 한다
+# (시험 `test_수집DB_기본값은_대시보드_레지스트리와_같다`). 환경변수는 다른 워크스페이스에서 코드를 안 고치고
+# 돌리려는 것이다. id 는 비밀이 아니다. **data_source id 를 넣는다** — 노션 주소의 id 는 database id 라 다르다.
+_수집DB_기본 = "5160ce53-7ce2-4271-879e-06f3ad9957cf"
+_노션id = re.compile(r"[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}", re.I)
+
+
+def 수집DB_읽기(환경=None) -> str:
+    """`NOTION_COLLECT_DB` 를 읽어 하이픈 꼴 id 로. 비었으면 기본값. **id 꼴이 아니면 멈춘다** —
+    이름이나 주소를 조용히 받으면 엉뚱한 DB 에 쓸 수 있다."""
+    값 = ((환경 if 환경 is not None else os.environ).get("NOTION_COLLECT_DB") or "").strip()
+    if not 값:
+        return _수집DB_기본
+    if not _노션id.fullmatch(값):
+        raise SystemExit("NOTION_COLLECT_DB 에 수집 DB 의 data_source id 를 넣는다(32자리 16진수, 하이픈은 있어도 된다). "
+                         "비우면 기본값을 쓴다")
+    h = 값.replace("-", "").lower()
+    return "%s-%s-%s-%s-%s" % (h[:8], h[8:12], h[12:16], h[16:20], h[20:])
+
+
+수집DB = 수집DB_읽기()
 기본표 = ROOT / "hub" / "data" / "darkchoco.db"
 
 # **items 의 country 가 ISO 두 글자라고 가정하면 안 됩니다.** 랜섬웨어 집계처는

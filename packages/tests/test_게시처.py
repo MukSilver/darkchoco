@@ -126,9 +126,10 @@ def test_수집이_줄을_만들_때_게시처를_같이_쓴다():
 
 
 def test_수집이_수집DB_상수를_안_건드렸다():
-    """push.py 의 수집DB 상수는 최현서 자리다."""
+    """push.py 의 수집DB 기본값은 최현서 자리다. 9/29 부터 NOTION_COLLECT_DB 로 바꿀 수 있고 기본값은 한 곳에만 있다."""
     글 = (ROOT / "hub" / "events" / "push.py").read_text(encoding="utf-8")
-    assert 글.count('수집DB = "5160ce53-7ce2-4271-879e-06f3ad9957cf"') == 1
+    assert 글.count('_수집DB_기본 = "5160ce53-7ce2-4271-879e-06f3ad9957cf"') == 1
+    assert 글.count("5160ce53-7ce2-4271-879e-06f3ad9957cf") == 1
 
 
 # ── 대시보드 포럼 사건 — 로컬과 배포가 같은가 ────────────────────────
