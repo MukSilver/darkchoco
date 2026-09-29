@@ -307,6 +307,25 @@ def test_공식_발표_여부도_반출_검사가_모양과_짝을_본다():
         assert bake.check(bad), f"{i}번 깨뜨림을 못 잡았다"
 
 
+def test_같은_이름은_도메인_꼬리를_최대한_지키고_겹치거나_없는_곳만_번호():
+    def it(raw, since, order):
+        return {"islandId": "FORUM", "name": "BreachForums", "_c": {"rawName": raw}, "_since": since, "_order": order}
+    items = [
+        it("BreachForums (bf.st)", "2026-02-01T00:00:00Z", 0),
+        it("BreachForums (breached.su)", "2025-01-01T00:00:00Z", 1),
+        it("BreachForums (breached.st)", "2024-06-01T00:00:00Z", 2),
+        it("BreachForums (원본, 2025 압수)", "2023-01-01T00:00:00Z", 3),
+    ]
+    bake.number_duplicates(items)
+    names = [x["name"] for x in items]
+    # bf 는 하나뿐이라 꼬리만, breached 는 둘이라 꼬리 뒤 번호(첫 사건이 이른 쪽이 1), 도메인 없는 곳은 번호
+    assert names == ["BreachForums bf", "BreachForums breached 2", "BreachForums breached 1", "BreachForums 1"], names
+    # 꼬리가 모두 다르면 전처럼 꼬리만
+    two = [it("BreachForums (bf.st)", None, 0), it("BreachForums (breached.su)", None, 1)]
+    bake.number_duplicates(two)
+    assert [x["name"] for x in two] == ["BreachForums bf", "BreachForums breached"]
+
+
 def json_copy(x):
     import json
     return json.loads(json.dumps(x))

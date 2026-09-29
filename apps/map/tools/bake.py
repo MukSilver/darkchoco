@@ -858,9 +858,11 @@ def number_duplicates(items: list[dict]) -> None:
 
     **도메인의 첫 조각을 붙인다** — 「BreachForums bf」 · 「BreachForums
     breached」 (2026-09-25 최현서 결정). 점이 없어 주소가 아니고 값 훑기를
-    지난다. 겹친 이름 가운데 하나라도 도메인이 없거나 첫 조각이 서로 같으면
-    번호로 물러선다 — 첫 사건이 이른 곳부터 1, 2 다. 사건이 없으면 명부 차례를
-    따른다.
+    지난다. **꼬리는 최대한 지킨다** (2026-09-30 최현서) — 첫 조각이 그 무리에서
+    하나뿐인 곳은 꼬리만 붙이고, 첫 조각이 겹치는 곳은 꼬리 뒤에, 도메인이 없는
+    곳은 이름 뒤에 번호를 붙인다. 전에는 하나라도 겹치거나 없으면 모두 번호로
+    물러서, 세 번째 BreachForums 가 들면 「bf · breached」 가 「1 · 2 · 3」 이 됐다.
+    번호는 첫 사건이 이른 곳부터 1, 2 다. 사건이 없으면 명부 차례를 따른다.
     """
     groups: dict[tuple[str, str], list[dict]] = {}
     for it in items:
@@ -869,13 +871,20 @@ def number_duplicates(items: list[dict]) -> None:
         if len(same) < 2:
             continue
         heads = [domain_head(it["_c"]["rawName"]) for it in same]
-        if all(heads) and len({h.casefold() for h in heads}) == len(heads):
-            for it, h in zip(same, heads):
+        seen: dict[str, int] = {}
+        for h in heads:
+            if h:
+                seen[h.casefold()] = seen.get(h.casefold(), 0) + 1
+        rest: dict[str, list[dict]] = {}
+        for it, h in zip(same, heads):
+            if h and seen[h.casefold()] == 1:
                 it["name"] = f"{it['name']} {h}"
-            continue
-        same.sort(key=lambda x: (when(x["_since"]) if x["_since"] else FAR_FUTURE, x["_order"]))
-        for i, it in enumerate(same, 1):
-            it["name"] = f"{it['name']} {i}"
+            else:
+                rest.setdefault(h or "", []).append(it)
+        for h, group in rest.items():
+            group.sort(key=lambda x: (when(x["_since"]) if x["_since"] else FAR_FUTURE, x["_order"]))
+            for i, it in enumerate(group, 1):
+                it["name"] = f"{it['name']} {h} {i}" if h else f"{it['name']} {i}"
 
 
 # ── 반출 검사 ───────────────────────────────────────────────────────────────
@@ -1440,7 +1449,11 @@ def read_registry(n, sources: dict[str, str], read, log) -> list[dict]:
                 }
             on = col(read, p, "DB 반영") is True
             links = split_links(col(read, p, "연결된 곳")) if on else []
-            online = col(read, p, "상태") == "online"
+            status = col(read, p, "상태")
+            online = status == "online"
+            # 「미확인」 은 죽은 것이 아니라 못 본 것이다 — 조사 쪽 두드리기가 앞단 검사(403 · 검사 화면)에 막히면
+            # 이 값을 적는다. 포럼 예외(`keep_place`)가 쓴다
+            unknown = status == "미확인"
             k = (island, raw_name.casefold())
             if k in by_name:
                 c = by_name[k]
@@ -1449,12 +1462,14 @@ def read_registry(n, sources: dict[str, str], read, log) -> list[dict]:
                     continue  # 꺼진 줄은 보태지 않는다
                 if not c["on"]:
                     # 먼저 들어온 꺼진 줄을 켜진 줄로 갈아 끼운다
-                    c.update({"aliases": aliases, "on": True, "online": online, "links": links, "info": info})
+                    c.update({"aliases": aliases, "on": True, "online": online, "unknown": unknown,
+                              "links": links, "info": info})
                     for s in ("raw", "posts", "threads"):
                         c.pop(s, None)
                     c.update(size)
                     continue
                 c["online"] = c["online"] or online
+                c["unknown"] = c.get("unknown", False) or unknown
                 for s, v in size.items():
                     c[s] = max(c.get(s) or 0, v)
                 c["aliases"] += [a for a in aliases if a not in c["aliases"]]
@@ -1462,7 +1477,7 @@ def read_registry(n, sources: dict[str, str], read, log) -> list[dict]:
                 continue
             c = {
                 "island": island, "rawName": raw_name, "aliases": aliases,
-                "on": on, "online": online, "order": len(out), "links": links, **size,
+                "on": on, "online": online, "unknown": unknown, "order": len(out), "links": links, **size,
                 "info": info,
             }
             by_name[k] = c
@@ -1916,7 +1931,9 @@ def bake(n, sources: dict[str, str], log) -> dict:
 
         reason = None
         if not island:
-            reason = "소스 없음"
+            # X(트위터 집계 계정)는 텔레그램 같은 알림 채널이라 지도에 안 넣는다 — 대시보드까지만 올리고, 지도 반영은
+            # 팀과 논의한다 (2026-09-29 최현서). 「소스 없음」 과 갈라 세어 로그에서 들어온 수가 보이게 한다
+            reason = "X 알림 채널(지도 밖)" if (col(read, p, "소스") or "") == "X" else "소스 없음"
         elif not (plat or "").strip() and "cand" not in ov:
             reason = "게시 플랫폼 없음"
         elif not posted:
@@ -2106,7 +2123,12 @@ def bake(n, sources: dict[str, str], log) -> dict:
             return False
         isl = c["island"]
         if isl == "FORUM":
-            return c["online"] and any((c.get(k) or 0) > 0 for k in ("raw", "posts", "threads"))
+            # 포럼 예외 — 상태가 「미확인」 이고 한국 관련 사건이 있으면 남긴다 (2026-09-30 최현서). 조사 쪽
+            # 두드리기가 앞단 검사(403 · 검사 화면)에 막히면 상태를 「미확인」 으로 적는데, 그 한 칸 때문에
+            # Darkforums(사건 44건)가 통째로 빠졌다. offline · 압수로 확인된 곳은 설계서 2.5 대로 뺀다 — 압수된
+            # 원본 BreachForums 를 압수 전 분기에만 보이려면 포럼 DB 에 닫힌 날짜 칸이 있어야 한다(없다)
+            live = c["online"] and any((c.get(k) or 0) > 0 for k in ("raw", "posts", "threads"))
+            return live or (c.get("unknown", False) and counted[id(c)] > 0)
         if isl == "TELEGRAM":
             return c["online"] and (c.get("raw") or 0) > 0
         # 랜섬웨어 — 한국 관련 사건이 있는 그룹은 offline 이거나 피해 기업 수가
