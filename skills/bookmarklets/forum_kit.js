@@ -1008,6 +1008,8 @@
         if (pg === 1 && got === 0) { 실패 = '0건 — 로그인이나 권한 확인'; FAILED.push(`${b.주소} — 1쪽이 0건. 로그인이나 권한 확인`); break; }
         if (pg > 1 && got === 0) break;       /* 더 안 늘면 마지막 쪽 */
       }
+/* 중단 단추로 이 게시판을 부르기 전에 멈췄으면 「안 본 게시판」 이다. 0건으로 적으면 글이 없는 게시판처럼 읽힌다 */
+      if (ABORT && !실패 && !글.length) break;
       const 옛 = 본것[b.주소];
       const 첫훑기 = !Array.isArray(옛);
       const 옛셋 = new Set(옛 || []);
@@ -1042,7 +1044,7 @@
     묶음.forEach(({ b, 글 }) => 글.forEach(t => 칸줄(t.title, t.url, t.author, t.date, b.이름, '', '안 봄')));
     return { md, empty: !합 && !FAILED.length,
              status: `훑기 · 게시판 ${묶음.length}/${볼것.length}곳 · 글 ${합}건 · 새 ${새합}건 · 요청 ${요청}번`
-                     + (ABORT ? ' · 중간에 멈춤(아래 「못 가져온 것」)' : '') };
+                     + (ABORT ? (FAILED.length ? ' · 중간에 멈춤(아래 「못 가져온 것」)' : ' · 중단 단추로 멈춤') : '') };
   };
 
 /* 체크 목록 편집기. 결과 상자를 편집기로 쓰고 단추가 「목록 저장」 으로 바뀐다 */
