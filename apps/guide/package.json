@@ -1,0 +1,40 @@
+{
+  "name": "guide",
+  "type": "module",
+  "version": "0.0.1",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "ensure-data": "node scripts/ensure-data.mjs",
+    "predev": "node scripts/ensure-data.mjs",
+    "dev": "astro dev",
+    "prebuild": "node scripts/ensure-data.mjs",
+    "build": "astro build && node scripts/csp-hashes.mjs",
+    "preview": "astro preview",
+    "astro": "astro",
+    "pretest": "node scripts/ensure-data.mjs",
+    "test": "vitest run",
+    "precheck": "node scripts/ensure-data.mjs",
+    "check": "astro check",
+    "prefetch-db": "node scripts/ensure-data.mjs",
+    "fetch-db": "node scripts/fetch-db.mjs",
+    "pree2e": "node scripts/ensure-data.mjs",
+    "e2e": "playwright test"
+  },
+  "dependencies": {
+    "@astrojs/preact": "^6.0.5",
+    "@playwright/test": "^1.63.0",
+    "astro": "^7.3.3",
+    "preact": "^10.29.8",
+    "vitest": "^5.0.1"
+  },
+  "allowScripts": {
+    "esbuild": true
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "typescript": "^6.0.3",
+    "wrangler": "^4.136.1"
+  }
+}

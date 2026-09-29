@@ -1,0 +1,31 @@
+{
+ "account": {
+  "acct": 3,
+  "money": 1
+ },
+ "email": {
+  "acct": 1,
+  "phish": 2
+ },
+ "phone": {
+  "acct": 1,
+  "phish": 2
+ },
+ "name": {
+  "phish": 1
+ },
+ "address": {
+  "phish": 1
+ },
+ "rrn": {
+  "ident": 3,
+  "money": 3
+ },
+ "finance": {
+  "money": 3
+ },
+ "internal": {
+  "priv": 2
+ },
+ "etc": {}
+}

@@ -3,6 +3,8 @@
     ci.yml         push 마다 시험을 돈다
     security.yml   금지한 코드와 비밀값이 섞였나 본다
     collect.yml    **여섯 시간마다 긁어 노션에 올린다**
+    guide.yml      가이드라인(apps/guide)을 빌드해 Cloudflare 에 올린다
+    guide-links.yml  한 달에 한 번 가이드라인이 안내하는 기관 주소가 열리는지 본다
 
 ## collect.yml 을 켜려면 비밀값 둘이 필요합니다
 
@@ -44,3 +46,20 @@
 GitHub 서버 주소는 여러 곳이 함께 쓰는 것이라 `ransomware.live` 가 막아 둘 수 있습니다.
 그래서 랜섬 단계에 `continue-on-error` 를 두었습니다 — 거기서 죽어도 텔레그램은 돕니다.
 막히면 랜섬만 로컬로 돌리고 나머지는 여기서 계속합니다.
+
+## guide.yml 을 켜려면 비밀값 다섯과 변수 하나가 필요합니다
+
+| 이름 | 무엇 |
+|---|---|
+| `GUIDE_SUPABASE_URL` | Supabase 프로젝트 주소 |
+| `GUIDE_SUPABASE_ANON_KEY` | 익명 키. guide 스키마는 익명 읽기가 열려 있습니다 |
+| `GUIDE_CLOUDFLARE_API_TOKEN` | 가이드라인을 올리는 Cloudflare 계정의 토큰 |
+| `GUIDE_CLOUDFLARE_ACCOUNT_ID` | 그 계정의 id |
+| `GUIDE_DISCORD_WEBHOOK` | 실패 알림. 없으면 알림만 건너뜁니다 |
+| `GUIDE_SITE_URL` (변수) | 사이트 주소 |
+
+**지도의 `CLOUDFLARE_API_TOKEN` 과 계정이 다릅니다.** 그래서 이름 앞에 `GUIDE_` 를 붙였습니다.
+같은 이름을 쓰면 가이드라인이 지도 계정으로 올라갑니다.
+
+정제 배치(darkchoco-data)가 Supabase 를 채운 뒤 `data-updated` 신호를 이 저장소로 보내면
+guide.yml 이 돕니다. 신호는 기본 가지(main)에 있는 워크플로만 받습니다.

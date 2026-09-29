@@ -1,0 +1,86 @@
+[
+ {
+  "name": "e프라이버시 클린서비스",
+  "url": "https://www.eprivacy.go.kr/userService.do"
+ },
+ {
+  "name": "KT",
+  "url": "https://www.kt.com"
+ },
+ {
+  "name": "LG U+",
+  "url": "https://www.lguplus.com"
+ },
+ {
+  "name": "NICE지키미",
+  "url": "https://www.credit.co.kr"
+ },
+ {
+  "name": "SK텔레콤",
+  "url": "https://www.tworld.co.kr"
+ },
+ {
+  "name": "개인정보 포털",
+  "url": "https://www.privacy.go.kr/delete.do"
+ },
+ {
+  "name": "개인정보노출자 사고예방시스템",
+  "url": "https://pd.fss.or.kr"
+ },
+ {
+  "name": "개인정보침해 신고센터 118",
+  "url": "tel:118"
+ },
+ {
+  "name": "구글 계정 보안",
+  "url": "https://myaccount.google.com/security"
+ },
+ {
+  "name": "네이버 내정보",
+  "url": "https://nid.naver.com/user2/help/myInfo"
+ },
+ {
+  "name": "어카운트인포",
+  "url": "https://www.payinfo.or.kr"
+ },
+ {
+  "name": "엠세이퍼",
+  "url": "https://www.msafer.or.kr"
+ },
+ {
+  "name": "올크레딧에서도 신청하기",
+  "url": "https://www.allcredit.co.kr"
+ },
+ {
+  "name": "인터넷으로 신고하기",
+  "url": "https://privacy.kisa.or.kr"
+ },
+ {
+  "name": "카드 한 번에 분실신고",
+  "url": "https://gongsi.crefia.or.kr/portal/financialConInfo/reportLostCards"
+ },
+ {
+  "name": "카드사 고객센터",
+  "url": null
+ },
+ {
+  "name": "카드사 연락처 보기",
+  "url": "https://gongsi.crefia.or.kr/portal/financialConInfo/reportLostCards"
+ },
+ {
+  "name": "카카오 계정",
+  "url": "https://accounts.kakao.com"
+ },
+ {
+  "name": "크레딧포유",
+  "url": "https://www.credit4u.or.kr"
+ },
+ {
+  "name": "털린 내 정보 찾기",
+  "url": "https://kidc.eprivacy.go.kr"
+ },
+ {
+  "name": "통신사",
+  "url": null
+ }
+]

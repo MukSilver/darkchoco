@@ -1,0 +1,10 @@
+---
+import Base from "../../layouts/Base.astro";
+import Notice from "../../islands/Notice";
+export function getStaticPaths() { return [1, 2, 3].map((step) => ({ params: { step: String(step) } })); }
+const step = Number(Astro.params.step) as 1 | 2 | 3;
+const titles = { 1: "받은 안내, 진짜일까요", 2: "안내문에서 다섯 가지를 확인하세요", 3: "안내문에 적힌 유출 항목을 선택하세요" };
+---
+<Base title={titles[step]}>
+  <Notice step={step} client:load />
+</Base>

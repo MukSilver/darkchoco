@@ -1,0 +1,6 @@
+{
+  // 정적 자산만 올립니다. main(Worker 코드)이 없어야 무료 요금제의 요청 제한이 없습니다.
+  "name": "guide",
+  "compatibility_date": "2026-09-01",
+  "assets": { "directory": "./dist", "not_found_handling": "404-page", "html_handling": "auto-trailing-slash" }
+}

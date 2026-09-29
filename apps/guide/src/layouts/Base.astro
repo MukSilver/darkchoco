@@ -1,0 +1,53 @@
+---
+import "../styles/fonts.css";
+import "../styles/global.css";
+import Prefs from "../islands/Prefs";
+
+interface Props { title: string; description?: string; noindex?: boolean }
+const { title, description = "개인정보 유출 안내를 받았을 때 무엇부터 해야 할지 순서대로 알려드려요. 이름이나 전화번호는 입력하지 않아요.", noindex = false } = Astro.props;
+const site = Astro.site ? Astro.site.toString().replace(/\/$/, "") : "";
+const url = site + Astro.url.pathname;
+---
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#26282B" media="(prefers-color-scheme: dark)" />
+  <title>{title} | WEB SCOPE 개인정보 유출 대응 안내</title>
+  <meta name="description" content={description} />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content={title} />
+  <meta property="og:description" content={description} />
+  <meta property="og:site_name" content="WEB SCOPE 개인정보 유출 대응 안내" />
+  {site && <meta property="og:url" content={url} />}
+  {site && <meta property="og:image" content={site + "/og.png"} />}
+  {site && <meta property="og:image:width" content="1200" />}
+  {site && <meta property="og:image:height" content="630" />}
+  {site && <meta property="og:image:alt" content="유출 안내를 받았다면, 무엇부터 해야 할까요. WEB SCOPE 개인정보 유출 대응 안내" />}
+  <meta name="twitter:card" content={site ? "summary_large_image" : "summary"} />
+  {noindex && <meta name="robots" content="noindex" />}
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <script is:inline>
+    /* 첫 그림 전에 밝기와 글자 크기를 맞춰 깜빡임을 없앱니다 */
+    try { var t = localStorage.getItem("guide-theme"); if (t && t !== "auto") document.documentElement.setAttribute("data-theme", t);
+      if (localStorage.getItem("guide-big") === "1") document.documentElement.classList.add("big"); } catch (e) {}
+  </script>
+</head>
+<body>
+  <header class="top" id="top"><div class="top-in">
+    <a class="brand" href="/"><b>WEB SCOPE</b><span>개인정보 유출 대응 안내</span></a>
+    <Prefs client:load />
+  </div></header>
+  <div class="mini noprint" id="mini" aria-hidden="true"></div>
+  <nav class="toc noprint" id="toc" aria-label="이 화면의 순서"></nav>
+  <main class="wrap" id="app"><slot /></main>
+  <div class="tip" id="tip" role="tooltip"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script>
+    import { initUi } from "../lib/ui";
+    initUi();
+  </script>
+</body>
+</html>
