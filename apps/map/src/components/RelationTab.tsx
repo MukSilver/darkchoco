@@ -115,7 +115,7 @@ export type RelationTabProps = {
   fallbackName?: (id: string) => string;
   /** 지도에 없는 영토의 섬 색 토큰 (명부) — 칩 색이 늘 행위자 회색이었다 (검토) */
   fallbackToken?: (id: string) => string;
-  /** 중심이 지도에 없는 까닭 — 「첫 사건이 2026 Q1」 · 「사건이 없어 가장 최근 분기에만 나오는 영토」 */
+  /** 중심이 지도에 없는 까닭 — 「2025 Q2에 운영 종료」 · 「첫 사건이 2026 Q1」 · 「사건이 없어 가장 최근 분기에만 나오는 영토」 */
   absentWhy?: string;
 };
 
@@ -504,7 +504,7 @@ export default function RelationTab(p: RelationTabProps) {
   const emptyBody = !p.center
     ? "기준일을 옮기면 관계가 보일 수 있습니다."
     : p.centerAbsent
-      ? `${centerName}${josa(centerName, "은", "는")} 이 기준일에는 아직 지도에 없습니다${p.absentWhy ? `(${p.absentWhy})` : ""}. ` +
+      ? `${centerName}${josa(centerName, "은", "는")} 이 기준일에는 지도에 없습니다${p.absentWhy ? `(${p.absentWhy})` : ""}. ` +
         (p.moveTo ? "기준일을 옮기면 관계가 보입니다." : "위 칩 줄에서 다른 영토를 골라 보세요.")
     : p.hiddenEst > 0
       ? `${withName} 연결된 관계는 추정 관계 ${p.hiddenEst}개뿐입니다. 추정 관계를 포함하면 연결 후보를 확인할 수 있습니다.`

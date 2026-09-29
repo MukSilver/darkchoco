@@ -405,8 +405,15 @@ function quarterStartUTC(d: Date): Date {
  * `since`(가장 이른 사건) 가 D 이전이면 있다. 사건이 없는 명부 영토는 이번
  * 분기에만 있다 — 명부에 오른 날을 모르니 지난 분기에 넣지 않는다.
  * `today` 를 모르면 `since` 가 없는 영토를 늘 있는 것으로 본다.
+ *
+ * `until`(운영 종료 날짜) 이 있으면 그 날짜가 든 분기까지만 있다. D 가 든 분기가
+ * 그 날 뒤에 시작하면 없다 (2026-09-30 최현서 — 압수된 곳은 압수 전 분기에만).
  */
 export function presentAt(t: Territory, d: Date, today?: Date): boolean {
+  if (t.until) {
+    const u = Date.parse(t.until);
+    if (!Number.isNaN(u) && quarterStartUTC(d).getTime() > u) return false;
+  }
   if (t.since) {
     const s = Date.parse(t.since);
     if (!Number.isNaN(s)) {

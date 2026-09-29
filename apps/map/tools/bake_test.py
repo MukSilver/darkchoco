@@ -326,6 +326,36 @@ def test_같은_이름은_도메인_꼬리를_최대한_지키고_겹치거나_�
     assert [x["name"] for x in two] == ["BreachForums bf", "BreachForums breached"]
 
 
+def test_운영_종료_날짜는_날짜만_읽고_같은_곳_두_줄이면_늦은_날을_따른다():
+    # 2026-09-30 최현서 — 압수된 곳은 압수 전 분기에만 (score.ts presentAt)
+    assert bake.end_day("2025-05-15") == "2025-05-15"
+    assert bake.end_day("2025-05-15T09:00:00.000+09:00") == "2025-05-15", "시각은 버린다"
+    assert bake.end_day(None) is None and bake.end_day("곧 닫음") is None
+
+    def row(name, until, on=True):
+        return {"properties": {"포럼 이름": name, "운영 종료 날짜": until, "DB 반영": on, "상태": "offline"}}
+
+    rows = {"forum": [row("OldForum", "2025-01-10"), row("OldForum", "2025-05-15"),
+                      row("OldForum", "2026-01-01", on=False), row("LiveForum", None)]}
+
+    class Fake:
+        def query_all(self, sid):
+            return rows.get(sid, [])
+
+    cands = bake.read_registry(Fake(), {k: k for k in bake.REGISTRY}, lambda v: v, lambda _m: None)
+    by = {c["rawName"]: c for c in cands}
+    assert by["OldForum"]["until"] == "2025-05-15", "꺼진 줄의 날짜는 보태지 않는다"
+    assert by["LiveForum"]["until"] is None
+
+    base = {"territories": [{"id": "f1", "name": "F", "islandId": "FORUM", "web": "dark", "until": "2025-05-15"}],
+            "events": [], "relations": [], "links": []}
+    assert bake.check(base) == []
+    for v in ["2025-05-15T00:00", "곧", 20250515]:
+        bad = json_copy(base)
+        bad["territories"][0]["until"] = v
+        assert len(bake.check(bad)) == 1, (v, bake.check(bad))
+
+
 def json_copy(x):
     import json
     return json.loads(json.dumps(x))
