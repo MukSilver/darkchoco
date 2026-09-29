@@ -4,7 +4,6 @@
 근거가 없으면 답을 만들지 않습니다. 방어적 보안 연구와 교육 목적입니다.
 
     정본        시스템 명세서 DC-RAGDB-SYS-001 판 1.6. **이 저장소에 넣지 않았습니다** (공개 저장소라서)
-    담당        김무근
     도는 곳      운영 PC. 깃허브 액션으로 돌지 않습니다
     옮겨 온 날   2026-09-29. 따로 있던 저장소(ragdb)의 그때 판을 옮겼습니다
 
@@ -13,33 +12,71 @@
 | 단계 | 파일 | 상태 |
 |---|---|---|
 | 표준 문서 받기 (F-01) | scripts/fetch_docs.py | 됨 |
-| 조각 나누기 (F-05) | scripts/chunk.py, scripts/tokenize_ko.py | 됨 |
-| 금지어 검사와 색인 (F-06) | scripts/masking.py, scripts/build_index.py | 됨 |
-| 받기부터 색인까지 한 번에 | scripts/refresh.py | 됨 |
-| 색인 검색 (손으로 확인용) | scripts/search.py | 됨 |
-| 키 확인 | scripts/check_keys.py | 됨 |
-| 질의 서버, 답변과 출처, 화면 | | 아직 |
+| 조직 이름 찾기 | scripts/find_names.py | 됨 |
+| 가리기, 가리기 검사, 조각 (F-03, F-05) | scripts/chunk.py, app/guard.py, app/pii.py | 됨 |
+| 금지어 검사, 색인, 넓히기 사전 (F-06) | scripts/build_index.py, scripts/masking.py | 됨 |
+| 스냅샷 굽기와 반출 관문 (F-22) | scripts/snapshot.py | 됨. 올리기는 아직 |
+| 재조사 추출 (F-20) | scripts/recheck.py | 됨. 빠진 줄 명부는 아직 |
+| 받기부터 갈아 끼우기까지 한 번에 | scripts/refresh.py | 됨 |
+| 조각 검색 (F-12) | app/search.py, app/expand.py, app/kinds.py, app/rerank.py | 됨 |
+| 답변과 출처, 근거 없음 (F-13, F-14, F-15) | app/answer.py, app/prompts/system.md | 됨 |
+| 사전 답변 조회, 답변 재사용 (F-16, F-21) | app/store.py | 됨 |
+| 질의 기록, 하루 차단기 (F-19, F-18 일부) | app/store.py, app/limits.py | 됨 |
+| 질의 한 건의 순서 (명세 5.5) | app/pipeline.py | 됨 |
+| 터미널에서 묻기 | scripts/ask.py | 됨 |
+| 예비 측정 (명세 7.2) | scripts/measure.py | 됨 |
+| 사전 답변 만들기 (F-17) | | 아직. 문제집이 있어야 합니다 |
+| 질의 서버, 사람 확인, 관리 서버 (F-18 나머지) | | 아직 |
+| 화면 다섯 | | 아직 |
+| 이미지 (F-08) | | 내보내지 않기로 했습니다 |
 
 ## 자료가 흐르는 길
 
     노션 (조사, 협업)
       └ 정제 배치 (darkchoco-data) ──→ Supabase rag 스키마
-                                        └ scripts/fetch_docs.py ──→ data/standard/ ──→ 조각 ──→ 색인
+           └ 받기 ──→ 이름 찾기 ──→ 가리기와 조각 ──→ 색인과 사전 ──→ 스냅샷과 반출 관문 ──→ 갈아 끼우기
 
 **이 폴더는 노션을 읽지 않습니다.** 다크웹에도 접속하지 않습니다. 입력구는 Supabase rag 스키마 하나입니다.
 
-**받은 자료는 저장소에 넣지 않습니다.** `data/` 아래(표준 문서, 색인, SQLite)는 루트 `.gitignore` 가 막습니다.
-스크립트가 필요한 폴더를 그때 만듭니다.
+**받은 자료는 저장소에 넣지 않습니다.** `data/` 아래(표준 문서, 색인, SQLite, 스냅샷, 찾은 이름 목록)는 루트 `.gitignore` 가 막습니다.
+
+## 나가는 글을 지키는 네 겹
+
+피해 조직 이름, 주소, 개인정보가 답변과 스냅샷에 나오지 않게 합니다.
+
+| 겹 | 어디서 | 무엇을 |
+|---|---|---|
+| 1 | 정제 배치 | 노션 칸에 적힌 조직 이름, 주소 머리가 있는 링크, 어니언 주소를 가림 |
+| 2 | find_names.py, chunk.py | 본문에 다르게 적힌 조직 표기를 모델로 찾아 목록으로 가림. 도메인은 규칙으로 전부 가림. 개인정보 꼴이 남은 문서는 통째로 뺌 |
+| 3 | snapshot.py | 구운 파일 전체를 다시 훑음. 하나라도 걸리면 새 판을 쓰지 않음 |
+| 4 | pipeline.py | 답을 내보내기 직전에 한 번 더 가림 |
+
+장소(포럼, 텔레그램, 랜섬웨어)와 행위자의 이름은 가리지 않습니다. 검색에 필요합니다.
+행위자의 다른 이름은 동일인 추정이라 가립니다.
 
 ## 돌리기
 
 ```
-pip install -r requirements.txt
-cp .env.example .env      # 값을 채웁니다. .env 는 저장소에 올라가지 않습니다
-python scripts/check_keys.py
-python scripts/refresh.py
-python scripts/search.py "질문"
+python -m venv .venv
+.venv\Scripts\python -m pip install -r requirements.txt -r requirements-dev.txt
+copy .env.example .env                                  값을 채웁니다. .env 는 저장소에 올라가지 않습니다
+.venv\Scripts\python scripts\check_keys.py
+.venv\Scripts\python scripts\refresh.py                 받기부터 갈아 끼우기까지
+.venv\Scripts\python scripts\ask.py "질문"               터미널에서 묻기
+.venv\Scripts\python scripts\ask.py --search "질문"      검색까지만 (0원)
+.venv\Scripts\python -m pytest tests -q                 시험 (0원, 열쇠 없이 돕니다)
 ```
+
+처음 한 번은 조직 이름 찾기가 문서 전체를 봅니다. 4달러쯤 듭니다. 그 뒤로는 바뀐 문서만 봅니다.
+
+## 값을 바꾸는 곳
+
+| 바꿀 것 | 파일 |
+|---|---|
+| 숫자 (후보 수, 넓히기 무게, 대기 상한, 하루 한도 등) | `.env`. 기본값과 설명은 `.env.example`, `app/config.py` |
+| 내보내는 칸 | `export_columns.json`. 여기 없는 칸은 나가지 않습니다 |
+| 종류를 알아내는 낱말 | `app/kind_synonyms.json` |
+| 지시문 | `app/prompts/system.md`. 고치면 평가를 다시 돌립니다 |
 
 ## 읽을 것
 
@@ -48,4 +85,4 @@ python scripts/search.py "질문"
 | CLAUDE.md | 코드를 쓸 때 지킬 것 |
 | DESIGN.md | 화면을 만들 때 보는 시각 기준 |
 
-명세서, 계획안, 로드맵은 담당자(김무근)에게 있습니다. 설계서는 노션 「LLM RAG DB」 페이지에 있습니다.
+명세서, 계획안, 로드맵, 인수인계 문서는 노션 「LLM RAG DB」 페이지에 있습니다.
