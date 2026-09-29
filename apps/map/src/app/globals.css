@@ -131,6 +131,16 @@ html {
   color: var(--t-text-body);
 }
 
+/*
+ * 다크웹 판은 브라우저가 그리는 부품(스크롤바 · 날짜 칸 · 고르기 목록)도 어두운 판으로 그린다. 스크롤바는
+ * 테두리 색으로 가늘게 — 전에는 모든 탭에서 흰 스크롤바가 떴다 (2026-09-29 최현서 v2 8번). 물려받는
+ * 속성이라 html 에 한 번 건다. 부품이 따로 준 색이 이긴다
+ */
+html[data-mode="black"] {
+  color-scheme: dark;
+  scrollbar-color: var(--t-border-strong) transparent;
+}
+
 body {
   background: var(--t-surface-app);
   color: var(--t-text-body);
@@ -182,17 +192,27 @@ body {
   }
 
   /*
-   * SVG 도형은 외곽선이 도형을 감싼 상자로 그려져 이웃 영토 · 선을 가로질렀다 (2026-09-29 검토).
-   * 지도 영토는 윤곽을 밝히고, 관계선은 선을 굵게 한다. 섬 이름표 · 관계도 노드는 상자가 곧 모양이라
-   * 외곽선 그대로다
+   * SVG 도형은 외곽선이 도형을 감싼 상자로 그려진다. 마우스로 영토를 고를 때도 브라우저가 포커스
+   * 고리를 그려 영토 둘레에 흰 네모가 생겼고, 확대하면 조각나 남았다 (2026-09-29 최현서 v2 1번).
+   * SVG 안의 누르는 도형은 외곽선을 아예 쓰지 않고, 키보드로 옮겨 왔을 때만 모양으로 알린다 —
+   * 영토는 윤곽을 밝히고, 섬 이름표 · 관계도 노드는 테두리를, 관계선은 선을 굵게 한다
    */
-  svg path[data-pick]:focus-visible {
+  svg [data-pick]:focus,
+  svg [data-edge]:focus,
+  svg [data-node]:focus {
     outline: none;
+  }
+  svg path[data-pick]:focus-visible {
     stroke: var(--t-hex-selected-edge);
     stroke-width: 2.5px;
   }
-  svg g[data-edge]:focus-visible {
-    outline: none;
+  svg g[data-pick]:focus-visible > rect {
+    stroke: var(--t-hex-selected-edge);
+    stroke-width: 1.5px;
+  }
+  svg g[data-node]:focus-visible > polygon {
+    stroke: var(--t-hex-selected-edge);
+    stroke-width: 2.5px;
   }
   svg g[data-edge]:focus-visible > path + path {
     stroke-width: 4px;

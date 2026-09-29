@@ -51,6 +51,7 @@ import {
   CONF_DASH,
   CONF_LABEL,
   KIND_LABEL,
+  KIND_HELP,
   KIND_NAME,
   KIND_ORDER,
   centerChips,
@@ -341,6 +342,8 @@ export default function RelationTab(p: RelationTabProps) {
    * (`legendShift`) 판을 재 둔다. 알약 크기(`labelScale`)도 이 크기를 쓴다
    */
   const [legendOpen, setLegendOpen] = useState(true);
+  // 범례 「?」 에 마우스를 올리거나 키보드 초점이 왔다 — 관계 종류 설명을 띄운다 (v2 3번)
+  const [kindHelp, setKindHelp] = useState(false);
   const boardRef = useRef<HTMLDivElement>(null);
   const [board, setBoard] = useState<{ w: number; h: number } | null>(null);
   useEffect(() => {
@@ -811,6 +814,7 @@ export default function RelationTab(p: RelationTabProps) {
                         if (!isCenter) p.onCenter(n.id);
                       }}
                       // 이웃 노드는 키보드로도 중심으로 삼는다 — Tab 으로 옮겨 Enter · Space
+                      data-node=""
                       tabIndex={isCenter ? undefined : 0}
                       role={isCenter ? undefined : "button"}
                       aria-label={isCenter ? undefined : `${n.t.name} — 중심으로`}
@@ -915,7 +919,27 @@ export default function RelationTab(p: RelationTabProps) {
           }
         >
           <div className="flex items-center justify-between gap-s2">
-            {legendOpen && <h3 className="text-[11px] text-label">관계 유형</h3>}
+            {legendOpen && (
+              <h3 className="flex items-center gap-s2 text-[11px] text-label">
+                관계 유형
+                {/*
+                  물음표 — 올리면 종류마다의 뜻을 판 위에 띄운다. 범례 상자는 안에서 굴러가 설명을 그 밖에
+                  둔다 (2026-09-29 최현서 v2 3번)
+                */}
+                <button
+                  type="button"
+                  aria-label="관계 유형 설명"
+                  aria-expanded={kindHelp}
+                  onMouseEnter={() => setKindHelp(true)}
+                  onMouseLeave={() => setKindHelp(false)}
+                  onFocus={() => setKindHelp(true)}
+                  onBlur={() => setKindHelp(false)}
+                  className="pointer-events-auto flex size-[16px] items-center justify-center rounded-full border border-edge text-[10px] leading-none text-label hover-edge"
+                >
+                  ?
+                </button>
+              </h3>
+            )}
             <button
               type="button"
               aria-expanded={legendOpen}
@@ -1035,6 +1059,31 @@ export default function RelationTab(p: RelationTabProps) {
           없어 끈다. 2단계로 넓힌 채 여기 왔으면 되돌릴 수 있게 켜 둔다.
           「전체 관계 보기」는 보류라 안 둔다 (설계서 4.2.7)
         */}
+        {/* 관계 유형 설명 — 범례 「?」 에 올렸을 때 범례 오른쪽에 뜬다 (v2 3번) */}
+        {legendOpen && kindHelp && (
+          <div
+            role="tooltip"
+            // 판이 낮은 1280×720 에서도 판 안에 들도록 넓고 촘촘하게 둔다
+            className="pointer-events-none absolute left-[214px] top-s4 z-10 flex max-h-[calc(100%-32px)] w-[380px] max-w-[calc(100%-230px)] flex-col gap-s2 overflow-hidden rounded-[12px] border border-edge bg-panel px-s4 py-s3 shadow-lg"
+          >
+            <h3 className="text-[11px] text-label">관계 유형 — 무엇을 뜻하나</h3>
+            <ul className="flex flex-col gap-s2">
+              {KIND_ORDER.map((k) => (
+                <li key={k} className="flex gap-s2 text-[11px] leading-[1.45] text-body">
+                  <span className="mt-[4px]">
+                    <KindDot kind={k} />
+                  </span>
+                  <span>
+                    <span className="font-semibold text-title">{KIND_LABEL[k]}</span>
+                    <span className="text-label"> · {KIND_NAME[k]}</span>
+                    <br />
+                    {KIND_HELP[k]}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {pairEmpty && (
           <div className="absolute bottom-[84px] left-1/2 flex w-[460px] max-w-[calc(100%-32px)] -translate-x-1/2 flex-col items-center gap-s3 rounded-[14px] border border-edge bg-panel px-s6 py-s5 text-center">
             <h3 className="text-[15px] font-semibold text-title">이 기준일에는 두 섬 사이 관계가 없습니다</h3>
@@ -1147,7 +1196,7 @@ export default function RelationTab(p: RelationTabProps) {
             style={{ height: "var(--h-zoom)" }}
           >
             <span aria-hidden>⛶</span>
-            전체 보기
+            화면에 맞춤
           </button>
         </div>
       </div>

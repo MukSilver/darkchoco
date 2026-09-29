@@ -157,8 +157,16 @@ function curve(
 }
 
 /** 관계선 라벨 알약 폭 (viewBox 단위). 겹침 판정과 그리기가 같이 쓴다 */
+/**
+ * 관계선 알약 글자 크기 (viewBox 단위, 칸 반지름 10). 종류 11 · 건수 10 · 높이 22 — 전에는 8 · 7 · 16 이라 100%
+ * 에서도 글자가 안 읽혔다 (2026-09-29 최현서 v2 5번). 확대하면 화면에서 100% 때 크기를 지킨다(`ls`)
+ */
+const PILL_NAME = 11;
+const PILL_COUNT = 10;
+const PILL_H = 22;
+
 function lineLabelW(v: RelView): number {
-  return textWidth(KIND_NAME[v.rel.kind], 8) + textWidth(`${v.count}건`, 7) + 18;
+  return textWidth(KIND_NAME[v.rel.kind], PILL_NAME) + textWidth(`${v.count}건`, PILL_COUNT) + 24;
 }
 
 /**
@@ -364,7 +372,7 @@ export default function HexMap({
       hovered != null && hovered !== selectedTerritory && (d.v.rel.from === hovered || d.v.rel.to === hovered);
     if (!onHover && !topLines.has(d.v.rel.id)) continue;
     const w = lineLabelW(d.v) * ls;
-    const b = { x0: d.mid.x - w / 2, y0: d.mid.y - 8 * ls, x1: d.mid.x + w / 2, y1: d.mid.y + 8 * ls };
+    const b = { x0: d.mid.x - w / 2, y0: d.mid.y - (PILL_H / 2) * ls, x1: d.mid.x + w / 2, y1: d.mid.y + (PILL_H / 2) * ls };
     if (!onHover && placed.some((o) => o.x0 < b.x1 && b.x0 < o.x1 && o.y0 < b.y1 && b.y0 < o.y1)) continue;
     placed.push(b);
     shownLines.add(d.v.rel.id);
@@ -464,6 +472,25 @@ export default function HexMap({
             className={`${pointer} transition-colors`}
             {...keyProps(t.name, t.territoryId === entryId)}
             {...hoverProps(t.territoryId)}
+          />
+        ))}
+        {/*
+          영토 경계 — 같은 섬 안의 영토도 가른다. 전에는 섬 칸이 모두 같은 색이라 이름표만 떠 있고 영토마다의
+          크기와 시점을 옮길 때의 변화를 알 수 없었다 (2026-09-29 최현서 v2 2번). 섬의 옆면(한 단계 진한)
+          색으로 영토 둘레를 한 번 더 긋는다. 흐린 영토는 옅게. 포인터는 안 받는다
+        */}
+        {flat.map((t) => (
+          <path
+            key={`edge-${t.territoryId}`}
+            aria-hidden
+            data-island={t.islandKey}
+            d={t.outline}
+            fill="none"
+            stroke={`var(--t-island-${t.token}-side)`}
+            strokeWidth={1.6}
+            strokeLinejoin="round"
+            opacity={dim(t) ? 0.45 : 1}
+            className="pointer-events-none"
           />
         ))}
         {/*
@@ -592,12 +619,12 @@ export default function HexMap({
             return (
               <g
                 key={`l-${v.rel.id}`}
-                transform={`translate(${mid.x} ${mid.y}) scale(${ls}) translate(${-w / 2} -8)`}
+                transform={`translate(${mid.x} ${mid.y}) scale(${ls}) translate(${-w / 2} ${-PILL_H / 2})`}
               >
-                <rect width={w} height={16} rx={4} fill="var(--t-surface-panel)" stroke="var(--t-border-card)" strokeWidth={0.8} />
-                <text x={7} y={11} fontSize={8} fontWeight={600}>
+                <rect width={w} height={PILL_H} rx={5} fill="var(--t-surface-panel)" stroke="var(--t-border-card)" strokeWidth={0.9} />
+                <text x={9} y={15} fontSize={PILL_NAME} fontWeight={600}>
                   <tspan fill="var(--t-text-title)">{name}</tspan>
-                  <tspan dx={4} fontSize={7} fill="var(--t-text-label)">
+                  <tspan dx={5} fontSize={PILL_COUNT} fill="var(--t-text-label)">
                     {v.count}건
                   </tspan>
                 </text>
