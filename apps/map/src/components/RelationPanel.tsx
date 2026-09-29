@@ -68,6 +68,8 @@ export type RelationPanelProps = {
   onPairPick: (v: RelView) => void;
   /** 「추정 관계 포함」을 꺼서 가린 중심의 관계 수. 관계 없음 요약 문안이 갈린다 (⑦-8g) */
   hiddenEst: number;
+  /** 고른 중심이 이 기준일 지도에 아직 없으면 그 이름 — 머리글이 「선택 없음」 대신 쓴다 (v2 9번) */
+  absentName?: string;
   /** 근거 사건 누르기 — 보고서 팝업 (설계서 4.3.4 · 4.3.6, 한 번 클릭) */
   onOpenEvent?: (id: string) => void;
 };
@@ -171,10 +173,12 @@ export default function RelationPanel(p: RelationPanelProps) {
         kindLabel: actor ? "ACTOR" : "TERRITORY",
         kindToken: null,
         kindAccent: true,
-        stateLabel: c ? "선택됨" : "선택 없음",
-        title: c?.name ?? "관계",
+        stateLabel: c || p.absentName ? "선택됨" : "선택 없음",
+        title: c?.name ?? p.absentName ?? "관계",
         subtitle: !c
-          ? "이 기준일에 기록된 관계가 없습니다"
+          ? p.absentName
+            ? "이 기준일 지도에 아직 없는 영토입니다"
+            : "이 기준일에 기록된 관계가 없습니다"
           : actor
             ? `${cIsl?.name ?? "행위자"} 섬 · 사건 ${c.metrics.eventCount}건 · 활동도 ${c.metrics.activity} · 활동 영토 ${actorN}곳`
             : `${cIsl?.name ?? ""} 섬 · 사건 ${c.metrics.eventCount}건 · 활동도 ${c.metrics.activity} · 연결된 섬 ${islandN}`,

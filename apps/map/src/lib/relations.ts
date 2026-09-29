@@ -218,6 +218,25 @@ export function touching(views: readonly RelView[], id: string): RelView[] {
 }
 
 /**
+ * 관계가 처음 보이는 분기 — 관계 탭 「기준일 옮기기」 (설계서 4.3.6 ⑦-8g). 중심이 있으면 **그 중심에 닿는**
+ * 관계가, 없으면 아무 관계가 처음 보이는 분기다. 지금 분기는 건너뛴다. `at` 은 그 분기에 보이는 관계
+ * (양 끝이 그 분기 지도에 있는 것만)를 낸다 — 관계 근거가 앞이어도 영토가 지도에 나오기 전에는 안 보인다
+ */
+export function firstRelQuarter<Q extends string>(
+  quarters: readonly Q[],
+  current: Q,
+  center: string | null,
+  at: (q: Q) => readonly RelView[],
+): Q | null {
+  for (const q of quarters) {
+    if (q === current) continue;
+    const here = at(q);
+    if (center ? touching(here, center).length > 0 : here.length > 0) return q;
+  }
+  return null;
+}
+
+/**
  * 영토의 [연결] 목록 · 배지 · 지도 선이 쓰는 관계. **행위자는 활동 관계만**이다
  * (설계서 4.3.8 「활동한 영토 목록」). 셋이 같은 목록을 써야 건수가 맞는다 (3.9)
  */

@@ -39,6 +39,7 @@ import {
   backLabel,
   defaultCenter,
   expandHops,
+  firstRelQuarter,
   islandPairs,
   josa,
   linkRows,
@@ -254,7 +255,8 @@ export default function Page() {
   /** 관계 탭이 그리는 관계. 「추정 관계 포함」을 끄면 추정을 뺀다 (피그마 ⑦-8g) */
   const relShown = useMemo(() => withEstimated(rels, relEst), [rels, relEst]);
   const terr = useMemo(() => new Map(layout.territories.map((t) => [t.territoryId, t])), [layout]);
-  const terrName = useCallback((id: string) => terr.get(id)?.name ?? id, [terr]);
+  // 그 분기 지도에 없는 영토(관계 탭에서 고른 중심 따위)도 명부 이름으로 부른다
+  const terrName = useCallback((id: string) => terr.get(id)?.name ?? REGISTRY.get(id)?.name ?? id, [terr]);
   const islandOf = useCallback((id: string) => terr.get(id)?.islandKey, [terr]);
   const islandInfo = useCallback(
     (key: string) => {
@@ -399,14 +401,14 @@ export default function Page() {
    * 「추정 관계를 포함하면 연결 후보를 확인할 수 있습니다」로 알린다)
    */
   const center = useMemo(
-    () =>
-      relPair
-        ? null
-        : relCenter && present.has(relCenter)
-          ? relCenter
-          : defaultCenter(rels, terrName),
-    [relPair, relCenter, present, rels, terrName],
+    // 사람이 고른 중심은 그 분기 지도에 없어도 지킨다 — 전에는 없으면 관계가 가장 많은 영토로 바뀌어,
+    // 과거로 간 뒤 「기준일 옮기기」 가 그 영토 기준 분기(늘 2024 Q3)를 말하고 누르면 중심이
+    // Darkforums 로 바뀌었다 (2026-09-29 최현서 v2 9번)
+    () => (relPair ? null : (relCenter ?? defaultCenter(rels, terrName))),
+    [relPair, relCenter, rels, terrName],
   );
+  /** 고른 중심이 이 기준일 지도에 아직 없다(첫 사건이 뒤다). 관계도 · 패널이 그렇게 알린다 */
+  const centerAbsent = !!center && !present.has(center);
   /**
    * 섬 · 영토 고르기. 고르면 패널을 펼친다 (설계서 4.2.4 「자동 펼침」). **선택을 풀어도
    * 접지는 않는다** — 펼침은 사람이 핸들로 정한 값이다 (2026-09-28 최현서 2번).
@@ -668,14 +670,12 @@ export default function Page() {
 
   const moveTo = useMemo(() => {
     if (!relEmpty) return null;
-    for (const q of quarters) {
-      if (q === ym) continue;
+    // 고른 중심 기준이다 — 중심은 그 분기 지도에 없어도 지킨다(위 `center`). 추정을 가렸으면 그 분기에서도
+    // 가린 채로 본다 — 옮겨 간 뒤 또 비면 안 된다
+    return firstRelQuarter(quarters, ym, center, (q) => {
       const qd = quarterEnd(q, TODAY);
-      // 추정을 가렸으면 그 분기에서도 가린 채로 본다 — 옮겨 간 뒤 또 비면 안 된다
-      const here = withEstimated(relationsAt(ALL_RELS, MAP.events, qd, presentIn(qd)), relEst);
-      if (center ? touching(here, center).length > 0 : here.length > 0) return q;
-    }
-    return null;
+      return withEstimated(relationsAt(ALL_RELS, MAP.events, qd, presentIn(qd)), relEst);
+    });
   }, [relEmpty, center, ym, quarters, relEst]);
 
   /**
@@ -1291,6 +1291,8 @@ export default function Page() {
                 depth={relDepth}
                 onDepth={setRelDepth}
                 hiddenEst={relHiddenEst}
+                centerAbsent={centerAbsent}
+                fallbackName={terrName}
               />
             ) : (
               <EntityTab
@@ -1371,6 +1373,7 @@ export default function Page() {
               pair={relPair}
               onPairPick={pickFromPair}
               hiddenEst={relHiddenEst}
+              absentName={centerAbsent && center ? terrName(center) : undefined}
               onOpenEvent={openReport}
             />
           ) : (
