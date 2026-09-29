@@ -11,7 +11,7 @@
  *   ├ 게시 위치 ─────┼ 유출 규모 ─────┤
  *   └ 유출 항목 ─────────────────────┘
  *   설명 · 연결된 사건 · 관계 · 출처
- *   마스킹 · 접근 로그 안내      JSON 내보내기   사건 자료 다운로드 (.zip)
+ *   저장 안내                   JSON 내보내기   사건 자료 다운로드 (.zip)
  *
  * 무엇을 보일지는 `report.ts` 가 정한다. 여기는 그리기와 누르기만 한다. 「JSON
  * 내보내기」도 같은 모형을 쓴다 — 화면에 없는 칸이 파일에 섞이지 않는다 (L707).
@@ -267,7 +267,13 @@ export default function EventReport({
         </div>
 
         <footer className="flex shrink-0 items-center gap-s3 border-t border-divider px-s5 py-s4">
-          <p className="min-w-0 flex-1 text-[11px] text-label">다운로드 파일 마스킹 처리 · 접근 로그가 기록됩니다</p>
+          {/*
+            사실대로 적는다 — 정적 배포라 접근 기록이 없고, 값을 가리는 것이 아니라 화면 칸만 싣는다. 피그마 문안
+            「다운로드 파일 마스킹 처리 · 접근 로그가 기록됩니다」와 다르다 (2026-09-29 최현서 결정)
+          */}
+          <p className="min-w-0 flex-1 text-[11px] text-label">
+            화면에 보이는 칸만 파일로 저장됩니다 · 원문과 피해 조직명은 들어 있지 않습니다
+          </p>
           <button
             type="button"
             onClick={exportJson}
