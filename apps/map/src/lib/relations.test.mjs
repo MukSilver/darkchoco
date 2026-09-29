@@ -17,6 +17,7 @@ import {
   connectedIslandCount,
   defaultCenter,
   expandHops,
+  firstRelQuarter,
   historyOrder,
   historyText,
   islandPairs,
@@ -321,4 +322,17 @@ test('중심에 닿지 않은 선을 고르면 중심의 관계와 견주지 않
   const text = selectedText(xa, 'c', [ca], (id) => id);
   assert.match(text, /^선택한 관계 x → a는 제휴자 모집 9건입니다\./);
   assert.doesNotMatch(text, /가장 많습니다/);
+});
+
+test('기준일 옮기기 — 고른 중심의 관계가 처음 보이는 분기, 지금 분기는 건너뛴다 (v2 9번)', () => {
+  const qs = ['2024-Q2', '2024-Q3', '2025-Q4', '2026-Q1', '2026-Q2'];
+  // 2024-Q3 에 다른 영토끼리 관계가 처음 보이고, 중심 u 의 관계는 u 가 지도에 나오는 2026-Q1 부터 보인다
+  const at = (q) => [
+    ...(q >= '2024-Q3' ? [view('R1', 'a', 'b', 3)] : []),
+    ...(q >= '2026-Q1' ? [view('R2', 'p', 'u', 1)] : []),
+  ];
+  assert.equal(firstRelQuarter(qs, '2024-Q2', 'u', at), '2026-Q1', '중심 기준 — 아무 관계가 처음 보이는 2024-Q3 이 아니다');
+  assert.equal(firstRelQuarter(qs, '2024-Q2', null, at), '2024-Q3', '중심이 없으면 아무 관계');
+  assert.equal(firstRelQuarter(qs, '2026-Q1', 'u', at), '2026-Q2', '지금 분기는 건너뛴다');
+  assert.equal(firstRelQuarter(qs, '2024-Q2', 'none', at), null, '끝까지 없으면 없다');
 });
