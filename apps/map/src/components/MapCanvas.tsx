@@ -2,7 +2,7 @@
  * 지도 캔버스 — 설계서 4.2.3.
  *
  * 줌은 50~200%, 25% 단위다. 휠과 +/− 단추 둘 다 받는다. 드래그로 옮기고
- * 「전체 보기」로 처음 자리(100%, 가운데)로 돌아온다.
+ * 「화면에 맞춤」으로 처음 자리(100%, 가운데 — 지도 전체가 판에 들어오는 배율)로 돌아온다.
  *
  * **포인터를 캡처하지 않는다.** 드래그 중 포인터가 캔버스를 벗어나도 따라오게
  * 하려고 `setPointerCapture` 를 걸었더니, 캡처가 걸린 뒤로는 `pointerup` 과
@@ -231,14 +231,17 @@ export default function MapCanvas({
   /** 누른 도형으로 고른다 — 섬 이름표 · 영토, 둘 다 아니면 빈 곳이라 선택 해제 (설계서 4.2.3) */
   const pickHit = (hit: Element | null) => {
     const id = hit?.getAttribute("data-id") ?? "";
+    // 이미 고른 섬 · 영토를 다시 누르면 선택을 푼다 (2026-09-29 최현서 v2 2번)
     if (hit?.getAttribute("data-pick") === "island") {
       const i = layout.islands.find((x) => x.islandKey === id);
-      if (i) onSelect({ kind: "island", key: id, name: i.name });
+      if (selection.kind === "island" && selection.key === id) onSelect({ kind: "none" });
+      else if (i) onSelect({ kind: "island", key: id, name: i.name });
       return;
     }
     if (hit?.getAttribute("data-pick") === "territory") {
       const tt = layout.territories.find((x) => x.territoryId === id);
-      if (tt) onSelect({ kind: "territory", id, name: tt.name });
+      if (selection.kind === "territory" && selection.id === id) onSelect({ kind: "none" });
+      else if (tt) onSelect({ kind: "territory", id, name: tt.name });
       return;
     }
     onSelect({ kind: "none" });
@@ -475,7 +478,9 @@ export default function MapCanvas({
         >
           <span aria-hidden>⛶</span>
           {/* 시점 비교 두 장처럼 아주 좁은 캔버스에서는 글자를 숨겨 단추 줄이 캔버스를 안 넘게 한다 */}
-          <span className="@max-[339px]:sr-only">전체 보기</span>
+          {/* 전체 지도가 판에 들어오게 배율 · 자리를 되돌린다 — 「전체 보기」 는 무엇을 하는지 드러나지
+              않았다 (2026-09-29 최현서 v2 2번) */}
+          <span className="@max-[339px]:sr-only">화면에 맞춤</span>
         </button>
       </div>
     </div>

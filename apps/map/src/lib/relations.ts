@@ -44,6 +44,21 @@ export const KIND_LABEL: Record<RelationKind, string> = {
  * 한국어라 둘을 나눠 둔다. 「Activity」 는 피그마에 없다 — 설계서 5.3 이
  * 「범례에 관계 종류 '활동' 추가」를 시안 할 일로 적어 두었다
  */
+/**
+ * 관계 종류 설명 — 관계 탭 범례의 「?」 에 띄운다 (2026-09-29 최현서 v2 3번 「영어라 뜻을 모른다」). 설계서
+ * 2절 「관계선 종류」(후속 = 이전 · 압수 후 이어진 곳, 활동 = 행위자 → 영토)와 관계 연혁 문장(`historyText`)의
+ * 뜻을 한 줄로 옮겼다
+ */
+export const KIND_HELP: Record<RelationKind, string> = {
+  affiliate: "랜섬웨어 그룹 등이 그 포럼 · 채널에서 제휴자를 모집한 관계",
+  contact: "한 곳이 다른 곳의 공지 · 연락 창구로 쓰인 관계",
+  leak: "한 곳이 다른 곳에 유출 데이터를 올린 관계",
+  access: "기업 계정 · VPN 같은 초기 접근 권한을 공급한 관계",
+  sale: "한 곳에서 데이터를 판매한 관계",
+  successor: "이전하거나 압수된 뒤 이어서 문을 연 곳",
+  activity: "행위자가 그 영토에서 활동한 관계 (행위자 → 영토)",
+};
+
 export const KIND_NAME: Record<RelationKind, string> = {
   affiliate: "Recruitment",
   contact: "Communication",
