@@ -230,9 +230,12 @@ jobs:
           # 문자열로 들어오므로 숫자가 아니면 버립니다. argparse 가 죽습니다
           LIMIT="${LIMIT_INPUT:-0}"
           case "$LIMIT" in ''|*[!0-9]*) LIMIT=0;; esac
-          # page_id 꼴(16진수와 대시)만 받습니다. 아니면 버리고 전부 봅니다
+          # page_id 꼴(16진수와 대시)만 받습니다. **틀리면 멈춥니다** (2026-09-30 검토). 전에는 버리고 전부
+          # 봤는데, 한 줄을 보려던 사람이 모르고 쓰기가 켜진 전체 판을 돌리게 됩니다
           PAGE="${PAGE_INPUT:-}"
-          case "$PAGE" in *[!0-9a-fA-F-]*) PAGE="";; esac
+          case "$PAGE" in
+            *[!0-9a-fA-F-]*) echo "::error::page 는 노션 page_id(16진수와 대시)만 받습니다. 주소 전체를 넣지 마십시오"; exit 1 ;;
+          esac
 
           case "${ONLY_INPUT:-all}" in
             forum)  ONLY=forum ;;
@@ -314,16 +317,22 @@ jobs:
           # 무시하고 그대로 Tor 를 태웁니다
           DARKCHOCO_TOR_SKIP: telegram
           LIMIT_INPUT: ${{ inputs.limit }}
+          PAGE_INPUT: ${{ inputs.page }}
         run: |
           set -e
           LIMIT="${LIMIT_INPUT:-0}"
           case "$LIMIT" in ''|*[!0-9]*) LIMIT=0;; esac
+          # 포럼 · 랜섬 잡과 같은 규칙. page 가 텔레그램 줄이 아니면 한갈래 가 조사 없이 바로 끝냅니다
+          PAGE="${PAGE_INPUT:-}"
+          case "$PAGE" in
+            *[!0-9a-fA-F-]*) echo "::error::page 는 노션 page_id(16진수와 대시)만 받습니다. 주소 전체를 넣지 마십시오"; exit 1 ;;
+          esac
           if [ "$WRITE" = "yes" ]; then
-            python dc.py crawl --only telegram --요약만 --limit "$LIMIT" --apply
+            python dc.py crawl --only telegram --요약만 --limit "$LIMIT" ${PAGE:+--page=$PAGE} --apply
           else
             # `cmd_crawl` 이 같은 말을 자기가 찍습니다. 여기서 또 찍으면
             # 화면에 두 줄이 나란히 떠서 「두 번 도는 건가」 로 읽힙니다
-            python dc.py crawl --only telegram --요약만 --limit "$LIMIT"
+            python dc.py crawl --only telegram --요약만 --limit "$LIMIT" ${PAGE:+--page=$PAGE}
           fi
 
       - name: 죽은 곳 쉬기 기록 넣어 두기

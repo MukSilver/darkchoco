@@ -190,6 +190,100 @@ def test_요약에_버틴_줄_수가_나오고_이름은_안_나온다():
     assert "지어낸포럼" not in 글
 
 
+# ── 3. 2026-09-30 검토 뒤 ─────────────────────────────────────
+def _랜섬한판(명부, 우리, 집계처, db: Path, *, apply=False, page="p1", 셈=None):
+    """갈래표의 랜섬 여는 법 · 앞선 것만 가짜로. 합치기 · 버팀 · 쓰기는 진짜로 돈다."""
+    옛명부, 옛표 = run.명부, dict(run.갈래표["ransom"])
+
+    def 앞선것(줄들, 상황):
+        if 셈 is not None:
+            셈.append(len(줄들))
+        return {x.page_id: 집계처() for x in 줄들} if 집계처 else {}
+
+    run.명부 = lambda 갈래: 명부
+    run.갈래표["ransom"].update({"여는법": lambda r, 상황: 우리(), "앞선것": 앞선것, "동시": 1})
+    try:
+        return run.한갈래("ransom", apply=apply, db=db, tor="socks5h://127.0.0.1:9",
+                         조용히=True, page=page)
+    finally:
+        run.명부 = 옛명부
+        run.갈래표["ransom"].clear()
+        run.갈래표["ransom"].update(옛표)
+
+
+def _연결실패():
+    p = Place(갈래="ransom", 이름="지어낸그룹", 주소="http://g.example.test")
+    p.못본이유 = "연결이 안 됩니다(TimeoutError)"
+    return p
+
+
+def _집계처(상태):
+    def 만들기():
+        p = Place(갈래="ransom", 이름="지어낸그룹")
+        p.두드림, p.상태 = True, 상태
+        return p
+    return 만들기
+
+
+def test_집계처가_offline_이라_하면_버티지_않는다():
+    """merge.py 는 집계처 판정을 우리 연결 실패보다 믿는다. #102 전처럼 바로 쓴다."""
+    with tempfile.TemporaryDirectory() as d:
+        명부 = _가짜명부([_줄()])
+        r = _랜섬한판(명부, _연결실패, _집계처("offline"), Path(d) / "b.db")
+        assert r.버팀 == 0, r.버팀
+        assert 명부.쓴값[0][1].get("상태") == "offline", 명부.쓴값
+
+
+def test_집계처가_없고_우리_5xx_면_버틴다():
+    def 우리():
+        p = Place(갈래="ransom", 이름="지어낸그룹", 주소="http://g.example.test")
+        p.두드림, p.상태, p.못본이유 = True, "offline", "HTTP 503"
+        return p
+    with tempfile.TemporaryDirectory() as d:
+        명부 = _가짜명부([_줄()])
+        r = _랜섬한판(명부, 우리, None, Path(d) / "b.db")
+        assert r.버팀 == 1, r.버팀
+        assert 명부.쓴값[0][1] == {}, 명부.쓴값
+
+
+def test_버텨도_시계열에는_본_값이_남는다():
+    """버틴 줄은 사본으로 쓴다. p 를 고치면 _쌓기 가 본 offline 대신 미확인을 건너뛴다.
+
+    _쌓기 를 가짜로 바꿔 넘어온 상태만 본다. 시험은 db 하나를 쉬기 기록과 시계열이 같이 써서
+    진짜 _쌓기 는 잠긴다(실제 판은 파일이 따로다).
+    """
+    받음: list = []
+    with tempfile.TemporaryDirectory() as d:
+        명부 = _가짜명부([_줄()])
+        옛명부, 옛조사, 옛쌓기 = run.명부, run._조사, run._쌓기
+        run.명부 = lambda 갈래: 명부
+        run._조사 = lambda 갈래, 줄들, ctx: ((x, _막힘(상태="offline", 까닭="HTTP 522")) for x in 줄들)
+        run._쌓기 = lambda db, 갈래, 목록: 받음.extend((p.상태, p.두드림) for p in 목록)
+        try:
+            r = run.한갈래("forum", apply=True, db=Path(d) / "b.db", tor=None, 조용히=True, page="p1")
+        finally:
+            run.명부, run._조사, run._쌓기 = 옛명부, 옛조사, 옛쌓기
+    assert r.버팀 == 1 and 명부.쓴값[0][1] == {}, (r.버팀, 명부.쓴값)
+    assert 받음 == [("offline", True)], 받음
+
+
+def test_page_가_이_갈래_줄이_아니면_조사기를_안_부른다():
+    """랜섬은 앞선 것만 불러도 집계처를 여덟 번 친다."""
+    셈: list = []
+    with tempfile.TemporaryDirectory() as d:
+        명부 = _가짜명부([_줄(pid="p1")])
+        r = _랜섬한판(명부, _연결실패, _집계처("offline"), Path(d) / "b.db", page="다른줄", 셈=셈)
+    assert 셈 == [], 셈
+    assert 명부.쓴값 == [] and r.본것 == 0 and r.못본것 == 0
+
+
+def test_page_입력이_틀리면_워크플로가_멈추고_텔레그램에도_넘긴다():
+    글 = (ROOT / ".github" / "workflows" / "places.yml").read_text(encoding="utf-8")
+    assert "주소 전체를 넣지 마십시오\"; exit 1" in 글, "틀린 page 로 전체 판이 돈다"
+    assert "버리고 전부 봅니다" not in 글
+    assert 글.count("${PAGE:+--page=$PAGE}") == 4, "포럼 · 랜섬 · 텔레그램 잡 모두 page 를 넘겨야 한다"
+
+
 def test_crawl_에_page_가_있다():
     글 = (ROOT / "dc.py").read_text(encoding="utf-8")
     assert '"--page"' in 글 and "page=(args.page" in 글
