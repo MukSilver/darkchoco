@@ -13,6 +13,8 @@ import json
 import os
 import re
 
+import masking          # scripts/masking.py. 주소와 초대 링크의 꼴 (금지어). 색인 전 검사와 같은 규칙을 쓴다
+
 from .normalize import has_hangul, norm
 
 NAME_MASK = "(조직명 가림)"
@@ -93,9 +95,17 @@ class Guard:
         return norm(s) not in self.keep
 
     def mask_domains(self, text):
+        # 주소 머리가 있는 링크, 텔레그램 링크, 어니언 주소를 먼저 가린다. 정제 배치가 본문에서는 가리지만
+        # 소제목처럼 빠뜨린 자리가 있었다 (2026-09-30)
+        for p in masking.ADDRESS_PATTERNS:
+            text = p.sub(ADDR_MASK, text)
         return DOMAIN.sub(lambda m: ADDR_MASK if self._is_domain(m.group(1)) else m.group(0), text)
 
     def find_domain(self, text):
+        for p in masking.ADDRESS_PATTERNS:
+            m = p.search(text or "")
+            if m:
+                return m.group(0)
         for m in DOMAIN.finditer(text or ""):
             if self._is_domain(m.group(1)):
                 return m.group(1)
