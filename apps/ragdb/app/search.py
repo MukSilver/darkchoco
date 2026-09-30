@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """F-12 조각 검색 — 처리 1부터 7. 재순위(처리 8)는 rerank.py.
 
-순서가 뜻이 있다 (명세 5.5). 반출 거르기가 가장 앞이다. 그래야 비반출 조각이 후보 자리를
+순서가 뜻이 있다 (설계서 「질문 한 건」). 반출 거르기가 가장 앞이다. 그래야 비반출 조각이 후보 자리를
 차지하지 않고 바깥으로도 나가지 않는다. 넓히기가 후보를 만들고, 재순위는 그 후보 안에서만 다시 매긴다.
 """
 import json
@@ -14,7 +14,7 @@ import numpy as np
 import tokenize_ko as T
 
 from . import config as cfg
-from . import expand, guard, kinds
+from . import expand, guard, kinds, store
 
 
 CASE_ID = re.compile(r"-((?:leak|inc)-\d+)$")
@@ -48,7 +48,23 @@ class Searcher:
         self.case = np.array([(m.group(1) if (m := CASE_ID.search(x.get("document_id") or "")) else "") for x in self.ids], dtype=object)
         self.terms = expand.load(d)          # 없거나 깨졌으면 None (TC-21)
         self.guard = guard.load(os.path.join(d, "guard.json"))
+        # 조각 본문. 색인과 같은 판 폴더에서 읽는다. 옛 판 폴더에는 없고, 그때는 SQLite 에서 읽는다
+        try:
+            with open(os.path.join(d, "chunks.json"), encoding="utf-8") as f:
+                self.bodies = json.load(f)
+        except (OSError, ValueError):
+            self.bodies = None
         assert n == len(self.visible)
+
+    def chunks(self, con, ids):
+        """조각 본문을 받은 순서대로 돌려준다.
+
+        색인과 같은 판의 본문이어야 한다. SQLite 의 chunks 표는 배치가 제자리에서 고치므로, 배치가 도는 동안이나
+        중간에 멈춘 뒤에는 색인과 어긋난다. 판 폴더의 chunks.json 은 그 판을 만들 때 같이 구운 것이다.
+        """
+        if self.bodies is None:
+            return store.chunks_by_id(con, ids)
+        return [dict(self.bodies[i], chunk_id=i) for i in ids if i in self.bodies]
 
     def _scores(self, tokens):
         """낱말 목록의 BM25 점수. 색인에 없는 낱말뿐이면 0."""

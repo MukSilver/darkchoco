@@ -3,8 +3,8 @@
 노션에 쌓인 다크웹, 개인정보 유출 조사 기록을 근거로 한국어 질문에 문장마다 출처를 붙여 답하는 도구입니다.
 근거가 없으면 답을 만들지 않습니다. 방어적 보안 연구와 교육 목적입니다.
 
-    정본        시스템 명세서 DC-RAGDB-SYS-001 판 1.6. **이 저장소에 넣지 않았습니다** (공개 저장소라서)
-    도는 곳      운영 PC. 깃허브 액션으로 돌지 않습니다
+    정본        설계서 DC-RAGDB-DES-001. 노션 「LLM 다크웹 RAG DB 구축 / 설계서」에 있습니다. 문서는 설계서 하나입니다
+    도는 곳      운영 PC (클라우드 서버로 옮길 예정). 깃허브 액션으로 돌지 않습니다
     옮겨 온 날   2026-09-29. 따로 있던 저장소(ragdb)의 그때 판을 옮겼습니다
 
 ## 지금 되어 있는 것
@@ -22,11 +22,11 @@
 | 답변과 출처, 근거 없음 (F-13, F-14, F-15) | app/answer.py, app/prompts/system.md | 됨 |
 | 사전 답변 조회, 답변 재사용 (F-16, F-21) | app/store.py | 됨 |
 | 질의 기록, 하루 차단기 (F-19, F-18 일부) | app/store.py, app/limits.py | 됨 |
-| 질의 한 건의 순서 (명세 5.5) | app/pipeline.py | 됨 |
+| 질의 한 건의 순서 (설계서 「질문 한 건」) | app/pipeline.py | 됨 |
 | 터미널에서 묻기 | scripts/ask.py | 됨 |
-| 예비 측정 (명세 7.2) | scripts/measure.py | 됨 |
+| 예비 측정 | scripts/measure.py | 됨 |
 | 사전 답변 만들기와 검토 (F-17) | scripts/prepare_answers.py, scripts/review_answers.py | 됨. 문제집이 있어야 돕니다 |
-| 문제집 평가 (명세 7.2) | scripts/evaluate.py, app/questions.py | 됨. 문제집이 있어야 돕니다 |
+| 문제집 평가 (설계서 「검증」) | scripts/evaluate.py, app/questions.py | 됨. 문제집이 있어야 돕니다 |
 | 질의 서버, 사람 확인 (F-18 나머지) | | 아직 |
 | 화면 (묻고 답하기, 출처 원문, 예시 질문) | | 아직. 디자인은 새로 짭니다 |
 | 이미지 (F-08) | | 내보내지 않기로 했습니다 |
@@ -50,9 +50,9 @@
 | 겹 | 어디서 | 무엇을 |
 |---|---|---|
 | 1 | 정제 배치 | 노션 칸에 적힌 조직 이름, 주소 머리가 있는 링크, 어니언 주소를 가림 |
-| 2 | find_names.py, chunk.py | 본문에 다르게 적힌 조직 표기를 모델로 찾아 목록으로 가림. 도메인은 규칙으로 전부 가림. 개인정보 꼴이 남은 문서는 통째로 뺌 |
+| 2 | find_names.py, chunk.py | 본문에 다르게 적힌 조직 표기를 모델로 찾아 목록으로 가림. 도메인은 규칙으로 전부 가림. 개인정보 꼴은 그 자리만 가림 |
 | 3 | snapshot.py | 구운 파일 전체를 다시 훑음. 하나라도 걸리면 새 판을 쓰지 않음 |
-| 4 | pipeline.py | 답을 내보내기 직전에 한 번 더 가림 |
+| 4 | pipeline.py | 답을 내보내기 직전에 한 번 더 가림. 저장해 둔 답(사전 답변, 재사용 답변)도 같음 |
 
 장소(포럼, 텔레그램, 랜섬웨어)와 행위자의 이름은 가리지 않습니다. 검색에 필요합니다.
 행위자의 다른 이름은 동일인 추정이라 가립니다.
@@ -77,7 +77,7 @@ copy .env.example .env                                  값을 채웁니다. .en
 .venv\Scripts\python scripts\evaluate.py --answers      답변까지 잼 (모델을 부릅니다)
 .venv\Scripts\python scripts\prepare_answers.py --count 사전 답변을 몇 개 만들지, 얼마쯤 들지
 .venv\Scripts\python scripts\prepare_answers.py         사전 답변 만들기
-.venv\Scripts\python scriptseview_answers.py          검토 전 목록. show, pass, drop
+.venv\Scripts\python scripts\review_answers.py          검토 전 목록. show, pass, drop
 ```
 
 문제집은 `data/questions.json` 에 둡니다. 모양은 `app/questions.py` 맨 위에 적혀 있습니다. 저장소에 넣지 않습니다.
@@ -99,4 +99,5 @@ copy .env.example .env                                  값을 채웁니다. .en
 |---|---|
 | CLAUDE.md | 코드를 쓸 때 지킬 것 |
 
-설계서(판 1.6)와 인수인계 문서는 노션 「LLM RAG DB」 페이지에 있습니다. 화면 디자인은 새로 짭니다.
+설계서와 인수인계 문서는 노션 「LLM 다크웹 RAG DB 구축」 페이지에 있습니다. 화면 디자인은 새로 짭니다.
+코드 주석의 F-12, SR-19 같은 번호의 뜻은 설계서 「코드 주석의 번호」에 있습니다.

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """F-17 사전 답변 갱신 — 문제집 질문에 미리 답을 만들어 둔다. 사람이 검토해 통과시킨 것만 쓰인다.
 
-    python scripts/prepare_answers.py --count          몇 개를 만들지, 얼마쯤 들지만 (0원)
+    python scripts/prepare_answers.py --count          몇 개를 만들지, 얼마쯤 들지만 (모델은 안 부른다. 재순위 비용은 든다)
     python scripts/prepare_answers.py                  하나씩 바로 만든다
     python scripts/prepare_answers.py --batch          배치 호출로 한꺼번에 맡긴다 (비용 절반, 보통 한 시간 안에 끝남)
     python scripts/prepare_answers.py --collect        맡겨 둔 배치의 결과를 받는다
@@ -38,7 +38,7 @@ def evidence(searcher, con, q):
     cands = found["candidates"]
     if not cands:
         return [], 0.0
-    bodies = {c["chunk_id"]: c for c in store.chunks_by_id(con, [c["chunk_id"] for c in cands])}
+    bodies = {c["chunk_id"]: c for c in searcher.chunks(con, [c["chunk_id"] for c in cands])}
     full = [dict(bodies[c["chunk_id"]], **{k: c[k] for k in ("score", "bm25", "expand", "boost")})
             for c in cands if c["chunk_id"] in bodies and bodies[c["chunk_id"]]["visibility"]]
     chunks, applied, ms = rerank.rerank(q, full)
@@ -116,7 +116,7 @@ def collect(con, searcher):
         if r.result.type != "succeeded":
             failed += 1
             continue
-        item["chunks"] = store.chunks_by_id(con, item["chunk_ids"])
+        item["chunks"] = searcher.chunks(con, item["chunk_ids"])
         res = answer.result_of(r.result.message, len(item["chunks"]), discount=0.5)
         spent += res["cost"]
         if res["stop_reason"] != "refusal" and len(item["chunks"]) == len(item["chunk_ids"]) and save(con, searcher, item, res):

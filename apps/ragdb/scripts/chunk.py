@@ -4,7 +4,7 @@
     python scripts/chunk.py --dry     자르기만 하고 보여준다
     python scripts/chunk.py           SQLite chunks에 넣는다
 
-명세 F-05
+F-05
   1. 줄 하나를 속성 조각 하나로, 본문 구간마다 조각 하나로 만든다.
      kind = 용어 문서는 조각으로 만들지 않는다 — 검색 대상이 아니라 넓히기 사전의 원천이다
   2. 본문 길이가 기준(OI-03) 미만인 조각은 색인에서 제외하고 따로 센다
@@ -27,16 +27,20 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from dotenv import load_dotenv
-
-load_dotenv()
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-STD_DIR = os.path.join(ROOT, "data", "standard")
-DB_PATH = os.getenv("SQLITE_PATH", os.path.join(ROOT, "data", "ragdb.sqlite"))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
 
-# OI-03 미결. 정해지기 전까지 설정에서 읽고, 없으면 아래 값으로 시작한다
-MIN_BODY = int(os.getenv("MIN_BODY_CHARS", "40"))
+from app import config as cfg       # noqa: E402  (.env 도 여기서 읽힌다)
+
+# 자리는 설정(app/config.py)을 따른다. 전에는 여기서 따로 정해서, .env 의 상대 경로가 돌리는 자리에 따라
+# 다른 곳을 가리켰다 (2026-09-30 검토에서 찾음)
+STD_DIR = os.path.join(cfg.DATA_DIR, "standard")
+DB_PATH = cfg.SQLITE_PATH
+
+# OI-03 첫 값. 설정에서 읽는다
+MIN_BODY = cfg.MIN_BODY_CHARS
 
 EXPORT_COLUMNS = os.path.join(ROOT, "export_columns.json")
 _columns = None
@@ -92,13 +96,13 @@ CREATE TABLE IF NOT EXISTS documents (
 CREATE INDEX IF NOT EXISTS idx_documents_list ON documents(kind, status, observed_at DESC);
 """
 
-# 명세 3.4 documents 의 나머지 칸. 먼저 만든 DB 에는 없으므로 없을 때만 더한다
+# 설계서 「저장 위치」 documents 의 나머지 칸. 먼저 만든 DB 에는 없으므로 없을 때만 더한다
 MORE_COLUMNS = [("country", "TEXT"), ("signup", "TEXT"), ("related", "TEXT"), ("verdict", "TEXT")]
-VERDICT_KEYS = ["검증 분류", "진위 판정", "신규성 판정", "판정 신뢰도"]      # 검증 네 축 (명세 1.3)
+VERDICT_KEYS = ["검증 분류", "진위 판정", "신규성 판정", "판정 신뢰도"]      # 검증 네 축
 
 
 def connect():
-    """명세 DR-09 — WAL · busy_timeout 5초 · synchronous NORMAL."""
+    """DR-09 — WAL · busy_timeout 5초 · synchronous NORMAL."""
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     c = sqlite3.connect(DB_PATH, timeout=5)
     c.execute("PRAGMA journal_mode=WAL")
@@ -114,7 +118,7 @@ def connect():
 
 def attr_body(doc):
     """속성 조각의 본문. 칸 값을 「이름: 값」 줄로 편다.
-    본문에 이미 있는 것을 다시 쓰지 않는다 (명세 DR-03)."""
+    본문에 이미 있는 것을 다시 쓰지 않는다 (DR-03)."""
     lines = ["%s: %s" % (doc["kind"], doc["title"])]
     if doc.get("summary"):
         lines.append(doc["summary"])
@@ -128,7 +132,7 @@ def attr_body(doc):
 def split(doc):
     """표준 문서 하나 → 조각 목록."""
     if doc["kind"] == "용어":
-        return []          # 검색 대상이 아니다 (명세 F-05 처리 1)
+        return []          # 검색 대상이 아니다 (F-05 처리 1)
 
     md = doc.get("metadata") or {}
     common = {
@@ -165,10 +169,10 @@ def split(doc):
 
 
 REQUIRE_NAME_CHECK = (os.getenv("REQUIRE_NAME_CHECK") or "1").strip() not in ("0", "false", "no")
-# 개인정보 꼴이 남은 문서를 어떻게 할지. mask: 그 자리만 가리고 문서는 둔다. exclude: 문서를 통째로 뺀다 (명세 F-03 대로).
+# 개인정보 꼴이 남은 문서를 어떻게 할지. mask: 그 자리만 가리고 문서는 둔다. exclude: 문서를 통째로 뺀다.
 # 2026-09-30 부터 기본값은 mask 다. 노션 원본을 고쳐 줄 조사팀이 따로 없어 exclude 로 두면 그 문서가 영영 빠진다
 PII_POLICY = (os.getenv("PII_POLICY") or "mask").strip()
-NAMES_FILE = os.path.join(ROOT, "data", "names.json")
+NAMES_FILE = os.path.join(cfg.DATA_DIR, "names.json")
 
 
 def load_guard(docs):
@@ -349,7 +353,7 @@ def run(dry=False, quiet=False):
                  d["revision"]["content_hash"], d["revision"]["notion_edited"],
                  flat(md.get("국가")), flat(md.get("가입 필요")), flat(md.get("연결된 곳")),
                  json.dumps(verdict, ensure_ascii=False) if verdict else None))
-        # 정리 — 이번에 만들지 않은 문서와 조각은 지운다 (명세 F-06 처리 6 의 뜻).
+        # 정리 — 이번에 만들지 않은 문서와 조각은 지운다 (F-06 처리 6 의 뜻).
         # 덮어쓰기만 하면 「DB 반영」이 꺼진 줄, 이름이 바뀐 문서, 줄어든 구간, 가리기 검사에 걸린 문서의 조각이 남는다
         con.execute("CREATE TEMP TABLE keep_c (chunk_id TEXT PRIMARY KEY)")
         con.executemany("INSERT OR IGNORE INTO keep_c VALUES (?)", [(c["chunk_id"],) for c in rows])

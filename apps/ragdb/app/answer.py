@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """F-13 답변 생성, F-14 출처 부여.
 
-조각 하나를 문서 하나로 모델에 준다. 인용(Citations)을 켜고 구조화 출력은 켜지 않는다 (함께 못 켠다, 명세 2.3).
+조각 하나를 문서 하나로 모델에 준다. 인용(Citations)을 켜고 구조화 출력은 켜지 않는다 (함께 못 켠다, 설계서 「개발 스택」).
 바깥으로 나가는 것은 질문(개인정보 꼴을 가린 뒤)과 반출 판정을 통과한 조각뿐이다 (SR-19).
 """
 import os
@@ -25,7 +25,7 @@ class AnswerError(Exception):
 
 
 def system_prompt():
-    """지시문 7개 (명세 4.6). 고치면 평가를 다시 돌린다 (7.2)."""
+    """지시문 7개 (설계서 「답변」). 고치면 평가를 다시 돌린다."""
     global _system
     if _system is None:
         with open(_PROMPT, encoding="utf-8") as f:
@@ -41,14 +41,25 @@ def client():
     return _client
 
 
-def document_text(chunk):
-    """모델에 주는 문서 글. 조각 본문 뒤에 확인일 줄을 붙인다 (지시문 5).
+def date_label(chunk):
+    """그 조각에 붙은 날짜의 이름.
 
-    확인일을 설명(context)에 두면 인용할 수 없어 출처 없는 문장이 생긴다. 본문 뒤에 붙이므로
+    유출 사고 DB 의 문서(사고-inc-N)에 붙은 날짜는 사고가 알려진 때(공표 시점)다. 팀이 확인한 날이 아니다.
+    전에는 전부 「확인일」 이라고 불러서 답이 공표 시점을 확인일이라고 적었다 (2026-09-30 검토에서 찾음).
+    """
+    if chunk.get("kind") == "사고" and "-inc-" in (chunk.get("document_id") or ""):
+        return "공표 시점"
+    return "확인일"
+
+
+def document_text(chunk):
+    """모델에 주는 문서 글. 조각 본문 뒤에 날짜 줄을 붙인다 (지시문 5).
+
+    날짜를 설명(context)에 두면 인용할 수 없어 출처 없는 문장이 생긴다. 본문 뒤에 붙이므로
     본문 안의 인용 위치(글자 번호)는 조각 본문과 그대로 맞는다.
     """
     body = (chunk.get("body") or "").strip() or "(본문 없음)"
-    return "%s\n\n확인일: %s" % (body, chunk.get("observed_at") or "없음")
+    return "%s\n\n%s: %s" % (body, date_label(chunk), chunk.get("observed_at") or "없음")
 
 
 def documents(chunks):

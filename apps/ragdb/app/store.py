@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""SQLite 저장 — 명세 3.4 의 표 가운데 질의와 운영이 쓰는 일곱.
+"""SQLite 저장 — 설계서 「저장 위치」 의 표 가운데 질의와 운영이 쓰는 일곱.
 
 chunks 와 documents 는 scripts/chunk.py 가 만든다. 여기는 그 둘을 읽기만 한다.
-SQLite 는 검색 엔진이 아니라 키로 꺼내는 저장소다 (3.4). 도는 질의는 점조회와 덧붙이기뿐이다.
+SQLite 는 검색 엔진이 아니라 키로 꺼내는 저장소다. 도는 질의는 점조회와 덧붙이기뿐이다.
 """
 import datetime
 import json

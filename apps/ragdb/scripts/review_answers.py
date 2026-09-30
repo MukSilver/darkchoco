@@ -7,7 +7,7 @@
     python scripts/review_answers.py drop 3 --who 이름      지운다
 
 번호는 목록에 나온 순서다. 누가 통과시켰는지는 확인 기록(review_log)에 남는다.
-관리 화면(UI-06)이 생기면 같은 일을 화면에서 한다.
+관리 화면은 만들지 않는다. 검토는 이 스크립트로 한다 (설계서 「운영」).
 """
 import json
 import os
@@ -60,7 +60,7 @@ def main():
             print("  %s %s" % (s["text"], mark))
         print()
         for s in json.loads(r["sources"] or "[]"):
-            print("  [%d] %s / %s · 확인일 %s" % (s["n"], s["title"], s["section"], s["observed_at"] or "없음"))
+            print("  [%d] %s / %s · %s %s" % (s["n"], s["title"], s["section"], s.get("date_label") or "확인일", s["observed_at"] or "없음"))
             body = con.execute("SELECT body FROM chunks WHERE chunk_id = ?", (s["chunk_id"],)).fetchone()
             if body:
                 print("      %s" % body[0][:300].replace("\n", " "))
@@ -75,7 +75,7 @@ def main():
             con.execute("UPDATE answers SET reviewed = 1 WHERE question_key = ?", (r["question_key"],))
             con.execute("INSERT INTO review_log (at, who, what, target) VALUES (?,?,?,?)",
                         (store.now(), name, "사전 답변 검토 통과", r["question_key"]))
-        print("통과시켰다. 다음 스냅샷부터 「자주 묻는 질문」에 나온다")
+        print("통과시켰다. 다음 스냅샷부터 첫 화면의 예시 질문으로 나온다")
         return 0
     if cmd == "drop":
         with con:
