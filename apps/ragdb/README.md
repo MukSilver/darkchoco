@@ -43,7 +43,7 @@
 
 **받은 자료는 저장소에 넣지 않습니다.** `data/` 아래(표준 문서, 색인, 스냅샷, 찾은 이름 목록의 사본)는 루트 `.gitignore` 가 막습니다.
 
-**운영 기록은 Supabase 에 있습니다.** 사전 답변, 재사용 답변, 질의 기록, 비용, 재조사 후보, 평가 질문, 찾아 둔 조직 표기가 rag 스키마에 있습니다(`app/store.py`). 그래서 저장소와 `.env` 만 있으면 어느 기계에서든 같은 기록으로 돕니다. 표는 darkchoco-data 의 `migrations/0012_rag_runtime.sql` 이 만듭니다.
+**운영 기록은 Supabase 에 있습니다.** 사전 답변, 재사용 답변, 질의 기록, 비용, 재조사 후보, 평가 질문, 찾아 둔 조직 표기가 rag 스키마에 있습니다(`app/store.py`). 그래서 저장소와 `.env` 만 있으면 어느 기계에서든 같은 기록으로 돕니다. 표는 darkchoco-data 의 `migrations/0012_rag_runtime.sql`, `0013_rag_cache_and_examples.sql` 이 만듭니다.
 
 ## 나가는 글을 지키는 네 겹
 
@@ -95,7 +95,7 @@ copy .env.example .env                                  값을 채웁니다. .en
 | 숫자 (후보 수, 넓히기 무게, 대기 상한, 하루 한도 등) | `.env`. 기본값과 설명은 `.env.example`, `app/config.py` |
 | 내보내는 칸 | `export_columns.json`. 여기 없는 칸은 나가지 않습니다 |
 | 종류를 알아내는 낱말 | `app/kind_synonyms.json` |
-| 지시문 | `app/prompts/system.md`. 고치면 평가를 다시 돌립니다 |
+| 지시문 | `app/prompts/system.md`. 고치면 평가를 다시 돌리고 답 글도 읽습니다. 옛 지시문으로 만든 재사용 답변은 저절로 새로 만들어지고, 검토 전 사전 답변은 `scripts/prepare_answers.py` 로 다시 만듭니다 |
 
 ## 읽을 것
 

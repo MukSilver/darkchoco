@@ -111,7 +111,7 @@ RAG DB 는 묻고 답하는 곳이다. 목록, 상세, 내려받기 화면과 �
 3. `chunk.py` — 가리기(`app/guard.py`, `app/pii.py`)와 조각 분할. 이름 찾기를 안 거친 문서는 뺀다. 개인정보 꼴은 그 자리만 가린다
 4. `build_index.py --hold` — 금지어 검사(`masking.py`) 뒤 새 판 폴더에 색인, 조각 본문(`chunks.json`), 넓히기 사전(`terms.json`), 지킴이 목록(`guard.json`)
 5. `snapshot.py` — 스냅샷 굽기와 반출 관문
-6. 갈아 끼우기 — `current.txt` 한 줄, 근거 문서가 바뀐 재사용 답변 지움, 반출 기록. 재사용 답변은 답에 쓴 문서가 그대로면 판이 바뀌어도 남는다
+6. 갈아 끼우기 — `current.txt` 한 줄, 근거 문서가 바뀐 재사용 답변 지움, 반출 기록. 재사용 답변은 답에 쓴 문서가 그대로면 판이 바뀌어도 남는다. 지시문이나 모델이 바뀌면 쓰지 않고 새로 답한다(`answer.answer_tag()`)
 7. `recheck.py` — 재조사 추출
 8. Supabase `rag.batch_log` 에 한 줄
 
