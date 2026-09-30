@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """지어낸 자료로 끝까지 태우는 시험 — 조각, 색인, 검색, 질의 순서, 스냅샷과 반출 관문.
 
-번호는 명세 7.1 의 확인 항목이다.
+번호는 설계서 7.2 의 확인 항목이다.
 """
 import json
 import os
@@ -40,7 +40,7 @@ def test_pii_document_is_excluded_when_asked(world, monkeypatch):
     import chunk as C
     monkeypatch.setattr(C, "PII_POLICY", "exclude")
     st = C.run(quiet=True)
-    assert [e["document_id"] for e in st["excluded"]] == ["사고-leak-2"]      # 명세 F-03 대로
+    assert [e["document_id"] for e in st["excluded"]] == ["사고-leak-2"]      # 통째로 빼는 설정일 때 (F-03)
     assert "203.0.113.7" not in _all_text(world)
 
 

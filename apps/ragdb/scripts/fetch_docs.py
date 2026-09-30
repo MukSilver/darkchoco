@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""F-01 받기 — 정제 배치가 Supabase rag 스키마에 만든 표준 문서를 data/standard/ 로 받는다 (명세 판 1.6, AD-21).
+"""F-01 받기 — 정제 배치가 Supabase rag 스키마에 만든 표준 문서를 data/standard/ 로 받는다 (AD-21).
 
     python scripts/fetch_docs.py            새 판이 있을 때만 받는다
     python scripts/fetch_docs.py --force    판이 같아도 다시 받는다
@@ -21,14 +21,17 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 import httpx
-from dotenv import load_dotenv
-
-load_dotenv()
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-STD_DIR = os.path.join(ROOT, "data", "standard")
-VER_FILE = os.path.join(ROOT, "data", "source_version.txt")
-EXCLUDED_FILE = os.path.join(ROOT, "data", "excluded_rows.json")
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+
+from app import config as cfg       # noqa: E402  (.env 도 여기서 읽힌다)
+
+# 자리는 설정(app/config.py)을 따른다
+STD_DIR = os.path.join(cfg.DATA_DIR, "standard")
+VER_FILE = os.path.join(cfg.DATA_DIR, "source_version.txt")
+EXCLUDED_FILE = os.path.join(cfg.DATA_DIR, "excluded_rows.json")
 PAGE = 500   # Data API 한 번에 최대 1,000줄. 여유를 둔다
 
 NEW, NOTHING, FAIL = 0, 10, 1

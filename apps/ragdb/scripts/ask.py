@@ -76,8 +76,8 @@ def main():
     if out["sources"]:
         print("\n── 출처")
         for s in out["sources"]:
-            print("   [%d] %s / %s · %s · 확인일 %s%s" % (
-                s["n"], s["title"], s["section"], s["kind"], s["observed_at"] or "없음",
+            print("   [%d] %s / %s · %s · %s %s%s" % (
+                s["n"], s["title"], s["section"], s["kind"], s.get("date_label") or "확인일", s["observed_at"] or "없음",
                 " · offline" if s.get("status") == "offline" else ""))
     return 0
 

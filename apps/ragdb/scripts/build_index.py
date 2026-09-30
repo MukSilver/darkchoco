@@ -4,10 +4,11 @@
     python scripts/build_index.py            색인을 만들고 곧바로 갈아 끼운다
     python scripts/build_index.py --hold     만들기만 한다. 갈아 끼우기는 refresh.py 가 스냅샷 뒤에 한다
 
-명세 F-06 처리 5 — 제자리에서 덮어쓰지 않는다.
+F-06 처리 5 — 제자리에서 덮어쓰지 않는다.
 새 판 폴더에 다 만든 뒤 마지막에 current.txt 한 줄만 바꿔 갈아 끼운다.
 직전 판은 지우지 않고 다음 배치까지 남긴다.
 """
+import datetime
 import json
 import os
 import shutil
@@ -23,16 +24,20 @@ import bm25s
 
 import chunk as C
 import tokenize_ko as T
-import masking as M   # 금지어 규칙. 가리기는 정제 배치가 하고 여기서는 한 번 더 훑기만 (판 1.6)
+import masking as M   # 금지어 규칙. 가리기는 정제 배치가 하고 여기서는 한 번 더 훑기만
+
+from app import config as cfg       # noqa: E402  (chunk 가 ROOT 를 sys.path 에 넣어 둔다)
+from app import store               # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-INDEX_ROOT = os.path.join(ROOT, "data", "bm25_index")
-CURRENT = os.path.join(ROOT, "data", "current.txt")
-STD_DIR = os.path.join(ROOT, "data", "standard")
+# 자리는 설정(app/config.py)을 따른다. 질의 쪽과 같은 곳을 봐야 한다
+INDEX_ROOT = cfg.INDEX_ROOT
+CURRENT = cfg.CURRENT
+STD_DIR = C.STD_DIR
 
 
 def load_indexed():
-    """색인에 넣을 조각. indexed=1 인 것만 (명세 F-05 처리 2)."""
+    """색인에 넣을 조각. indexed=1 인 것만 (F-05 처리 2)."""
     con = C.connect()
     rows = con.execute(
         "SELECT chunk_id, document_id, kind, title, section, body, visibility, status, observed_at "
@@ -135,7 +140,7 @@ def build(version=None, hold=False):
         print("색인에 넣을 조각이 없다. 먼저 chunk.py 를 돌린다")
         return None
 
-    # 명세 F-06 처리 1 · TC-06 — 반출 조각에 금지어(주소·링크)가 남았으면 색인을 만들지 않는다
+    # F-06 처리 1 · TC-06 — 반출 조각에 금지어(주소·링크)가 남았으면 색인을 만들지 않는다
     bad = []
     for cid, did, kind, title, section, body, vis, status, observed in rows:
         if not vis:
@@ -149,16 +154,20 @@ def build(version=None, hold=False):
             print("  %-45s %s" % (cid[:45], hit))
         return None
 
-    version = version or time.strftime("%Y%m%d-%H%M%S")
+    # 판 이름은 한국 시간으로 짓는다. 서버의 시간대가 달라도 같은 이름이 나오게 한다
+    version = version or datetime.datetime.now(store.KST).strftime("%Y%m%d-%H%M%S")
     out_dir = os.path.join(INDEX_ROOT, version)
     os.makedirs(out_dir, exist_ok=True)
 
     ids = []
     corpus = []
+    bodies = {}
     for cid, did, kind, title, section, body, vis, status, observed in rows:
         ids.append({"chunk_id": cid, "document_id": did, "kind": kind,
                     "title": title, "section": section, "visibility": bool(vis),
                     "status": status, "observed_at": observed})
+        bodies[cid] = {"document_id": did, "kind": kind, "title": title, "section": section, "body": body,
+                       "visibility": 1 if vis else 0, "observed_at": observed, "status": status}
         # 제목과 소제목도 함께 넣는다 — 본문에 이름이 안 나오는 구간이 있다
         corpus.append(T.tokens("%s %s %s" % (title or "", section or "", body or "")))
 
@@ -168,6 +177,11 @@ def build(version=None, hold=False):
 
     with open(os.path.join(out_dir, "ids.json"), "w", encoding="utf-8") as f:
         json.dump(ids, f, ensure_ascii=False)
+    # 조각 본문도 판 폴더에 둔다. 질의는 색인과 같은 판의 본문을 읽는다 (app/search.py).
+    # SQLite 의 chunks 표는 배치가 제자리에서 고치므로, 거기서 읽으면 배치가 중간에 멈췄을 때
+    # 색인은 옛 판인데 본문은 새 것이 된다 (2026-09-30 검토에서 찾음)
+    with open(os.path.join(out_dir, "chunks.json"), "w", encoding="utf-8") as f:
+        json.dump(bodies, f, ensure_ascii=False)
 
     g = bake_guard(out_dir)
     n_terms, sec = bake_terms(out_dir, g)

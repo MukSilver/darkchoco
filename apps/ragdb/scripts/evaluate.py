@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""문제집 평가 (명세 7.2) — 세 벌을 이 순서로 잰다.
+"""문제집 평가 (설계서 7.1) — 세 벌을 이 순서로 잰다.
 
     python scripts/evaluate.py                 검색만 잰다 (재순위를 켠 셋째 벌만 돈이 든다)
     python scripts/evaluate.py --answers       답변까지 잰다 (모델을 부른다. 질문 하나에 1센트쯤)
@@ -73,7 +73,7 @@ def run_one(n, qs, searcher, con, with_answers):
         text, _ = pii.mask(q["question"])
         found = searcher.search(text, weight=weight)
         cands = found["candidates"]
-        bodies = {x["chunk_id"]: x for x in store.chunks_by_id(con, [x["chunk_id"] for x in cands])}
+        bodies = {x["chunk_id"]: x for x in searcher.chunks(con, [x["chunk_id"] for x in cands])}
         full = [dict(bodies[x["chunk_id"]], **{k: x[k] for k in ("score", "bm25", "expand", "boost")})
                 for x in cands if x["chunk_id"] in bodies]
         if use_rerank and full:

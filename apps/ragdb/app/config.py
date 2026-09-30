@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """설정 — 값은 전부 .env 에서 읽는다. 코드에 박지 않는다 (CLAUDE.md 「값을 지어내지 않는다」).
 
-아래 기본값 가운데 「첫 값」 이라고 적은 것은 명세서의 미결(OI)을 닫은 값이 아니다.
+아래 기본값 가운데 「첫 값」 이라고 적은 것은 확정한 값이 아니다 (설계서 8.3).
 문제집으로 재기 전에 돌려 보려고 둔 출발점이고, 재고 나면 .env 에서 숫자만 바꾼다.
 """
 import os
@@ -59,7 +59,7 @@ RERANK_ENABLED = _b("RERANK_ENABLED", True)
 RERANK_MODEL = _s("RERANK_MODEL", "rerank-v3.5")     # OI-25 첫 값
 RERANK_TIMEOUT_MS = _i("RERANK_TIMEOUT_MS", 10000)   # OI-21 첫 값. 실측(2026-09-30): 첫 호출 6.7초, 그 뒤 0.3에서 0.5초
 RERANK_MIN_SCORE = _f("RERANK_MIN_SCORE", 0.0)       # OI-22. 0 이면 문턱을 쓰지 않음
-RERANK_PRICE_PER_SEARCH = _f("RERANK_PRICE_PER_SEARCH", 0.0025)   # 달러. 명세 2.3 의 위쪽 값
+RERANK_PRICE_PER_SEARCH = _f("RERANK_PRICE_PER_SEARCH", 0.0025)   # 달러. 검색 한 번 값으로 넉넉히 잡은 것
 
 # ── 답변 (F-13) ──
 ANSWER_MODEL = _s("ANSWER_MODEL", "claude-sonnet-5")
