@@ -88,7 +88,7 @@ def run(quiet=False):
         return None
     docs = [d for d in C.load_docs() if d["kind"] != "용어"]
     con = store.connect()
-    live = {r["document_id"]: r for r in con.execute("SELECT document_id, title, observed_at FROM documents WHERE visibility = 1")}
+    live = {r["document_id"]: r for r in con.execute("SELECT document_id, kind, title, observed_at FROM documents WHERE visibility = 1")}
 
     shown = [(d["title"], [d["title"]] + [a for a in (d.get("aliases") or []) if isinstance(a, str)])
              for d in docs if d["document_id"] in live]
@@ -130,9 +130,9 @@ def run(quiet=False):
             counts[branch] += 1
             if name is not None or branch == "대조 못함":
                 queue(con, branch, name, r["id"])
-        # 처리 6: 확인일이 오래된 항목
+        # 처리 6: 확인일이 오래된 항목. 팀이 다시 확인하는 종류만 (사고와 판정의 날짜는 확인일이 아니다)
         for did, r in live.items():
-            if is_stale(r["observed_at"]):
+            if is_stale(r["observed_at"], kind=r["kind"]):
                 counts["오래됨"] += 1
                 queue(con, "오래됨", r["title"])
         # 처리 11: 쓴 질문 낱말 지문을 지운다

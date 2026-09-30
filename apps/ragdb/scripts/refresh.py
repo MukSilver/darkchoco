@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""수집 배치와 색인 배치를 한 번에 (명세 2.1, 2.2). 새 판이 없으면 아무것도 하지 않는다.
+"""주간 배치. 받기부터 판 교체까지 한 번에 (설계서 4.1). 새 판이 없으면 아무것도 하지 않는다.
 
     .venv\\Scripts\\python scripts\\refresh.py            새 판이 있을 때만
     .venv\\Scripts\\python scripts\\refresh.py --force    판이 같아도 다시
@@ -83,11 +83,19 @@ def main():
         return 1 if step else 0
 
     # 1. 받기
+    # 받기는 받은 판 이름을 곧바로 적어 둔다. 그래서 뒤 단계에서 멈추면 다음 회차에 「받을 새 판이 없다」 가 되어
+    # 다시 만들지 않는다 (2026-09-30 검토에서 찾음). 받았는데 끝까지 못 간 것을 표시해 두고, 다음 회차에 이어서 만든다
+    pending = os.path.join(cfg.DATA_DIR, "pending_build.txt")
     if not a.local:
         got = run("fetch_docs.py", *(["--force"] if a.force else []))
-        if got == 10:
-            return 0          # 받을 새 판이 없다. 기록도 남기지 않는다
-        if got != 0:
+        if got == 0:
+            with open(pending, "w", encoding="utf-8") as f:
+                f.write(started + "\n")
+        elif got == 10:
+            if not os.path.exists(pending):
+                return 0          # 받을 새 판이 없다. 기록도 남기지 않는다
+            print("받을 새 판은 없지만 지난 배치가 끝까지 가지 못했다. 받아 둔 자료로 다시 만든다")
+        else:
             return finish("받기")
 
     # 2. 이름 찾기. 못 본 문서가 있어도(끝 값 2) 계속한다. 그 문서는 조각으로 만들지 않을 뿐이다
@@ -146,6 +154,8 @@ def main():
     con = store.connect()
     line["observed"]["dropped_cache"] = store.drop_old_cache(con, version)
     con.close()
+    if os.path.exists(pending):
+        os.remove(pending)          # 새 판까지 왔다. 다음 회차는 새 판이 있을 때만 돈다
 
     # 7. 재조사 추출
     rs = recheck.run(quiet=True)

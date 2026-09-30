@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""질의 한 건의 순서 — 명세 5.5. 순서를 바꾸지 않는다. 자리마다 까닭이 있다.
+"""질의 한 건의 순서 — 설계서 4.3. 순서를 바꾸지 않는다. 자리마다 까닭이 있다.
 
 사람 확인(순서 1의 앞 절반)은 질의 서버가 요청을 받는 자리에서 하고 여기로 넘긴다.
 여기서 내는 이벤트는 5.3 의 SSE 이벤트와 같은 이름이다: received, searching, text, replace, sources, done, error.
@@ -44,10 +44,21 @@ def word_fingerprints(tokens):
 
 
 def source_list(chunks):
-    """출처 목록. 번호, 조각, 확인일 (F-14 처리 4)."""
+    """출처 목록. 번호, 조각, 날짜와 그 날짜의 이름 (F-14 처리 4)."""
     return [{"n": i, "chunk_id": c["chunk_id"], "document_id": c["document_id"], "kind": c.get("kind"),
              "title": c.get("title"), "section": c.get("section"), "observed_at": c.get("observed_at"),
-             "status": c.get("status")} for i, c in enumerate(chunks, 1)]
+             "date_label": answer.date_label(c), "status": c.get("status")} for i, c in enumerate(chunks, 1)]
+
+
+def cleaned_answer(g, hit):
+    """저장해 둔 답(사전 답변, 재사용 답변)을 내보내기 전에 지금 판의 지킴이로 한 번 더 가린다.
+
+    답을 만든 뒤에 새로 찾은 조직 표기가 있을 수 있다. 새 답변만 가리고 저장해 둔 답은 그대로 내보내던 것을
+    고쳤다 (2026-09-30 검토에서 찾음).
+    """
+    sents = [dict(s, text=g.clean(s.get("text"))) for s in hit["answer"]]
+    sources = [dict(s, title=g.clean(s.get("title")), section=g.clean(s.get("section"))) for s in hit["sources"]]
+    return sents, sources
 
 
 def ask(question, evaluation=False, who=None, searcher=None, con=None, limiter=None,
@@ -87,9 +98,10 @@ def ask(question, evaluation=False, who=None, searcher=None, con=None, limiter=N
         hit = store.prepared_answer(con, key) if key else None
         if hit:
             log.update(used_prepared=1, sources=[s["chunk_id"] for s in hit["sources"]])
-            yield "text", "".join(s["text"] + " " for s in hit["answer"]).strip()
-            yield "sources", hit["sources"]
-            yield "done", {"kind": "prepared", "sentences": hit["answer"], "created_at": hit["created_at"],
+            sents, sources = cleaned_answer(searcher.guard, hit)
+            yield "text", "".join(s["text"] + " " for s in sents).strip()
+            yield "sources", sources
+            yield "done", {"kind": "prepared", "sentences": sents, "created_at": hit["created_at"],
                            "version": searcher.version, "pii_masked": bool(found)}
             return
 
@@ -98,9 +110,10 @@ def ask(question, evaluation=False, who=None, searcher=None, con=None, limiter=N
             hit = store.cached_answer(con, searcher.version, key_fp)
             if hit:
                 log.update(reused=1, sources=[s["chunk_id"] for s in hit["sources"]])
-                yield "text", "".join(s["text"] + " " for s in hit["answer"]).strip()
-                yield "sources", hit["sources"]
-                yield "done", {"kind": "reused", "sentences": hit["answer"], "created_at": hit["created_at"],
+                sents, sources = cleaned_answer(searcher.guard, hit)
+                yield "text", "".join(s["text"] + " " for s in sents).strip()
+                yield "sources", sources
+                yield "done", {"kind": "reused", "sentences": sents, "created_at": hit["created_at"],
                                "version": searcher.version, "pii_masked": False}
                 return
 
@@ -121,7 +134,7 @@ def ask(question, evaluation=False, who=None, searcher=None, con=None, limiter=N
 
         chunks, applied, ms = [], False, 0
         if cands:
-            bodies = {c["chunk_id"]: c for c in store.chunks_by_id(con, [c["chunk_id"] for c in cands])}
+            bodies = {c["chunk_id"]: c for c in searcher.chunks(con, [c["chunk_id"] for c in cands])}
             full = [dict(bodies[c["chunk_id"]], **{k: c[k] for k in ("score", "bm25", "expand", "boost")})
                     for c in cands if c["chunk_id"] in bodies and bodies[c["chunk_id"]]["visibility"]]
 
@@ -183,6 +196,8 @@ def ask(question, evaluation=False, who=None, searcher=None, con=None, limiter=N
             return
 
         sents = answer.sentences(res["blocks"])
+        for s in sents:
+            s["text"] = g.clean(s["text"])      # 블록을 이어 붙인 문장으로 한 번 더. 이름이 두 블록에 걸쳐 있을 수 있다
         used = sorted({n for s in sents for n in s["sources"]})
         sources = [s for s in source_list(chunks) if s["n"] in used]
         yield "sources", sources

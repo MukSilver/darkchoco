@@ -46,7 +46,7 @@ def check_anthropic():
 
 
 def check_supabase():
-    """표준 문서를 받는 곳 (명세 판 1.6 F-01). rag.versions 를 한 줄 읽어 본다."""
+    """표준 문서를 받는 곳 (F-01). rag.versions 를 한 줄 읽어 본다."""
     url = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
     key = os.getenv("SUPABASE_SERVICE_KEY", "").strip()
     if not url or not key:

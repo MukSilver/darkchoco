@@ -177,3 +177,49 @@ def test_excluded_names_are_counted_not_blocked(world):
     ex = snapshot.excluded_names(world.version)
     assert ex["files"] == 1 and ex["by_kind"] == {"포럼": 1}
     assert "GammaForum" not in json.dumps(ex, ensure_ascii=False)
+
+
+# ── 2026-09-30 검토에서 고친 것 ──
+def test_query_reads_bodies_of_its_own_version(world):
+    """배치가 SQLite 의 조각을 고쳐도, 질의는 색인과 같은 판 폴더의 본문을 읽는다."""
+    con = store.connect()
+    s = Searcher()
+    cid = "포럼-alphaforum#s1"
+    before = s.chunks(con, [cid])[0]["body"]
+    con.execute("UPDATE chunks SET body = '배치가 도는 중에 바뀐 본문' WHERE chunk_id = ?", (cid,))
+    con.commit()
+    assert s.chunks(con, [cid])[0]["body"] == before
+    assert store.chunks_by_id(con, [cid])[0]["body"] != before
+    con.close()
+
+
+def test_stored_answer_is_cleaned_when_it_goes_out(world, fake_stream):
+    """저장해 둔 답에 나중에 찾은 조직 표기가 들어 있어도 나갈 때 가려진다."""
+    con = store.connect()
+    key = __import__("tokenize_ko").question_key("AlphaForum 지금 상태 알려줘")
+    h = con.execute("SELECT content_hash FROM documents WHERE document_id = '포럼-alphaforum'").fetchone()[0]
+    sents = [{"text": "가나다몰 자료가 AlphaForum 에 올라왔습니다.", "sources": [1], "cited": True}]
+    srcs = [{"n": 1, "chunk_id": "포럼-alphaforum#s1", "document_id": "포럼-alphaforum", "kind": "포럼",
+             "title": "AlphaForum", "section": "가나다몰 글", "observed_at": "2026-09-01", "status": "online"}]
+    with con:
+        con.execute("INSERT INTO answers (question_key, question, answer, sources, model, created_at, reviewed, doc_hashes) "
+                    "VALUES (?,?,?,?,?,?,1,?)", (key, "q", store.j(sents), store.j(srcs), "m", store.now(),
+                                                 store.j({"포럼-alphaforum": h})))
+    con.close()
+    out = pipeline.run("AlphaForum 지금 상태 알려줘", evaluation=True, stream_factory=fake_stream([("x", [0])]))
+    assert out["done"]["kind"] == "prepared"
+    assert "가나다몰" not in json.dumps(out, ensure_ascii=False)
+
+
+def test_only_checked_kinds_go_stale():
+    import snapshot
+    assert snapshot.is_stale("2020-01-01", kind="포럼") is True
+    assert snapshot.is_stale("2020-01-01", kind="사고") is False          # 사고의 날짜는 공표 시점이나 수집일이다
+    assert snapshot.is_stale("2020-01-01", kind="판정") is False
+
+
+def test_date_label_tells_publication_from_check():
+    inc = {"kind": "사고", "document_id": "사고-inc-3", "body": "본문", "observed_at": "2025-12-01"}
+    leak = {"kind": "사고", "document_id": "사고-leak-3", "body": "본문", "observed_at": "2026-06-02"}
+    assert answer.date_label(inc) == "공표 시점" and answer.document_text(inc).endswith("공표 시점: 2025-12-01")
+    assert answer.date_label(leak) == "확인일" and answer.document_text(leak).endswith("확인일: 2026-06-02")
