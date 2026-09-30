@@ -156,7 +156,7 @@ def main():
         from app.search import Searcher
         line["observed"]["dropped_cache"] = store.connect().drop_stale_cache(Searcher(version).docs)
     except store.StoreError as e:
-        # 새 판은 이미 쓰이고 있다. 옛 판의 재사용 답변은 판이 달라 어차피 걸리지 않는다
+        # 새 판은 이미 쓰이고 있다. 근거가 바뀐 재사용 답변은 질의 때 문서 해시를 다시 대조하므로 못 지워도 쓰이지 않는다
         line["failed"].append({"what": "판 교체 뒤 기록", "note": str(e)})
     if os.path.exists(pending):
         os.remove(pending)          # 새 판까지 왔다. 다음 회차는 새 판이 있을 때만 돈다
