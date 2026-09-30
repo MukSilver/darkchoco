@@ -12,7 +12,7 @@
     3 조각            chunk.py          가리기, 가리기 검사(F-03), 조각과 목록
     4 색인            build_index.py    금지어 검사, 색인, 넓히기 사전, 지킴이 목록. 갈아 끼우지는 않는다
     5 스냅샷과 관문     snapshot.py       굽기, 반출 관문 (F-22)
-    6 갈아 끼우기                        current.txt 한 줄, 옛 판의 재사용 답변 지움, 반출 기록
+    6 갈아 끼우기                        current.txt 한 줄, 근거 문서가 바뀐 재사용 답변 지움, 반출 기록
     7 재조사 추출      recheck.py        (F-20)
     8 배치 기록                          저장소(Supabase rag.batch_log)에 한 줄
 
@@ -153,7 +153,8 @@ def main():
     snapshot.publish_current(version, snap["baked_at"])
     try:
         snapshot.log_export(version, snap["documents"], snap["chunks"])
-        line["observed"]["dropped_cache"] = store.connect().drop_old_cache(version)
+        from app.search import Searcher
+        line["observed"]["dropped_cache"] = store.connect().drop_stale_cache(Searcher(version).docs)
     except store.StoreError as e:
         # 새 판은 이미 쓰이고 있다. 옛 판의 재사용 답변은 판이 달라 어차피 걸리지 않는다
         line["failed"].append({"what": "판 교체 뒤 기록", "note": str(e)})

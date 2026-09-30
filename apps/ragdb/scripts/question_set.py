@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-"""문제집을 파일로 받아 고치고 다시 올린다 (설계서 「검증」).
+"""평가 질문을 파일로 받아 고치고 다시 올린다 (설계서 「검증」).
 
-    python scripts/question_set.py                  지금 문제집이 몇 문항인지
-    python scripts/question_set.py pull 파일.json    저장소의 문제집을 파일로 받는다
-    python scripts/question_set.py push 파일.json    파일의 문제집으로 통째로 바꾼다
+    python scripts/question_set.py                  지금 평가 질문이 몇 문항인지
+    python scripts/question_set.py pull 파일.json    저장소의 평가 질문을 파일로 받는다
+    python scripts/question_set.py push 파일.json    파일의 평가 질문으로 통째로 바꾼다
 
-문제집은 운영 기록 저장소(Supabase 의 rag.questions)에 있다. 파일 모양은 app/questions.py 맨 위에 적혀 있다.
+평가 질문은 운영 기록 저장소(Supabase 의 rag.questions)에 있다. 파일 모양은 app/questions.py 맨 위에 적혀 있다.
 파일은 깃허브 저장소 밖에 둔다. 반출하지 않는 줄의 이름이 들어 있다.
 올린 뒤에는 scripts/evaluate.py 로 다시 재고, scripts/prepare_answers.py 로 사전 답변을 다시 만든다.
 """
@@ -36,7 +36,7 @@ def main():
     args = sys.argv[1:]
     if not args:
         qs = questions.load(st)
-        print("문제집 %d문항 (답 없음이 정답인 것 %d)" % (len(qs), sum(1 for q in qs if q["none"])))
+        print("평가 질문 %d문항 (답 없음이 정답인 것 %d)" % (len(qs), sum(1 for q in qs if q["none"])))
         return 0
     if len(args) != 2 or args[0] not in ("pull", "push"):
         print(__doc__)

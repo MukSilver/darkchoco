@@ -116,7 +116,10 @@ def ask(question, evaluation=False, who=None, searcher=None, con=None, limiter=N
 
         # 5. 재사용 답변 (F-21). 개인정보를 가렸으면 건너뛴다
         if key_fp:
-            hit = _try(lambda: con.cached_answer(searcher.version, key_fp))
+            hit = _try(lambda: con.cached_answer(key_fp))
+            if hit and not store.holds(searcher.docs, hit):
+                _try(lambda: con.drop_cache(key_fp))           # 근거 문서가 바뀌었다. 새로 답한다
+                hit = None
             if hit:
                 log.update(reused=1, sources=[s["chunk_id"] for s in hit["sources"]])
                 sents, sources = cleaned_answer(searcher.guard, hit)
@@ -189,7 +192,7 @@ def ask(question, evaluation=False, who=None, searcher=None, con=None, limiter=N
                     buf += value
                     cut = answer.last_sentence_end(buf)
                     if cut:
-                        yield "text", g.clean(buf[:cut])
+                        yield "text", answer.plain(g.clean(buf[:cut]))
                         buf = buf[cut:]
                 else:
                     res = value
@@ -197,7 +200,7 @@ def ask(question, evaluation=False, who=None, searcher=None, con=None, limiter=N
             yield "error", {"status": 503, "code": e.code}
             return
         if buf:
-            yield "text", g.clean(buf)
+            yield "text", answer.plain(g.clean(buf))
         for b in res["blocks"]:
             b["text"] = g.clean(b["text"])
         _try(lambda: con.add_usage(answer_cost=res["cost"], new_answer=True, evaluation=evaluation))
@@ -219,7 +222,9 @@ def ask(question, evaluation=False, who=None, searcher=None, con=None, limiter=N
 
         # 13. 재사용 답변 저장. 개인정보를 가린 질문은 저장하지 않는다
         if key_fp and res["stop_reason"] == "end_turn":
-            _try(lambda: con.save_cache(searcher.version, key_fp, sents, sources, res["model"]))
+            hashes = {s["document_id"]: searcher.docs[s["document_id"]]["content_hash"]
+                      for s in sources if s["document_id"] in searcher.docs}
+            _try(lambda: con.save_cache(searcher.version, key_fp, sents, sources, res["model"], hashes))
 
         yield "done", {"kind": "new", "sentences": sents, "version": searcher.version, "pii_masked": bool(found),
                        "rerank_applied": applied, "truncated": res["stop_reason"] == "max_tokens"}

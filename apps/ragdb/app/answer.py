@@ -203,7 +203,45 @@ def sentences(blocks):
             if p:
                 out.append({"text": p, "sources": ns, "cited": bool(ns)})
         start = end
-    return out
+    return _merge_headings(out)
+
+
+_MARK = re.compile(r"\*\*|__|^#{1,6}\s+|^[-*•]\s+", re.M)
+# 내용 없이 목록을 여는 말. 지시문이 금지해도 모델이 쓴다. 출처가 없고 이 꼴이면 뺀다
+_LEAD = re.compile(r"(다음과 같습니다|아래와 같습니다|정리하면 다음과 같습니다|다음과 같이 정리됩니다)[.:]?$")
+_ENDS = re.compile(r"[.!?。다요죠음됨함]\s*[)\]」]?\s*$")
+
+
+def plain(text):
+    """굵은 글씨, 머리글, 글머리 기호 같은 꾸밈 표시를 뗀다. 지시문이 금지해도 모델이 가끔 쓴다."""
+    return _MARK.sub("", text or "")
+
+
+def _merge_headings(out):
+    """출처 없는 제목 줄을 바로 다음 문장에 붙인다.
+
+    여러 건을 나열하는 답에서 모델이 「INC-62 (의료 분야 유출 사고, 2026년 7월)」 같은 제목 줄을 따로 쓴다.
+    제목 줄은 다음 문장이 설명하는 대상의 이름이라 다음 문장과 같은 출처를 가진다. 따로 세면 출처 없는 문장이
+    늘어난다 (2026-09-30 평가에서 찾음). 문장으로 끝나는 줄(「네, 있습니다.」)은 붙이지 않는다.
+    """
+    for s in out:
+        s["text"] = plain(s["text"]).strip()
+    merged = []
+    i = 0
+    while i < len(out):
+        s = out[i]
+        head = (not s["cited"] and i + 1 < len(out) and out[i + 1]["cited"] and len(s["text"]) <= 60
+                and not _ENDS.search(s["text"]))
+        if head:
+            nxt = dict(out[i + 1])
+            nxt["text"] = "%s: %s" % (s["text"].rstrip(": "), nxt["text"])
+            merged.append(nxt)
+            i += 2
+            continue
+        if s["text"] and not (not s["cited"] and _LEAD.search(s["text"])):
+            merged.append(s)
+        i += 1
+    return merged
 
 
 def grounded(blocks):

@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-"""F-17 사전 답변 갱신 — 문제집 질문에 미리 답을 만들어 둔다. 사람이 검토해 통과시킨 것만 쓰인다.
+"""F-17 사전 답변 갱신 — 평가 질문 질문에 미리 답을 만들어 둔다. 사람이 검토해 통과시킨 것만 쓰인다.
 
     python scripts/prepare_answers.py --count          몇 개를 만들지, 얼마쯤 들지만 (모델은 안 부른다. 재순위 비용은 든다)
     python scripts/prepare_answers.py                  하나씩 바로 만든다
     python scripts/prepare_answers.py --batch          배치 호출로 한꺼번에 맡긴다 (비용 절반, 보통 한 시간 안에 끝남)
     python scripts/prepare_answers.py --collect        맡겨 둔 배치의 결과를 받는다
 
-문제집(저장소의 questions 표)이 비어 있으면 아무것도 만들지 않는다. 오류가 아니다.
+평가 질문(저장소의 questions 표)이 비어 있으면 아무것도 만들지 않는다. 오류가 아니다.
 근거 문서의 내용 해시가 바뀐 질문만 다시 만든다. 처음 들어온 질문은 해시와 상관없이 만든다 (처리 3).
 검색과 재순위는 즉석 질의와 똑같이 태운다 (처리 4, F-12 와 F-13 그대로).
 만든 답은 검토 전(reviewed = 0)으로 들어간다. 통과는 scripts/review_answers.py 로 한다 (처리 6).
@@ -55,8 +55,8 @@ def plan(searcher, con):
     todo, same, empty, spent = [], 0, 0, 0.0
     for item in questions.load(con):
         q, found = pii.mask(item["question"])
-        if found or item["none"]:
-            continue          # 개인정보 꼴이 든 질문과 「답 없음」이 정답인 질문은 사전 답변을 만들지 않는다
+        if found or item["none"] or not item["example"]:
+            continue          # 사전 답변은 예시 질문에만 만든다. 개인정보 꼴이 든 질문과 「답 없음」이 정답인 질문은 빼고
         key = T.question_key(q)
         chunks, cost = evidence(searcher, con, q)
         spent += cost
@@ -126,7 +126,7 @@ def main():
     if "--collect" in sys.argv:
         return collect(con, searcher)
     if not questions.load(con):
-        print("문제집이 비어 있다. 만들 것이 없다 (scripts/question_set.py push 로 올린다)")
+        print("평가 질문이 비어 있다. 만들 것이 없다 (scripts/question_set.py push 로 올린다)")
         return 0
     todo, same, empty, spent = plan(searcher, con)
     guess = sum(answer.estimate_cost(t["question"], t["chunks"]) for t in todo) * (0.5 if "--batch" in sys.argv else 1)
