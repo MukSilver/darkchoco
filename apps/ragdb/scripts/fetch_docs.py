@@ -28,6 +28,7 @@ load_dotenv()
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STD_DIR = os.path.join(ROOT, "data", "standard")
 VER_FILE = os.path.join(ROOT, "data", "source_version.txt")
+EXCLUDED_FILE = os.path.join(ROOT, "data", "excluded_rows.json")
 PAGE = 500   # Data API 한 번에 최대 1,000줄. 여유를 둔다
 
 NEW, NOTHING, FAIL = 0, 10, 1
@@ -51,12 +52,12 @@ def notion_time(s):
     return t.strftime("%Y-%m-%dT%H:%M:%S.") + "%03dZ" % (t.microsecond // 1000)
 
 
-def read_all(c, url, table, select):
+def read_all(c, url, table, select, order="document_id"):
     """표 하나를 끝까지 읽는다."""
     out, offset = [], 0
     while True:
         r = c.get("%s/rest/v1/%s" % (url, table),
-                  params={"select": select, "order": "document_id", "limit": PAGE, "offset": offset})
+                  params={"select": select, "order": order, "limit": PAGE, "offset": offset})
         if r.status_code != 200:
             raise RuntimeError("%s 읽기 %s: %s" % (table, r.status_code, r.text[:200]))
         rows = r.json()
@@ -66,6 +67,24 @@ def read_all(c, url, table, select):
         offset += PAGE
 
 
+def fetch_excluded(c, url):
+    """빠진 줄 명부를 받는다 (F-20 처리 2). 「DB 반영」이 꺼진 줄의 이름만 든 목록이고 본문이 없다.
+
+    못 받으면 직전 명부를 그대로 둔다. 이 파일은 재조사 추출만 읽는다. 색인, 스냅샷, 질의 서버는 읽지 않는다 (SR-01).
+    """
+    try:
+        rows = read_all(c, url, "excluded_rows", "kind,name,aliases,status,observed_at", order="notion_id")
+    except Exception as e:
+        print("빠진 줄 명부를 못 받았다 (%s). 직전 명부를 쓴다" % type(e).__name__)
+        return None
+    tmp = EXCLUDED_FILE + ".tmp"
+    os.makedirs(os.path.dirname(EXCLUDED_FILE), exist_ok=True)
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump({"made_at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "rows": rows}, f, ensure_ascii=False)
+    os.replace(tmp, EXCLUDED_FILE)
+    return len(rows)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--force", action="store_true", help="판이 같아도 다시 받는다")
@@ -73,6 +92,9 @@ def main():
 
     url, c = client()
     with c:
+        n = fetch_excluded(c, url)
+        if n is not None:
+            print("빠진 줄 명부 %d줄" % n)
         r = c.get("%s/rest/v1/versions" % url, params={"select": "*", "order": "version.desc", "limit": 1})
         if r.status_code != 200:
             print("판을 못 읽었다:", r.status_code, r.text[:200])
