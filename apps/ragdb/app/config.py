@@ -39,11 +39,10 @@ def _path(name, default):
 
 # ── 자리 ──
 DATA_DIR = _path("DATA_DIR", "data")
-SQLITE_PATH = _path("SQLITE_PATH", os.path.join("data", "ragdb.sqlite"))
+STAGING_DIR = os.path.join(DATA_DIR, "staging")       # 배치가 조각을 만들어 두는 자리. 색인이 여기서 읽어 판 폴더로 굽는다
 INDEX_ROOT = os.path.join(DATA_DIR, "bm25_index")
 SNAPSHOT_ROOT = os.path.join(DATA_DIR, "snapshot")
 CURRENT = os.path.join(DATA_DIR, "current.txt")
-BATCH_LOG = os.path.join(DATA_DIR, "batch_log.jsonl")
 
 # ── 검색 (F-12) ──
 CANDIDATE_M = _i("CANDIDATE_M", 100)                 # OI-02 첫 값. 문제집 초안(2026-09-30)에서 50 이면 둘이 빠지고 100 이면 다 듦. 재순위 비용은 100개까지 한 단위
@@ -87,6 +86,8 @@ STALE_DAYS = _i("STALE_DAYS", 90)                    # OI-29 첫 값. 확인일�
 MIN_BODY_CHARS = _i("MIN_BODY_CHARS", 40)            # OI-03 첫 값
 
 # ── 열쇠. 값은 여기서만 읽는다 ──
+SUPABASE_URL = _s("SUPABASE_URL")                    # 입력(표준 문서)과 운영 기록(app/store.py)
+SUPABASE_SERVICE_KEY = _s("SUPABASE_SERVICE_KEY")
 ANTHROPIC_API_KEY = _s("ANTHROPIC_API_KEY")
 COHERE_API_KEY = _s("COHERE_API_KEY")
 DISCORD_WEBHOOK = _s("DISCORD_WEBHOOK")

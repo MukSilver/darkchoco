@@ -2,7 +2,6 @@
 """문제집, 사전 답변(F-16, F-17), 평가(7.2), 빠진 줄 명부(F-20). 자료는 지어낸 것이다."""
 import json
 import os
-import sqlite3
 
 from app import answer, pipeline, questions, store
 from app import config as cfg
@@ -21,15 +20,13 @@ EXCLUDED = {"made_at": "2026-09-30T00:00:00+00:00",
 
 
 def _write(world):
-    (world.data / "questions.json").write_text(json.dumps(QUESTIONS, ensure_ascii=False), encoding="utf-8")
+    store.connect().replace_questions(QUESTIONS["questions"])
     (world.data / "excluded_rows.json").write_text(json.dumps(EXCLUDED, ensure_ascii=False), encoding="utf-8")
 
 
 def _resolver(world):
     import chunk as C
-    con = store.connect()
-    live = {r[0] for r in con.execute("SELECT document_id FROM documents WHERE visibility = 1")}
-    con.close()
+    live = {did for did, r in Searcher().docs.items() if r["visibility"]}
     return questions.resolver(C.load_docs(), live, EXCLUDED["rows"])
 
 
@@ -73,30 +70,29 @@ def test_prepared_answer_needs_review_and_fresh_evidence(world, fake_stream, mon
     t = next(x for x in todo if x["id"] == "Q1")
     res = next(v for k, v in answer.generate(t["question"], t["chunks"]) if k == "result")
     assert P.save(con, s, t, res)
-    con.close()
 
     never = fake_stream([("모델을 부르면 안 된다", [0])])
     run = lambda: pipeline.run("AlphaForum 지금 상태 알려줘", evaluation=True, stream_factory=never)
     monkeypatch.undo()                                                # answer.generate 를 되돌린다
     # conftest 의 world 가 건 값도 같이 풀리므로 다시 건다
-    for k, v in {"DATA_DIR": str(world.data), "SQLITE_PATH": str(world.data / "ragdb.sqlite"),
-                 "INDEX_ROOT": str(world.data / "bm25_index"), "CURRENT": str(world.data / "current.txt"),
-                 "FINGERPRINT_KEY": "test-key", "COHERE_API_KEY": ""}.items():
+    for k, v in {"DATA_DIR": str(world.data), "INDEX_ROOT": str(world.data / "bm25_index"),
+                 "CURRENT": str(world.data / "current.txt"), "FINGERPRINT_KEY": "test-key", "COHERE_API_KEY": ""}.items():
         monkeypatch.setattr(cfg, k, v)
+    monkeypatch.setattr(store, "_default", con)
 
     assert run()["done"]["kind"] == "new"                             # 검토 전에는 쓰이지 않는다
-    con = sqlite3.connect(str(world.data / "ragdb.sqlite"))
-    con.execute("DELETE FROM answer_cache")
-    con.execute("UPDATE answers SET reviewed = 1")
-    con.commit()
+    con.cache.clear()
+    for a in con.answers.values():
+        a["reviewed"] = True
     never.request = None
     out = run()
     assert out["done"]["kind"] == "prepared" and never.request is None      # F-16. 모델을 부르지 않는다
     assert out["text"].startswith("AlphaForum 은 접속이 확인됐습니다")
 
-    con.execute("UPDATE documents SET content_hash = '바뀜' WHERE document_id = '포럼-alphaforum'")
-    con.commit()
-    con.close()
+    p = world.data / "bm25_index" / world.version / "documents.json"
+    docs = json.loads(p.read_text(encoding="utf-8"))
+    docs["포럼-alphaforum"]["content_hash"] = "바뀜"
+    p.write_text(json.dumps(docs, ensure_ascii=False), encoding="utf-8")
     assert run()["done"]["kind"] == "new"                             # TC-13. 근거 문서가 바뀌면 옛 답은 안 나온다
 
 
@@ -108,8 +104,7 @@ def test_answer_without_source_is_not_saved(world, monkeypatch):
     t = P.plan(s, con)[0][0]
     res = {"blocks": [{"text": "출처 없이 한 말입니다.", "cites": []}], "stop_reason": "end_turn", "model": "fake", "cost": 0}
     assert not P.save(con, s, t, res)
-    assert con.execute("SELECT COUNT(*) FROM answers").fetchone()[0] == 0
-    con.close()
+    assert con.answers == {}
 
 
 def test_prepared_answer_is_cleaned(world):
@@ -120,9 +115,7 @@ def test_prepared_answer_is_cleaned(world):
     t = P.plan(s, con)[0][0]
     res = {"blocks": [{"text": "가나다몰 자료가 올라왔습니다.", "cites": [{"n": 1}]}], "stop_reason": "end_turn", "model": "fake", "cost": 0}
     assert P.save(con, s, t, res)
-    saved = con.execute("SELECT answer FROM answers").fetchone()[0]
-    con.close()
-    assert "가나다몰" not in saved
+    assert "가나다몰" not in json.dumps(con.answers, ensure_ascii=False)
 
 
 # ── 평가 ──
@@ -139,7 +132,6 @@ def test_evaluate_counts_by_kind(world, monkeypatch):
     base = E.run_one(1, qs, Searcher(), con, with_answers=False)
     wide = E.run_one(2, qs, Searcher(), con, with_answers=True)
     skipped = E.run_one(3, qs, Searcher(), con, with_answers=False)
-    con.close()
     assert base["counts"]["answerable"] == 3 and base["counts"]["hidden"] == 1 and base["counts"]["none"] == 1
     assert base["metrics"]["후보 포함"] == 1.0 and "근거 부합" not in base["metrics"]
     assert wide["weight"] == 0.3 and wide["metrics"]["근거 부합"] == 0.5
@@ -156,11 +148,10 @@ def test_recheck_tells_hidden_rows_apart(world, fake_stream):
     pipeline.run("yyyzzzqqq", evaluation=False, stream_factory=never)             # 아무것과도 안 겹친다
     st = recheck.run(quiet=True)
     assert st["branches"]["빠진 줄 겹침"] == 1 and st["branches"]["겹침 없음"] == 1      # TC-26
-    con = store.connect()
-    rows = con.execute("SELECT branch, row_name FROM recheck_queue WHERE branch = '빠진 줄 겹침'").fetchall()
-    left = con.execute("SELECT COUNT(*) FROM qa_log WHERE word_fps IS NOT NULL").fetchone()[0]
-    con.close()
-    assert [tuple(r) for r in rows] == [("빠진 줄 겹침", "GammaForum")]
+    mem = store.connect()
+    rows = [(r["branch"], r["row_name"]) for r in mem.recheck_rows() if r["branch"] == "빠진 줄 겹침"]
+    left = sum(1 for r in mem.qa_rows() if r["word_fps"] is not None)
+    assert rows == [("빠진 줄 겹침", "GammaForum")]
     assert left == 0                                                  # 쓴 질문 낱말 지문은 지운다
 
 
@@ -181,34 +172,45 @@ def test_excluded_names_are_counted_not_blocked(world):
 
 # ── 2026-09-30 검토에서 고친 것 ──
 def test_query_reads_bodies_of_its_own_version(world):
-    """배치가 SQLite 의 조각을 고쳐도, 질의는 색인과 같은 판 폴더의 본문을 읽는다."""
-    con = store.connect()
-    s = Searcher()
+    """배치가 작업 자리의 조각을 고쳐도, 질의는 색인과 같은 판 폴더의 본문을 읽는다."""
+    import chunk as C
     cid = "포럼-alphaforum#s1"
-    before = s.chunks(con, [cid])[0]["body"]
-    con.execute("UPDATE chunks SET body = '배치가 도는 중에 바뀐 본문' WHERE chunk_id = ?", (cid,))
-    con.commit()
-    assert s.chunks(con, [cid])[0]["body"] == before
-    assert store.chunks_by_id(con, [cid])[0]["body"] != before
-    con.close()
+    before = Searcher().chunks([cid])[0]["body"]
+    p = world.data / "staging" / "chunks.json"
+    chunks = json.loads(p.read_text(encoding="utf-8"))
+    next(c for c in chunks if c["chunk_id"] == cid)["body"] = "배치가 도는 중에 바뀐 본문"
+    p.write_text(json.dumps(chunks, ensure_ascii=False), encoding="utf-8")
+    assert Searcher().chunks([cid])[0]["body"] == before
+    assert [c for c in C.staged()[0] if c["chunk_id"] == cid][0]["body"] != before
 
 
 def test_stored_answer_is_cleaned_when_it_goes_out(world, fake_stream):
     """저장해 둔 답에 나중에 찾은 조직 표기가 들어 있어도 나갈 때 가려진다."""
-    con = store.connect()
+    mem = store.connect()
     key = __import__("tokenize_ko").question_key("AlphaForum 지금 상태 알려줘")
-    h = con.execute("SELECT content_hash FROM documents WHERE document_id = '포럼-alphaforum'").fetchone()[0]
+    h = Searcher().docs["포럼-alphaforum"]["content_hash"]
     sents = [{"text": "가나다몰 자료가 AlphaForum 에 올라왔습니다.", "sources": [1], "cited": True}]
     srcs = [{"n": 1, "chunk_id": "포럼-alphaforum#s1", "document_id": "포럼-alphaforum", "kind": "포럼",
              "title": "AlphaForum", "section": "가나다몰 글", "observed_at": "2026-09-01", "status": "online"}]
-    with con:
-        con.execute("INSERT INTO answers (question_key, question, answer, sources, model, created_at, reviewed, doc_hashes) "
-                    "VALUES (?,?,?,?,?,?,1,?)", (key, "q", store.j(sents), store.j(srcs), "m", store.now(),
-                                                 store.j({"포럼-alphaforum": h})))
-    con.close()
+    mem.put_answer(key, "q", sents, srcs, "m", {"포럼-alphaforum": h})
+    mem.review_answer(key, "시험", passed=True)
     out = pipeline.run("AlphaForum 지금 상태 알려줘", evaluation=True, stream_factory=fake_stream([("x", [0])]))
     assert out["done"]["kind"] == "prepared"
     assert "가나다몰" not in json.dumps(out, ensure_ascii=False)
+
+
+def test_store_outage_does_not_break_answers_but_stops_paid_calls(world, fake_stream, monkeypatch):
+    """운영 기록 저장소가 닿지 않을 때. 관리 질의는 답이 나가고, 방문자 질의는 차단기를 못 봐서 돈 드는 호출을 하지 않는다."""
+    class Down(store.MemoryStore):
+        def _fail(self, *a, **k):
+            raise store.StoreError("닿지 못함")
+        prepared_row = cached_answer = spent_today = add_usage = save_cache = log_query = _fail
+    monkeypatch.setattr(store, "_default", Down())
+    stream = fake_stream([("AlphaForum 은 접속이 확인됐습니다.", [0])])
+    assert pipeline.run("AlphaForum 지금 상태", evaluation=True, stream_factory=stream)["done"]["kind"] == "new"
+    stream2 = fake_stream([("부르면 안 된다", [0])])
+    r = pipeline.run("AlphaForum 지금 상태", evaluation=False, stream_factory=stream2)
+    assert r["error"] == {"status": 503, "code": "upstream"} and stream2.request is None
 
 
 def test_only_checked_kinds_go_stale():

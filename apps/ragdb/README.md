@@ -41,7 +41,9 @@
 
 **이 폴더는 노션을 읽지 않습니다.** 다크웹에도 접속하지 않습니다. 입력구는 Supabase rag 스키마 하나입니다.
 
-**받은 자료는 저장소에 넣지 않습니다.** `data/` 아래(표준 문서, 색인, SQLite, 스냅샷, 찾은 이름 목록)는 루트 `.gitignore` 가 막습니다.
+**받은 자료는 저장소에 넣지 않습니다.** `data/` 아래(표준 문서, 색인, 스냅샷, 찾은 이름 목록의 사본)는 루트 `.gitignore` 가 막습니다.
+
+**운영 기록은 Supabase 에 있습니다.** 사전 답변, 재사용 답변, 질의 기록, 비용, 재조사 후보, 문제집, 찾아 둔 조직 표기가 rag 스키마에 있습니다(`app/store.py`). 그래서 저장소와 `.env` 만 있으면 어느 기계에서든 같은 기록으로 돕니다. 표는 darkchoco-data 의 `migrations/0012_rag_runtime.sql` 이 만듭니다.
 
 ## 나가는 글을 지키는 네 겹
 
@@ -70,9 +72,11 @@ copy .env.example .env                                  값을 채웁니다. .en
 .venv\Scripts\python -m pytest tests -q                 시험 (0원, 열쇠 없이 돕니다)
 ```
 
-문제집을 받은 뒤
+문제집으로 재기와 사전 답변 (문제집은 Supabase 에 있습니다)
 
 ```
+.venv\Scripts\python scripts\question_set.py pull data\q.json   문제집을 파일로 받아 고칩니다
+.venv\Scripts\python scripts\question_set.py push data\q.json   고친 문제집을 올립니다
 .venv\Scripts\python scripts\evaluate.py                문제집으로 검색을 세 벌 잼
 .venv\Scripts\python scripts\evaluate.py --answers      답변까지 잼 (모델을 부릅니다)
 .venv\Scripts\python scripts\prepare_answers.py --count 사전 답변을 몇 개 만들지, 얼마쯤 들지
@@ -80,7 +84,7 @@ copy .env.example .env                                  값을 채웁니다. .en
 .venv\Scripts\python scripts\review_answers.py          검토 전 목록. show, pass, drop
 ```
 
-문제집은 `data/questions.json` 에 둡니다. 모양은 `app/questions.py` 맨 위에 적혀 있습니다. 저장소에 넣지 않습니다.
+문제집 파일의 모양은 `app/questions.py` 맨 위에 적혀 있습니다. 파일은 `data/` 아래나 저장소 밖에 둡니다.
 
 처음 한 번은 조직 이름 찾기가 문서 전체를 봅니다. 4달러쯤 듭니다. 그 뒤로는 바뀐 문서만 봅니다.
 

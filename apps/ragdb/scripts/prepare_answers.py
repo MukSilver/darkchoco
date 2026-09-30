@@ -6,7 +6,7 @@
     python scripts/prepare_answers.py --batch          배치 호출로 한꺼번에 맡긴다 (비용 절반, 보통 한 시간 안에 끝남)
     python scripts/prepare_answers.py --collect        맡겨 둔 배치의 결과를 받는다
 
-문제집(data/questions.json)이 없으면 아무것도 만들지 않는다. 오류가 아니다.
+문제집(저장소의 questions 표)이 비어 있으면 아무것도 만들지 않는다. 오류가 아니다.
 근거 문서의 내용 해시가 바뀐 질문만 다시 만든다. 처음 들어온 질문은 해시와 상관없이 만든다 (처리 3).
 검색과 재순위는 즉석 질의와 똑같이 태운다 (처리 4, F-12 와 F-13 그대로).
 만든 답은 검토 전(reviewed = 0)으로 들어간다. 통과는 scripts/review_answers.py 로 한다 (처리 6).
@@ -38,24 +38,22 @@ def evidence(searcher, con, q):
     cands = found["candidates"]
     if not cands:
         return [], 0.0
-    bodies = {c["chunk_id"]: c for c in searcher.chunks(con, [c["chunk_id"] for c in cands])}
+    bodies = {c["chunk_id"]: c for c in searcher.chunks([c["chunk_id"] for c in cands])}
     full = [dict(bodies[c["chunk_id"]], **{k: c[k] for k in ("score", "bm25", "expand", "boost")})
             for c in cands if c["chunk_id"] in bodies and bodies[c["chunk_id"]]["visibility"]]
     chunks, applied, ms = rerank.rerank(q, full)
     return chunks, (cfg.RERANK_PRICE_PER_SEARCH if ms else 0.0)
 
 
-def doc_hashes(con, ids):
-    ids = sorted(set(ids))
-    rows = con.execute("SELECT document_id, content_hash FROM documents WHERE document_id IN (%s)"
-                       % ",".join("?" * len(ids)), ids).fetchall() if ids else []
-    return {r["document_id"]: r["content_hash"] for r in rows}
+def doc_hashes(searcher, ids):
+    """답에 쓰인 문서의 내용 해시. 지금 판의 문서 목록에서 읽는다."""
+    return {i: searcher.docs[i]["content_hash"] for i in sorted(set(ids)) if i in searcher.docs}
 
 
 def plan(searcher, con):
     """만들 질문을 고른다. 돌려주는 것: [{id, question, key, chunks, hashes}], 건너뛴 수, 근거 없는 수"""
     todo, same, empty, spent = [], 0, 0, 0.0
-    for item in questions.load():
+    for item in questions.load(con):
         q, found = pii.mask(item["question"])
         if found or item["none"]:
             continue          # 개인정보 꼴이 든 질문과 「답 없음」이 정답인 질문은 사전 답변을 만들지 않는다
@@ -65,8 +63,8 @@ def plan(searcher, con):
         if not chunks:
             empty += 1
             continue
-        old = con.execute("SELECT * FROM answers WHERE question_key = ?", (key,)).fetchone()
-        if old and store.answer_holds(con, old):
+        old = con.answer_row(key)
+        if old and store.holds(searcher.docs, old):
             same += 1          # 답에 쓰인 근거 문서가 그대로다. 다시 만들지 않는다
             continue
         todo.append({"id": item["id"], "question": q, "key": key, "chunks": chunks})
@@ -82,15 +80,8 @@ def save(con, searcher, item, res):
     sents = answer.sentences(res["blocks"])
     used = sorted({n for s in sents for n in s["sources"]})
     sources = [s for s in pipeline.source_list(item["chunks"]) if s["n"] in used]
-    hashes = doc_hashes(con, [s["document_id"] for s in sources])      # 답에 실제로 쓰인 문서만
-    with con:
-        con.execute(
-            "INSERT INTO answers (question_key, question, answer, sources, model, created_at, reviewed, doc_hashes) "
-            "VALUES (?,?,?,?,?,?,0,?) ON CONFLICT(question_key) DO UPDATE SET question=excluded.question, "
-            "answer=excluded.answer, sources=excluded.sources, model=excluded.model, created_at=excluded.created_at, "
-            "reviewed=0, doc_hashes=excluded.doc_hashes",
-            (item["key"], item["question"], store.j(sents), store.j(sources), res["model"], store.now(),
-             store.j(hashes)))
+    hashes = doc_hashes(searcher, [s["document_id"] for s in sources])      # 답에 실제로 쓰인 문서만
+    con.put_answer(item["key"], item["question"], sents, sources, res["model"], hashes)
     return True
 
 
@@ -116,14 +107,14 @@ def collect(con, searcher):
         if r.result.type != "succeeded":
             failed += 1
             continue
-        item["chunks"] = searcher.chunks(con, item["chunk_ids"])
+        item["chunks"] = searcher.chunks(item["chunk_ids"])
         res = answer.result_of(r.result.message, len(item["chunks"]), discount=0.5)
         spent += res["cost"]
         if res["stop_reason"] != "refusal" and len(item["chunks"]) == len(item["chunk_ids"]) and save(con, searcher, item, res):
             made += 1
         else:
             dropped += 1
-    store.add_usage(con, answer_cost=spent, evaluation=True)
+    con.add_usage(answer_cost=spent, evaluation=True)
     os.remove(PENDING)
     print("받았다: 만든 것 %d, 출처가 없어 버린 것 %d, 실패 %d, %.2f달러" % (made, dropped, failed, spent))
     return 0
@@ -134,15 +125,15 @@ def main():
     searcher = Searcher()
     if "--collect" in sys.argv:
         return collect(con, searcher)
-    if not questions.load():
-        print("문제집(data/questions.json)이 없다. 만들 것이 없다")
+    if not questions.load(con):
+        print("문제집이 비어 있다. 만들 것이 없다 (scripts/question_set.py push 로 올린다)")
         return 0
     todo, same, empty, spent = plan(searcher, con)
     guess = sum(answer.estimate_cost(t["question"], t["chunks"]) for t in todo) * (0.5 if "--batch" in sys.argv else 1)
     print("만들 질문 %d개 · 근거가 그대로라 건너뛴 것 %d개 · 근거를 못 찾은 것 %d개 · 넉넉히 잡은 비용 %.2f달러" % (
         len(todo), same, empty, guess))
     if spent:
-        store.add_usage(con, rerank_cost=spent, evaluation=True)
+        con.add_usage(rerank_cost=spent, evaluation=True)
     if "--count" in sys.argv or not todo:
         return 0
 
@@ -177,7 +168,7 @@ def main():
             made += 1
         else:
             dropped += 1
-    store.add_usage(con, answer_cost=cost, evaluation=True)
+    con.add_usage(answer_cost=cost, evaluation=True)
     print("만든 것 %d, 출처가 없어 버린 것 %d, 실패 %d, %.2f달러. 검토는 scripts/review_answers.py" % (made, dropped, failed, cost))
     return 0
 

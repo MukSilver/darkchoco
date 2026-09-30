@@ -20,7 +20,7 @@
     반출 오제외    답이 있는 줄이 반출 대상이 아니어서 못 답한 비율  분모: 노션에 답이 있는 질문
 
 어디를 고칠지 알려고 넷으로 나눠 센다: 후보 미포함(넓히기 몫), 재순위 탈락(재순위 몫), 생성 실패, 반출 오제외.
-결과는 data/eval_log.jsonl 에 덧붙인다. 그때 쓴 문제집, 지시문, 모델, 넓히기 사전의 판을 함께 남긴다.
+결과는 저장소의 평가 기록(rag.eval_log)에 덧붙인다. 그때 쓴 문제집, 지시문, 모델, 넓히기 사전의 판을 함께 남긴다.
 비용은 평가 실행 비용 칸에 따로 센다. 하루 차단기를 쓰지 않는다.
 """
 import hashlib
@@ -41,7 +41,6 @@ from app import answer, pii, questions, rerank, store      # noqa: E402
 from app import config as cfg                              # noqa: E402
 from app.search import Searcher                            # noqa: E402
 
-LOG = os.path.join(cfg.DATA_DIR, "eval_log.jsonl")
 RUNS = {1: ("기준선", 0.0, False), 2: ("넓히기", None, False), 3: ("넓히기와 재순위", None, True)}
 
 
@@ -51,6 +50,10 @@ def sha(path):
             return hashlib.sha256(f.read()).hexdigest()[:16]
     except OSError:
         return None
+
+
+def sha_of(data):
+    return hashlib.sha256(json.dumps(data, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()[:16]
 
 
 def ratio(a, b):
@@ -73,7 +76,7 @@ def run_one(n, qs, searcher, con, with_answers):
         text, _ = pii.mask(q["question"])
         found = searcher.search(text, weight=weight)
         cands = found["candidates"]
-        bodies = {x["chunk_id"]: x for x in searcher.chunks(con, [x["chunk_id"] for x in cands])}
+        bodies = {x["chunk_id"]: x for x in searcher.chunks([x["chunk_id"] for x in cands])}
         full = [dict(bodies[x["chunk_id"]], **{k: x[k] for k in ("score", "bm25", "expand", "boost")})
                 for x in cands if x["chunk_id"] in bodies]
         if use_rerank and full:
@@ -136,9 +139,10 @@ def run_one(n, qs, searcher, con, with_answers):
 
 
 def main():
-    qs = questions.load()
+    con = store.connect()
+    qs = questions.load(con)
     if not qs:
-        print("문제집(data/questions.json)이 없다. 문제집이 없는 동안은 scripts/measure.py 로 방향만 본다")
+        print("문제집이 비어 있다. 문제집이 없는 동안은 scripts/measure.py 로 방향만 본다")
         return 0
     only = [1, 2, 3]
     for i, a in enumerate(sys.argv):
@@ -147,9 +151,8 @@ def main():
     with_answers = "--answers" in sys.argv
 
     searcher = Searcher()
-    con = store.connect()
     docs = C.load_docs()
-    live = {r[0] for r in con.execute("SELECT document_id FROM documents WHERE visibility = 1")}
+    live = {did for did, r in searcher.docs.items() if r.get("visibility")}
     try:
         with open(os.path.join(cfg.DATA_DIR, "excluded_rows.json"), encoding="utf-8") as f:
             excluded = json.load(f).get("rows") or []
@@ -170,8 +173,7 @@ def main():
     runs = [run_one(n, qs, searcher, con, with_answers) for n in only]
     total = sum(r.get("cost", 0) for r in runs)
     if total:
-        store.add_usage(con, answer_cost=total, evaluation=True)
-    con.close()
+        con.add_usage(answer_cost=total, evaluation=True)
 
     print()
     for r in runs:
@@ -182,13 +184,12 @@ def main():
             "%s %s" % (k, "없음" if v is None else "%.3f" % v) for k, v in r["metrics"].items())))
         print("    나눠 센 것: %s" % ", ".join("%s %s" % (k, "안 잼" if v is None else v) for k, v in r["split"].items()))
 
-    line = {"at": store.now(), "version": searcher.version, "questions": len(qs), "questions_hash": sha(questions.PATH),
+    line = {"at": store.now(), "version": searcher.version, "questions": len(qs), "questions_hash": sha_of([[q["id"], q["question"], q["rows"], q["none"]] for q in qs]),
             "prompt_hash": sha(os.path.join(ROOT, "app", "prompts", "system.md")), "model": cfg.ANSWER_MODEL,
             "rerank_model": cfg.RERANK_MODEL, "terms": None if searcher.terms is None else len(searcher.terms),
             "m": cfg.CANDIDATE_M, "k": cfg.FINAL_K, "with_answers": with_answers, "runs": runs}
-    with open(LOG, "a", encoding="utf-8") as f:
-        f.write(json.dumps(line, ensure_ascii=False) + "\n")
-    print("\n쓴 돈 %.2f달러 (평가 실행 비용). 결과는 data/eval_log.jsonl 에 덧붙였다" % total)
+    con.log_eval(line)
+    print("\n쓴 돈 %.2f달러 (평가 실행 비용). 결과는 저장소의 평가 기록에 덧붙였다" % total)
     return 0
 
 

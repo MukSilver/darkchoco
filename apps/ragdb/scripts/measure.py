@@ -28,7 +28,7 @@ from app import config as cfg          # noqa: E402
 from app.normalize import norm         # noqa: E402
 from app.search import Searcher        # noqa: E402
 
-STD_DIR = os.path.join(ROOT, "data", "standard")
+STD_DIR = os.path.join(cfg.DATA_DIR, "standard")
 
 
 def questions():

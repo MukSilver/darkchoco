@@ -5,7 +5,6 @@
 """
 import json
 import os
-import sqlite3
 
 from app import answer, guard, pipeline, store
 from app import config as cfg
@@ -13,10 +12,9 @@ from app.search import Searcher
 
 
 def _all_text(world):
-    con = sqlite3.connect(str(world.data / "ragdb.sqlite"))
-    rows = con.execute("SELECT title || ' ' || section || ' ' || body FROM chunks").fetchall()
-    con.close()
-    return "\n".join(r[0] for r in rows)
+    import chunk as C
+    chunks, _ = C.staged()
+    return "\n".join("%s %s %s" % (c["title"], c["section"], c["body"]) for c in chunks)
 
 
 # ── 조각 (F-03, F-05, DR-07) ──
@@ -45,10 +43,10 @@ def test_pii_document_is_excluded_when_asked(world, monkeypatch):
 
 
 def test_terms_are_not_chunks_or_documents(world):
-    con = sqlite3.connect(str(world.data / "ragdb.sqlite"))
-    assert con.execute("SELECT COUNT(*) FROM documents WHERE kind = '용어'").fetchone()[0] == 0      # QR-05
-    assert con.execute("SELECT COUNT(*) FROM chunks WHERE kind = '용어'").fetchone()[0] == 0
-    con.close()
+    import chunk as C
+    chunks, docs = C.staged()
+    assert not [d for d in docs if d["kind"] == "용어"]                   # QR-05
+    assert not [c for c in chunks if c["kind"] == "용어"]
     assert world.stats["terms"] == 1
 
 
@@ -75,10 +73,10 @@ def test_terms_skip_actor_aliases_and_keep_term_forms(world):
 
 def test_index_stops_on_forbidden_word(world, monkeypatch):
     import build_index
-    con = sqlite3.connect(str(world.data / "ragdb.sqlite"))
-    con.execute("UPDATE chunks SET body = body || ' 주소는 http://leak.example/abc' WHERE chunk_id = '포럼-alphaforum#s1'")
-    con.commit()
-    con.close()
+    p = world.data / "staging" / "chunks.json"
+    chunks = json.loads(p.read_text(encoding="utf-8"))
+    next(c for c in chunks if c["chunk_id"] == "포럼-alphaforum#s1")["body"] += " 주소는 http://leak.example/abc"
+    p.write_text(json.dumps(chunks, ensure_ascii=False), encoding="utf-8")
     assert build_index.build(version="20260101-000001") is None        # TC-06
     assert Searcher().version == world.version                         # current.txt 는 그대로
 
@@ -150,9 +148,7 @@ def test_no_candidates_means_no_model_call(world, fake_stream):
 def test_answer_without_citation_is_replaced(world, fake_stream):
     r = _run("AlphaForum 운영진은 누구야?", fake_stream([("아마 누구일 것입니다.", [])]))
     assert r["done"]["kind"] == "no_evidence" and r["text"] == answer.NO_EVIDENCE      # TC-11
-    con = store.connect()
-    assert con.execute("SELECT COUNT(*) FROM answer_cache").fetchone()[0] == 0          # 근거 없음은 저장하지 않는다
-    con.close()
+    assert store.connect().cache_count() == 0                                           # 근거 없음은 저장하지 않는다
 
 
 def test_pii_question_is_masked_and_not_stored(world, fake_stream):
@@ -162,20 +158,16 @@ def test_pii_question_is_masked_and_not_stored(world, fake_stream):
     assert r["done"]["pii_masked"]
     assert marker not in json.dumps(stream.request["messages"], ensure_ascii=False)     # TC-34
     assert "[전화번호]" in stream.request["messages"][0]["content"][-1]["text"]
-    con = store.connect()
-    assert con.execute("SELECT COUNT(*) FROM answer_cache").fetchone()[0] == 0
-    con.close()
+    assert store.connect().cache_count() == 0
 
 
 def test_nothing_about_the_question_is_stored(world, fake_stream):
     marker = "표지문자열XYZ123"
     _run("AlphaForum %s 지금 상태" % marker, fake_stream([("AlphaForum 은 접속이 확인됐습니다.", [0])]))
     _run("%s zzzzqqqq" % marker, fake_stream([("x", [])]))
-    con = store.connect()
-    dump = "\n".join(str(tuple(r)) for t in ("qa_log", "answer_cache", "usage", "recheck_queue")
-                     for r in con.execute("SELECT * FROM %s" % t))
-    n = con.execute("SELECT COUNT(*) FROM qa_log").fetchone()[0]
-    con.close()
+    mem = store.connect()
+    dump = json.dumps([mem.qa_rows(), list(mem.cache.values()), mem.usage_rows(), mem.recheck_rows()], ensure_ascii=False)
+    n = mem.qa_count()
     assert n == 2 and marker not in dump                                # TC-36, SR-16
 
 
@@ -216,10 +208,8 @@ def test_rerank_order_is_used_but_not_its_text(world, fake_stream):
         return type("Res", (), {"results": [R(len(docs) - 1, 0.9), R(0, 0.5)]})()
     from app import rerank
     s = Searcher()
-    con = store.connect()
     cands = s.search("AlphaForum 지금 상태")["candidates"]
-    full = [dict(c, **{"body": b["body"]}) for c in cands for b in store.chunks_by_id(con, [c["chunk_id"]])]
-    con.close()
+    full = [dict(c, **{"body": b["body"]}) for c in cands for b in s.chunks([c["chunk_id"]])]
     import pytest
     monkey = pytest.MonkeyPatch()
     monkey.setattr(cfg, "COHERE_API_KEY", "x")
@@ -246,10 +236,9 @@ def test_question_length_limit(world, fake_stream):
 
 def test_version_change_drops_old_reuse(world, fake_stream):
     _run("AlphaForum 지금 상태", fake_stream([("AlphaForum 은 접속이 확인됐습니다.", [0])]))
-    con = store.connect()
-    assert con.execute("SELECT COUNT(*) FROM answer_cache").fetchone()[0] == 1
-    assert store.drop_old_cache(con, "20260202-000000") == 1                             # TC-35, DR-10
-    con.close()
+    mem = store.connect()
+    assert mem.cache_count() == 1
+    assert mem.drop_old_cache("20260202-000000") == 1                                    # TC-35, DR-10
 
 
 # ── 스냅샷과 반출 관문 (F-22) ──
