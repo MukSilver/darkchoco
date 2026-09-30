@@ -22,11 +22,11 @@
 | 답변과 출처, 근거 없음 (F-13, F-14, F-15) | app/answer.py, app/prompts/system.md | 됨 |
 | 사전 답변 조회, 답변 재사용 (F-16, F-21) | app/store.py | 됨 |
 | 질의 기록, 하루 차단기 (F-19, F-18 일부) | app/store.py, app/limits.py | 됨 |
-| 질의 한 건의 순서 (설계서 4.3) | app/pipeline.py | 됨 |
+| 질의 한 건의 순서 (설계서 「질문 한 건」) | app/pipeline.py | 됨 |
 | 터미널에서 묻기 | scripts/ask.py | 됨 |
 | 예비 측정 | scripts/measure.py | 됨 |
 | 사전 답변 만들기와 검토 (F-17) | scripts/prepare_answers.py, scripts/review_answers.py | 됨. 문제집이 있어야 돕니다 |
-| 문제집 평가 (설계서 7.1) | scripts/evaluate.py, app/questions.py | 됨. 문제집이 있어야 돕니다 |
+| 문제집 평가 (설계서 「검증」) | scripts/evaluate.py, app/questions.py | 됨. 문제집이 있어야 돕니다 |
 | 질의 서버, 사람 확인 (F-18 나머지) | | 아직 |
 | 화면 (묻고 답하기, 출처 원문, 예시 질문) | | 아직. 디자인은 새로 짭니다 |
 | 이미지 (F-08) | | 내보내지 않기로 했습니다 |
@@ -100,4 +100,4 @@ copy .env.example .env                                  값을 채웁니다. .en
 | CLAUDE.md | 코드를 쓸 때 지킬 것 |
 
 설계서와 인수인계 문서는 노션 「LLM 다크웹 RAG DB 구축」 페이지에 있습니다. 화면 디자인은 새로 짭니다.
-코드 주석의 F-12, SR-19 같은 번호의 뜻은 설계서 2.6 「번호 읽는 법」에 있습니다.
+코드 주석의 F-12, SR-19 같은 번호의 뜻은 설계서 「코드 주석의 번호」에 있습니다.

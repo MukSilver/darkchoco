@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""문제집 평가 (설계서 7.1) — 세 벌을 이 순서로 잰다.
+"""문제집 평가 (설계서 「검증」) — 세 벌을 이 순서로 잰다.
 
     python scripts/evaluate.py                 검색만 잰다 (재순위를 켠 셋째 벌만 돈이 든다)
     python scripts/evaluate.py --answers       답변까지 잰다 (모델을 부른다. 질문 하나에 1센트쯤)

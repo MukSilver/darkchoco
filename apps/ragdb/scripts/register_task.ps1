@@ -1,4 +1,4 @@
-﻿# 배치를 윈도우 작업 스케줄러에 건다 (설계서 2.4: 주 1회와 손으로).
+﻿# 배치를 윈도우 작업 스케줄러에 건다 (설계서 「개발 스택」: 주 1회와 손으로).
 #
 #   powershell -ExecutionPolicy Bypass -File scripts\register_task.ps1            걸기 (월요일 04:00)
 #   powershell -ExecutionPolicy Bypass -File scripts\register_task.ps1 -Remove    지우기

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """F-13 답변 생성, F-14 출처 부여.
 
-조각 하나를 문서 하나로 모델에 준다. 인용(Citations)을 켜고 구조화 출력은 켜지 않는다 (함께 못 켠다, 설계서 2.3).
+조각 하나를 문서 하나로 모델에 준다. 인용(Citations)을 켜고 구조화 출력은 켜지 않는다 (함께 못 켠다, 설계서 「개발 스택」).
 바깥으로 나가는 것은 질문(개인정보 꼴을 가린 뒤)과 반출 판정을 통과한 조각뿐이다 (SR-19).
 """
 import os
@@ -25,7 +25,7 @@ class AnswerError(Exception):
 
 
 def system_prompt():
-    """지시문 7개 (설계서 4.5). 고치면 평가를 다시 돌린다 (7.1)."""
+    """지시문 7개 (설계서 「답변」). 고치면 평가를 다시 돌린다."""
     global _system
     if _system is None:
         with open(_PROMPT, encoding="utf-8") as f:

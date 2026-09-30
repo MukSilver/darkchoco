@@ -4,7 +4,7 @@
     python scripts/snapshot.py              지금 판으로 굽고 관문을 본다
     python scripts/snapshot.py --check      이미 구운 지금 판에 관문만 다시 본다
 
-스냅샷은 화면이 읽는 정적 파일 묶음이다 (설계서 5.6). 반출 대상만 담는다.
+스냅샷은 화면이 읽는 정적 파일 묶음이다 (설계서 「API와 스냅샷 파일」). 반출 대상만 담는다.
 
     data/snapshot/current.json                      지금 판 이름, 구운 시각
     data/snapshot/{판}/doc/{document_id}.json       출처 원문 (답의 출처를 눌렀을 때 보이는 반출 조각)
@@ -220,7 +220,7 @@ def excluded_names(version):
     돌려주는 것: {names(명부에만 있는 이름 수), files(그 이름이 나온 파일 수), by_kind}. 명부가 없으면 None.
     이름은 돌려주지 않는다.
 
-    지금은 세기만 하고 멈추지 않는다 (GATE_EXCLUDED_NAMES=warn). 멈출지는 설계서 8.3 의 정해야 할 것이다.
+    지금은 세기만 하고 멈추지 않는다 (GATE_EXCLUDED_NAMES=warn). 멈출지는 설계서 「보류 및 확정 필요」 에 있다.
     꺼진 줄 가운데는 내보내면 안 되는 곳과 아직 조사하지 않은 곳이 섞여 있고, 뒤쪽은 다른 문서의 본문에
     이름이 나오는 것이 자연스럽다. 막을지는 사람이 정한다. block 으로 바꾸면 관문에서 멈춘다.
     """

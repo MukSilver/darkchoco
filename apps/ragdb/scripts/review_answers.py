@@ -7,7 +7,7 @@
     python scripts/review_answers.py drop 3 --who 이름      지운다
 
 번호는 목록에 나온 순서다. 누가 통과시켰는지는 확인 기록(review_log)에 남는다.
-관리 화면은 만들지 않는다. 검토는 이 스크립트로 한다 (설계서 5.4).
+관리 화면은 만들지 않는다. 검토는 이 스크립트로 한다 (설계서 「운영」).
 """
 import json
 import os

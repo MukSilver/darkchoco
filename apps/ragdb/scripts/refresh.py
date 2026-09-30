@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""주간 배치. 받기부터 판 교체까지 한 번에 (설계서 4.1). 새 판이 없으면 아무것도 하지 않는다.
+"""주간 배치. 받기부터 판 교체까지 한 번에 (설계서 「자료 준비」). 새 판이 없으면 아무것도 하지 않는다.
 
     .venv\\Scripts\\python scripts\\refresh.py            새 판이 있을 때만
     .venv\\Scripts\\python scripts\\refresh.py --force    판이 같아도 다시

@@ -96,7 +96,7 @@ CREATE TABLE IF NOT EXISTS documents (
 CREATE INDEX IF NOT EXISTS idx_documents_list ON documents(kind, status, observed_at DESC);
 """
 
-# 설계서 3.6 documents 의 나머지 칸. 먼저 만든 DB 에는 없으므로 없을 때만 더한다
+# 설계서 「저장 위치」 documents 의 나머지 칸. 먼저 만든 DB 에는 없으므로 없을 때만 더한다
 MORE_COLUMNS = [("country", "TEXT"), ("signup", "TEXT"), ("related", "TEXT"), ("verdict", "TEXT")]
 VERDICT_KEYS = ["검증 분류", "진위 판정", "신규성 판정", "판정 신뢰도"]      # 검증 네 축
 
