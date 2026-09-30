@@ -70,6 +70,8 @@ copy .env.example .env                                  값을 채웁니다. .en
 .venv\Scripts\python scripts\ask.py "질문"               터미널에서 묻기
 .venv\Scripts\python scripts\ask.py --search "질문"      검색까지만 (0원)
 .venv\Scripts\python -m pytest tests -q                 시험 (0원, 열쇠 없이 돕니다)
+.venv\Scripts\python -m uvicorn server.main:app --host 127.0.0.1 --port 8787 --workers 1   질의 서버 (워커 하나, AD-02)
+cd web && npm ci && npm run dev                         화면 개발 서버 (/api 와 /data 를 로컬로 넘김)
 ```
 
 평가 질문으로 재기와 사전 답변 (평가 질문은 Supabase 에 있습니다)

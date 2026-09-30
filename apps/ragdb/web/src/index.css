@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+/* 색과 글꼴은 확정 디자인(v1/v2)이 정해지면 여기 토큰만 바꾼다. 아래는 v2(RAGDB_디자인_v2.html)의 값이다. */
+@theme {
+  --color-bg: #1e1e21;
+  --color-frame: #242427;
+  --color-panel: #2a2a2e;
+  --color-raise: #313136;
+  --color-sunk: #1a1a1d;
+  --color-line: #35353a;
+  --color-line-2: #44444b;
+  --color-text: #ededef;
+  --color-text-2: #c6c6cc;
+  --color-muted: #909098;
+  --color-faint: #6f6f77;
+  --color-coral: #ff5f57;
+  --color-coral-ink: #ff8c86;
+  --color-ok: #4ade80;
+  --color-off: #8e8e96;
+  --color-unk: #f5b544;
+  --font-sans: "Pretendard Variable", Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+
+html, body, #root { height: 100%; }
+body { background: var(--color-bg); color: var(--color-text); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
