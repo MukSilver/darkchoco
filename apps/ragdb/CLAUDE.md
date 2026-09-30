@@ -83,7 +83,7 @@ RAG DB 는 묻고 답하는 곳이다. 목록, 상세, 내려받기 화면과 �
 
 값은 `.env` 에서 읽는다(`app/config.py`). 코드에 상수로 박지 않는다. 기본값과 까닭은 `.env.example` 에 있다.
 자리(`data/` 아래 경로)도 `app/config.py` 의 것을 쓴다. 스크립트가 따로 경로를 만들지 않는다.
-「첫 값」 이라고 적힌 것은 문제집으로 재기 전의 출발점이다. 설계서 「보류 및 확정 필요」에 모아 두었다.
+「첫 값」 이라고 적힌 것은 평가 질문으로 재기 전의 출발점이다. 설계서 「보류 및 확정 필요」에 모아 두었다.
 사용 한도는 하루 3달러(하루 차단기)다. 사람별 제한은 쓰지 않는다.
 
 ## 윈도우 콘솔
@@ -107,12 +107,12 @@ RAG DB 는 묻고 답하는 곳이다. 목록, 상세, 내려받기 화면과 �
 `.venv\Scripts\python scripts\refresh.py` 하나가 아래를 잇는다. 새 판이 없으면 아무것도 하지 않는다. 하나라도 실패하면 거기서 멈추고 지금 판을 그대로 쓴다. 멈춘 배치는 다음 회차에 받아 둔 자료로 이어서 만든다(`data/pending_build.txt`).
 
 1. `fetch_docs.py` — Supabase rag.versions 의 마지막 판이 `data/source_version.txt` 와 다르면 rag.documents · rag.private 을 받아 `data/standard/` 에 쓴다. 판에서 빠진 문서는 파일을 지운다
-2. `find_names.py` — 바뀐 문서에서 피해 조직 표기를 모델로 찾아 `data/names.json` 에 쌓는다
+2. `find_names.py` — 바뀐 문서에서 피해 조직 표기를 모델로 찾아 Supabase `rag.found_names` 에 쌓고 `data/names.json` 에 사본을 쓴다. 모델이 놓친 표기는 `add_names.py` 로 손으로 더한다
 3. `chunk.py` — 가리기(`app/guard.py`, `app/pii.py`)와 조각 분할. 이름 찾기를 안 거친 문서는 뺀다. 개인정보 꼴은 그 자리만 가린다
 4. `build_index.py --hold` — 금지어 검사(`masking.py`) 뒤 새 판 폴더에 색인, 조각 본문(`chunks.json`), 넓히기 사전(`terms.json`), 지킴이 목록(`guard.json`)
 5. `snapshot.py` — 스냅샷 굽기와 반출 관문
-6. 갈아 끼우기 — `current.txt` 한 줄, 옛 판의 재사용 답변 지움, 반출 기록
+6. 갈아 끼우기 — `current.txt` 한 줄, 근거 문서가 바뀐 재사용 답변 지움, 반출 기록. 재사용 답변은 답에 쓴 문서가 그대로면 판이 바뀌어도 남는다
 7. `recheck.py` — 재조사 추출
-8. `data/batch_log.jsonl` 에 한 줄
+8. Supabase `rag.batch_log` 에 한 줄
 
 표준 문서의 모양을 바꾸려면 이 저장소가 아니라 darkchoco-data 의 `src/rag.mjs` 를 고친다. 바꾸면 이 저장소의 chunk.py 가 그대로 읽는지 확인한다.

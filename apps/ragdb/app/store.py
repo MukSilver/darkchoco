@@ -2,7 +2,7 @@
 """운영 기록 저장 — Supabase rag 스키마 (설계서 「저장 위치」).
 
 2026-09-30 김무근 결정으로 SQLite 를 쓰지 않는다. 사전 답변, 재사용 답변, 질의 기록, 비용, 재조사 후보,
-문제집, 찾아 둔 조직 표기는 Supabase 에 있다. 그래서 저장소와 열쇠만 있으면 어느 기계에서든 돈다.
+평가 질문, 찾아 둔 조직 표기는 Supabase 에 있다. 그래서 저장소와 열쇠만 있으면 어느 기계에서든 돈다.
 표와 함수는 darkchoco-data 의 migrations/0012_rag_runtime.sql 이 만든다.
 
 여기 있는 것은 키로 꺼내고 덧붙이는 일뿐이다. 검색은 판 폴더의 색인 파일에서 한다.
@@ -150,22 +150,28 @@ class SupabaseStore:
                                      "target": key}])
 
     # ── 재사용 답변 (F-21) ──
-    def cached_answer(self, version, key_fp):
-        rows = self._rpc("cache_hit", p_version=version, p_key_fp=key_fp)
+    # 판을 넘어 쓴다. 답에 쓴 문서의 내용 해시(doc_hashes)가 그대로일 때만 쓰고, 바뀌었으면 지운다 (2026-09-30)
+    def cached_answer(self, key_fp):
+        rows = self._rpc("cache_hit", p_key_fp=key_fp)
         return rows[0] if rows else None
 
-    def save_cache(self, version, key_fp, answer, sources, model):
-        self._insert("answer_cache", [{"version": version, "key_fp": key_fp, "answer": answer, "sources": sources,
-                                       "model": model, "created_at": now()}], on_conflict="version,key_fp")
+    def save_cache(self, version, key_fp, answer, sources, model, doc_hashes):
+        self._insert("answer_cache", [{"key_fp": key_fp, "version": version, "answer": answer, "sources": sources,
+                                       "doc_hashes": doc_hashes, "model": model, "created_at": now(), "hits": 0}],
+                     on_conflict="key_fp")
 
     def cache_count(self):
-        return len(self._all("answer_cache", "version.asc,key_fp.asc", select="key_fp"))
+        return len(self._all("answer_cache", "key_fp.asc", select="key_fp"))
 
-    def drop_old_cache(self, version):
-        """판이 바뀌면 옛 판의 재사용 답변을 지운다 (DR-10, TC-35)."""
-        r = self._do("DELETE", "/answer_cache", params={"version": "neq." + version, "select": "key_fp"},
-                     headers={"Prefer": "return=representation"})
-        return len(r.json())
+    def drop_cache(self, key_fp):
+        self._do("DELETE", "/answer_cache", params={"key_fp": "eq." + key_fp}, headers={"Prefer": "return=minimal"})
+
+    def drop_stale_cache(self, docs):
+        """새 판에서 근거 문서가 바뀐 재사용 답변을 지운다 (DR-10). 지운 수를 돌려준다."""
+        gone = [r["key_fp"] for r in self._all("answer_cache", "key_fp.asc", select="key_fp,doc_hashes") if not holds(docs, r)]
+        for k in gone:
+            self.drop_cache(k)
+        return len(gone)
 
     # ── 사용량 (F-18) ──
     def spent_today(self):
@@ -231,15 +237,15 @@ class SupabaseStore:
     def log_eval(self, line):
         self._insert("eval_log", [{"at": now(), "line": line}])
 
-    # ── 문제집 ──
+    # ── 평가 질문 ──
     def questions(self):
         return self._all("questions", "position.asc,id.asc")
 
     def replace_questions(self, items):
-        """문제집을 통째로 바꾼다. items 는 [{id, question, rows, none}]."""
+        """평가 질문을 통째로 바꾼다. items 는 [{id, question, rows, none, example}]."""
         self._do("DELETE", "/questions", params={"id": "not.is.null"}, headers={"Prefer": "return=minimal"})
         rows = [{"id": str(q["id"]), "position": i, "question": q["question"], "rows": q.get("rows") or [],
-                 "none": bool(q.get("none"))} for i, q in enumerate(items, 1)]
+                 "none": bool(q.get("none")), "example": bool(q.get("example"))} for i, q in enumerate(items, 1)]
         for i in range(0, len(rows), 200):
             self._insert("questions", rows[i:i + 200])
 
@@ -258,6 +264,13 @@ class SupabaseStore:
     def delete_names(self, ids):
         for did in ids:
             self._do("DELETE", "/found_names", params={"document_id": "eq." + did}, headers={"Prefer": "return=minimal"})
+
+    def drop_answers(self, keep_keys):
+        """keep_keys 에 없는 사전 답변을 지운다. 평가 질문을 바꿔 쓸모없어진 답을 치운다."""
+        gone = [r["question_key"] for r in self.answers_all() if r["question_key"] not in keep_keys]
+        for k in gone:
+            self._do("DELETE", "/answers", params={"question_key": "eq." + k}, headers={"Prefer": "return=minimal"})
+        return len(gone)
 
 
 class MemoryStore:
@@ -297,25 +310,28 @@ class MemoryStore:
             self.answers.pop(key, None)
         self.reviews.append({"at": now(), "who": who, "what": "사전 답변 검토 통과" if passed else "사전 답변 지움", "target": key})
 
-    def cached_answer(self, version, key_fp):
-        r = self.cache.get((version, key_fp))
+    def cached_answer(self, key_fp):
+        r = self.cache.get(key_fp)
         if not r:
             return None
         r["hits"] += 1
         return self._copy(r)
 
-    def save_cache(self, version, key_fp, answer, sources, model):
-        self.cache[(version, key_fp)] = self._copy({"version": version, "key_fp": key_fp, "answer": answer,
-                                                    "sources": sources, "model": model, "created_at": now(), "hits": 0})
+    def save_cache(self, version, key_fp, answer, sources, model, doc_hashes):
+        self.cache[key_fp] = self._copy({"key_fp": key_fp, "version": version, "answer": answer, "sources": sources,
+                                         "doc_hashes": doc_hashes, "model": model, "created_at": now(), "hits": 0})
 
     def cache_count(self):
         return len(self.cache)
 
-    def drop_old_cache(self, version):
-        old = [k for k in self.cache if k[0] != version]
-        for k in old:
+    def drop_cache(self, key_fp):
+        self.cache.pop(key_fp, None)
+
+    def drop_stale_cache(self, docs):
+        gone = [k for k, r in self.cache.items() if not holds(docs, r)]
+        for k in gone:
             del self.cache[k]
-        return len(old)
+        return len(gone)
 
     def spent_today(self):
         u = self.usage.get(today())
@@ -400,7 +416,7 @@ class MemoryStore:
 
     def replace_questions(self, items):
         self._questions = [{"id": str(q["id"]), "position": i, "question": q["question"], "rows": q.get("rows") or [],
-                            "none": bool(q.get("none"))} for i, q in enumerate(items, 1)]
+                            "none": bool(q.get("none")), "example": bool(q.get("example"))} for i, q in enumerate(items, 1)]
 
     def names_state(self):
         return self._copy(self.names)
@@ -411,6 +427,12 @@ class MemoryStore:
     def delete_names(self, ids):
         for did in ids:
             self.names.pop(did, None)
+
+    def drop_answers(self, keep_keys):
+        gone = [k for k in self.answers if k not in keep_keys]
+        for k in gone:
+            del self.answers[k]
+        return len(gone)
 
 
 _default = None

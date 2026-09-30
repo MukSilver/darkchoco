@@ -2,7 +2,7 @@
 """설정 — 값은 전부 .env 에서 읽는다. 코드에 박지 않는다 (CLAUDE.md 「값을 지어내지 않는다」).
 
 아래 기본값 가운데 「첫 값」 이라고 적은 것은 확정한 값이 아니다 (설계서 「보류 및 확정 필요」).
-문제집으로 재기 전에 돌려 보려고 둔 출발점이고, 재고 나면 .env 에서 숫자만 바꾼다.
+평가 질문으로 재기 전에 돌려 보려고 둔 출발점이고, 재고 나면 .env 에서 숫자만 바꾼다.
 """
 import os
 
@@ -45,11 +45,11 @@ SNAPSHOT_ROOT = os.path.join(DATA_DIR, "snapshot")
 CURRENT = os.path.join(DATA_DIR, "current.txt")
 
 # ── 검색 (F-12) ──
-CANDIDATE_M = _i("CANDIDATE_M", 100)                 # OI-02 첫 값. 문제집 초안(2026-09-30)에서 50 이면 둘이 빠지고 100 이면 다 듦. 재순위 비용은 100개까지 한 단위
+CANDIDATE_M = _i("CANDIDATE_M", 100)                 # OI-02 첫 값. 평가 질문 초안(2026-09-30)에서 50 이면 둘이 빠지고 100 이면 다 듦. 재순위 비용은 100개까지 한 단위
 FINAL_K = _i("FINAL_K", 5)                           # OI-02 잠정
 KIND_BOOST = _f("KIND_BOOST", 0.1)                   # OI-02 첫 값. 후보 가운데 가장 높은 점수의 몇 배를 더하는지
 OFFLINE_FACTOR = _f("OFFLINE_FACTOR", 0.85)          # F-07 처리 1 첫 값. offline 조각의 점수에 곱함. 예비 측정에서 0.7 보다 나았음
-EXPANSION_WEIGHT = _f("EXPANSION_WEIGHT", 0.5)       # OI-14 첫 값. 예비 측정과 문제집 초안(2026-09-30)에서 0.3 과 0.5 가 같고 별칭 질문은 0.5 가 나음. 0 이면 꺼짐
+EXPANSION_WEIGHT = _f("EXPANSION_WEIGHT", 0.5)       # OI-14 첫 값. 예비 측정과 평가 질문 초안(2026-09-30)에서 0.3 과 0.5 가 같고 별칭 질문은 0.5 가 나음. 0 이면 꺼짐
 EXPANSION_MAX_ITEMS = _i("EXPANSION_MAX_ITEMS", 5)   # OI-15 첫 값
 EXPANSION_MAX_FORMS = _i("EXPANSION_MAX_FORMS", 5)   # OI-15 첫 값
 
@@ -62,7 +62,7 @@ RERANK_PRICE_PER_SEARCH = _f("RERANK_PRICE_PER_SEARCH", 0.0025)   # 달러. 검�
 
 # ── 답변 (F-13) ──
 ANSWER_MODEL = _s("ANSWER_MODEL", "claude-sonnet-5")
-ANSWER_MAX_TOKENS = _i("ANSWER_MAX_TOKENS", 1024)    # OI-30 초기값
+ANSWER_MAX_TOKENS = _i("ANSWER_MAX_TOKENS", 1536)    # OI-30 첫 값. 1,024 에서 대상 설명 답이 끊겨 올림 (2026-09-30)
 QUESTION_MAX_CHARS = _i("QUESTION_MAX_CHARS", 300)   # OI-30 초기값
 PRICE_INPUT = _f("PRICE_INPUT_PER_MTOK", 2.0)
 PRICE_OUTPUT = _f("PRICE_OUTPUT_PER_MTOK", 10.0)

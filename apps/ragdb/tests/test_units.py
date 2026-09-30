@@ -160,3 +160,21 @@ def test_latin_name_with_korean_particle_is_masked():
     assert g.clean("Zeta에서 나온 자료, Zeta의 회원") == "(조직명 가림)에서 나온 자료, (조직명 가림)의 회원"
     assert g.clean("Zetas 와 AZeta 는 다른 낱말") == "Zetas 와 AZeta 는 다른 낱말"
     assert g.leaks("Acme Corp은") == ["조직 이름"]
+
+
+def test_heading_line_joins_next_sentence():
+    """출처 없는 제목 줄은 다음 문장에 붙고, 굵은 글씨 표시는 떨어진다 (2026-09-30)."""
+    from app import answer
+    blocks = [{"text": "**INC-7 (의료 분야 유출 사고)**\n", "cites": []},
+              {"text": "환자 정보 3만 건이 유출됐습니다.", "cites": [{"n": 1}]},
+              {"text": "\n네, 더 있습니다.", "cites": []}]
+    out = answer.sentences(blocks)
+    assert out[0] == {"text": "INC-7 (의료 분야 유출 사고): 환자 정보 3만 건이 유출됐습니다.", "sources": [1], "cited": True}
+    assert out[1]["text"] == "네, 더 있습니다." and not out[1]["cited"]              # 문장으로 끝나는 줄은 붙이지 않는다
+
+
+def test_lead_in_without_source_is_dropped():
+    from app import answer
+    out = answer.sentences([{"text": "확인되는 그룹은 다음과 같습니다.\n", "cites": []},
+                            {"text": "AlphaLock 은 한국 피해가 1건 있습니다.", "cites": [{"n": 1}]}])
+    assert [s["text"] for s in out] == ["AlphaLock 은 한국 피해가 1건 있습니다."]

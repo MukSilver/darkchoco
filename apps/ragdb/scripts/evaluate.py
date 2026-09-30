@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""문제집 평가 (설계서 「검증」) — 세 벌을 이 순서로 잰다.
+"""평가 질문 평가 (설계서 「검증」) — 세 벌을 이 순서로 잰다.
 
     python scripts/evaluate.py                 검색만 잰다 (재순위를 켠 셋째 벌만 돈이 든다)
     python scripts/evaluate.py --answers       답변까지 잰다 (모델을 부른다. 질문 하나에 1센트쯤)
@@ -20,7 +20,7 @@
     반출 오제외    답이 있는 줄이 반출 대상이 아니어서 못 답한 비율  분모: 노션에 답이 있는 질문
 
 어디를 고칠지 알려고 넷으로 나눠 센다: 후보 미포함(넓히기 몫), 재순위 탈락(재순위 몫), 생성 실패, 반출 오제외.
-결과는 저장소의 평가 기록(rag.eval_log)에 덧붙인다. 그때 쓴 문제집, 지시문, 모델, 넓히기 사전의 판을 함께 남긴다.
+결과는 저장소의 평가 기록(rag.eval_log)에 덧붙인다. 그때 쓴 평가 질문, 지시문, 모델, 넓히기 사전의 판을 함께 남긴다.
 비용은 평가 실행 비용 칸에 따로 센다. 하루 차단기를 쓰지 않는다.
 """
 import hashlib
@@ -142,7 +142,7 @@ def main():
     con = store.connect()
     qs = questions.load(con)
     if not qs:
-        print("문제집이 비어 있다. 문제집이 없는 동안은 scripts/measure.py 로 방향만 본다")
+        print("평가 질문이 비어 있다. 평가 질문이 없는 동안은 scripts/measure.py 로 방향만 본다")
         return 0
     only = [1, 2, 3]
     for i, a in enumerate(sys.argv):

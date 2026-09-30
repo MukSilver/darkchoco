@@ -234,11 +234,19 @@ def test_question_length_limit(world, fake_stream):
     assert r["error"] == {"status": 400, "code": "too_long"}
 
 
-def test_version_change_drops_old_reuse(world, fake_stream):
-    _run("AlphaForum 지금 상태", fake_stream([("AlphaForum 은 접속이 확인됐습니다.", [0])]))
+def test_reuse_survives_new_version_until_evidence_changes(world, fake_stream):
+    """재사용 답변은 판을 넘어 쓴다. 답에 쓴 문서가 바뀌면 지운다 (DR-10, 2026-09-30)."""
+    first = fake_stream([("AlphaForum 은 접속이 확인됐습니다.", [0])])
+    _run("AlphaForum 지금 상태", first)
     mem = store.connect()
     assert mem.cache_count() == 1
-    assert mem.drop_old_cache("20260202-000000") == 1                                    # TC-35, DR-10
+    same = {k: dict(v) for k, v in Searcher().docs.items()}
+    assert mem.drop_stale_cache(same) == 0                                              # 근거가 그대로면 남는다
+    again = fake_stream([("부르면 안 된다", [0])])
+    assert _run("AlphaForum 은 지금 상태", again)["done"]["kind"] == "reused" and again.request is None
+    changed = {k: dict(v) for k, v in same.items()}
+    changed["포럼-alphaforum"]["content_hash"] = "바뀜"
+    assert mem.drop_stale_cache(changed) == 1                                           # 근거가 바뀌면 지운다
 
 
 # ── 스냅샷과 반출 관문 (F-22) ──

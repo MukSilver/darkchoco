@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""문제집, 사전 답변(F-16, F-17), 평가(7.2), 빠진 줄 명부(F-20). 자료는 지어낸 것이다."""
+"""평가 질문, 사전 답변(F-16, F-17), 평가(7.2), 빠진 줄 명부(F-20). 자료는 지어낸 것이다."""
 import json
 import os
 
@@ -8,10 +8,10 @@ from app import config as cfg
 from app.search import Searcher
 
 QUESTIONS = {"questions": [
-    {"id": "Q1", "question": "AlphaForum 지금 상태 알려줘", "rows": ["AlphaForum"]},
-    {"id": "Q2", "question": "알파포럼 운영진 바뀌었어?", "rows": ["알파포럼"]},
-    {"id": "Q3", "question": "LEAK-1 은 어떤 사고야?", "rows": ["LEAK-1"]},
-    {"id": "Q4", "question": "감마포럼은 살아 있어?", "rows": ["GammaForum"]},
+    {"id": "Q1", "question": "AlphaForum 지금 상태 알려줘", "rows": ["AlphaForum"], "example": True},
+    {"id": "Q2", "question": "알파포럼 운영진 바뀌었어?", "rows": ["알파포럼"], "example": True},
+    {"id": "Q3", "question": "LEAK-1 은 어떤 사고야?", "rows": ["LEAK-1"], "example": True},
+    {"id": "Q4", "question": "감마포럼은 살아 있어?", "rows": ["GammaForum"], "example": True},
     {"id": "Q5", "question": "오늘 점심 뭐 먹지", "none": True},
     {"id": "Q6", "question": "없는 줄을 적은 질문", "rows": ["아무도모르는이름"]},
 ]}
@@ -40,7 +40,7 @@ def _fake_generate(blocks):
     return gen
 
 
-# ── 문제집 ──
+# ── 평가 질문 ──
 def test_rows_resolve_by_name_alias_and_number(world):
     _write(world)
     resolve = _resolver(world)
@@ -225,3 +225,12 @@ def test_date_label_tells_publication_from_check():
     leak = {"kind": "사고", "document_id": "사고-leak-3", "body": "본문", "observed_at": "2026-06-02"}
     assert answer.date_label(inc) == "공표 시점" and answer.document_text(inc).endswith("공표 시점: 2025-12-01")
     assert answer.date_label(leak) == "확인일" and answer.document_text(leak).endswith("확인일: 2026-06-02")
+
+
+def test_prepared_answers_only_for_examples(world):
+    """사전 답변은 예시 질문에만 만든다 (2026-09-30)."""
+    import prepare_answers as P
+    store.connect().replace_questions([{"id": "E1", "question": "AlphaForum 지금 상태 알려줘", "rows": ["AlphaForum"], "example": True},
+                                       {"id": "N1", "question": "알파포럼 운영진 바뀌었어?", "rows": ["알파포럼"]}])
+    todo = P.plan(Searcher(), store.connect())[0]
+    assert [t["id"] for t in todo] == ["E1"]
