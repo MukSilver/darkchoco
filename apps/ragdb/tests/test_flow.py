@@ -261,9 +261,10 @@ def test_snapshot_holds_only_exported(world):
     with open(os.path.join(root, "doc", "사고-leak-2.json"), encoding="utf-8") as f:
         assert "203.0.113.7" not in f.read()
     assert os.path.exists(os.path.join(root, "doc", "포럼-alphaforum.json"))
-    with open(os.path.join(root, "list.json"), encoding="utf-8") as f:
-        ids = [d["document_id"] for d in json.load(f)["documents"]]
+    ids = [fn[:-5] for fn in os.listdir(os.path.join(root, "doc"))]
     assert "포럼-hidden" not in ids and r["documents"] == len(ids)
+    # 목록과 전체 내려받기는 굽지 않는다 (2026-09-30, 설계서 판 1.5)
+    assert not os.path.exists(os.path.join(root, "list.json")) and not os.path.exists(os.path.join(root, "export"))
     with open(os.path.join(root, "doc", "포럼-alphaforum-st.json"), encoding="utf-8") as f:
         d = json.load(f)
     assert d["stale"] is True and all(c["images"] == [] for c in d["chunks"])
