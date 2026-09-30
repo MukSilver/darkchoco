@@ -89,6 +89,8 @@ def bake(version):
     docs = C.load_docs()
     g, _ = C.load_guard(docs)
     std = {d["document_id"]: C.cleaned(d, g) for d in docs if d["document_id"] in live}
+    if C.PII_POLICY == "mask":
+        std = {k: C.pii_masked(v) for k, v in std.items()}          # 조각을 만들 때와 같은 가리기 (F-03)
 
     baked_at = store.now()
     listing, export, n_chunks, size = [], [], 0, 0

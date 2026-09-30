@@ -165,6 +165,9 @@ def split(doc):
 
 
 REQUIRE_NAME_CHECK = (os.getenv("REQUIRE_NAME_CHECK") or "1").strip() not in ("0", "false", "no")
+# 개인정보 꼴이 남은 문서를 어떻게 할지. mask: 그 자리만 가리고 문서는 둔다. exclude: 문서를 통째로 뺀다 (명세 F-03 대로).
+# 2026-09-30 부터 기본값은 mask 다. 노션 원본을 고쳐 줄 조사팀이 따로 없어 exclude 로 두면 그 문서가 영영 빠진다
+PII_POLICY = (os.getenv("PII_POLICY") or "mask").strip()
 NAMES_FILE = os.path.join(ROOT, "data", "names.json")
 
 
@@ -193,6 +196,24 @@ def cleaned(doc, g):
     out["metadata"] = {k: g.clean_value(v) for k, v in (doc.get("metadata") or {}).items()}
     out["sections"] = [dict(s, heading=g.clean(s.get("heading")), body=g.clean(s.get("body")))
                        for s in doc.get("sections") or []]
+    return out
+
+
+def pii_masked(doc):
+    """개인정보 꼴을 자리 표시([IP], [이메일] 등)로 바꾼 사본. 제목은 건드리지 않는다."""
+    if ROOT not in sys.path:
+        sys.path.insert(0, ROOT)
+    from app import pii
+
+    def m(v):
+        if isinstance(v, list):
+            return [pii.mask(x)[0] if isinstance(x, str) else x for x in v]
+        return pii.mask(v)[0] if isinstance(v, str) else v
+
+    out = dict(doc)
+    out["summary"] = m(doc.get("summary"))
+    out["metadata"] = {k: m(v) for k, v in (doc.get("metadata") or {}).items()}
+    out["sections"] = [dict(s, heading=m(s.get("heading")), body=m(s.get("body"))) for s in doc.get("sections") or []]
     return out
 
 
@@ -238,7 +259,7 @@ def run(dry=False, quiet=False):
     docs = load_docs()
     g, checked = load_guard(docs)
     total = short = 0
-    rows, kept, excluded, terms = [], [], [], 0
+    rows, kept, excluded, covered, terms = [], [], [], [], 0
     dropped = {}
     for d in docs:
         if d["kind"] == "용어":
@@ -256,6 +277,10 @@ def run(dry=False, quiet=False):
             continue
         d = cleaned(d, g)
         hits = pii_hits(d)
+        if hits and PII_POLICY == "mask":
+            d = pii_masked(d)
+            covered.append({"document_id": d["document_id"], "kind": d["kind"], "hits": hits})
+            hits = pii_hits(d)          # 가린 뒤에도 남았으면 뺀다
         if hits:
             excluded.append({"document_id": d["document_id"], "kind": d["kind"], "hits": hits})
             continue
@@ -279,13 +304,18 @@ def run(dry=False, quiet=False):
         say("  이름에 조직 이름이 들어 있어 뺀 문서 %d개 (%s)" % (len(named), ", ".join(e["kind"] for e in named)))
     if waiting:
         say("  조직 이름 찾기를 안 거쳐 뺀 문서 %d개. find_names.py 를 돌리면 들어온다" % len(waiting))
+    if covered:
+        say("  개인정보 꼴이 남아 그 자리를 가린 문서 %d개 (F-03). 노션 원본에서 가리는 것이 맞다" % len(covered))
+        for e in covered:
+            say("    %-28s %s" % (e["document_id"][:28], ", ".join("%s %s" % (h["where"], h["what"]) for h in e["hits"][:4])))
     if masked:
         say("  개인정보 꼴이 남아 뺀 문서 %d개 (F-03). 노션 원본에서 가린 뒤 다시 들어온다" % len(masked))
         for e in masked:
             say("    %-28s %s" % (e["document_id"][:28], ", ".join("%s %s" % (h["where"], h["what"]) for h in e["hits"][:4])))
 
     stats = {"documents": len(kept), "terms": terms, "chunks": total, "not_indexed": short,
-             "excluded": excluded, "dropped_columns": {"%s.%s" % k: n for k, n in sorted(dropped.items())}}
+             "excluded": excluded, "pii_masked": covered,
+             "dropped_columns": {"%s.%s" % k: n for k, n in sorted(dropped.items())}}
     if dry:
         say("\n  --dry 라 쓰지 않았다")
         return stats

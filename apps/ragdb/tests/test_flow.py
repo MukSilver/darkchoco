@@ -28,10 +28,20 @@ def test_chunks_hide_names_domains_and_contact(world):
     assert guard.NAME_MASK in text and "alphaforum.st" in text         # 장소 이름으로 쓰이는 도메인은 남는다
 
 
-def test_pii_document_is_excluded(world):
-    assert [e["document_id"] for e in world.stats["excluded"]] == ["사고-leak-2"]      # TC-03
+def test_pii_is_masked_in_place(world):
+    assert world.stats["excluded"] == []
+    assert [e["document_id"] for e in world.stats["pii_masked"]] == ["사고-leak-2"]
+    assert world.stats["pii_masked"][0]["hits"] == [{"where": "칸 메모", "what": "[IP]"}]
+    text = _all_text(world)
+    assert "203.0.113.7" not in text and "[IP]" in text                 # TC-03. 값은 안 나가고 문서는 남는다
+
+
+def test_pii_document_is_excluded_when_asked(world, monkeypatch):
+    import chunk as C
+    monkeypatch.setattr(C, "PII_POLICY", "exclude")
+    st = C.run(quiet=True)
+    assert [e["document_id"] for e in st["excluded"]] == ["사고-leak-2"]      # 명세 F-03 대로
     assert "203.0.113.7" not in _all_text(world)
-    assert world.stats["excluded"][0]["hits"] == [{"where": "칸 메모", "what": "[IP]"}]
 
 
 def test_terms_are_not_chunks_or_documents(world):
@@ -248,7 +258,8 @@ def test_snapshot_holds_only_exported(world):
     r = snapshot.bake(world.version)
     root = os.path.join(cfg.SNAPSHOT_ROOT, world.version)
     assert not os.path.exists(os.path.join(root, "doc", "포럼-hidden.json"))             # TC-09
-    assert not os.path.exists(os.path.join(root, "doc", "사고-leak-2.json"))
+    with open(os.path.join(root, "doc", "사고-leak-2.json"), encoding="utf-8") as f:
+        assert "203.0.113.7" not in f.read()
     assert os.path.exists(os.path.join(root, "doc", "포럼-alphaforum.json"))
     with open(os.path.join(root, "list.json"), encoding="utf-8") as f:
         ids = [d["document_id"] for d in json.load(f)["documents"]]

@@ -105,6 +105,8 @@ def main():
                             write_lock_seconds=round(time.monotonic() - t, 2), dropped_columns=st["dropped_columns"])
     line["excluded"] = [{"document_id": e["document_id"], "why": ", ".join("%s %s" % (h["where"], h["what"]) for h in e["hits"][:4])}
                         for e in st["excluded"]]
+    line["pii_masked"] = [{"document_id": e["document_id"], "why": ", ".join("%s %s" % (h["where"], h["what"]) for h in e["hits"][:4])}
+                          for e in st["pii_masked"]]
 
     # 4. 색인. 갈아 끼우지 않고 만들기만 한다
     ix = build_index.build(hold=True)
