@@ -33,6 +33,15 @@ def system_prompt():
     return _system
 
 
+def answer_tag():
+    """답을 만든 모델과 지시문의 이름표. 재사용 답변에 남겨 두고, 다르면 그 답을 다시 쓰지 않는다.
+
+    지시문을 고치면 옛 지시문으로 만든 답이 근거 문서가 바뀔 때까지 계속 나갔다 (2026-09-30 지시문 고칠 때 찾음).
+    """
+    import hashlib
+    return "%s#%s" % (cfg.ANSWER_MODEL, hashlib.sha256(system_prompt().encode("utf-8")).hexdigest()[:8])
+
+
 def client():
     global _client
     if _client is None:
@@ -53,13 +62,20 @@ def date_label(chunk):
 
 
 def document_text(chunk):
-    """모델에 주는 문서 글. 조각 본문 뒤에 날짜 줄을 붙인다 (지시문 5).
+    """모델에 주는 문서 글. 조각 본문 뒤에 상태 줄과 날짜 줄을 붙인다 (지시문 5).
 
-    날짜를 설명(context)에 두면 인용할 수 없어 출처 없는 문장이 생긴다. 본문 뒤에 붙이므로
-    본문 안의 인용 위치(글자 번호)는 조각 본문과 그대로 맞는다.
+    설명(context)과 제목은 인용할 수 없다. 거기 둔 값으로 쓴 문장은 출처 없는 문장이 된다.
+    상태는 「속성」 조각에만 본문으로 있고 나머지 조각에는 설명에만 있어서, 상태를 말한 문장에 출처가
+    붙지 않았다 (2026-09-30 진단, 출처 없는 문장 35개 중 약 12개). 본문에 이미 있으면 다시 붙이지 않는다.
+    본문 뒤에 붙이므로 본문 안의 인용 위치(글자 번호)는 조각 본문과 그대로 맞는다.
     """
     body = (chunk.get("body") or "").strip() or "(본문 없음)"
-    return "%s\n\n%s: %s" % (body, date_label(chunk), chunk.get("observed_at") or "없음")
+    tail = []
+    status = chunk.get("status")
+    if status and "상태: %s" % status not in body:
+        tail.append("상태: %s" % status)
+    tail.append("%s: %s" % (date_label(chunk), chunk.get("observed_at") or "없음"))
+    return "%s\n\n%s" % (body, "\n".join(tail))
 
 
 def documents(chunks):
@@ -68,14 +84,11 @@ def documents(chunks):
     for c in chunks:
         if not c.get("visibility"):
             raise ValueError("비반출 조각이 모델로 가려 했다 (SR-19)")
-        context = ["종류: %s" % (c.get("kind") or "")]
-        if c.get("status"):
-            context.append("상태: %s" % c["status"])
         out.append({
             "type": "document",
             "source": {"type": "text", "media_type": "text/plain", "data": document_text(c)},
             "title": ("%s / %s" % (c.get("title") or "", c.get("section") or ""))[:200],
-            "context": "\n".join(context),
+            "context": "종류: %s" % (c.get("kind") or ""),
             "citations": {"enabled": True},
         })
     return out
@@ -207,8 +220,9 @@ def sentences(blocks):
 
 
 _MARK = re.compile(r"\*\*|__|^#{1,6}\s+|^[-*•]\s+", re.M)
-# 내용 없이 목록을 여는 말. 지시문이 금지해도 모델이 쓴다. 출처가 없고 이 꼴이면 뺀다
-_LEAD = re.compile(r"(다음과 같습니다|아래와 같습니다|정리하면 다음과 같습니다|다음과 같이 정리됩니다)[.:]?$")
+# 내용 없이 목록을 여는 말. 지시문이 금지해도 모델이 쓴다. 출처가 없고 이 꼴이면 뺀다.
+# 「다음과 같습니다」 말고도 「다음이 있습니다」, 「다음 인물들이 확인됩니다」, 쌍점으로 끝나는 줄을 쓴다 (2026-09-30 진단)
+_LEAD = re.compile(r"((다음|아래)[^.]{0,40}(있습니다|같습니다|확인됩니다|확인됐습니다|확인되었습니다|정리됩니다)[.:]?|:)$")
 _ENDS = re.compile(r"[.!?。다요죠음됨함]\s*[)\]」]?\s*$")
 
 
@@ -230,6 +244,9 @@ def _merge_headings(out):
     i = 0
     while i < len(out):
         s = out[i]
+        if not s["cited"] and _LEAD.search(s["text"]):
+            i += 1                  # 목록을 여는 말은 제목 줄로 붙이지 않고 뺀다
+            continue
         head = (not s["cited"] and i + 1 < len(out) and out[i + 1]["cited"] and len(s["text"]) <= 60
                 and not _ENDS.search(s["text"]))
         if head:
@@ -238,7 +255,7 @@ def _merge_headings(out):
             merged.append(nxt)
             i += 2
             continue
-        if s["text"] and not (not s["cited"] and _LEAD.search(s["text"])):
+        if s["text"]:
             merged.append(s)
         i += 1
     return merged

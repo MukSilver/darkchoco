@@ -249,6 +249,15 @@ def test_reuse_survives_new_version_until_evidence_changes(world, fake_stream):
     assert mem.drop_stale_cache(changed) == 1                                           # 근거가 바뀌면 지운다
 
 
+def test_reuse_stops_when_prompt_changes(world, fake_stream, monkeypatch):
+    """지시문이나 모델이 바뀌면 옛 답을 다시 쓰지 않고 새로 답한다 (2026-09-30)."""
+    _run("AlphaForum 지금 상태", fake_stream([("AlphaForum 은 접속이 확인됐습니다.", [0])]))
+    monkeypatch.setattr(answer, "_system", "고친 지시문")
+    again = fake_stream([("AlphaForum 은 새 지시문으로 답합니다.", [0])])
+    r = _run("AlphaForum 은 지금 상태", again)
+    assert r["done"]["kind"] == "new" and again.request is not None
+
+
 # ── 스냅샷과 반출 관문 (F-22) ──
 def test_snapshot_holds_only_exported(world):
     import snapshot

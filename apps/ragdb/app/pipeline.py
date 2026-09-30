@@ -117,8 +117,8 @@ def ask(question, evaluation=False, who=None, searcher=None, con=None, limiter=N
         # 5. 재사용 답변 (F-21). 개인정보를 가렸으면 건너뛴다
         if key_fp:
             hit = _try(lambda: con.cached_answer(key_fp))
-            if hit and not store.holds(searcher.docs, hit):
-                _try(lambda: con.drop_cache(key_fp))           # 근거 문서가 바뀌었다. 새로 답한다
+            if hit and (not store.holds(searcher.docs, hit) or hit.get("model") != answer.answer_tag()):
+                _try(lambda: con.drop_cache(key_fp))           # 근거 문서나 모델, 지시문이 바뀌었다. 새로 답한다
                 hit = None
             if hit:
                 log.update(reused=1, sources=[s["chunk_id"] for s in hit["sources"]])
@@ -224,7 +224,7 @@ def ask(question, evaluation=False, who=None, searcher=None, con=None, limiter=N
         if key_fp and res["stop_reason"] == "end_turn":
             hashes = {s["document_id"]: searcher.docs[s["document_id"]]["content_hash"]
                       for s in sources if s["document_id"] in searcher.docs}
-            _try(lambda: con.save_cache(searcher.version, key_fp, sents, sources, res["model"], hashes))
+            _try(lambda: con.save_cache(searcher.version, key_fp, sents, sources, answer.answer_tag(), hashes))
 
         yield "done", {"kind": "new", "sentences": sents, "version": searcher.version, "pii_masked": bool(found),
                        "rerank_applied": applied, "truncated": res["stop_reason"] == "max_tokens"}

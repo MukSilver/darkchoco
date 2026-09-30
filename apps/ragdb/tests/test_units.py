@@ -121,6 +121,17 @@ def test_document_text_keeps_body_offsets():
     assert t.startswith(c["body"]) and t.endswith("확인일: 2026-09-01")
 
 
+def test_document_text_puts_status_where_it_can_be_cited():
+    # 설명 칸의 값은 인용할 수 없다. 상태는 본문 뒤에 붙이고, 본문에 이미 있으면 다시 붙이지 않는다
+    c = {"body": "가상의 포럼 Alpha 소개.", "status": "online", "observed_at": "2026-09-01"}
+    t = answer.document_text(c)
+    assert t.startswith(c["body"]) and "상태: online\n확인일: 2026-09-01" in t
+    c2 = {"body": "이름: Alpha\n상태: online", "status": "online", "observed_at": "2026-09-01"}
+    assert answer.document_text(c2).count("상태: online") == 1
+    doc = answer.documents([dict(c, visibility=1, kind="장소")])[0]
+    assert "상태" not in doc["context"]
+
+
 def test_documents_refuse_hidden_chunks():
     import pytest
     with pytest.raises(ValueError):
@@ -178,3 +189,15 @@ def test_lead_in_without_source_is_dropped():
     out = answer.sentences([{"text": "확인되는 그룹은 다음과 같습니다.\n", "cites": []},
                             {"text": "AlphaLock 은 한국 피해가 1건 있습니다.", "cites": [{"n": 1}]}])
     assert [s["text"] for s in out] == ["AlphaLock 은 한국 피해가 1건 있습니다."]
+
+
+def test_other_lead_ins_are_dropped_too():
+    # 「다음이 있습니다」, 「다음 인물들이 확인됩니다」, 쌍점으로 끝나는 줄. 제목 줄로 붙이지도 않는다
+    from app import answer
+    cited = {"text": "가상의 판매자 Beta 는 자료를 팝니다.", "cites": [{"n": 1}]}
+    for lead in ("가상의 포럼으로는 다음이 있습니다.", "판매자로는 다음 인물들이 확인됩니다.", "찾은 자료:"):
+        out = answer.sentences([{"text": lead + "\n", "cites": []}, cited])
+        assert [s["text"] for s in out] == [cited["text"]], lead
+    # 출처가 있으면 「다음」 이 들어가도 그대로 둔다
+    out = answer.sentences([{"text": "Beta 는 다음 달에 문을 닫았다고 적혀 있습니다.", "cites": [{"n": 1}]}])
+    assert len(out) == 1
