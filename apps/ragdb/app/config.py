@@ -46,11 +46,11 @@ CURRENT = os.path.join(DATA_DIR, "current.txt")
 BATCH_LOG = os.path.join(DATA_DIR, "batch_log.jsonl")
 
 # ── 검색 (F-12) ──
-CANDIDATE_M = _i("CANDIDATE_M", 50)                  # OI-02 잠정
+CANDIDATE_M = _i("CANDIDATE_M", 100)                 # OI-02 첫 값. 문제집 초안(2026-09-30)에서 50 이면 둘이 빠지고 100 이면 다 듦. 재순위 비용은 100개까지 한 단위
 FINAL_K = _i("FINAL_K", 5)                           # OI-02 잠정
 KIND_BOOST = _f("KIND_BOOST", 0.1)                   # OI-02 첫 값. 후보 가운데 가장 높은 점수의 몇 배를 더하는지
 OFFLINE_FACTOR = _f("OFFLINE_FACTOR", 0.85)          # F-07 처리 1 첫 값. offline 조각의 점수에 곱함. 예비 측정에서 0.7 보다 나았음
-EXPANSION_WEIGHT = _f("EXPANSION_WEIGHT", 0.3)       # OI-14 첫 값. 예비 측정(2026-09-30)에서 별칭 질문이 다 드는 가장 작은 값. 0 이면 꺼짐
+EXPANSION_WEIGHT = _f("EXPANSION_WEIGHT", 0.5)       # OI-14 첫 값. 예비 측정과 문제집 초안(2026-09-30)에서 0.3 과 0.5 가 같고 별칭 질문은 0.5 가 나음. 0 이면 꺼짐
 EXPANSION_MAX_ITEMS = _i("EXPANSION_MAX_ITEMS", 5)   # OI-15 첫 값
 EXPANSION_MAX_FORMS = _i("EXPANSION_MAX_FORMS", 5)   # OI-15 첫 값
 

@@ -6,6 +6,7 @@
 """
 import json
 import os
+import re
 
 import bm25s
 import numpy as np
@@ -14,6 +15,15 @@ import tokenize_ko as T
 
 from . import config as cfg
 from . import expand, guard, kinds
+
+
+CASE_ID = re.compile(r"-((?:leak|inc)-\d+)$")
+CASE_ASK = re.compile(r"(?<![0-9A-Za-z])(LEAK|INC)\s*-?\s*(\d+)(?![0-9])", re.I)
+
+
+def asked_cases(question):
+    """질문에 적힌 사건 번호. 「LEAK-11」, 「leak 11」, 「INC-3」 을 leak-11, inc-3 꼴로."""
+    return {"%s-%s" % (m.group(1).lower(), m.group(2)) for m in CASE_ASK.finditer(question or "")}
 
 
 def current_version():
@@ -34,6 +44,8 @@ class Searcher:
         self.visible = np.array([bool(x.get("visibility")) for x in self.ids], dtype=bool)
         self.offline = np.array([x.get("status") == "offline" for x in self.ids], dtype=bool)
         self.kind = np.array([x.get("kind") or "" for x in self.ids], dtype=object)
+        # 사건 번호로 묻는 질문을 위해 문서 식별자 끝의 번호(leak-11, inc-3)를 미리 뽑아 둔다
+        self.case = np.array([(m.group(1) if (m := CASE_ID.search(x.get("document_id") or "")) else "") for x in self.ids], dtype=object)
         self.terms = expand.load(d)          # 없거나 깨졌으면 None (TC-21)
         self.guard = guard.load(os.path.join(d, "guard.json"))
         assert n == len(self.visible)
@@ -86,6 +98,16 @@ class Searcher:
             hit = np.isin(self.kind, found) & (total > 0)
             boost = np.where(hit, kind_boost * float(total.max()), 0.0).astype(np.float32)
             total = total + boost
+
+        # 사건 번호로 물으면 그 번호의 문서(수집, 유출 사고, 판정)를 맨 앞에 둔다. 번호는 낱말 점수로는 약하다
+        # (「leak」 과 숫자는 사고 문서마다 있다). 반출 안 되는 조각은 그대로 0 이다
+        cases = asked_cases(question)
+        if cases:
+            hit = np.isin(self.case, list(cases)) & (self.visible if exported_only else True)
+            if hit.any():
+                top = float(total.max()) if total.max() > 0 else 1.0
+                boost = boost + np.where(hit, top + 1.0, 0.0).astype(np.float32)
+                total = np.where(hit, total + top + 1.0, total)
 
         # 처리 7: 후보 M개
         order = np.argsort(-total, kind="stable")[:m]
