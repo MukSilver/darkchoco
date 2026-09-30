@@ -14,7 +14,7 @@
     5 스냅샷과 관문     snapshot.py       굽기, 반출 관문 (F-22)
     6 갈아 끼우기                        current.txt 한 줄, 옛 판의 재사용 답변 지움, 반출 기록
     7 재조사 추출      recheck.py        (F-20)
-    8 배치 기록                          data/batch_log.jsonl 에 한 줄
+    8 배치 기록                          저장소(Supabase rag.batch_log)에 한 줄
 
 색인(bm25s, kiwipiepy)이 .venv 에만 있으므로 .venv 의 python 으로 돌린다.
 실패하면 디스코드로 알린다. 알림에는 자료 내용을 싣지 않고 어느 단계인지만 보낸다 (F-23 처리 5, 6).
@@ -75,9 +75,10 @@ def main():
         line["seconds"] = round(time.monotonic() - t0, 1)
         if step:
             line["stopped_at"] = step
-        os.makedirs(os.path.dirname(cfg.BATCH_LOG), exist_ok=True)
-        with open(cfg.BATCH_LOG, "a", encoding="utf-8") as f:      # 덧붙이기만 한다. 지우거나 다시 만들지 않는다
-            f.write(json.dumps(line, ensure_ascii=False) + "\n")
+        try:
+            store.connect().log_batch(line)          # 덧붙이기만 한다
+        except store.StoreError as e:
+            print("배치 기록을 남기지 못했다 (%s)" % e)
         if step and not a.quiet_fail:
             notify(step)
         return 1 if step else 0
@@ -150,10 +151,12 @@ def main():
     # 6. 갈아 끼우기. 여기까지 와야 새 판이 쓰인다
     build_index.activate(version)
     snapshot.publish_current(version, snap["baked_at"])
-    snapshot.log_export(version, snap["documents"], snap["chunks"])
-    con = store.connect()
-    line["observed"]["dropped_cache"] = store.drop_old_cache(con, version)
-    con.close()
+    try:
+        snapshot.log_export(version, snap["documents"], snap["chunks"])
+        line["observed"]["dropped_cache"] = store.connect().drop_old_cache(version)
+    except store.StoreError as e:
+        # 새 판은 이미 쓰이고 있다. 옛 판의 재사용 답변은 판이 달라 어차피 걸리지 않는다
+        line["failed"].append({"what": "판 교체 뒤 기록", "note": str(e)})
     if os.path.exists(pending):
         os.remove(pending)          # 새 판까지 왔다. 다음 회차는 새 판이 있을 때만 돈다
 
@@ -163,7 +166,6 @@ def main():
         line["observed"]["recheck"] = rs
 
     # 8. 배치 기록
-    line["observed"]["sqlite_bytes"] = os.path.getsize(cfg.SQLITE_PATH) if os.path.exists(cfg.SQLITE_PATH) else None
     for k in ("append_wait_max_seconds", "append_failed", "resident_memory_bytes", "excluded_rows_seconds"):
         line["observed"][k] = None          # 질의 서버가 돌 때 재는 값. 아직 잴 자리가 없어 빈 값으로 둔다
     print("판 %s: 문서 %d · 조각 %d (색인 %d) · 사전 %s항목 · 스냅샷 %.1fMB · 뺀 문서 %d" % (

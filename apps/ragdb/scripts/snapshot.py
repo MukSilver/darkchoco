@@ -86,14 +86,36 @@ def write(path, data):
     return os.path.getsize(path)
 
 
-def bake(version):
+def version_files(version):
+    """판 폴더의 문서 목록과 조각 (build_index.py 가 구운 것). ({document_id: 문서}, {chunk_id: 조각})"""
+    d = os.path.join(cfg.INDEX_ROOT, version)
+    with open(os.path.join(d, "documents.json"), encoding="utf-8") as f:
+        docs = json.load(f)
+    with open(os.path.join(d, "chunks.json"), encoding="utf-8") as f:
+        chunks = json.load(f)
+    return docs, chunks
+
+
+def _order(chunk_id):
+    try:
+        return int(chunk_id.rsplit("#s", 1)[1])
+    except (IndexError, ValueError):
+        return 0
+
+
+def bake(version, st=None):
     """스냅샷을 굽는다 (F-22 처리 1). 돌려주는 것: {dir, documents, chunks, answers, bytes, baked_at}"""
     out = os.path.join(cfg.SNAPSHOT_ROOT, version)
     if os.path.isdir(out):
         shutil.rmtree(out)
-    con = store.connect()
-    rows = con.execute("SELECT * FROM documents WHERE visibility = 1 ORDER BY kind, title").fetchall()
-    live = {r["document_id"] for r in rows}
+    doc_rows, all_chunks = version_files(version)
+    rows = sorted(((did, r) for did, r in doc_rows.items() if r.get("visibility")),
+                  key=lambda x: (x[1].get("kind") or "", x[1].get("title") or ""))
+    live = {did for did, _ in rows}
+    by_doc = {}
+    for cid, c in all_chunks.items():
+        if c.get("visibility"):
+            by_doc.setdefault(c["document_id"], []).append(cid)
 
     docs = C.load_docs()
     g, _ = C.load_guard(docs)
@@ -106,38 +128,35 @@ def bake(version):
     # 태그를 지운 뒤에 한 번 더 가린다. 지우면서 글자가 바뀌기 때문이다
     safe = lambda v: g.clean(strip_active(v))
     strip = lambda v: [safe(x) for x in v] if isinstance(v, list) else safe(v)
-    for r in rows:
-        d = std.get(r["document_id"])
+    for did, r in rows:
+        d = std.get(did)
         if d is None:
             continue
         attrs = {k: strip(v) for k, v in C.exported_metadata(d)[0].items()}
-        chunks = [dict(c) for c in con.execute(
-            "SELECT chunk_id, section, body, observed_at, status FROM chunks "
-            "WHERE document_id = ? AND visibility = 1 ORDER BY CAST(substr(chunk_id, instr(chunk_id, '#s') + 2) AS INTEGER)",
-            (r["document_id"],))]
-        for c in chunks:
-            c["body"] = safe(c["body"])
-            c["section"] = safe(c["section"])
-            c["images"] = []
+        chunks = []
+        for cid in sorted(by_doc.get(did, []), key=_order):
+            c = all_chunks[cid]
+            chunks.append({"chunk_id": cid, "section": safe(c.get("section")), "body": safe(c.get("body")),
+                           "observed_at": c.get("observed_at"), "status": c.get("status"), "images": []})
         n_chunks += len(chunks)
-        head = {"document_id": r["document_id"], "kind": r["kind"], "title": safe(r["title"]),
-                "summary": safe(r["summary"]),
-                "status": r["status"], "observed_at": r["observed_at"], "country": r["country"], "signup": r["signup"],
-                "verdict": json.loads(r["verdict"]) if r["verdict"] else None,
-                "stale": is_stale(r["observed_at"], kind=r["kind"])}
+        head = {"document_id": did, "kind": r["kind"], "title": safe(r.get("title")),
+                "summary": safe(r.get("summary")),
+                "status": r.get("status"), "observed_at": r.get("observed_at"), "country": r.get("country"),
+                "signup": r.get("signup"), "verdict": r.get("verdict") or None,
+                "stale": is_stale(r.get("observed_at"), kind=r["kind"])}
         n_docs += 1
-        detail = dict(head, attributes=attrs, related=r["related"], chunks=chunks)
-        size += write(os.path.join(out, "doc", "%s.json" % r["document_id"]), detail)
+        detail = dict(head, attributes=attrs, related=r.get("related"), chunks=chunks)
+        size += write(os.path.join(out, "doc", "%s.json" % did), detail)
 
     # 사전 답변도 지금 목록으로 한 번 더 가린다. 답을 만든 뒤에 새로 찾은 조직 표기가 있을 수 있다
+    st = st or store.connect()
     answers = []
-    for a in con.execute("SELECT * FROM answers WHERE reviewed = 1 ORDER BY created_at").fetchall():
-        if not store.answer_holds(con, a):
+    for a in st.answers_all():
+        if not a["reviewed"] or not store.holds(doc_rows, a):
             continue
-        sents = [dict(s, text=safe(s.get("text"))) for s in json.loads(a["answer"])]
-        sources = [dict(s, title=safe(s.get("title")), section=safe(s.get("section"))) for s in json.loads(a["sources"] or "[]")]
+        sents = [dict(s, text=safe(s.get("text"))) for s in a["answer"]]
+        sources = [dict(s, title=safe(s.get("title")), section=safe(s.get("section"))) for s in a["sources"] or []]
         answers.append({"question": safe(a["question"]), "answer": sents, "sources": sources, "created_at": a["created_at"]})
-    con.close()
 
     size += write(os.path.join(out, "answers.json"), {"version": version, "answers": answers})
     size += write(os.path.join(out, "status.json"), {"version": version, "baked_at": baked_at,
@@ -231,9 +250,7 @@ def excluded_names(version):
     except (OSError, ValueError, AttributeError):
         return None
     docs = C.load_docs()
-    con = store.connect()
-    live = {r[0] for r in con.execute("SELECT document_id FROM documents WHERE visibility = 1")}
-    con.close()
+    live = {did for did, r in version_files(version)[0].items() if r.get("visibility")}
     shown = set()
     for d in docs:
         if d["document_id"] in live:
@@ -270,11 +287,7 @@ def publish_current(version, baked_at):
 
 def log_export(version, documents, chunks):
     """반출 기록 (SR-18). 판을 쓴 시각과 수만 남긴다."""
-    con = store.connect()
-    with con:
-        con.execute("INSERT INTO export_log (at, version, documents, chunks) VALUES (?,?,?,?)",
-                    (store.now(), version, documents, chunks))
-    con.close()
+    store.connect().log_export(version, documents, chunks)
 
 
 def main():

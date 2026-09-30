@@ -36,15 +36,9 @@ CURRENT = cfg.CURRENT
 STD_DIR = C.STD_DIR
 
 
-def load_indexed():
-    """색인에 넣을 조각. indexed=1 인 것만 (F-05 처리 2)."""
-    con = C.connect()
-    rows = con.execute(
-        "SELECT chunk_id, document_id, kind, title, section, body, visibility, status, observed_at "
-        "FROM chunks WHERE indexed = 1"
-    ).fetchall()
-    con.close()
-    return rows
+def load_staged():
+    """배치가 작업 자리에 만들어 둔 조각과 문서 목록 (chunk.py). 없으면 (None, None)."""
+    return C.staged()
 
 
 def has_forbidden(text):
@@ -135,19 +129,21 @@ def activate(version):
 
 def build(version=None, hold=False):
     """돌려주는 것: {version, chunks, tokens, excluded, terms, terms_seconds} 또는 None."""
-    rows = load_indexed()
+    chunks, doc_rows = load_staged()
+    rows = [c for c in chunks or [] if c.get("indexed")]
     if not rows:
         print("색인에 넣을 조각이 없다. 먼저 chunk.py 를 돌린다")
         return None
 
-    # F-06 처리 1 · TC-06 — 반출 조각에 금지어(주소·링크)가 남았으면 색인을 만들지 않는다
+    # F-06 처리 1 · TC-06 — 나가는 조각에 금지어(주소·링크)가 남았으면 색인을 만들지 않는다.
+    # 색인에 안 드는 짧은 조각도 스냅샷으로는 나가므로 같이 본다
     bad = []
-    for cid, did, kind, title, section, body, vis, status, observed in rows:
-        if not vis:
+    for c in chunks:
+        if not c.get("visibility"):
             continue
-        hit = has_forbidden("%s %s %s" % (title or "", section or "", body or ""))
+        hit = has_forbidden("%s %s %s" % (c.get("title") or "", c.get("section") or "", c.get("body") or ""))
         if hit:
-            bad.append((cid, hit[:60]))
+            bad.append((c["chunk_id"], hit[:60]))
     if bad:
         print("금지어 검사에서 멈춤 — 반출 조각 %d개에 주소나 링크가 남아 있다 (TC-06). current.txt 는 그대로" % len(bad))
         for cid, hit in bad[:15]:
@@ -161,40 +157,38 @@ def build(version=None, hold=False):
 
     ids = []
     corpus = []
-    bodies = {}
-    for cid, did, kind, title, section, body, vis, status, observed in rows:
-        ids.append({"chunk_id": cid, "document_id": did, "kind": kind,
-                    "title": title, "section": section, "visibility": bool(vis),
-                    "status": status, "observed_at": observed})
-        bodies[cid] = {"document_id": did, "kind": kind, "title": title, "section": section, "body": body,
-                       "visibility": 1 if vis else 0, "observed_at": observed, "status": status}
+    for c in rows:
+        ids.append({"chunk_id": c["chunk_id"], "document_id": c["document_id"], "kind": c["kind"],
+                    "title": c["title"], "section": c["section"], "visibility": bool(c["visibility"]),
+                    "status": c.get("status"), "observed_at": c.get("observed_at")})
         # 제목과 소제목도 함께 넣는다 — 본문에 이름이 안 나오는 구간이 있다
-        corpus.append(T.tokens("%s %s %s" % (title or "", section or "", body or "")))
+        corpus.append(T.tokens("%s %s %s" % (c["title"] or "", c["section"] or "", c["body"] or "")))
 
     r = bm25s.BM25()
     r.index(corpus, show_progress=False)
     r.save(out_dir, corpus=None)
 
-    with open(os.path.join(out_dir, "ids.json"), "w", encoding="utf-8") as f:
-        json.dump(ids, f, ensure_ascii=False)
-    # 조각 본문도 판 폴더에 둔다. 질의는 색인과 같은 판의 본문을 읽는다 (app/search.py).
-    # SQLite 의 chunks 표는 배치가 제자리에서 고치므로, 거기서 읽으면 배치가 중간에 멈췄을 때
-    # 색인은 옛 판인데 본문은 새 것이 된다 (2026-09-30 검토에서 찾음)
-    with open(os.path.join(out_dir, "chunks.json"), "w", encoding="utf-8") as f:
-        json.dump(bodies, f, ensure_ascii=False)
+    def write(name, data):
+        with open(os.path.join(out_dir, name), "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+
+    write("ids.json", ids)
+    # 판 폴더는 그 판이 쓰는 것을 전부 담는다. 질의와 스냅샷은 여기만 읽는다 (app/search.py, snapshot.py).
+    # 그래서 배치가 도는 중이거나 중간에 멈춰도 지금 판의 답이 바뀌지 않는다
+    #   chunks.json      조각 전부 (색인에 안 든 짧은 조각 포함). chunk_id 로 찾는다
+    #   documents.json   문서 머리와 내용 해시. document_id 로 찾는다
+    write("chunks.json", {c["chunk_id"]: {k: v for k, v in c.items() if k != "chunk_id"} for c in chunks})
+    write("documents.json", {d["document_id"]: {k: v for k, v in d.items() if k != "document_id"} for d in doc_rows})
 
     g = bake_guard(out_dir)
     n_terms, sec = bake_terms(out_dir, g)
-
-    con = C.connect()
-    excluded = con.execute("SELECT COUNT(*) FROM chunks WHERE indexed = 0").fetchone()[0]
-    con.close()
 
     if not hold:
         activate(version)
 
     return {"version": version, "chunks": len(ids), "tokens": sum(len(c) for c in corpus),
-            "excluded": excluded, "terms": n_terms, "terms_seconds": round(sec, 3), "guard_names": len(g.names)}
+            "excluded": len(chunks) - len(rows), "terms": n_terms, "terms_seconds": round(sec, 3),
+            "guard_names": len(g.names)}
 
 
 if __name__ == "__main__":

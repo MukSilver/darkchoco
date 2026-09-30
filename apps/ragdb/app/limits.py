@@ -69,4 +69,4 @@ class Limiter:
 
 def budget_allows(con, max_cost):
     """하루 차단기 (F-18 처리 4). 이번 호출의 최대 비용을 더해도 한도 안인가."""
-    return store.spent_today(con) + max_cost <= cfg.DAILY_BUDGET_USD
+    return con.spent_today() + max_cost <= cfg.DAILY_BUDGET_USD

@@ -8,6 +8,7 @@
 
 번호는 목록에 나온 순서다. 누가 통과시켰는지는 확인 기록(review_log)에 남는다.
 관리 화면은 만들지 않는다. 검토는 이 스크립트로 한다 (설계서 「운영」).
+사전 답변은 운영 기록 저장소(Supabase)에 있다. 어느 기계에서 검토해도 같은 목록을 본다.
 """
 import json
 import os
@@ -20,11 +21,8 @@ if hasattr(sys.stdout, "reconfigure"):
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from app import store          # noqa: E402
-
-
-def rows(con):
-    return con.execute("SELECT * FROM answers ORDER BY reviewed, created_at, question_key").fetchall()
+from app import config as cfg          # noqa: E402
+from app import store                  # noqa: E402
 
 
 def who():
@@ -34,9 +32,20 @@ def who():
     return ""
 
 
+def bodies():
+    """지금 판의 조각 본문. 출처를 보여 줄 때 쓴다. 판이 없으면 빈 것."""
+    try:
+        with open(cfg.CURRENT, encoding="utf-8") as f:
+            version = f.read().strip()
+        with open(os.path.join(cfg.INDEX_ROOT, version, "chunks.json"), encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
 def main():
-    con = store.connect()
-    all_rows = rows(con)
+    st = store.connect()
+    all_rows = st.answers_all()
     args = [a for a in sys.argv[1:] if not a.startswith("--") and a != who()]
     if not args:
         waiting = sum(1 for r in all_rows if not r["reviewed"])
@@ -55,15 +64,17 @@ def main():
     if cmd == "show":
         print("질문   %s" % r["question"])
         print("만든 때 %s · 모델 %s · %s\n" % (r["created_at"], r["model"], "통과" if r["reviewed"] else "검토 전"))
-        for s in json.loads(r["answer"]):
+        for s in r["answer"]:
             mark = "".join("[%d]" % n for n in s["sources"]) if s["cited"] else "(출처 없음)"
             print("  %s %s" % (s["text"], mark))
         print()
-        for s in json.loads(r["sources"] or "[]"):
-            print("  [%d] %s / %s · %s %s" % (s["n"], s["title"], s["section"], s.get("date_label") or "확인일", s["observed_at"] or "없음"))
-            body = con.execute("SELECT body FROM chunks WHERE chunk_id = ?", (s["chunk_id"],)).fetchone()
+        text = bodies()
+        for s in r["sources"] or []:
+            print("  [%d] %s / %s · %s %s" % (s["n"], s["title"], s["section"], s.get("date_label") or "확인일",
+                                            s["observed_at"] or "없음"))
+            body = (text.get(s["chunk_id"]) or {}).get("body")
             if body:
-                print("      %s" % body[0][:300].replace("\n", " "))
+                print("      %s" % body[:300].replace("\n", " "))
         return 0
 
     name = who()
@@ -71,17 +82,11 @@ def main():
         print("--who 로 검토한 사람 이름을 적는다")
         return 1
     if cmd == "pass":
-        with con:
-            con.execute("UPDATE answers SET reviewed = 1 WHERE question_key = ?", (r["question_key"],))
-            con.execute("INSERT INTO review_log (at, who, what, target) VALUES (?,?,?,?)",
-                        (store.now(), name, "사전 답변 검토 통과", r["question_key"]))
+        st.review_answer(r["question_key"], name, passed=True)
         print("통과시켰다. 다음 스냅샷부터 첫 화면의 예시 질문으로 나온다")
         return 0
     if cmd == "drop":
-        with con:
-            con.execute("DELETE FROM answers WHERE question_key = ?", (r["question_key"],))
-            con.execute("INSERT INTO review_log (at, who, what, target) VALUES (?,?,?,?)",
-                        (store.now(), name, "사전 답변 지움", r["question_key"]))
+        st.review_answer(r["question_key"], name, passed=False)
         print("지웠다")
         return 0
     print(__doc__)

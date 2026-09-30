@@ -14,7 +14,7 @@ import numpy as np
 import tokenize_ko as T
 
 from . import config as cfg
-from . import expand, guard, kinds, store
+from . import expand, guard, kinds
 
 
 CASE_ID = re.compile(r"-((?:leak|inc)-\d+)$")
@@ -48,22 +48,21 @@ class Searcher:
         self.case = np.array([(m.group(1) if (m := CASE_ID.search(x.get("document_id") or "")) else "") for x in self.ids], dtype=object)
         self.terms = expand.load(d)          # 없거나 깨졌으면 None (TC-21)
         self.guard = guard.load(os.path.join(d, "guard.json"))
-        # 조각 본문. 색인과 같은 판 폴더에서 읽는다. 옛 판 폴더에는 없고, 그때는 SQLite 에서 읽는다
-        try:
-            with open(os.path.join(d, "chunks.json"), encoding="utf-8") as f:
-                self.bodies = json.load(f)
-        except (OSError, ValueError):
-            self.bodies = None
+        # 조각 본문과 문서 머리. 색인과 같은 판 폴더에서 읽는다
+        self.bodies = self._json(d, "chunks.json")
+        self.docs = self._json(d, "documents.json")
         assert n == len(self.visible)
 
-    def chunks(self, con, ids):
-        """조각 본문을 받은 순서대로 돌려준다.
+    @staticmethod
+    def _json(d, name):
+        try:
+            with open(os.path.join(d, name), encoding="utf-8") as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            return {}
 
-        색인과 같은 판의 본문이어야 한다. SQLite 의 chunks 표는 배치가 제자리에서 고치므로, 배치가 도는 동안이나
-        중간에 멈춘 뒤에는 색인과 어긋난다. 판 폴더의 chunks.json 은 그 판을 만들 때 같이 구운 것이다.
-        """
-        if self.bodies is None:
-            return store.chunks_by_id(con, ids)
+    def chunks(self, ids):
+        """조각을 받은 순서대로 돌려준다. 색인과 같은 판의 것이다 (판 폴더의 chunks.json)."""
         return [dict(self.bodies[i], chunk_id=i) for i in ids if i in self.bodies]
 
     def _scores(self, tokens):

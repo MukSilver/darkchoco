@@ -82,12 +82,36 @@ def text_of(doc):
 
 
 def load():
+    """찾아 둔 목록. 원본은 저장소(Supabase)다. 받아서 이 기계의 사본(data/names.json)도 새로 쓴다.
+
+    다른 기계에서 찾은 것도 받아 오므로 같은 문서를 두 번 찾느라 돈을 쓰지 않는다.
+    저장소에 닿지 못하면 이 기계의 사본을 쓴다. chunk.py 와 build_index.py 는 사본을 읽는다.
+    """
     try:
-        with open(NAMES, encoding="utf-8") as f:
-            d = json.load(f)
-        return d if isinstance(d.get("docs"), dict) else {"docs": {}}
-    except (OSError, ValueError, AttributeError):
-        return {"docs": {}}
+        state = {"docs": store.connect().names_state()}
+    except store.StoreError:
+        try:
+            with open(NAMES, encoding="utf-8") as f:
+                d = json.load(f)
+            return d if isinstance(d.get("docs"), dict) else {"docs": {}}
+        except (OSError, ValueError, AttributeError):
+            return {"docs": {}}
+    os.makedirs(os.path.dirname(NAMES), exist_ok=True)
+    save(state)
+    return state
+
+
+def push(before, state):
+    """이번에 바뀐 것만 저장소에 올린다. 빠진 문서는 지운다."""
+    now = state["docs"]
+    changed = {k: v for k, v in now.items() if before.get(k) != v}
+    gone = [k for k in before if k not in now]
+    st = store.connect()
+    if changed:
+        st.put_names(changed)
+    if gone:
+        st.delete_names(gone)
+    return len(changed), len(gone)
 
 
 def save(state):
@@ -142,6 +166,7 @@ def main():
     keep = {norm(k) for k in guard.keep_names(docs) + guard.COMMON_PLATFORMS}
     state = load()
     have = state["docs"]
+    before = json.loads(json.dumps(have, ensure_ascii=False))          # 저장소에 올릴 때 견줄 처음 모습
     live = {d["document_id"] for d in docs}
     for gone in [k for k in have if k not in live]:
         del have[gone]
@@ -154,6 +179,8 @@ def main():
         len(docs), len(todo), chars, guess, BUDGET, MODEL))
     if "--count" in sys.argv or not todo:
         save(state)
+        if "--count" not in sys.argv:
+            push(before, state)
         return 0
     if not cfg.ANTHROPIC_API_KEY:
         print("ANTHROPIC_API_KEY 가 없다")
@@ -182,8 +209,8 @@ def main():
             save(state)
             print("  %d / %d · %.2f달러" % (done + len(failed), len(todo), spent))
     save(state)
-    store.add_usage(con, answer_cost=spent, evaluation=True)
-    con.close()
+    push(before, state)
+    con.add_usage(answer_cost=spent, evaluation=True)
 
     left = len(todo) - done - len(failed)
     print("본 문서 %d개 · 이름이 나온 문서 %d개 · 표기 %d개 · 쓴 돈 %.2f달러" % (

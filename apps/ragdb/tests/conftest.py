@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """시험이 같이 쓰는 것. 자료는 전부 지어낸 것이다. 실제 조사 기록과 실제 조직 이름을 넣지 않는다.
 
-바깥 호출(모델, 재순위)은 하지 않는다. 가짜를 끼운다. 그래서 시험은 0원이고 열쇠가 없어도 돈다.
+바깥 호출(모델, 재순위, 운영 기록 저장소)은 하지 않는다. 가짜를 끼운다. 그래서 시험은 0원이고 열쇠가 없어도 돈다.
 """
 import json
 import os
@@ -58,6 +58,7 @@ def world(tmp_path, monkeypatch):
     import build_index
     import chunk as C
     from app import config as cfg
+    from app import store
 
     data = tmp_path / "data"
     std = data / "standard"
@@ -68,13 +69,14 @@ def world(tmp_path, monkeypatch):
                       for d in DOCS if d["kind"] != "용어"}}
     (data / "names.json").write_text(json.dumps(names, ensure_ascii=False), encoding="utf-8")
 
-    for k, v in {"DATA_DIR": str(data), "SQLITE_PATH": str(data / "ragdb.sqlite"), "INDEX_ROOT": str(data / "bm25_index"),
+    for k, v in {"DATA_DIR": str(data), "STAGING_DIR": str(data / "staging"), "INDEX_ROOT": str(data / "bm25_index"),
                  "SNAPSHOT_ROOT": str(data / "snapshot"), "CURRENT": str(data / "current.txt"),
-                 "BATCH_LOG": str(data / "batch_log.jsonl"), "FINGERPRINT_KEY": "test-key", "EXPANSION_WEIGHT": 0.3,
+                 "FINGERPRINT_KEY": "test-key", "EXPANSION_WEIGHT": 0.3,
                  "RERANK_ENABLED": True, "COHERE_API_KEY": "", "DAILY_BUDGET_USD": 3.0, "STALE_DAYS": 90}.items():
         monkeypatch.setattr(cfg, k, v)
     monkeypatch.setattr(C, "STD_DIR", str(std))
-    monkeypatch.setattr(C, "DB_PATH", str(data / "ragdb.sqlite"))
+    monkeypatch.setattr(C, "STAGING", str(data / "staging"))
+    monkeypatch.setattr(store, "_default", store.MemoryStore())          # 운영 기록은 메모리에. Supabase 를 부르지 않는다
     monkeypatch.setattr(C, "NAMES_FILE", str(data / "names.json"))
     monkeypatch.setattr(C, "REQUIRE_NAME_CHECK", True)
     monkeypatch.setattr(build_index, "STD_DIR", str(std))

@@ -26,7 +26,7 @@ RAG DB 는 묻고 답하는 곳이다. 목록, 상세, 내려받기 화면과 �
 | 화면 | React + Vite + TS · Tailwind |
 | 검색 | bm25s · kiwipiepy · cohere SDK. 벡터 검색은 쓰지 않는다 |
 | 답변 | anthropic SDK · Claude Sonnet |
-| 저장 | SQLite · 파일 |
+| 저장 | 운영 기록은 Supabase rag 스키마(`app/store.py`). 색인과 판은 파일. SQLite 는 쓰지 않는다(2026-09-30) |
 | 입력 | Supabase rag 스키마 (httpx로 받음). 정제 배치 darkchoco-data 가 노션에서 만든다 |
 | 공개 | Cloudflare 정식 터널 (cloudflared 서비스). 터널은 API 주소 하나만 |
 | 화면 배포 | Cloudflare 정적 호스팅 (rag.도메인), API는 rag-api.도메인 |
@@ -72,7 +72,7 @@ RAG DB 는 묻고 답하는 곳이다. 목록, 상세, 내려받기 화면과 �
 질의는 시작할 때 `current.txt`를 한 번 읽어 끝까지 그 판을 쓴다.
 
 질의가 읽는 것(색인, `ids.json`, 조각 본문 `chunks.json`, 넓히기 사전 `terms.json`, 지킴이 목록 `guard.json`)은 전부 판 폴더에 있다.
-SQLite 의 `chunks` 표는 배치가 제자리에서 고치는 작업용 표다. **질의가 거기서 본문을 읽게 만들지 않는다.** 배치가 중간에 멈추면 색인과 본문이 다른 판이 된다.
+`data/staging/` 은 배치가 조각을 만들어 두는 작업 자리다. **질의가 거기서 본문을 읽게 만들지 않는다.** 배치가 중간에 멈추면 색인과 본문이 다른 판이 된다.
 
 ## 배치와 웹 서버는 다른 프로세스다 — AD-02
 

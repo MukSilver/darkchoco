@@ -2,7 +2,7 @@
 """F-05 조각 분할 — 표준 문서를 검색 단위로 자른다.
 
     python scripts/chunk.py --dry     자르기만 하고 보여준다
-    python scripts/chunk.py           SQLite chunks에 넣는다
+    python scripts/chunk.py           작업 자리(data/staging)에 쓴다
 
 F-05
   1. 줄 하나를 속성 조각 하나로, 본문 구간마다 조각 하나로 만든다.
@@ -19,7 +19,6 @@ OI-03(최소 본문 길이)은 아직 미결이다. 여기서 정하지 않고 �
 import argparse
 import json
 import os
-import sqlite3
 import sys
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -37,7 +36,9 @@ from app import config as cfg       # noqa: E402  (.env 도 여기서 읽힌다)
 # 자리는 설정(app/config.py)을 따른다. 전에는 여기서 따로 정해서, .env 의 상대 경로가 돌리는 자리에 따라
 # 다른 곳을 가리켰다 (2026-09-30 검토에서 찾음)
 STD_DIR = os.path.join(cfg.DATA_DIR, "standard")
-DB_PATH = cfg.SQLITE_PATH
+# 만든 조각과 문서 목록을 두는 작업 자리. 색인(build_index.py)이 여기서 읽어 판 폴더로 굽는다.
+# 질의는 여기를 읽지 않는다. 판 폴더만 읽는다. SQLite 는 쓰지 않는다 (2026-09-30)
+STAGING = cfg.STAGING_DIR
 
 # OI-03 첫 값. 설정에서 읽는다
 MIN_BODY = cfg.MIN_BODY_CHARS
@@ -64,56 +65,19 @@ def exported_metadata(doc):
     md = doc.get("metadata") or {}
     return {k: v for k, v in md.items() if k in allow}, [k for k in md if k not in allow]
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS chunks (
-  chunk_id     TEXT PRIMARY KEY,
-  document_id  TEXT NOT NULL,
-  kind         TEXT,
-  title        TEXT,
-  section      TEXT,
-  body         TEXT,
-  visibility   INTEGER,
-  observed_at  TEXT,
-  status       TEXT,
-  images       TEXT,
-  indexed      INTEGER,
-  related      TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_chunks_doc ON chunks(document_id);
-CREATE INDEX IF NOT EXISTS idx_chunks_indexed ON chunks(indexed, visibility);
-
-CREATE TABLE IF NOT EXISTS documents (
-  document_id  TEXT PRIMARY KEY,
-  kind         TEXT,
-  title        TEXT,
-  summary      TEXT,
-  visibility   INTEGER,
-  status       TEXT,
-  observed_at  TEXT,
-  content_hash TEXT,
-  updated_at   TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_documents_list ON documents(kind, status, observed_at DESC);
-"""
-
-# 설계서 「저장 위치」 documents 의 나머지 칸. 먼저 만든 DB 에는 없으므로 없을 때만 더한다
-MORE_COLUMNS = [("country", "TEXT"), ("signup", "TEXT"), ("related", "TEXT"), ("verdict", "TEXT")]
 VERDICT_KEYS = ["검증 분류", "진위 판정", "신규성 판정", "판정 신뢰도"]      # 검증 네 축
 
 
-def connect():
-    """DR-09 — WAL · busy_timeout 5초 · synchronous NORMAL."""
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    c = sqlite3.connect(DB_PATH, timeout=5)
-    c.execute("PRAGMA journal_mode=WAL")
-    c.execute("PRAGMA busy_timeout=5000")
-    c.execute("PRAGMA synchronous=NORMAL")
-    c.executescript(SCHEMA)
-    have = {r[1] for r in c.execute("PRAGMA table_info(documents)")}
-    for name, typ in MORE_COLUMNS:
-        if name not in have:
-            c.execute("ALTER TABLE documents ADD COLUMN %s %s" % (name, typ))
-    return c
+def staged():
+    """작업 자리에 만들어 둔 것을 읽는다. (조각 목록, 문서 목록). 없으면 (None, None)."""
+    try:
+        with open(os.path.join(STAGING, "chunks.json"), encoding="utf-8") as f:
+            chunks = json.load(f)
+        with open(os.path.join(STAGING, "documents.json"), encoding="utf-8") as f:
+            docs = json.load(f)
+        return chunks, docs
+    except (OSError, ValueError):
+        return None, None
 
 
 def attr_body(doc):
@@ -141,17 +105,15 @@ def split(doc):
         "title": doc["title"],
         "observed_at": md.get("확인일") or md.get("공표 시점") or md.get("수집일") or md.get("검증일"),
         "status": md.get("상태"),
-        "related": json.dumps(
-            [x.strip() for x in str(md.get("연결된 곳", "")).split("·") if x.strip()],
-            ensure_ascii=False),
+        "related": [x.strip() for x in str(md.get("연결된 곳", "")).split("·") if x.strip()],
     }
 
     out = [dict(common,
                 chunk_id="%s#s0" % doc["document_id"],
                 section="속성",
                 body=attr_body(doc),
-                visibility=doc["visibility"],
-                images=json.dumps([], ensure_ascii=False))]
+                visibility=bool(doc["visibility"]),
+                images=[])]
 
     for i, s in enumerate(doc.get("sections") or [], 1):
         body = s.get("body") or ""
@@ -159,8 +121,8 @@ def split(doc):
                         chunk_id="%s#s%d" % (doc["document_id"], i),
                         section=s.get("heading") or ("문단 %d" % i),
                         body=body,
-                        visibility=doc["visibility"] and s.get("visibility", True),
-                        images=json.dumps(s.get("images") or [], ensure_ascii=False)))
+                        visibility=bool(doc["visibility"] and s.get("visibility", True)),
+                        images=s.get("images") or []))
 
     # 처리 2 — 짧은 조각은 색인에서 뺀다. 속성 조각은 길이와 무관하게 넣는다
     for ch in out:
@@ -324,51 +286,27 @@ def run(dry=False, quiet=False):
         say("\n  --dry 라 쓰지 않았다")
         return stats
 
-    con = connect()
-    with con:
-        for c in rows:
-            con.execute("""INSERT INTO chunks
-              (chunk_id, document_id, kind, title, section, body, visibility, observed_at, status, images, indexed, related)
-              VALUES (:chunk_id,:document_id,:kind,:title,:section,:body,:visibility,:observed_at,:status,:images,:indexed,:related)
-              ON CONFLICT(chunk_id) DO UPDATE SET
-                body=excluded.body, section=excluded.section, visibility=excluded.visibility,
-                observed_at=excluded.observed_at, status=excluded.status,
-                images=excluded.images, indexed=excluded.indexed, related=excluded.related""", c)
-        flat = lambda v: " · ".join(str(x) for x in v) if isinstance(v, list) else v
-        for d in kept:
-            md = d.get("metadata") or {}
-            verdict = {k: md[k] for k in VERDICT_KEYS if md.get(k)} if d["kind"] == "판정" else {}
-            con.execute("""INSERT INTO documents
-              (document_id, kind, title, summary, visibility, status, observed_at, content_hash, updated_at,
-               country, signup, related, verdict)
-              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
-              ON CONFLICT(document_id) DO UPDATE SET
-                title=excluded.title, summary=excluded.summary, visibility=excluded.visibility,
-                status=excluded.status, observed_at=excluded.observed_at,
-                content_hash=excluded.content_hash, updated_at=excluded.updated_at,
-                country=excluded.country, signup=excluded.signup, related=excluded.related, verdict=excluded.verdict""",
-                (d["document_id"], d["kind"], d["title"], d.get("summary"),
-                 1 if d["visibility"] else 0, md.get("상태"),
-                 md.get("확인일") or md.get("공표 시점") or md.get("수집일") or md.get("검증일"),
-                 d["revision"]["content_hash"], d["revision"]["notion_edited"],
-                 flat(md.get("국가")), flat(md.get("가입 필요")), flat(md.get("연결된 곳")),
-                 json.dumps(verdict, ensure_ascii=False) if verdict else None))
-        # 정리 — 이번에 만들지 않은 문서와 조각은 지운다 (F-06 처리 6 의 뜻).
-        # 덮어쓰기만 하면 「DB 반영」이 꺼진 줄, 이름이 바뀐 문서, 줄어든 구간, 가리기 검사에 걸린 문서의 조각이 남는다
-        con.execute("CREATE TEMP TABLE keep_c (chunk_id TEXT PRIMARY KEY)")
-        con.executemany("INSERT OR IGNORE INTO keep_c VALUES (?)", [(c["chunk_id"],) for c in rows])
-        con.execute("CREATE TEMP TABLE keep_d (document_id TEXT PRIMARY KEY)")
-        con.executemany("INSERT OR IGNORE INTO keep_d VALUES (?)", [(d["document_id"],) for d in kept])
-        gone_c = con.execute("DELETE FROM chunks WHERE chunk_id NOT IN (SELECT chunk_id FROM keep_c)").rowcount
-        gone_d = con.execute("DELETE FROM documents WHERE document_id NOT IN (SELECT document_id FROM keep_d)").rowcount
-        con.execute("DROP TABLE keep_c")
-        con.execute("DROP TABLE keep_d")
-        if gone_c or gone_d:
-            say("  지운 것: 조각 %d개 · 문서 %d개" % (gone_c, gone_d))
-    n = con.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
-    con.close()
-    say("  %s 에 조각 %d개" % (DB_PATH, n))
-    stats.update(removed_chunks=gone_c, removed_documents=gone_d)
+    flat = lambda v: " · ".join(str(x) for x in v) if isinstance(v, list) else v
+    doc_rows = []
+    for d in kept:
+        md = d.get("metadata") or {}
+        verdict = {k: md[k] for k in VERDICT_KEYS if md.get(k)} if d["kind"] == "판정" else {}
+        doc_rows.append({
+            "document_id": d["document_id"], "kind": d["kind"], "title": d["title"], "summary": d.get("summary"),
+            "visibility": bool(d["visibility"]), "status": md.get("상태"),
+            "observed_at": md.get("확인일") or md.get("공표 시점") or md.get("수집일") or md.get("검증일"),
+            "content_hash": d["revision"]["content_hash"], "updated_at": d["revision"]["notion_edited"],
+            "country": flat(md.get("국가")), "signup": flat(md.get("가입 필요")), "related": flat(md.get("연결된 곳")),
+            "verdict": verdict or None})
+
+    # 작업 자리를 통째로 새로 쓴다. 이번에 만들지 않은 문서와 조각(꺼진 줄, 이름이 바뀐 문서, 줄어든 구간)은 남지 않는다
+    os.makedirs(STAGING, exist_ok=True)
+    for name, data in (("chunks.json", rows), ("documents.json", doc_rows)):
+        tmp = os.path.join(STAGING, name + ".tmp")
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+        os.replace(tmp, os.path.join(STAGING, name))
+    say("  %s 에 조각 %d개, 문서 %d개" % (STAGING, len(rows), len(doc_rows)))
     return stats
 
 

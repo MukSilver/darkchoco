@@ -61,14 +61,21 @@ def cleaned_answer(g, hit):
     return sents, sources
 
 
+def _try(call):
+    """저장소 호출. 안 닿으면 None 을 돌려주고 질의는 계속한다. 기록을 못 남겨도 답은 나간다."""
+    try:
+        return call()
+    except store.StoreError:
+        return None
+
+
 def ask(question, evaluation=False, who=None, searcher=None, con=None, limiter=None,
         rerank_call=None, stream_factory=None):
     """질의 한 건. 이벤트 (이름, 값) 을 차례로 낸다.
 
     evaluation 이 참이면 관리 경로의 질의다. 사람별 제한과 하루 차단기를 거치지 않고 비용을 따로 센다 (F-18 처리 6).
-    who 는 IP 해시다. IP 원문을 받지 않는다.
+    who 는 IP 해시다. IP 원문을 받지 않는다. con 은 운영 기록 저장소다 (app/store.py).
     """
-    own = con is None
     con = con or store.connect()
     log = dict(question_len=len(question or ""), evaluation=1 if evaluation else 0, no_evidence=0, used_prepared=0,
                reused=0, pii_masked=0, no_dictionary=0, expansion_truncated=0, rerank_applied=0, rerank_ms=0, cost=0.0,
@@ -94,8 +101,10 @@ def ask(question, evaluation=False, who=None, searcher=None, con=None, limiter=N
         key_fp = None if found else fingerprint(key)
         log["question_hash"] = fingerprint(key)
 
-        # 4. 사전 답변 (F-16)
-        hit = store.prepared_answer(con, key) if key else None
+        # 4. 사전 답변 (F-16). 검토를 통과했고 근거 문서가 그대로인 것만 (TC-13)
+        hit = _try(lambda: con.prepared_row(key)) if key else None
+        if hit and not store.holds(searcher.docs, hit):
+            hit = None
         if hit:
             log.update(used_prepared=1, sources=[s["chunk_id"] for s in hit["sources"]])
             sents, sources = cleaned_answer(searcher.guard, hit)
@@ -107,7 +116,7 @@ def ask(question, evaluation=False, who=None, searcher=None, con=None, limiter=N
 
         # 5. 재사용 답변 (F-21). 개인정보를 가렸으면 건너뛴다
         if key_fp:
-            hit = store.cached_answer(con, searcher.version, key_fp)
+            hit = _try(lambda: con.cached_answer(searcher.version, key_fp))
             if hit:
                 log.update(reused=1, sources=[s["chunk_id"] for s in hit["sources"]])
                 sents, sources = cleaned_answer(searcher.guard, hit)
@@ -134,14 +143,20 @@ def ask(question, evaluation=False, who=None, searcher=None, con=None, limiter=N
 
         chunks, applied, ms = [], False, 0
         if cands:
-            bodies = {c["chunk_id"]: c for c in searcher.chunks(con, [c["chunk_id"] for c in cands])}
+            bodies = {c["chunk_id"]: c for c in searcher.chunks([c["chunk_id"] for c in cands])}
             full = [dict(bodies[c["chunk_id"]], **{k: c[k] for k in ("score", "bm25", "expand", "boost")})
                     for c in cands if c["chunk_id"] in bodies and bodies[c["chunk_id"]]["visibility"]]
 
             # 7. 하루 차단기. 거절할 요청에 비용을 쓰지 않는다
             if not evaluation:
                 worst = answer.estimate_cost(q, full[:cfg.FINAL_K]) + cfg.RERANK_PRICE_PER_SEARCH
-                if not limits.budget_allows(con, worst):
+                try:
+                    allowed = limits.budget_allows(con, worst)
+                except store.StoreError:
+                    # 오늘 쓴 돈을 못 읽으면 차단기가 일을 못 한다. 돈이 드는 호출을 하지 않는다
+                    yield "error", {"status": 503, "code": "upstream"}
+                    return
+                if not allowed:
                     yield "error", {"status": 503, "code": "budget"}
                     return
 
@@ -150,7 +165,7 @@ def ask(question, evaluation=False, who=None, searcher=None, con=None, limiter=N
             # 10. 재순위 (F-12 처리 8)
             chunks, applied, ms = rerank.rerank(q, full, call=rerank_call)
             if ms:
-                store.add_usage(con, rerank_cost=cfg.RERANK_PRICE_PER_SEARCH, evaluation=evaluation)
+                _try(lambda: con.add_usage(rerank_cost=cfg.RERANK_PRICE_PER_SEARCH, evaluation=evaluation))
                 log["cost"] += cfg.RERANK_PRICE_PER_SEARCH
         log.update(rerank_applied=1 if applied else 0, rerank_ms=ms,
                    sources=[c["chunk_id"] for c in chunks],
@@ -185,7 +200,7 @@ def ask(question, evaluation=False, who=None, searcher=None, con=None, limiter=N
             yield "text", g.clean(buf)
         for b in res["blocks"]:
             b["text"] = g.clean(b["text"])
-        store.add_usage(con, answer_cost=res["cost"], new_answer=True, evaluation=evaluation)
+        _try(lambda: con.add_usage(answer_cost=res["cost"], new_answer=True, evaluation=evaluation))
         log["cost"] += res["cost"]
 
         if not answer.grounded(res["blocks"]):
@@ -204,7 +219,7 @@ def ask(question, evaluation=False, who=None, searcher=None, con=None, limiter=N
 
         # 13. 재사용 답변 저장. 개인정보를 가린 질문은 저장하지 않는다
         if key_fp and res["stop_reason"] == "end_turn":
-            store.save_cache(con, searcher.version, key_fp, sents, sources, res["model"])
+            _try(lambda: con.save_cache(searcher.version, key_fp, sents, sources, res["model"]))
 
         yield "done", {"kind": "new", "sentences": sents, "version": searcher.version, "pii_masked": bool(found),
                        "rerank_applied": applied, "truncated": res["stop_reason"] == "max_tokens"}
@@ -214,11 +229,9 @@ def ask(question, evaluation=False, who=None, searcher=None, con=None, limiter=N
         # 14. 질의 기록 (F-19). 기록 실패가 답변 실패로 번지지 않게 맨 뒤에 둔다
         try:
             if "question_hash" in log:          # 길이 검사에서 돌려보낸 요청은 남기지 않는다
-                store.log_query(con, **log)
+                con.log_query(**log)
         except Exception:
             pass
-        if own:
-            con.close()
 
 
 def run(question, on_event=None, **kw):
