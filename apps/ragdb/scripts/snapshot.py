@@ -7,11 +7,12 @@
 스냅샷은 화면이 읽는 정적 파일 묶음이다 (명세 5.4). 반출 대상만 담는다.
 
     data/snapshot/current.json                      지금 판 이름, 구운 시각
-    data/snapshot/{판}/list.json                    목록
-    data/snapshot/{판}/doc/{document_id}.json       상세와 반출 조각
-    data/snapshot/{판}/answers.json                 검토를 통과한 사전 답변
+    data/snapshot/{판}/doc/{document_id}.json       출처 원문 (답의 출처를 눌렀을 때 보이는 반출 조각)
+    data/snapshot/{판}/answers.json                 검토를 통과한 사전 답변 (예시 질문)
     data/snapshot/{판}/status.json                  판, 구운 시각, 문서 수, 조각 수
-    data/snapshot/{판}/export/ragdb_export.json     반출 대상 전체
+
+목록(list.json)과 전체 내려받기(export/ragdb_export.json)는 굽지 않는다 (2026-09-30 김무근, 설계서 판 1.5).
+RAG DB 는 묻고 답하는 곳이고, 훑어보기는 생태계 지도가 맡는다. 조사 자료를 통째로 내주는 파일도 두지 않는다.
 
 이미지는 굽지 않는다 (OI-34, 2026-09-30). 조사 화면을 찍은 그림에는 조직 이름이 그대로 보이고 그림 속 글자는
 가릴 수 없다. 조각의 images 는 빈 목록으로 나간다.
@@ -78,7 +79,7 @@ def write(path, data):
 
 
 def bake(version):
-    """스냅샷을 굽는다 (F-22 처리 1). 돌려주는 것: {dir, documents, chunks, bytes, list_bytes}"""
+    """스냅샷을 굽는다 (F-22 처리 1). 돌려주는 것: {dir, documents, chunks, answers, bytes, baked_at}"""
     out = os.path.join(cfg.SNAPSHOT_ROOT, version)
     if os.path.isdir(out):
         shutil.rmtree(out)
@@ -93,7 +94,7 @@ def bake(version):
         std = {k: C.pii_masked(v) for k, v in std.items()}          # 조각을 만들 때와 같은 가리기 (F-03)
 
     baked_at = store.now()
-    listing, export, n_chunks, size = [], [], 0, 0
+    n_docs, n_chunks, size = 0, 0, 0
     for r in rows:
         d = std.get(r["document_id"])
         if d is None:
@@ -115,12 +116,9 @@ def bake(version):
                 "summary": safe(r["summary"]),
                 "status": r["status"], "observed_at": r["observed_at"], "country": r["country"], "signup": r["signup"],
                 "verdict": json.loads(r["verdict"]) if r["verdict"] else None, "stale": is_stale(r["observed_at"])}
-        listing.append(head)
+        n_docs += 1
         detail = dict(head, attributes=attrs, related=r["related"], chunks=chunks)
         size += write(os.path.join(out, "doc", "%s.json" % r["document_id"]), detail)
-        export.append({"document_id": r["document_id"], "kind": r["kind"], "title": head["title"],
-                       "summary": head["summary"], "attributes": attrs,
-                       "sections": [{"section": c["section"], "body": c["body"]} for c in chunks if c["section"] != "속성"]})
 
     answers = [{"question": a["question"], "answer": json.loads(a["answer"]), "sources": json.loads(a["sources"] or "[]"),
                 "created_at": a["created_at"]}
@@ -128,16 +126,11 @@ def bake(version):
                if store.answer_holds(con, a)]
     con.close()
 
-    list_bytes = write(os.path.join(out, "list.json"), {"version": version, "documents": listing})
-    size += list_bytes
     size += write(os.path.join(out, "answers.json"), {"version": version, "answers": answers})
     size += write(os.path.join(out, "status.json"), {"version": version, "baked_at": baked_at,
-                                                    "documents": len(listing), "chunks": n_chunks})
-    size += write(os.path.join(out, "export", "ragdb_export.json"),
-                  {"version": version, "baked_at": baked_at, "license": "방어 목적의 보안 연구와 교육에만 씁니다",
-                   "documents": export})
-    return {"dir": out, "documents": len(listing), "chunks": n_chunks, "answers": len(answers),
-            "bytes": size, "list_bytes": list_bytes, "baked_at": baked_at}
+                                                    "documents": n_docs, "chunks": n_chunks})
+    return {"dir": out, "documents": n_docs, "chunks": n_chunks, "answers": len(answers),
+            "bytes": size, "baked_at": baked_at}
 
 
 def _walk(node, path, visit):
@@ -263,7 +256,7 @@ def publish_current(version, baked_at):
 
 
 def log_export(version, documents, chunks):
-    """반출 기록 (SR-18). 내려받은 사람은 기록하지 않는다."""
+    """반출 기록 (SR-18). 판을 쓴 시각과 수만 남긴다."""
     con = store.connect()
     with con:
         con.execute("INSERT INTO export_log (at, version, documents, chunks) VALUES (?,?,?,?)",
@@ -276,8 +269,8 @@ def main():
         version = f.read().strip()
     if "--check" not in sys.argv:
         r = bake(version)
-        print("판 %s 스냅샷: 문서 %d · 조각 %d · 사전 답변 %d · %.1fMB (목록 %.0fKB)" % (
-            version, r["documents"], r["chunks"], r["answers"], r["bytes"] / 1e6, r["list_bytes"] / 1e3))
+        print("판 %s 스냅샷: 문서 %d · 조각 %d · 사전 답변 %d · %.1fMB" % (
+            version, r["documents"], r["chunks"], r["answers"], r["bytes"] / 1e6))
     bad = gate(version)
     if bad:
         print("반출 관문에서 멈춤 — %d곳 (F-22 처리 2). 올리지 않는다" % len(bad))
