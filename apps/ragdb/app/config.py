@@ -57,7 +57,7 @@ EXPANSION_MAX_FORMS = _i("EXPANSION_MAX_FORMS", 5)   # OI-15 첫 값
 # ── 재순위 (F-12 처리 8) ──
 RERANK_ENABLED = _b("RERANK_ENABLED", True)
 RERANK_MODEL = _s("RERANK_MODEL", "rerank-v3.5")     # OI-25 첫 값
-RERANK_TIMEOUT_MS = _i("RERANK_TIMEOUT_MS", 5000)    # OI-21 첫 값
+RERANK_TIMEOUT_MS = _i("RERANK_TIMEOUT_MS", 10000)   # OI-21 첫 값. 실측(2026-09-30): 첫 호출 6.7초, 그 뒤 0.3에서 0.5초
 RERANK_MIN_SCORE = _f("RERANK_MIN_SCORE", 0.0)       # OI-22. 0 이면 문턱을 쓰지 않음
 RERANK_PRICE_PER_SEARCH = _f("RERANK_PRICE_PER_SEARCH", 0.0025)   # 달러. 명세 2.3 의 위쪽 값
 
