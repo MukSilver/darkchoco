@@ -168,7 +168,7 @@ def main():
     have = state["docs"]
     before = json.loads(json.dumps(have, ensure_ascii=False))          # 저장소에 올릴 때 견줄 처음 모습
     live = {d["document_id"] for d in docs}
-    for gone in [k for k in have if k not in live]:
+    for gone in [k for k in have if k not in live and not k.startswith("_")]:      # 「_수동」 은 사람이 더한 줄이다 (add_names.py)
         del have[gone]
 
     todo = docs if "--all" in sys.argv else [
