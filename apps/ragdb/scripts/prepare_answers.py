@@ -8,6 +8,7 @@
 
 평가 질문(저장소의 questions 표)이 비어 있으면 아무것도 만들지 않는다. 오류가 아니다.
 근거 문서의 내용 해시가 바뀐 질문만 다시 만든다. 처음 들어온 질문은 해시와 상관없이 만든다 (처리 3).
+검토 전인 답은 지시문이나 모델이 바뀌어도 다시 만든다. 검토를 통과한 답은 사람이 읽고 통과시켰으므로 그대로 둔다.
 검색과 재순위는 즉석 질의와 똑같이 태운다 (처리 4, F-12 와 F-13 그대로).
 만든 답은 검토 전(reviewed = 0)으로 들어간다. 통과는 scripts/review_answers.py 로 한다 (처리 6).
 비용은 평가 실행 비용 칸에 센다.
@@ -64,8 +65,8 @@ def plan(searcher, con):
             empty += 1
             continue
         old = con.answer_row(key)
-        if old and store.holds(searcher.docs, old):
-            same += 1          # 답에 쓰인 근거 문서가 그대로다. 다시 만들지 않는다
+        if old and store.holds(searcher.docs, old) and (old.get("reviewed") or old.get("model") == answer.answer_tag()):
+            same += 1          # 근거 문서가 그대로다. 검토를 통과했거나 지금 지시문으로 만든 답이면 다시 만들지 않는다
             continue
         todo.append({"id": item["id"], "question": q, "key": key, "chunks": chunks})
     return todo, same, empty, spent
@@ -81,7 +82,7 @@ def save(con, searcher, item, res):
     used = sorted({n for s in sents for n in s["sources"]})
     sources = [s for s in pipeline.source_list(item["chunks"]) if s["n"] in used]
     hashes = doc_hashes(searcher, [s["document_id"] for s in sources])      # 답에 실제로 쓰인 문서만
-    con.put_answer(item["key"], item["question"], sents, sources, res["model"], hashes)
+    con.put_answer(item["key"], item["question"], sents, sources, answer.answer_tag(), hashes)
     return True
 
 
