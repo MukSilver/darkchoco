@@ -150,3 +150,13 @@ def test_ip_hash_hides_ip():
     lim = limits.Limiter()
     h = lim.ip_hash("203.0.113.7")
     assert "203" not in h and len(h) == 64 and h == lim.ip_hash("203.0.113.7")
+
+
+def test_latin_name_with_korean_particle_is_masked():
+    """영문 이름 뒤에 조사가 바로 붙어도 가린다. 영문 낱말 안에 든 것은 가리지 않는다 (2026-09-30)."""
+    from app import guard
+    g = guard.Guard(names=["Acme Corp", "Zeta"])
+    assert g.clean("Acme Corp은 검색되지 않음") == "(조직명 가림)은 검색되지 않음"
+    assert g.clean("Zeta에서 나온 자료, Zeta의 회원") == "(조직명 가림)에서 나온 자료, (조직명 가림)의 회원"
+    assert g.clean("Zetas 와 AZeta 는 다른 낱말") == "Zetas 와 AZeta 는 다른 낱말"
+    assert g.leaks("Acme Corp은") == ["조직 이름"]

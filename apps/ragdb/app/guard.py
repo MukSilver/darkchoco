@@ -55,14 +55,17 @@ def _usable(name, keep):
 
 def _patterns(names):
     W = r"[0-9A-Za-z가-힣]"
+    L = r"[0-9A-Za-z]"
     out = []
     hangul = [re.escape(n) for n in names if has_hangul(n)]
     latin = [re.escape(n) for n in names if not has_hangul(n)]
-    # 한글 이름 뒤에는 조사가 바로 붙으므로 앞 경계만 본다. 영문은 앞뒤를 다 본다
+    # 한글 이름 뒤에는 조사가 바로 붙으므로 앞 경계만 본다.
+    # 영문 이름은 영문과 숫자로만 경계를 본다(Audi 가 audit 에 걸리지 않게). 한글은 경계로 보지 않는다.
+    # 전에는 한글도 경계로 봐서 「Acme은」, 「Acme에서」 처럼 조사가 붙은 영문 이름을 놓쳤다 (2026-09-30 찾음)
     for i in range(0, len(hangul), 200):
         out.append(re.compile(r"(?<!%s)(?:%s)" % (W, "|".join(hangul[i:i + 200])), re.I))
     for i in range(0, len(latin), 200):
-        out.append(re.compile(r"(?<!%s)(?:%s)(?!%s)" % (W, "|".join(latin[i:i + 200]), W), re.I))
+        out.append(re.compile(r"(?<!%s)(?:%s)(?!%s)" % (L, "|".join(latin[i:i + 200]), L), re.I))
     return out
 
 
