@@ -1,12 +1,6 @@
 // 답 화면의 가운데 (피그마 「답 · 끝」 30:467, 「출처 원문 열림」 12:296).
 // 진행 단계 → 답 글과 출처 번호 → 정보줄 → 출처 카드. 근거 없음과 오류는 카드로 따로 보인다.
 import { useState } from 'react'
-import stepPast from '../assets/dots/step-past.svg'
-import stepNow from '../assets/dots/step-now.svg'
-import stepIdle from '../assets/dots/step-idle.svg'
-import dotOnline from '../assets/dots/status-online.svg'
-import dotOffline from '../assets/dots/status-offline.svg'
-import dotUnknown from '../assets/dots/status-unknown.svg'
 import { KIND_LABEL, TONE_TEXT, errorMessage, shortDate, statusTone } from '../lib/labels'
 import type { Tone } from '../lib/labels'
 import { masked } from '../lib/mask'
@@ -23,15 +17,13 @@ export function Progress({ turn }: { turn: Turn }) {
     <ol className="flex flex-wrap items-center gap-3" aria-label="진행 단계">
       {STEPS.map((name, i) => {
         const state = turn.phase === 'error' ? 'idle' : i < at ? 'past' : i === at ? 'now' : 'idle'
-        const dot = state === 'past' ? stepPast : state === 'now' ? stepNow : stepIdle
+        const dot = state === 'past' ? 'bg-body' : state === 'now' ? 'bg-accent' : 'bg-step-idle'
         const color = state === 'past' ? 'text-body' : state === 'now' ? 'text-accent' : 'text-step-idle'
         return (
           <li key={name} className="flex items-center gap-3" aria-current={state === 'now' ? 'step' : undefined}>
             {i > 0 && <span className="h-px w-7 bg-line" />}
             <span className="flex items-center gap-[7px]">
-              <span className={`relative size-[6px] shrink-0 ${state === 'now' && turn.phase !== 'done' ? 'animate-pulse-dot' : ''}`}>
-                <img alt="" src={dot} className="absolute inset-0 block size-full max-w-none" />
-              </span>
+              <span className={`size-[6px] shrink-0 rounded-full ${dot} ${state === 'now' && turn.phase !== 'done' ? 'animate-pulse-dot' : ''}`} />
               <span className={`text-[12.5px] leading-none whitespace-nowrap ${color}`}>{name}</span>
             </span>
           </li>
@@ -50,7 +42,7 @@ function Cite({ n, selected, onClick }: { n: number; selected: boolean; onClick:
       aria-label={`출처 ${n} 열기`}
       aria-pressed={selected}
       className={`mx-[2px] inline-flex size-[18px] cursor-pointer items-center justify-center rounded-[5px] border align-[0.1em] font-mono text-[11px] leading-none ${
-        selected ? 'border-accent font-bold text-accent-text' : 'border-mask-line text-muted hover:border-accent hover:text-accent-text'
+        selected ? 'border-accent font-semibold text-accent-text' : 'border-mask-line text-muted hover:border-accent hover:text-accent-text'
       }`}
     >
       {n}
@@ -59,7 +51,7 @@ function Cite({ n, selected, onClick }: { n: number; selected: boolean; onClick:
 }
 
 /* ── 상태 표시 (4:18) ── */
-const DOT: Record<Exclude<Tone, 'plain'>, string> = { online: dotOnline, offline: dotOffline, unknown: dotUnknown }
+const DOT: Record<Exclude<Tone, 'plain'>, string> = { online: 'bg-online', offline: 'bg-offline', unknown: 'bg-unknown' }
 
 export function Status({ status }: { status: string | null }) {
   if (!status) return null
@@ -67,7 +59,7 @@ export function Status({ status }: { status: string | null }) {
   return (
     <span className="flex items-center gap-[6px]">
       {tone !== 'plain' && (
-        <span className="relative size-[6px] shrink-0"><img alt="" src={DOT[tone]} className="absolute inset-0 block size-full max-w-none" /></span>
+        <span className={`size-[6px] shrink-0 rounded-full ${DOT[tone]}`} />
       )}
       <span className={`text-[12.5px] leading-none whitespace-nowrap ${TONE_TEXT[tone]}`}>{status}</span>
     </span>
@@ -82,7 +74,7 @@ function SourceCard({ s, selected, onClick }: { s: Source; selected: boolean; on
       onClick={onClick}
       aria-pressed={selected}
       className={`flex w-full cursor-pointer items-center gap-[14px] rounded-[12px] border bg-card px-[14px] py-3 text-left transition-colors ${
-        selected ? 'border-accent' : 'border-line-card hover:border-[#3a5a9e]'
+        selected ? 'border-accent' : 'border-line-card hover:border-line'
       }`}
     >
       <span className={`w-[22px] shrink-0 text-center font-mono text-[12px] leading-none ${selected ? 'text-accent-text' : 'text-muted'}`}>{s.n}</span>
@@ -95,7 +87,7 @@ function SourceCard({ s, selected, onClick }: { s: Source; selected: boolean; on
       </span>
       <span className="flex shrink-0 flex-col items-end gap-[5px]">
         <Status status={s.status} />
-        <span className="font-mono text-[11px] leading-none text-[#6f7e9c]">{shortDate(s.observed_at)}</span>
+        <span className="font-mono text-[11px] leading-none text-faint">{shortDate(s.observed_at)}</span>
       </span>
     </button>
   )
@@ -110,7 +102,7 @@ export function Answer({ turn, selected, onCite }: { turn: Turn; selected: numbe
     const m = errorMessage(turn.error.code)
     return (
       <div role="alert" className="flex animate-rise flex-col gap-2 rounded-[16px] border border-danger/30 bg-danger/[0.08] px-6 py-[22px]">
-        <p className="text-[16px] leading-normal font-bold text-title">{m.title}</p>
+        <p className="text-[16px] leading-normal font-semibold text-title">{m.title}</p>
         <p className="text-[14px] leading-[1.6] text-body">{m.body}</p>
       </div>
     )
@@ -119,7 +111,7 @@ export function Answer({ turn, selected, onCite }: { turn: Turn; selected: numbe
   if (done && turn.kind === 'no_evidence') {
     return (
       <div className="flex animate-rise flex-col gap-2 rounded-[16px] border border-line-card bg-card/60 px-6 py-[22px]">
-        <p className="text-[16px] leading-normal font-bold text-title">확인 가능한 근거를 찾지 못했습니다</p>
+        <p className="text-[16px] leading-normal font-semibold text-title">확인 가능한 근거를 찾지 못했습니다</p>
         <p className="text-[14px] leading-[1.6] text-body">분야, 시기, 장소, 행위자로 바꿔 물어 보세요. 피해 조직의 이름으로는 찾을 수 없어요.</p>
       </div>
     )
@@ -141,7 +133,7 @@ export function Answer({ turn, selected, onCite }: { turn: Turn; selected: numbe
     <div className="flex w-full flex-col gap-[14px]">
       {badge && (
         <span className="flex items-center gap-2 self-start rounded-full border border-accent/25 bg-accent/[0.12] px-3 py-[5px]">
-          <span className="relative size-[6px] shrink-0"><img alt="" src={stepNow} className="absolute inset-0 block size-full max-w-none" /></span>
+          <span className="size-[6px] shrink-0 rounded-full bg-accent" />
           <span className="text-[12.5px] leading-none whitespace-nowrap text-accent-text">{badge}</span>
         </span>
       )}

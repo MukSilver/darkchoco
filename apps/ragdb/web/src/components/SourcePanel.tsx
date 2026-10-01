@@ -68,7 +68,7 @@ export function DocView({ doc, chunkId, onChunk }: { doc: Doc; chunkId: string |
             <span className="rounded-[4px] border border-unknown/30 bg-unknown/[0.12] px-2 py-[2px] text-[11px] leading-normal font-medium text-warn-text">오래됨 · 90일 지남</span>
           )}
         </div>
-        <h2 className="text-[20px] leading-[1.3] font-bold tracking-[-0.3px] text-strong">{masked(doc.title)}</h2>
+        <h2 className="text-[20px] leading-[1.3] font-semibold tracking-[-0.3px] text-strong">{masked(doc.title)}</h2>
       </div>
 
       {doc.status === 'offline' && (

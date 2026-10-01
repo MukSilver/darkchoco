@@ -1,43 +1,45 @@
 @import "tailwindcss";
 
-/* 색은 피그마 파일(5va2t9ir9ZEOsDbWBktApI)의 변수 「RAG 색」 과 같은 값이다. 바꿀 때는 피그마와 같이 바꾼다. */
+/* 색과 글꼴은 피그마 파일(5va2t9ir9ZEOsDbWBktApI)의 변수 묶음 「RAG 색」, 모드 「라이트 블랙」 과 같은 값이다 (B안).
+   생태계 지도와 같은 모습이다. 바꿀 때는 피그마와 같이 바꾼다. 남색 A안의 값은 피그마의 모드 「다크」 에 있다. */
 @theme {
-  --color-page: #0a1020;
-  --color-panel: #0d1526;
-  --color-input: #111a2b;
-  --color-card: #131c30;
-  --color-chip: #1a2540;
+  --color-page: #27292c;
+  --color-panel: #2b2d30;
+  --color-input: #2f3134;
+  --color-card: #313336;
+  --color-chip: #3a3c41;
 
-  --color-line: #223050;
-  --color-line-card: #1e2a44;
-  --color-divider: #1a2540;
+  --color-line: #4e5156;
+  --color-line-card: #43464b;
+  --color-divider: #37393d;
 
-  --color-accent: #5b8def;
-  --color-accent-text: #8fb3ff;
-  --color-accent-strong: #b7cdff;
-  --color-highlight-text: #eaf0fb;
+  --color-accent: #ff5d5d;
+  --color-accent-text: #ff8f8f;
+  --color-accent-strong: #ffb8b8;
+  --color-highlight-text: #fff0f0;
 
-  --color-strong: #f3f6fc;
-  --color-title: #e6ecf7;
-  --color-answer: #dce4f3;
-  --color-body: #c7d3ea;
-  --color-muted: #8a9ab8;
-  --color-faint: #8593b0;
-  --color-placeholder: #7c8baa;
+  --color-strong: #f5f5f6;
+  --color-title: #ededef;
+  --color-answer: #e3e4e7;
+  --color-body: #c9cace;
+  --color-muted: #9a9ca3;
+  --color-faint: #8b8d94;
+  --color-placeholder: #7f8188;
 
-  --color-mask-bg: #1b2740;
-  --color-mask-line: #2e3f63;
-  --color-mask-text: #9fb6e0;
+  --color-mask-bg: #1c1d20;
+  --color-mask-line: #4a4c52;
+  --color-mask-text: #b8bac0;
 
   --color-online: #3dd68c;
-  --color-offline: #7b879e;
+  --color-offline: #8e9097;
   --color-unknown: #f2b84b;
   --color-warn-text: #f2c875;
-  --color-danger: #f26d6d;
+  /* 강조색이 붉은 계열이라 오류는 더 진한 빨강으로 가른다 */
+  --color-danger: #e5364a;
   --color-danger-text: #ff9c9c;
-  --color-step-idle: #33425f;
+  --color-step-idle: #55585e;
 
-  --font-sans: "Noto Sans KR Variable", "Noto Sans KR", -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --font-sans: "IBM Plex Sans KR", -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
   --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, Menlo, monospace;
 
   --animate-pulse-dot: pulse-dot 1s ease-in-out infinite;
@@ -63,7 +65,7 @@ body {
   word-break: break-word;
 }
 textarea, button, input { font: inherit; }
-::selection { background: rgba(91, 141, 239, 0.35); }
+::selection { background: rgba(255, 93, 93, 0.35); }
 
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }

@@ -105,7 +105,7 @@ export default function App() {
             <div className="flex w-full max-w-[720px] flex-1 flex-col gap-4 px-6 pt-7 pb-5">
               <div className="flex flex-col gap-2">
                 <span className="text-[12px] leading-none font-medium tracking-[1.2px] text-accent">질문</span>
-                <h1 className="text-[21px] leading-[1.35] font-bold tracking-[-0.315px] text-strong">{turn.question}</h1>
+                <h1 className="text-[21px] leading-[1.35] font-semibold tracking-[-0.315px] text-strong">{turn.question}</h1>
               </div>
               <Progress turn={turn} />
               <Answer turn={turn} selected={open?.n ?? null} onCite={cite} />
@@ -143,7 +143,7 @@ function Home({ server, answers, onAsk, onExample }: {
   return (
     <div className="flex w-full max-w-[720px] flex-1 flex-col gap-10 px-6 pt-[88px] pb-6 max-sm:pt-12">
       <div className="flex flex-col gap-[14px]">
-        <h1 className="text-[36px] leading-[1.2] font-bold tracking-[-0.72px] text-strong max-sm:text-[28px]">조사 기록에 물어보세요</h1>
+        <h1 className="text-[36px] leading-[1.2] font-semibold tracking-[-0.72px] text-strong max-sm:text-[28px]">조사 기록에 물어보세요</h1>
         <p className="max-w-[520px] text-[16px] leading-[1.65] text-muted">조사 기록 안에서만 답하고, 문장마다 출처를 붙입니다. 근거가 없으면 없다고 답합니다.</p>
       </div>
       <div className="flex w-full flex-col gap-[10px]">
@@ -161,7 +161,7 @@ function Home({ server, answers, onAsk, onExample }: {
                 key={a.question}
                 type="button"
                 onClick={() => onExample(a)}
-                className="cursor-pointer rounded-[14px] border border-line-card bg-card px-4 py-[14px] text-left text-[14.5px] leading-[1.45] text-body transition-colors hover:border-[#3a5a9e]"
+                className="cursor-pointer rounded-[14px] border border-line-card bg-card px-4 py-[14px] text-left text-[14.5px] leading-[1.45] text-body transition-colors hover:border-line"
               >
                 {a.question}
               </button>
@@ -197,7 +197,7 @@ function DocPage({ version, id, index, onHome, go }: { version: string | null; i
 function Missing({ text, onHome }: { text: string; onHome: () => void }) {
   return (
     <div className="flex w-full max-w-[720px] flex-col items-start gap-4 px-6 pt-[88px]">
-      <h1 className="text-[28px] leading-[1.2] font-bold text-strong">{text}</h1>
+      <h1 className="text-[28px] leading-[1.2] font-semibold text-strong">{text}</h1>
       <button type="button" onClick={onHome} className="cursor-pointer rounded-[9px] bg-accent px-4 py-[9px] text-[14px] font-medium text-white">첫 화면으로</button>
     </div>
   )
