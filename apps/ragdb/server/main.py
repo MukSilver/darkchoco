@@ -42,6 +42,7 @@ if ALLOWED_ORIGINS:
 
 KEEPALIVE_SECONDS = float(os.getenv("SSE_KEEPALIVE_SECONDS") or 10)
 _END = object()
+_IDLE = object()
 
 
 def _sse(name, value):
@@ -67,12 +68,19 @@ async def _events(question):
         finally:
             q.put(_END)
 
+    def take():
+        # 기다리는 시간은 큐에서 센다. 밖에서 끊으면(wait_for) 기다리던 스레드가 남아 다음 이벤트를 가져가 버린다
+        try:
+            return q.get(timeout=KEEPALIVE_SECONDS)
+        except queue.Empty:
+            return _IDLE
+
+    # 방문자가 중간에 끊어도 work 는 끝까지 돈다. 쓴 돈과 질의 기록이 남아야 하루 차단기가 맞는다
     threading.Thread(target=work, daemon=True).start()
     loop = asyncio.get_running_loop()
     while True:
-        try:
-            item = await asyncio.wait_for(loop.run_in_executor(None, q.get), timeout=KEEPALIVE_SECONDS)
-        except asyncio.TimeoutError:
+        item = await loop.run_in_executor(None, take)
+        if item is _IDLE:
             yield ": keepalive\n\n"
             continue
         if item is _END:

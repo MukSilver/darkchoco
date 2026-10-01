@@ -158,3 +158,83 @@ def test_status_without_version_is_503(client, monkeypatch, tmp_path):
     monkeypatch.setattr(cfg, "CURRENT", str(tmp_path / "없음.txt"))
     r = client.get("/api/status")
     assert r.status_code == 503 and r.json()["reason"] == "no_version"
+
+
+def test_slow_answer_keeps_alive_and_loses_no_event(client, monkeypatch):
+    """답이 늦게 오면 주석 줄로 연결을 살린다. 그 사이에 온 이벤트가 빠지면 안 된다."""
+    import time
+    monkeypatch.setattr(main, "KEEPALIVE_SECONDS", 0.05)
+
+    def slow(question, **kw):
+        yield "received", {}
+        time.sleep(0.3)                                           # 재순위가 늦는 자리
+        yield "searching", {}
+        time.sleep(0.3)                                           # 답 만들기가 늦는 자리
+        yield "text", "첫 문장."
+        yield "done", {"kind": "new", "sentences": [], "version": "v", "pii_masked": False}
+    monkeypatch.setattr(main.pipeline, "ask", slow)
+    r = client.post("/api/ask", json={"question": "질문"})
+    assert ": keepalive" in r.text
+    assert [e for e, _ in parse_sse(r.text)] == ["received", "searching", "text", "done"]
+
+
+def test_pipeline_runs_to_end_after_client_leaves(client, monkeypatch):
+    """방문자가 중간에 끊어도 질의 순서는 끝까지 돈다. 쓴 돈과 질의 기록이 남아야 하루 차단기가 맞는다."""
+    import threading
+    finished = threading.Event()
+
+    def ask(question, **kw):
+        yield "received", {}
+        yield "text", "첫 문장."
+        yield "done", {"kind": "new", "sentences": [], "version": "v", "pii_masked": False}
+        finished.set()                                            # 질의 기록을 남기는 자리
+    monkeypatch.setattr(main.pipeline, "ask", ask)
+    with client.stream("POST", "/api/ask", json={"question": "질문"}) as r:
+        next(r.iter_lines())                                      # 첫 줄만 받고 끊는다
+    assert finished.wait(2)
+
+
+class FakeHttp:
+    def __init__(self, body=None, error=None):
+        self.body, self.error, self.sent = body, error, None
+
+    def post(self, url, data=None, timeout=None):
+        self.sent = data
+        if self.error:
+            raise self.error
+
+        class R:
+            def json(_):
+                return self.body
+        return R()
+
+
+def test_turnstile_verify(monkeypatch):
+    monkeypatch.setattr(turnstile, "secret", lambda: "")
+    assert turnstile.verify("아무거나") == (True, "disabled")       # 비밀값이 없으면 검증을 끈다
+
+    monkeypatch.setattr(turnstile, "secret", lambda: "시험용-비밀값")
+    assert turnstile.verify("") == (False, "missing")
+
+    ok = FakeHttp({"success": True})
+    assert turnstile.verify("tok", "203.0.113.5", client=ok) == (True, "ok")
+    assert ok.sent == {"secret": "시험용-비밀값", "response": "tok", "remoteip": "203.0.113.5"}
+
+    assert turnstile.verify("tok", client=FakeHttp({"success": False, "error-codes": ["timeout-or-duplicate"]})) == (False, "timeout-or-duplicate")
+    assert turnstile.verify("tok", client=FakeHttp({"success": False})) == (False, "failed")
+    # Cloudflare 가 안 닿으면 통과시키지 않는다
+    assert turnstile.verify("tok", client=FakeHttp(error=OSError("연결 끊김"))) == (False, "unreachable")
+
+
+def test_turnstile_is_checked_before_pipeline(client, monkeypatch):
+    """사람 확인에 실패하면 돈이 드는 질의 순서에 들어가지 않는다. IP 는 터널이 준 머리말에서 읽는다."""
+    seen, called = {}, []
+
+    def verify(token, ip=None, **kw):
+        seen.update(token=token, ip=ip)
+        return False, "failed"
+    monkeypatch.setattr(turnstile, "verify", verify)
+    monkeypatch.setattr(main.pipeline, "ask", lambda q, **kw: called.append(q) or iter(()))
+    r = client.post("/api/ask", json={"question": "질문", "turnstile": "tok"}, headers={"CF-Connecting-IP": "203.0.113.5"})
+    assert r.status_code == 401 and called == []
+    assert seen == {"token": "tok", "ip": "203.0.113.5"}
