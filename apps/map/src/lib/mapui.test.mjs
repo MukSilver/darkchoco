@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { fitTicks, labelT, labelTicks, pastSnapshot, revealPan, tipPlace, toCanvas } from './mapui.ts';
+import { fitTicks, labelT, labelTicks, NAME_TOP, nameW, pastSnapshot, pickLabels, revealPan, tipPlace, toCanvas } from './mapui.ts';
 import { quarterText } from './quarter.ts';
 
 // 판 1000 × 680, 위 여백 16 · 아래 여백 64 → 지도 판은 1000 × 600
@@ -130,4 +130,27 @@ test('같은 두 영토 사이 선들의 알약 자리 — 가운데, 그다음 
   assert.ok(Math.abs(labelT(3) - 0.16) < 1e-9);
   assert.equal(labelT(9), 0.16, '많아도 앞쪽 끝 가까이에서 멈춘다');
   assert.equal(labelT(10), 0.84, '뒤쪽 끝도');
+});
+
+test('영토 이름표 — 섬마다 점수 상위 열 곳까지, 겹치면 뺀다 (팀 피드백 2)', () => {
+  assert.equal(NAME_TOP, 10);
+  const t = (id, island, score, x, y, name = id) => ({
+    territoryId: id, name, islandKey: island, cells: [], label: { x, y }, metrics: { score },
+  });
+  // 멀리 떨어진 열둘 — 점수 상위 열만 든다
+  const spread = Array.from({ length: 12 }, (_, i) => t(`f${i}`, 'FORUM', 100 - i, i * 500, 0));
+  const got = pickLabels(spread).map((x) => x.territoryId);
+  assert.equal(got.length, 10);
+  assert.ok(!got.includes('f10') && !got.includes('f11'), '점수 하위 둘은 뺀다');
+  // 섬마다 따로 센다
+  const two = [...spread, ...Array.from({ length: 3 }, (_, i) => t(`r${i}`, 'RANSOMWARE', 50 - i, i * 500, 5000))];
+  assert.equal(pickLabels(two).length, 13);
+  // 겹치면 점수가 작은 쪽을 빼고 다음으로 넘어간다 — 열 곳을 못 채울 수 있다
+  const crowd = [t('big', 'FORUM', 90, 0, 0), t('near', 'FORUM', 80, 10, 0), t('far', 'FORUM', 70, 400, 0)];
+  assert.deepEqual(pickLabels(crowd).map((x) => x.territoryId), ['big', 'far']);
+  // 확대하면(알약이 판 단위로 반) 겹치던 것이 든다
+  const w = nameW('big');
+  const close = [t('big', 'FORUM', 90, 0, 0), t('near', 'FORUM', 80, w * 0.75, 0)];
+  assert.equal(pickLabels(close, 1).length, 1);
+  assert.equal(pickLabels(close, 0.5).length, 2);
 });

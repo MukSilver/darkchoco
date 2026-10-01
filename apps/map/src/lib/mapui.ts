@@ -164,3 +164,68 @@ export function labelT(k: number): number {
   const step = Math.ceil(k / 2) * 0.17;
   return Math.min(0.84, Math.max(0.16, 0.5 + (k % 2 === 1 ? -step : step)));
 }
+
+/** 섬마다 이름표를 다는 영토 수 — 점수 상위 (2026-10-01 팀 피드백 2 「상위 10개만 보이면 분포가 깔끔해진다」) */
+export const NAME_TOP = 10;
+/**
+ * 영토 이름표 글자 크기 · 알약 높이 (viewBox 단위, 칸 반지름 10). 전에는 8 · 14 라 100% 에서 화면 4~6px 로
+ * 안 읽혔다 — 팀 피드백 2 「너무 작은 라벨 글씨도 키울 수 있다」. 확대하면 화면에서 100% 때 크기를 지킨다
+ */
+export const NAME_FS = 12;
+export const NAME_H = 20;
+
+/** 영토 이름표 알약 폭 (viewBox 단위, 100%). 한글은 글자 크기만큼, 나머지는 0.58 배로 어림한다(`HexMap`) */
+export function nameW(name: string): number {
+  let w = 0;
+  for (const ch of name) w += /[가-힣ㄱ-ㆎ]/.test(ch) ? 1 : 0.58;
+  return w * NAME_FS + 14;
+}
+
+/** 이름표를 고를 때 보는 영토 꼴 — `layout.ts` `TerritoryShape` 의 일부 */
+export type NameCand = {
+  territoryId: string;
+  name: string;
+  islandKey: string;
+  cells: readonly unknown[];
+  label: Pt;
+  metrics: { score: number };
+};
+
+/**
+ * 이름표를 달 영토를 고른다 — **섬마다 점수 상위 `top` 곳까지, 겹치지 않는 만큼**.
+ *
+ * 영토는 다 그리고(점수 · 칸 계산 그대로) 이름표만 줄인다 (2026-10-01 팀 피드백 2, 기본안). 점수가 큰
+ * 것부터 놓고 앞서 놓은 이름표와 겹치면 뺀다 — 작은 영토가 몰린 곳은 열 곳이 다 안 든다. 확대하면
+ * 알약이 판 단위로 작아져(`ls`) 더 든다. 이름표가 없는 영토는 마우스를 올리면 툴팁이 이름을 보인다.
+ * 전에는 섬마다 칸이 많은 둘(고른 섬은 넷)이었다 (피그마 ⑦-1 · ⑦-2)
+ */
+export function pickLabels<T extends NameCand>(territories: readonly T[], ls = 1, top = NAME_TOP): T[] {
+  const byIsland = new Map<string, T[]>();
+  for (const t of territories) {
+    const list = byIsland.get(t.islandKey) ?? [];
+    list.push(t);
+    byIsland.set(t.islandKey, list);
+  }
+  const out: T[] = [];
+  const placed: { x0: number; y0: number; x1: number; y1: number }[] = [];
+  for (const list of byIsland.values()) {
+    const ranked = [...list].sort(
+      (a, b) =>
+        b.metrics.score - a.metrics.score ||
+        b.cells.length - a.cells.length ||
+        a.territoryId.localeCompare(b.territoryId),
+    );
+    let n = 0;
+    for (const t of ranked) {
+      if (n >= top) break;
+      const w = (nameW(t.name) * ls) / 2;
+      const h = (NAME_H * ls) / 2;
+      const b = { x0: t.label.x - w, y0: t.label.y - h, x1: t.label.x + w, y1: t.label.y + h };
+      if (placed.some((o) => o.x0 < b.x1 && b.x0 < o.x1 && o.y0 < b.y1 && b.y0 < o.y1)) continue;
+      placed.push(b);
+      out.push(t);
+      n += 1;
+    }
+  }
+  return out;
+}

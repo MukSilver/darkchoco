@@ -129,6 +129,11 @@ export type MapCanvasProps = {
    */
   grab?: boolean;
   onGrab?: (g: boolean) => void;
+  /**
+   * 섬마다 이름표를 다는 영토 수. 없으면 열(`NAME_TOP`, 팀 피드백 2). 타임라인 블록처럼 작은 판은 열 곳을
+   * 달면 글자가 3px 대로 작아져 덮기만 해서 전처럼 둘을 준다
+   */
+  nameTop?: number;
 };
 
 /** 마우스 자리와 그때의 캔버스 크기 (px). 툴팁이 가장자리에서 뒤집을 때 쓴다 */
@@ -155,6 +160,7 @@ export default function MapCanvas({
   badge,
   grab,
   onGrab,
+  nameTop,
 }: MapCanvasProps) {
   const { zoom, pan } = view;
   const setPan = (p: MapView["pan"]) => onView({ zoom, pan: p });
@@ -389,6 +395,7 @@ export default function MapCanvas({
             layout={layout}
             viewBox={viewBox}
             zoom={zoom}
+            nameTop={nameTop}
             selectedTerritory={
               selection.kind === "territory" ? selection.id : undefined
             }
