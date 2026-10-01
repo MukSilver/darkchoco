@@ -37,8 +37,8 @@
   --color-danger-text: #ff9c9c;
   --color-step-idle: #33425f;
 
-  --font-sans: "Noto Sans KR", "Pretendard Variable", Pretendard, -apple-system, "Apple SD Gothic Neo", sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  --font-sans: "Noto Sans KR Variable", "Noto Sans KR", -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, Menlo, monospace;
 
   --animate-pulse-dot: pulse-dot 1s ease-in-out infinite;
   --animate-rise: rise 0.25s ease-out;
