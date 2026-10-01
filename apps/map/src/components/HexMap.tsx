@@ -501,8 +501,9 @@ export default function HexMap({
         ))}
         {/*
           영토 경계 — 같은 섬 안의 영토도 가른다. 전에는 섬 칸이 모두 같은 색이라 이름표만 떠 있고 영토마다의
-          크기와 시점을 옮길 때의 변화를 알 수 없었다 (2026-09-29 최현서 v2 2번). 섬의 옆면(한 단계 진한)
-          색으로 영토 둘레를 한 번 더 긋는다. 흐린 영토는 옅게. 포인터는 안 받는다
+          크기와 시점을 옮길 때의 변화를 알 수 없었다 (2026-09-29 최현서 v2 2번). 섬 색을 연하게 한 밝은
+          선으로 영토 둘레를 한 번 더 긋는다 — 9/29 의 옆면 색은 어두운 칸 선에 묻혀 첫 화면에서 안 보였다
+          (2026-10-01 팀 피드백 3, `tokens.css` 「영토 경계」). 흐린 영토는 옅게. 포인터는 안 받는다
         */}
         {flat.map((t) => (
           <path
@@ -511,9 +512,9 @@ export default function HexMap({
             data-island={t.islandKey}
             d={t.outline}
             fill="none"
-            // 흐린 영토는 회색 — 옆면 색을 옅게 그으면 흐린 칸 둘레에 섬 색이 되살아났다 (검토)
-            stroke={dim(t) ? "var(--t-border-strong)" : `var(--t-island-${t.token}-side)`}
-            strokeWidth={1.6}
+            // 흐린 영토는 회색 — 섬 색 선을 옅게 그으면 흐린 칸 둘레에 섬 색이 되살아났다 (검토)
+            stroke={dim(t) ? "var(--t-border-strong)" : `var(--t-island-${t.token}-edge)`}
+            strokeWidth={1.8}
             strokeLinejoin="round"
             opacity={dim(t) ? 0.7 : 1}
             className="pointer-events-none"
