@@ -12,7 +12,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { cellToXY, hexPoints } from "@/lib/hex";
 import type { MapLayout, TerritoryShape } from "@/lib/layout";
-import { labelT } from "@/lib/mapui";
+import { labelT, NAME_FS, NAME_H, NAME_TOP, nameW, pickLabels } from "@/lib/mapui";
 import { boxOrigin, boxUnder, flipFrom, flipTo, growFrom, islandBoxes, parseMs, type IslandBox } from "@/lib/motion";
 import { CONF_DASH, KIND_NAME, type RelView } from "@/lib/relations";
 
@@ -69,34 +69,6 @@ function textWidth(s: string, fontSize: number): number {
   return w * fontSize;
 }
 
-/**
- * 이름표를 달 영토를 고른다 — **섬마다 칸이 많은 둘까지**.
- *
- * 전부 달면 작은 영토의 이름표가 서로 겹쳐 글자가 안 읽힌다. 피그마 `⑦-1` 도
- * 섬마다 둘씩만 달려 있다. 나머지 이름은 호버 툴팁과 패널이 말해 준다.
- *
- * **고른 섬은 넷까지 보여 준다.** 피그마 `⑦-2 섬 선택 (포럼)` 이 그렇다.
- * 다른 섬이 흐려져 자리가 넉넉해지므로 더 달아도 안 겹친다.
- */
-function pickLabels(
-  layout: MapLayout,
-  selectedIsland?: string,
-): TerritoryShape[] {
-  const byIsland = new Map<string, TerritoryShape[]>();
-  for (const t of layout.territories) {
-    const list = byIsland.get(t.islandKey) ?? [];
-    list.push(t);
-    byIsland.set(t.islandKey, list);
-  }
-  const out: TerritoryShape[] = [];
-  for (const [key, list] of byIsland) {
-    const n = key === selectedIsland ? 4 : 2;
-    out.push(
-      ...[...list].sort((a, b) => b.cells.length - a.cells.length).slice(0, n),
-    );
-  }
-  return out;
-}
 
 export type HexMapProps = {
   layout: MapLayout;
@@ -130,6 +102,8 @@ export type HexMapProps = {
   zoom?: number;
   /** 그릴 관계선. 영토를 골랐을 때만 온다 */
   lines?: readonly RelView[];
+  /** 섬마다 이름표를 다는 영토 수. 없으면 `NAME_TOP`(열) — 타임라인 블록은 둘 (`MapCanvas`) */
+  nameTop?: number;
 };
 
 /**
@@ -204,6 +178,7 @@ export default function HexMap({
   litIslands,
   lines = [],
   zoom = 100,
+  nameTop = NAME_TOP,
 }: HexMapProps) {
   const hasSelection = Boolean(selectedTerritory || selectedIsland);
   /**
@@ -403,7 +378,7 @@ export default function HexMap({
     shownLines.add(d.v.rel.id);
   }
 
-  // 이름표는 섬마다 둘씩이다. 관계로 이어진 영토는 그 밖이어도 이름을 단다 — 선 끝에 이름이
+  // 이름표는 섬마다 점수 상위 열 곳까지다(겹치면 뺀다). 관계로 이어진 영토는 그 밖이어도 이름을 단다 — 선 끝에 이름이
   // 없으면 어디로 이어졌는지 모른다 (피그마 ⑦-3). 다만 건수 상위 개수 안 선과 마우스를 올린 영토
   // 선의 끝, 고른 · 떠오른 영토만 단다 (위 개수 규칙과 같이 간다). 알약이 겹쳐 빠진 선도 개수
   // 안이면 끝 이름은 단다 — 전에는 관계가 셋뿐이어도 알약이 겹치면 선 끝이 이름 없이 남았다
@@ -418,7 +393,8 @@ export default function HexMap({
     Boolean(raised?.has(t.territoryId)) ||
     namedEnds.has(t.territoryId) ||
     lines.length === 0;
-  const picked = pickLabels(layout, selectedIsland);
+  // 섬마다 점수 상위 열 곳까지, 겹치지 않는 만큼 (2026-10-01 팀 피드백 2, `mapui.ts` `pickLabels`)
+  const picked = pickLabels(layout.territories, ls, nameTop);
   // 고른 영토는 `lit` 이 없어도 이름을 단다 — 타임라인 지도는 `lit` 을 안 넘겨서, 섬의 큰 둘에 못 든
   // 영토를 고르면 떠오르기만 하고 이름이 없었다 (2026-09-29 묶음 5 검토)
   const labelled = [
@@ -724,22 +700,23 @@ export default function HexMap({
         {labelled
           .filter((t) => !dim(t))
           .map((t) => {
-            const w = textWidth(t.name, 8) + 12;
+            // 글자 12 · 높이 20 (전에는 8 · 14). 확대하면 화면에서 100% 때 크기를 지킨다(`ls`) — 팀 피드백 2
+            const w = nameW(t.name);
             const at = anchor(t);
             return (
               <g key={t.territoryId} data-island={t.islandKey}>
-              <g transform={`translate(${at.x - w / 2} ${at.y - 7})`}>
+              <g transform={`translate(${at.x} ${at.y}) scale(${ls}) translate(${-w / 2} ${-NAME_H / 2})`}>
                 <rect
                   width={w}
-                  height={14}
-                  rx={4}
+                  height={NAME_H}
+                  rx={5}
                   fill="var(--t-surface-app)"
                   opacity={0.88}
                 />
                 <text
                   x={w / 2}
-                  y={10}
-                  fontSize={8}
+                  y={NAME_H / 2 + NAME_FS * 0.36}
+                  fontSize={NAME_FS}
                   fontWeight={600}
                   textAnchor="middle"
                   fill="var(--t-text-title)"

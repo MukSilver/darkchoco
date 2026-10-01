@@ -135,6 +135,8 @@ export default function TimelineTab({
         view={view}
         onView={onView}
         framed={false}
+        // 작은 판이라 이름표는 전처럼 섬마다 둘 — 열 곳을 달면 글자가 3px 대로 덮기만 한다 (팀 피드백 2 는 지도 탭)
+        nameTop={2}
         label={label}
         hint={timelineHint(sel)}
         badge={badge}
