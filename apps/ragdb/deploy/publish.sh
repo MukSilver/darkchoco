@@ -34,7 +34,8 @@ set -a
 # shellcheck disable=SC1091
 . <(grep -E '^(CLOUDFLARE_API_TOKEN|CLOUDFLARE_ACCOUNT_ID)=' .env || true)
 set +a
-[ -n "${CLOUDFLARE_API_TOKEN:-}" ] || { echo ".env 에 CLOUDFLARE_API_TOKEN 이 없다"; exit 1; }
+# 토큰이 없으면 wrangler 로그인(`npx wrangler login`)으로 올린다. 서버의 주간 예약은 로그인할 수 없으므로 토큰이 있어야 한다
+[ -n "${CLOUDFLARE_API_TOKEN:-}" ] || echo ".env 에 CLOUDFLARE_API_TOKEN 이 없다. wrangler 로그인으로 올린다"
 
 cd web
 [ -d node_modules ] || npm ci
