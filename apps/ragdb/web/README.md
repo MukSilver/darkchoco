@@ -1,32 +1,19 @@
-# React + TypeScript + Vite
+# apps/ragdb/web: 화면
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+묻고 답하기와 출처 원문 (설계서 「화면 정의」). React + Vite + TypeScript + Tailwind.
+디자인 정본은 피그마 파일 「화면」 페이지이고 색은 `src/index.css` 의 값이 피그마 변수와 같다.
 
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```
+npm ci
+npm run dev        개발 서버 (5173). /api 는 127.0.0.1:8787, /data 는 127.0.0.1:8788 로 넘긴다
+npm run build      dist/ 에 굽는다
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+개발할 때 같이 띄울 것 (apps/ragdb 에서)
+
+```
+.venv\Scripts\python -m uvicorn server.main:app --host 127.0.0.1 --port 8787 --workers 1
+python -m http.server 8788 --bind 127.0.0.1 --directory data/snapshot
+```
+
+설정 값은 `.env.example` 을 본다. 전부 공개 값이다. 비밀 열쇠는 여기 두지 않는다.
