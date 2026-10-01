@@ -1,102 +1,190 @@
-// 화면 골격. 공개 화면은 둘이다 (설계서 「화면 목록」): 묻고 답하기 ( / ) 와 출처 원문 ( /doc/{id}/{s} ).
-// 디자인(v1/v2)이 확정되면 컴포넌트를 채운다. 라우터 라이브러리는 스택에 없으므로 주소는 직접 읽는다.
-import { useEffect, useState } from 'react'
+// 공개 화면은 둘이다 (설계서 「화면 목록」): 묻고 답하기 ( / ) 와 출처 원문 ( /doc/{문서}/{조각 순번} ).
+// 라우터 라이브러리는 스택에 없으므로 주소는 직접 읽는다. 스냅샷은 서버 없이 뜨고, 질의 서버 상태는 따로 본다.
+import { useCallback, useEffect, useState } from 'react'
 import { serverStatus, snapshot } from './api'
-import type { Answers, Current, SnapshotStatus, Status } from './types'
+import { Answer, Progress } from './components/Answer'
+import { AskBoxAnswer, AskBoxHome } from './components/AskBox'
+import { Banner, Header } from './components/Header'
+import type { ServerState } from './components/Header'
+import { DocView, SourcePanel, useDoc } from './components/SourcePanel'
+import type { Answers, Current, PreparedAnswer } from './types'
+import { useAsk } from './useAsk'
 
-type Route = { page: 'ask' } | { page: 'doc'; id: string; section: number } | { page: 'missing' }
+type Route = { page: 'ask' } | { page: 'doc'; id: string; index: number } | { page: 'missing' }
 
-function route(pathname: string): Route {
+function parse(pathname: string): Route {
   if (pathname === '/' || pathname === '') return { page: 'ask' }
-  const m = /^\/doc\/([^/]+)(?:\/(\d+))?$/.exec(pathname)
-  if (m) return { page: 'doc', id: decodeURIComponent(m[1]), section: Number(m[2] ?? 0) }
+  const m = /^\/doc\/([^/]+)(?:\/(\d+))?\/?$/.exec(pathname)
+  if (m) return { page: 'doc', id: decodeURIComponent(m[1]), index: Number(m[2] ?? 0) }
   return { page: 'missing' }
 }
 
+const CONTACT = import.meta.env.VITE_CONTACT_EMAIL as string | undefined
+
 export default function App() {
-  const [r, setRoute] = useState<Route>(() => route(location.pathname))
+  const [route, setRoute] = useState<Route>(() => parse(location.pathname))
   const [current, setCurrent] = useState<Current | null>(null)
-  const [snap, setSnap] = useState<SnapshotStatus | null>(null)
   const [answers, setAnswers] = useState<Answers | null>(null)
-  const [server, setServer] = useState<Status | null | 'loading'>('loading')
+  const [server, setServer] = useState<ServerState>('loading')
+  const { turn, start, showPrepared, reset } = useAsk()
+  const [open, setOpen] = useState<{ n: number; documentId: string; chunkId: string | null } | null>(null)
+
+  const go = useCallback((path: string) => {
+    history.pushState(null, '', path)
+    setRoute(parse(path))
+  }, [])
 
   useEffect(() => {
-    const onPop = () => setRoute(route(location.pathname))
+    const onPop = () => setRoute(parse(location.pathname))
     addEventListener('popstate', onPop)
     return () => removeEventListener('popstate', onPop)
   }, [])
 
-  useEffect(() => {
-    // 스냅샷은 서버 없이 뜬다. 질의 서버 상태는 따로 본다 (설계서 「묻고 답하기」: 서버가 꺼져도 예시와 원문은 그대로)
-    snapshot.current().then(async (c) => {
-      setCurrent(c)
-      const [s, a] = await Promise.all([snapshot.status(c.version), snapshot.answers(c.version)])
-      setSnap(s)
-      setAnswers(a)
-    }).catch(() => setCurrent(null))
-    serverStatus().then(setServer)
+  const checkServer = useCallback(() => {
+    serverStatus().then((s) => setServer(!s || !s.ok ? 'off' : s.accepting ? 'ok' : s.reason === 'budget' ? 'budget' : 'off'))
   }, [])
 
-  const header = (
-    <header className="flex h-14 items-center justify-between border-b border-line bg-frame px-6">
-      <div className="flex items-center gap-3">
-        <span className="text-sm font-semibold">다크웹 RAG DB</span>
-        {snap && <span className="font-mono text-xs text-muted">판 {snap.version} · 문서 {snap.documents}</span>}
-      </div>
-      <ServerBadge server={server} />
-    </header>
-  )
+  useEffect(() => {
+    snapshot.current().then(async (c) => {
+      setCurrent(c)
+      setAnswers(await snapshot.answers(c.version).catch(() => null))
+    }).catch(() => setCurrent(null))
+    checkServer()
+  }, [checkServer])
+
+  // 하루 차단기에 걸리면 헤더와 입력창도 그 상태로
+  useEffect(() => {
+    if (turn?.phase === 'error' && turn.error?.code === 'budget') setServer('budget')
+  }, [turn])
+
+  const home = () => { reset(); setOpen(null); go('/') }
+  const ask = (q: string) => { setOpen(null); if (route.page !== 'ask') go('/'); start(q) }
+  const example = (a: PreparedAnswer) => { setOpen(null); showPrepared(a) }
+  const cite = (n: number) => {
+    const s = turn?.sources.find((x) => x.n === n)
+    if (!s) return
+    setOpen(open?.n === n ? null : { n, documentId: s.document_id, chunkId: s.chunk_id })
+  }
 
   return (
-    <div className="flex min-h-full flex-col">
-      {header}
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10">
-        {r.page === 'ask' && <AskPlaceholder answers={answers} server={server} />}
-        {r.page === 'doc' && current && <DocPlaceholder version={current.version} id={r.id} section={r.section} />}
-        {r.page === 'missing' && <p className="text-muted">이런 주소는 없어요.</p>}
-      </main>
-      <footer className="border-t border-line px-6 py-4 text-xs text-muted">
-        AI가 만든 답이에요. 출처로 확인해 주세요. 잘못된 답이나 가려지지 않은 이름은 (팀 연락 메일: 미정) 으로 알려 주세요.
-      </footer>
+    <div className="flex h-full flex-col">
+      <Header version={current?.version ?? null} server={server} onHome={home} />
+      <Banner server={server} />
+      <div className="flex min-h-0 flex-1">
+        <main className="flex min-w-0 flex-1 flex-col items-center overflow-y-auto">
+          {route.page === 'missing' && <Missing text="이런 주소는 없어요" onHome={home} />}
+          {route.page === 'doc' && <DocPage version={current?.version ?? null} id={route.id} index={route.index} onHome={home} go={go} />}
+          {route.page === 'ask' && !turn && (
+            <Home server={server} answers={answers} onAsk={ask} onExample={example} />
+          )}
+          {route.page === 'ask' && turn && (
+            <div className="flex w-full max-w-[720px] flex-1 flex-col gap-4 px-6 pt-7 pb-5">
+              <div className="flex flex-col gap-2">
+                <span className="text-[12px] leading-none font-medium tracking-[1.2px] text-accent">질문</span>
+                <h1 className="text-[21px] leading-[1.35] font-bold tracking-[-0.315px] text-strong">{turn.question}</h1>
+              </div>
+              <Progress turn={turn} />
+              <Answer turn={turn} selected={open?.n ?? null} onCite={cite} />
+              <div className="min-h-4 flex-1" />
+              <div className="sticky bottom-0 -mx-6 bg-page/90 px-6 pt-2 pb-1 backdrop-blur-[6px]">
+                <AskBoxAnswer
+                  server={server}
+                  busy={turn.phase !== 'done' && turn.phase !== 'error'}
+                  onSubmit={ask}
+                  onExamples={home}
+                />
+              </div>
+              <Footer />
+            </div>
+          )}
+        </main>
+        {route.page === 'ask' && open && current && (
+          <SourcePanel
+            version={current.version}
+            documentId={open.documentId}
+            chunkId={open.chunkId}
+            onChunk={(id) => setOpen({ ...open, chunkId: id })}
+            onClose={() => setOpen(null)}
+          />
+        )}
+      </div>
     </div>
   )
 }
 
-function ServerBadge({ server }: { server: Status | null | 'loading' }) {
-  if (server === 'loading') return null
-  const [color, text] = server === null ? ['bg-coral', '지금은 새 질문을 받지 않아요']
-    : server.accepting ? ['bg-ok', '새 질문 받는 중']
-    : server.reason === 'budget' ? ['bg-unk', '오늘 새 답변은 쉬어요']
-    : ['bg-coral', '지금은 새 질문을 받지 않아요']
-  return <span className="flex items-center gap-2 text-xs text-text-2"><i className={`inline-block h-2 w-2 rounded-full ${color}`} />{text}</span>
-}
-
-function AskPlaceholder({ answers, server }: { answers: Answers | null; server: Status | null | 'loading' }) {
-  const locked = server === null || (server !== 'loading' && !server.accepting)
+function Home({ server, answers, onAsk, onExample }: {
+  server: ServerState; answers: Answers | null; onAsk: (q: string) => void; onExample: (a: PreparedAnswer) => void
+}) {
+  const examples = answers?.answers ?? []
   return (
-    <section>
-      <h1 className="text-3xl font-bold tracking-tight">팀이 쌓은 조사 기록에 물어보세요</h1>
-      <p className="mt-3 text-text-2">기록 안에서만 답하고, 문장마다 어느 기록에서 나왔는지 번호를 붙입니다. 근거가 없으면 없다고 답합니다.</p>
-      <div className="mt-6 rounded-xl border border-line bg-panel p-4 text-muted">
-        {locked ? '지금은 새 질문을 받지 않아요. 예시 질문과 출처 원문은 볼 수 있어요.' : '(입력창 자리. 300자, 질문은 저장하지 않아요)'}
+    <div className="flex w-full max-w-[720px] flex-1 flex-col gap-10 px-6 pt-[88px] pb-6 max-sm:pt-12">
+      <div className="flex flex-col gap-[14px]">
+        <h1 className="text-[36px] leading-[1.2] font-bold tracking-[-0.72px] text-strong max-sm:text-[28px]">조사 기록에 물어보세요</h1>
+        <p className="max-w-[520px] text-[16px] leading-[1.65] text-muted">조사 기록 안에서만 답하고, 문장마다 출처를 붙입니다. 근거가 없으면 없다고 답합니다.</p>
       </div>
-      <p className="mt-3 text-sm text-muted">피해 조직 이름과 주소는 가려져 있어 이름으로는 찾을 수 없어요. 분야 · 시기 · 장소 · 행위자로 물어 보세요. 질문과 가까운 자료 다섯 개로 답해요.</p>
-      <h2 className="mt-8 font-mono text-xs tracking-widest text-coral-ink">EXAMPLES · 사람이 검토한 답</h2>
-      {!answers || answers.answers.length === 0
-        ? <p className="mt-2 text-sm text-muted">검토를 통과한 사전 답변이 아직 없어요.</p>
-        : <ol className="mt-2 space-y-2">{answers.answers.map((a, i) => (
-            <li key={i} className="rounded-lg border border-line bg-panel px-4 py-3 text-sm">{a.question}</li>))}</ol>}
-    </section>
+      <div className="flex w-full flex-col gap-[10px]">
+        <AskBoxHome server={server} onSubmit={onAsk} />
+        <p className="px-[6px] text-[13px] leading-[1.6] text-faint">
+          <span className="font-medium text-muted">물을 수 있는 것</span> 분야 · 시기 · 장소(포럼, 텔레그램, 랜섬웨어) · 행위자. 피해 조직의 이름으로는 찾을 수 없어요.
+        </p>
+      </div>
+      {examples.length > 0 && (
+        <section className="flex w-full flex-col gap-3" aria-label="예시 질문">
+          <h2 className="text-[12px] leading-none font-medium tracking-[1.2px] text-muted">예시 질문</h2>
+          <div className="grid grid-cols-3 gap-[10px] max-sm:grid-cols-1">
+            {examples.map((a) => (
+              <button
+                key={a.question}
+                type="button"
+                onClick={() => onExample(a)}
+                className="cursor-pointer rounded-[14px] border border-line-card bg-card px-4 py-[14px] text-left text-[14.5px] leading-[1.45] text-body transition-colors hover:border-[#3a5a9e]"
+              >
+                {a.question}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+      <div className="flex-1" />
+      <Footer />
+    </div>
   )
 }
 
-function DocPlaceholder({ version, id, section }: { version: string; id: string; section: number }) {
-  const [state, setState] = useState<'loading' | 'missing' | 'ok'>('loading')
-  const [title, setTitle] = useState('')
-  useEffect(() => {
-    snapshot.doc(version, id).then((d) => { setTitle(d.title); setState('ok') }).catch(() => setState('missing'))
-  }, [version, id])
-  if (state === 'loading') return null
-  if (state === 'missing') return <p className="text-muted">찾을 수 없는 문서예요.</p>
-  return <section><h1 className="text-2xl font-bold">{title}</h1><p className="mt-2 text-sm text-muted">(출처 원문 자리. 조각 {section})</p></section>
+/** 주소로 바로 연 출처 원문. */
+function DocPage({ version, id, index, onHome, go }: { version: string | null; id: string; index: number; onHome: () => void; go: (p: string) => void }) {
+  const load = useDoc(version, id)
+  if (!version || load.state === 'loading') return null
+  if (load.state === 'missing') return <Missing text="찾을 수 없는 문서예요" onHome={onHome} />
+  const chunk = load.doc.chunks[index] ?? load.doc.chunks[0]
+  return (
+    <div className="flex w-full max-w-[720px] flex-col gap-[18px] px-6 pt-10 pb-8">
+      <span className="text-[12px] leading-none font-medium tracking-[1.2px] text-muted">출처 원문</span>
+      <DocView
+        doc={load.doc}
+        chunkId={chunk?.chunk_id ?? null}
+        onChunk={(cid) => go(`/doc/${encodeURIComponent(id)}/${load.doc.chunks.findIndex((c) => c.chunk_id === cid)}`)}
+      />
+      <Footer />
+    </div>
+  )
+}
+
+function Missing({ text, onHome }: { text: string; onHome: () => void }) {
+  return (
+    <div className="flex w-full max-w-[720px] flex-col items-start gap-4 px-6 pt-[88px]">
+      <h1 className="text-[28px] leading-[1.2] font-bold text-strong">{text}</h1>
+      <button type="button" onClick={onHome} className="cursor-pointer rounded-[9px] bg-accent px-4 py-[9px] text-[14px] font-medium text-white">첫 화면으로</button>
+    </div>
+  )
+}
+
+/** 바닥글 (설계서 「묻고 답하기」): AI가 만든 글임을 숨기지 않고, 잘못된 답과 가려지지 않은 이름을 알릴 창구를 둔다. */
+function Footer() {
+  return (
+    <footer className="pt-2 pb-1 text-[12px] leading-[1.6] text-faint">
+      AI가 만든 답이에요. 출처로 확인해 주세요.
+      {CONTACT && <> 잘못된 답이나 가려지지 않은 이름은 <a className="text-accent-text hover:text-accent-strong" href={`mailto:${CONTACT}`}>{CONTACT}</a> 로 알려 주세요.</>}
+    </footer>
+  )
 }

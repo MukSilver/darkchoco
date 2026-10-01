@@ -79,10 +79,13 @@ function parseBlock(block: string): AskEvent | null {
   return { event, data: data ? JSON.parse(data) : {} } as AskEvent
 }
 
-/** 그 조각에 붙은 날짜의 이름. 서버(app/answer.py date_label)와 같은 규칙을 둔다. 어긋나면 서버가 맞다. */
+/**
+ * 그 조각에 붙은 날짜의 이름. 서버(app/answer.py date_label)와 똑같은 규칙이다. 어긋나면 서버가 맞다.
+ * 설계서 「노션 DB 대응」 은 수집 DB 를 수집일, 검증을 검증일로 부르지만 서버는 지금 유출 사고 DB 만 공표 시점,
+ * 나머지는 확인일로 부른다. 답 글과 출처 카드, 출처 원문이 같은 이름을 쓰도록 서버를 따른다. 서버가 바뀌면 여기도 바꾼다.
+ */
 export function dateLabel(kind: Kind, documentId: string): '확인일' | '공표 시점' | '수집일' | '검증일' {
-  if (kind === '사고') return documentId.includes('-inc-') ? '공표 시점' : '수집일'
-  if (kind === '판정') return '검증일'
+  if (kind === '사고' && documentId.includes('-inc-')) return '공표 시점'
   return '확인일'
 }
 

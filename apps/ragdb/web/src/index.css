@@ -1,26 +1,70 @@
 @import "tailwindcss";
 
-/* 색과 글꼴은 확정 디자인(v1/v2)이 정해지면 여기 토큰만 바꾼다. 아래는 v2(RAGDB_디자인_v2.html)의 값이다. */
+/* 색은 피그마 파일(5va2t9ir9ZEOsDbWBktApI)의 변수 「RAG 색」 과 같은 값이다. 바꿀 때는 피그마와 같이 바꾼다. */
 @theme {
-  --color-bg: #1e1e21;
-  --color-frame: #242427;
-  --color-panel: #2a2a2e;
-  --color-raise: #313136;
-  --color-sunk: #1a1a1d;
-  --color-line: #35353a;
-  --color-line-2: #44444b;
-  --color-text: #ededef;
-  --color-text-2: #c6c6cc;
-  --color-muted: #909098;
-  --color-faint: #6f6f77;
-  --color-coral: #ff5f57;
-  --color-coral-ink: #ff8c86;
-  --color-ok: #4ade80;
-  --color-off: #8e8e96;
-  --color-unk: #f5b544;
-  --font-sans: "Pretendard Variable", Pretendard, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  --color-page: #0a1020;
+  --color-panel: #0d1526;
+  --color-input: #111a2b;
+  --color-card: #131c30;
+  --color-chip: #1a2540;
+
+  --color-line: #223050;
+  --color-line-card: #1e2a44;
+  --color-divider: #1a2540;
+
+  --color-accent: #5b8def;
+  --color-accent-text: #8fb3ff;
+  --color-accent-strong: #b7cdff;
+  --color-highlight-text: #eaf0fb;
+
+  --color-strong: #f3f6fc;
+  --color-title: #e6ecf7;
+  --color-answer: #dce4f3;
+  --color-body: #c7d3ea;
+  --color-muted: #8a9ab8;
+  --color-faint: #8593b0;
+  --color-placeholder: #7c8baa;
+
+  --color-mask-bg: #1b2740;
+  --color-mask-line: #2e3f63;
+  --color-mask-text: #9fb6e0;
+
+  --color-online: #3dd68c;
+  --color-offline: #7b879e;
+  --color-unknown: #f2b84b;
+  --color-warn-text: #f2c875;
+  --color-danger: #f26d6d;
+  --color-danger-text: #ff9c9c;
+  --color-step-idle: #33425f;
+
+  --font-sans: "Noto Sans KR", "Pretendard Variable", Pretendard, -apple-system, "Apple SD Gothic Neo", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+
+  --animate-pulse-dot: pulse-dot 1s ease-in-out infinite;
+  --animate-rise: rise 0.25s ease-out;
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 0.35; }
+    50% { opacity: 1; }
+  }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: none; }
+  }
 }
 
 html, body, #root { height: 100%; }
-body { background: var(--color-bg); color: var(--color-text); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
+body {
+  margin: 0;
+  background: var(--color-page);
+  color: var(--color-title);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  word-break: break-word;
+}
+textarea, button, input { font: inherit; }
+::selection { background: rgba(91, 141, 239, 0.35); }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
