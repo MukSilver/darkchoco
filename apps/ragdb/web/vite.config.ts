@@ -6,6 +6,8 @@ import tailwindcss from '@tailwindcss/vite'
 // /data 를 배치가 구운 스냅샷 폴더로 넘긴다. 배포는 Cloudflare 정적 호스팅이고 API 는 rag-api.도메인이다.
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // 작은 글꼴 조각을 CSS 안에 박지 않고 파일로 둔다. 박으면 응답 머리말의 font-src 'self' 에 막힌다 (public/_headers)
+  build: { assetsInlineLimit: 0 },
   server: {
     proxy: {
       '/api': { target: 'http://127.0.0.1:8787', changeOrigin: true },

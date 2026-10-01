@@ -51,7 +51,9 @@ function ChunkBody({ doc, chunk }: { doc: Doc; chunk: Chunk }) {
 }
 
 export function DocView({ doc, chunkId, onChunk }: { doc: Doc; chunkId: string | null; onChunk: (id: string) => void }) {
-  const chunk = doc.chunks.find((c) => c.chunk_id === chunkId) ?? doc.chunks[0]
+  // 제목만 있고 글이 빈 조각은 탭으로 보이지 않는다 (지금 판에 17개). 속성 조각은 글이 비어도 칸 값을 편다
+  const chunks = doc.chunks.filter((c) => c.body.trim() !== '' || isAttributes(doc, c))
+  const chunk = chunks.find((c) => c.chunk_id === chunkId) ?? chunks[0]
   const label = dateLabel(doc.kind, doc.document_id)
   return (
     <>
@@ -77,9 +79,9 @@ export function DocView({ doc, chunkId, onChunk }: { doc: Doc; chunkId: string |
         </p>
       )}
 
-      {doc.chunks.length > 1 && (
+      {chunks.length > 1 && (
         <div className="flex flex-wrap gap-[6px]" role="tablist" aria-label="같은 문서의 다른 조각">
-          {doc.chunks.map((c) => {
+          {chunks.map((c) => {
             const on = c.chunk_id === chunk?.chunk_id
             return (
               <button

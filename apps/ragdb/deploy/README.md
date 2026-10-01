@@ -74,6 +74,16 @@ sudo -u ragdb -H bash -c 'cd /opt/darkchoco/apps/ragdb && deploy/publish.sh'
 반출 관문을 다시 본 뒤 화면을 굽고, 스냅샷을 `dist/data/` 에 넣어 `npx wrangler deploy` 로 올린다. 올린 판은 `data/published_version.txt` 에 적는다.
 화면 코드만 바뀌었으면 `deploy/publish.sh --force`.
 
+올리기 전에 내 컴퓨터에서 같은 묶음을 띄워 볼 수 있다. 계정과 열쇠가 필요 없다.
+
+```bash
+cd web && npm run build && mkdir -p dist/data && cp -r ../data/snapshot/. dist/data/
+npx wrangler deploy --dry-run        # 설정과 파일 수만 본다. 올리지 않는다
+npx wrangler dev --port 8790         # http://127.0.0.1:8790 에서 화면, 스냅샷, 응답 머리말을 본다
+```
+
+질의 서버가 없으므로 헤더는 「지금은 새 질문을 받지 않아요」 로 뜬다. 출처 원문 주소(`/doc/문서/순번`)는 그대로 열려야 한다.
+
 ### 7. 주간 예약
 
 ```bash
