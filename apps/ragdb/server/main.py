@@ -18,6 +18,7 @@ import sys
 import threading
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -31,6 +32,13 @@ from app.search import current_version   # noqa: E402
 from server import turnstile             # noqa: E402
 
 app = FastAPI(title="다크웹 RAG DB 질의 서버", docs_url=None, redoc_url=None, openapi_url=None)
+
+# 화면(rag.도메인)과 질의 서버(rag-api.도메인)는 주소가 다르다. 화면 주소에서 오는 요청만 받는다.
+# ALLOWED_ORIGINS 가 비어 있으면 다른 주소의 요청을 받지 않는다 (개발 때는 화면 개발 서버가 /api 를 넘겨 주므로 필요 없다).
+ALLOWED_ORIGINS = [o.strip().rstrip("/") for o in (os.getenv("ALLOWED_ORIGINS") or "").split(",") if o.strip()]
+if ALLOWED_ORIGINS:
+    app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_methods=["GET", "POST"],
+                       allow_headers=["Content-Type"], allow_credentials=False, max_age=600)
 
 KEEPALIVE_SECONDS = float(os.getenv("SSE_KEEPALIVE_SECONDS") or 10)
 _END = object()
@@ -86,6 +94,10 @@ async def ask(request: Request):
         return JSONResponse({"status": 400, "code": "empty"}, status_code=400)
     if len(question) > cfg.QUESTION_MAX_CHARS:
         return JSONResponse({"status": 400, "code": "too_long"}, status_code=400)
+    try:
+        current_version()                 # 판이 없으면 답할 수 없다. 사람 확인과 돈이 드는 호출 앞에서 돌려보낸다
+    except OSError:
+        return JSONResponse({"status": 503, "code": "no_version"}, status_code=503)
     ok, _why = turnstile.verify(body.get("turnstile"), _client_ip(request))
     if not ok:
         return JSONResponse({"status": 401, "code": "turnstile"}, status_code=401)

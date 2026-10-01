@@ -1,7 +1,8 @@
 // 공개 화면은 둘이다 (설계서 「화면 목록」): 묻고 답하기 ( / ) 와 출처 원문 ( /doc/{문서}/{조각 순번} ).
 // 라우터 라이브러리는 스택에 없으므로 주소는 직접 읽는다. 스냅샷은 서버 없이 뜨고, 질의 서버 상태는 따로 본다.
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { serverStatus, snapshot } from './api'
+import { turnstileToken } from './turnstile'
 import { Answer, Progress } from './components/Answer'
 import { AskBoxAnswer, AskBoxHome } from './components/AskBox'
 import { Banner, Header } from './components/Header'
@@ -28,6 +29,9 @@ export default function App() {
   const [server, setServer] = useState<ServerState>('loading')
   const { turn, start, showPrepared, reset } = useAsk()
   const [open, setOpen] = useState<{ n: number; documentId: string; chunkId: string | null } | null>(null)
+  const [human, setHuman] = useState(false)          // 서버가 사람 확인을 켰는가
+  const [checking, setChecking] = useState(false)    // 사람 확인을 기다리는 중
+  const humanEl = useRef<HTMLDivElement>(null)
 
   const go = useCallback((path: string) => {
     history.pushState(null, '', path)
@@ -41,7 +45,10 @@ export default function App() {
   }, [])
 
   const checkServer = useCallback(() => {
-    serverStatus().then((s) => setServer(!s || !s.ok ? 'off' : s.accepting ? 'ok' : s.reason === 'budget' ? 'budget' : 'off'))
+    serverStatus().then((s) => {
+      setServer(!s || !s.ok ? 'off' : s.accepting ? 'ok' : s.reason === 'budget' ? 'budget' : 'off')
+      setHuman(!!s?.turnstile)
+    })
   }, [])
 
   useEffect(() => {
@@ -58,7 +65,19 @@ export default function App() {
   }, [turn])
 
   const home = () => { reset(); setOpen(null); go('/') }
-  const ask = (q: string) => { setOpen(null); if (route.page !== 'ask') go('/'); start(q) }
+  const ask = async (q: string) => {
+    if (checking) return
+    setOpen(null)
+    if (route.page !== 'ask') go('/')
+    let token: string | null = null
+    if (human && humanEl.current) {
+      // 사람 확인. 대부분 아무것도 안 보이고 지나간다. 토큰을 못 받으면 그대로 보내고 서버가 401 로 돌려보낸다
+      setChecking(true)
+      token = await turnstileToken(humanEl.current)
+      setChecking(false)
+    }
+    start(q, token)
+  }
   const example = (a: PreparedAnswer) => { setOpen(null); showPrepared(a) }
   const cite = (n: number) => {
     const s = turn?.sources.find((x) => x.n === n)
@@ -72,6 +91,11 @@ export default function App() {
       <Banner server={server} />
       <div className="flex min-h-0 flex-1">
         <main className="flex min-w-0 flex-1 flex-col items-center overflow-y-auto">
+          {/* 사람 확인 상자가 필요할 때만 여기에 보인다 (Cloudflare Turnstile) */}
+          <div className={`flex w-full max-w-[720px] flex-col gap-2 px-6 ${checking ? 'pt-6' : ''}`}>
+            {checking && <p className="text-[13px] leading-normal text-muted" role="status">사람인지 확인하고 있어요…</p>}
+            <div ref={humanEl} />
+          </div>
           {route.page === 'missing' && <Missing text="이런 주소는 없어요" onHome={home} />}
           {route.page === 'doc' && <DocPage version={current?.version ?? null} id={route.id} index={route.index} onHome={home} go={go} />}
           {route.page === 'ask' && !turn && (

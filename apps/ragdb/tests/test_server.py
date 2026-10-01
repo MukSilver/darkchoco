@@ -28,9 +28,36 @@ def parse_sse(text):
 
 
 @pytest.fixture()
-def client(monkeypatch):
+def client(monkeypatch, tmp_path):
     monkeypatch.setattr(turnstile, "secret", lambda: "")          # 검증 끔
+    cur = tmp_path / "current.txt"                                # 판이 있는 것으로
+    cur.write_text("20260901-000000", encoding="utf-8")
+    monkeypatch.setattr(cfg, "CURRENT", str(cur))
     return TestClient(main.app)
+
+
+def test_ask_without_version_is_503(client, monkeypatch, tmp_path):
+    monkeypatch.setattr(cfg, "CURRENT", str(tmp_path / "없음.txt"))
+    called = []
+    monkeypatch.setattr(main.pipeline, "ask", lambda q, **kw: called.append(q) or iter(()))
+    r = client.post("/api/ask", json={"question": "알파포럼 살아 있어?"})
+    assert r.status_code == 503 and r.json()["code"] == "no_version"
+    assert called == []                                           # 판이 없으면 질의 순서에 들어가지 않는다
+
+
+def test_other_origin_is_allowed_only_when_listed(monkeypatch):
+    import importlib
+    monkeypatch.setenv("ALLOWED_ORIGINS", "https://rag.example.org")
+    m = importlib.reload(main)
+    try:
+        c = TestClient(m.app)
+        ok = c.options("/api/ask", headers={"Origin": "https://rag.example.org", "Access-Control-Request-Method": "POST"})
+        no = c.options("/api/ask", headers={"Origin": "https://evil.example.org", "Access-Control-Request-Method": "POST"})
+        assert ok.headers.get("access-control-allow-origin") == "https://rag.example.org"
+        assert "access-control-allow-origin" not in no.headers
+    finally:
+        monkeypatch.delenv("ALLOWED_ORIGINS")
+        importlib.reload(main)
 
 
 def fake_ask(events):
