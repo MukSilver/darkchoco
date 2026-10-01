@@ -9,7 +9,8 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': { target: 'http://127.0.0.1:8787', changeOrigin: true },
-      '/data': { target: 'http://127.0.0.1:8788', changeOrigin: true },
+      // 스냅샷 폴더(data/snapshot)를 8788 에 그대로 띄운다: python -m http.server 8788 --directory data/snapshot
+      '/data': { target: 'http://127.0.0.1:8788', changeOrigin: true, rewrite: (p) => p.replace(/^\/data/, '') },
     },
   },
 })
