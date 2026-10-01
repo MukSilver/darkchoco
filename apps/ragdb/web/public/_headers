@@ -1,0 +1,24 @@
+# 응답 머리말 (Cloudflare 정적 자산). 조사 자료를 다루는 화면이라 다른 사이트에 끼워지거나 주소가 새지 않게 한다.
+#
+# Content-Security-Policy: 스크립트와 글꼴, 그림은 이 사이트 것만. 사람 확인(Turnstile)만 Cloudflare 것을 부른다.
+# connect-src 의 https: 는 질의 서버 주소다. 도메인이 정해지면 그 주소 하나로 좁힌다.
+#
+# /data/current.json 은 늘 새로 읽는다 (판이 바뀌면 바로 따라가야 한다).
+# 판 폴더의 파일은 판 이름이 주소에 들어 있어 바뀌지 않는다. 구운 화면 파일은 이름에 내용 해시가 들어 있다.
+
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+  X-Robots-Tag: noindex
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+
+/data/current.json
+  Cache-Control: no-store
+
+/data/*
+  Cache-Control: public, max-age=3600
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

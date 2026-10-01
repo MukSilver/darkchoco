@@ -122,6 +122,9 @@ export function SourcePanel({ version, documentId, chunkId, onChunk, onClose }: 
     return () => removeEventListener('keydown', onKey)
   }, [onClose])
   return (
+    <>
+    {/* 좁은 화면: 시트 뒤를 어둡게 하고, 누르면 닫는다 */}
+    <div className="fixed inset-0 z-10 bg-black/50 lg:hidden" onClick={onClose} aria-hidden="true" />
     <aside
       aria-label="출처 원문"
       className="fixed inset-x-0 bottom-0 z-20 flex max-h-[82vh] flex-col overflow-hidden rounded-t-[16px] border-t border-divider bg-panel lg:static lg:z-auto lg:h-full lg:max-h-none lg:w-[560px] lg:shrink-0 lg:rounded-none lg:border-t-0 lg:border-l"
@@ -136,5 +139,6 @@ export function SourcePanel({ version, documentId, chunkId, onChunk, onClose }: 
         {load.state === 'ok' && <DocView doc={load.doc} chunkId={chunkId} onChunk={onChunk} />}
       </div>
     </aside>
+    </>
   )
 }

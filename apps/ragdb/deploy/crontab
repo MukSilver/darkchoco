@@ -1,0 +1,12 @@
+# 주간 배치 (설계서 「자료 준비」: 매주 월요일 04시, 질의 서버와 같은 서버에서).
+# 자리: ragdb 사용자의 crontab  (deploy/setup.sh 가 건다:  crontab -u ragdb deploy/crontab)
+#
+# refresh.py 는 새 판이 없으면 아무것도 하지 않는다. 실패하면 지금 판을 그대로 쓰고 디스코드로 단계만 알린다.
+# 새 판이 만들어졌으면 publish.sh 가 화면과 스냅샷을 Cloudflare 에 올린다. 판이 그대로면 올리지 않는다.
+# 질의 서버는 질문마다 current.txt 를 읽으므로 다시 띄울 필요가 없다.
+
+CRON_TZ=Asia/Seoul
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+
+0 4 * * 1  cd /opt/darkchoco/apps/ragdb && .venv/bin/python scripts/refresh.py >> /var/log/ragdb/refresh.log 2>&1 && deploy/publish.sh >> /var/log/ragdb/publish.log 2>&1

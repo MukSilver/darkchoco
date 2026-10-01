@@ -1,0 +1,12 @@
+// 화면과 스냅샷을 Cloudflare Workers 정적 자산으로 올린다 (설계서 「개발 스택」: 화면 올리기 wrangler).
+// 올리는 것은 dist/ 하나다. deploy/publish.sh 가 dist/data/ 에 스냅샷을 넣은 뒤 `npx wrangler deploy` 를 부른다.
+// 코드가 도는 Worker 가 아니다. 파일만 내준다. 그래서 질의 서버가 멈춰도 화면, 예시 질문, 출처 원문은 뜬다.
+{
+  "name": "ragdb-web",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./dist",
+    // /doc/{문서}/{조각} 처럼 파일이 없는 주소는 index.html 을 내준다 (화면이 주소를 읽어 그린다)
+    "not_found_handling": "single-page-application"
+  }
+}

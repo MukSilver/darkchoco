@@ -1,0 +1,15 @@
+// 감시 Worker. 5분마다 질의 서버 상태를 본다 (src/index.js).
+// 올리기:  cd apps/ragdb/monitor && npx wrangler deploy
+// 비밀값:  npx wrangler secret put DISCORD_WEBHOOK
+{
+  "name": "ragdb-monitor",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-01",
+  "triggers": { "crons": ["*/5 * * * *"] },
+  "vars": {
+    // 질의 서버의 상태 주소. 도메인이 정해지면 https://rag-api.도메인/api/status 로 바꾼다
+    "STATUS_URL": ""
+  }
+  // 상태가 바뀔 때만 알리려면 KV 묶음을 하나 만들어 아래를 푼다:  npx wrangler kv namespace create ragdb-monitor
+  // "kv_namespaces": [{ "binding": "STATE", "id": "<만든 묶음의 id>" }]
+}

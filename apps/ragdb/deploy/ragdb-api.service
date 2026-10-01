@@ -1,0 +1,31 @@
+# 질의 서버 (설계서 「개발 스택」: 클라우드 리눅스 서버 하나, systemd 서비스).
+# 자리: /etc/systemd/system/ragdb-api.service  (deploy/setup.sh 가 복사한다)
+#
+# 워커는 하나다 (AD-02). 워커마다 색인이 따로 올라가 메모리를 600MB 쯤 쓴다.
+# 127.0.0.1 에만 붙는다. 밖으로 여는 것은 Cloudflare 터널(cloudflared)이 한다. 서버에 열린 포트를 두지 않는다.
+# 값은 /opt/darkchoco/apps/ragdb/.env 에서 읽는다 (app/config.py 가 읽음). 여기에 열쇠를 적지 않는다.
+
+[Unit]
+Description=RAG DB 질의 서버 (FastAPI)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ragdb
+Group=ragdb
+WorkingDirectory=/opt/darkchoco/apps/ragdb
+Environment=PYTHONIOENCODING=utf-8
+ExecStart=/opt/darkchoco/apps/ragdb/.venv/bin/python -m uvicorn server.main:app --host 127.0.0.1 --port 8787 --workers 1
+Restart=always
+RestartSec=3
+
+# 질의 서버는 판 폴더를 읽기만 한다. 쓰는 곳은 주간 배치(다른 프로세스)다
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/opt/darkchoco
+
+[Install]
+WantedBy=multi-user.target
