@@ -2,7 +2,7 @@
 // 300자 상한. 넘으면 테두리와 글자 수가 빨강. 포커스면 테두리 파랑. Enter 로 보냄, Shift+Enter 줄바꿈.
 // 서버 꺼짐과 하루 차단기면 잠기고 안내 문구가 든다.
 import { useState } from 'react'
-import type { KeyboardEvent } from 'react'
+import type { KeyboardEvent, Ref } from 'react'
 import { QUESTION_MAX } from '../lib/labels'
 import type { ServerState } from './Header'
 
@@ -15,8 +15,12 @@ const LOCKED_ANSWER: Partial<Record<ServerState, string>> = {
   off: '지금은 새 질문을 받지 않아요',
 }
 
-function useBox(onSubmit: (q: string) => void, locked: boolean, busy: boolean) {
-  const [value, setValue] = useState('')
+/** 밖에서 쥔 글. 키워드 버튼이 질문 칸을 채울 때 쓴다. */
+type Draft = [string, (v: string) => void]
+
+function useBox(onSubmit: (q: string) => void, locked: boolean, busy: boolean, draft?: Draft) {
+  const own = useState('')
+  const [value, setValue] = draft ?? own
   const count = value.length
   const over = count > QUESTION_MAX
   const ready = !locked && !busy && !over && value.trim().length > 0
@@ -47,14 +51,17 @@ function SendButton({ ready, onClick }: { ready: boolean; onClick: () => void })
   )
 }
 
-export function AskBoxHome({ server, onSubmit }: { server: ServerState; onSubmit: (q: string) => void }) {
+export function AskBoxHome({ server, onSubmit, draft, inputRef }: {
+  server: ServerState; onSubmit: (q: string) => void; draft?: Draft; inputRef?: Ref<HTMLTextAreaElement>
+}) {
   const lockedText = LOCKED_HOME[server]
   const locked = !!lockedText
-  const b = useBox(onSubmit, locked, false)
+  const b = useBox(onSubmit, locked, false, draft)
   const border = b.over ? 'border-danger' : 'border-line focus-within:border-accent'
   return (
     <div className={`flex w-full flex-col gap-[10px] rounded-[16px] border bg-input px-[18px] pt-4 pb-[14px] transition-colors ${border}`}>
       <textarea
+        ref={inputRef}
         value={b.value}
         onChange={(e) => b.setValue(e.target.value)}
         onKeyDown={b.onKeyDown}
@@ -65,7 +72,7 @@ export function AskBoxHome({ server, onSubmit }: { server: ServerState; onSubmit
         className="h-[76px] w-full resize-none bg-transparent text-[17px] leading-[1.5] text-title outline-none placeholder:text-placeholder disabled:cursor-not-allowed"
       />
       <div className="flex items-center justify-between gap-3 border-t border-white/[0.06] pt-3">
-        <p className="text-[12.5px] leading-normal text-faint">질문은 저장하지 않아요 · 개인정보는 적지 마세요</p>
+        <p className="text-[12.5px] leading-normal text-faint">질문은 서버에 저장하지 않아요 · 개인정보는 적지 마세요</p>
         <div className="flex shrink-0 items-center gap-3">
           <span className={`font-mono text-[12px] leading-none ${b.over ? 'text-danger' : 'text-faint'}`}>{b.count}/{QUESTION_MAX}</span>
           <SendButton ready={b.ready} onClick={b.submit} />
@@ -99,7 +106,7 @@ export function AskBoxAnswer({ server, busy, onSubmit, onExamples }: {
         <SendButton ready={b.ready} onClick={b.submit} />
       </div>
       <div className="flex items-start justify-between px-[6px] text-[12.5px] leading-normal">
-        <span className="text-faint">질문은 저장하지 않아요</span>
+        <span className="text-faint">질문은 서버에 저장하지 않아요</span>
         <button type="button" onClick={onExamples} className="cursor-pointer text-muted hover:text-title">예시 질문</button>
       </div>
     </div>

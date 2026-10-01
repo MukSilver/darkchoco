@@ -11,6 +11,17 @@ export const KIND_LABEL: Record<Kind, string> = {
   판정: '검증 결과',
 }
 
+/** 키워드 버튼. 누르면 질문 칸에 물음 하나를 채운다. 보내지는 않는다 (고쳐서 물을 수 있게).
+ *  이름은 KIND_LABEL 과 같고, 물음은 평가 질문에서 골랐다. */
+export const STARTERS: { label: string; question: string }[] = [
+  { label: '랜섬웨어', question: '한국 조직을 공격한 랜섬웨어 그룹은 어디야?' },
+  { label: '포럼', question: '한국 자료가 자주 올라오는 포럼은 어디야?' },
+  { label: '텔레그램', question: 'Darkforums 텔레그램 채널은 규모가 어느 정도야?' },
+  { label: '유출 사고', question: '2026년 7월 의료 분야 유출 사고 중 규모가 큰 건?' },
+  { label: '활동 계정', question: '한국 데이터베이스를 사 모아 되파는 행위자가 있어?' },
+  { label: '검증 결과', question: '허위로 판정된 유출 주장이 있어?' },
+]
+
 export type Tone = 'online' | 'offline' | 'unknown' | 'plain'
 
 /** 상태 값의 색. online 초록, offline 회색, 미확인 노랑 (피그마 「상태 표시」). 그 밖의 값은 글자만. */

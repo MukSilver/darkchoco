@@ -6,6 +6,7 @@ import type { ApiError, DoneKind, PreparedAnswer, Sentence, Source } from './typ
 export type Phase = 'received' | 'searching' | 'writing' | 'done' | 'error'
 
 export interface Turn {
+  id: string                   // 답 한 건의 이름. 지난 질문에 같은 답을 두 번 넣지 않으려고 쓴다
   question: string
   phase: Phase
   text: string                 // 흘러 들어오는 글 (끝나기 전)
@@ -19,8 +20,10 @@ export interface Turn {
   seconds: number | null
 }
 
+const newId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+
 const blank = (question: string): Turn => ({
-  question, phase: 'received', text: '', sentences: [], sources: [], kind: null, createdAt: null,
+  id: newId(), question, phase: 'received', text: '', sentences: [], sources: [], kind: null, createdAt: null,
   piiMasked: false, truncated: false, error: null, seconds: null,
 })
 
@@ -37,9 +40,15 @@ export function useAsk() {
   const showPrepared = useCallback((a: PreparedAnswer) => {
     abort.current?.abort()
     setTurn({
-      ...blank(a.question), phase: 'done', sentences: a.answer, sources: a.sources, kind: 'prepared',
+      ...blank(a.question), id: `prepared:${a.question}`, phase: 'done', sentences: a.answer, sources: a.sources, kind: 'prepared',
       createdAt: a.created_at, text: a.answer.map((s) => s.text).join(' '),
     })
+  }, [])
+
+  /** 지난 질문. 그때 받은 답을 그대로 다시 보여 준다. 서버를 부르지 않는다. */
+  const restore = useCallback((t: Turn) => {
+    abort.current?.abort()
+    setTurn(t)
   }, [])
 
   /** 새 질문. */
@@ -77,5 +86,5 @@ export function useAsk() {
     }
   }, [])
 
-  return { turn, start, showPrepared, reset }
+  return { turn, start, showPrepared, restore, reset }
 }

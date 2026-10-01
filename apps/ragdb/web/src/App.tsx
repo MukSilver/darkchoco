@@ -7,7 +7,11 @@ import { Answer, Progress } from './components/Answer'
 import { AskBoxAnswer, AskBoxHome } from './components/AskBox'
 import { Banner, Header } from './components/Header'
 import type { ServerState } from './components/Header'
+import { HistoryPanel } from './components/HistoryPanel'
 import { DocView, SourcePanel, useDoc } from './components/SourcePanel'
+import { useHistory } from './history'
+import type { Past } from './history'
+import { STARTERS } from './lib/labels'
 import type { Answers, Current, PreparedAnswer } from './types'
 import { useAsk } from './useAsk'
 
@@ -22,12 +26,27 @@ function parse(pathname: string): Route {
 
 const CONTACT = import.meta.env.VITE_CONTACT_EMAIL as string | undefined
 
+/** 화면 너비 조건이 맞는가. 바뀌면 다시 그린다. */
+function useMedia(query: string) {
+  const [on, setOn] = useState(() => matchMedia(query).matches)
+  useEffect(() => {
+    const m = matchMedia(query)
+    const f = () => setOn(m.matches)
+    m.addEventListener('change', f)
+    return () => m.removeEventListener('change', f)
+  }, [query])
+  return on
+}
+
 export default function App() {
   const [route, setRoute] = useState<Route>(() => parse(location.pathname))
   const [current, setCurrent] = useState<Current | null>(null)
   const [answers, setAnswers] = useState<Answers | null>(null)
   const [server, setServer] = useState<ServerState>('loading')
-  const { turn, start, showPrepared, reset } = useAsk()
+  const { turn, start, showPrepared, restore, reset } = useAsk()
+  const hist = useHistory()
+  const [drawer, setDrawer] = useState(false)        // 좁은 화면의 지난 질문 서랍
+  const roomy = useMedia('(min-width: 1360px)')      // 출처 패널과 지난 질문을 함께 펴도 되는 너비
   const [open, setOpen] = useState<{ n: number; documentId: string; chunkId: string | null } | null>(null)
   const [human, setHuman] = useState(false)          // 서버가 사람 확인을 켰는가
   const [checking, setChecking] = useState(false)    // 사람 확인을 기다리는 중
@@ -64,7 +83,19 @@ export default function App() {
     if (turn?.phase === 'error' && turn.error?.code === 'budget') setServer('budget')
   }, [turn])
 
+  // 끝난 답은 지난 질문에 쌓는다. 오류는 쌓지 않는다
+  const addPast = hist.add
+  const version = current?.version ?? null
+  useEffect(() => {
+    if (turn?.phase === 'done') addPast(turn, version)
+  }, [turn, version, addPast])
+
   const home = () => { reset(); setOpen(null); go('/') }
+  const past = (p: Past) => {
+    setOpen(null)
+    if (route.page !== 'ask') go('/')
+    restore(p.turn)
+  }
   const ask = async (q: string) => {
     if (checking) return
     setOpen(null)
@@ -87,9 +118,19 @@ export default function App() {
 
   return (
     <div className="flex h-full flex-col">
-      <Header version={current?.version ?? null} server={server} onHome={home} />
+      <Header version={version} server={server} onHome={home} history={hist.list.length} onHistory={() => setDrawer(true)} />
       <Banner server={server} />
       <div className="flex min-h-0 flex-1">
+        <HistoryPanel
+          list={hist.list}
+          activeId={route.page === 'ask' ? turn?.id ?? null : null}
+          open={hist.open && (roomy || !open)}
+          onToggle={() => hist.setOpen(!hist.open)}
+          drawer={drawer}
+          onDrawer={setDrawer}
+          onPick={past}
+          onClear={hist.clear}
+        />
         <main className="flex min-w-0 flex-1 flex-col items-center overflow-y-auto">
           {/* 사람 확인 상자가 필요할 때만 여기에 보인다 (Cloudflare Turnstile) */}
           <div className={`flex w-full max-w-[720px] flex-col gap-2 px-6 ${checking ? 'pt-6' : ''}`}>
@@ -140,6 +181,13 @@ function Home({ server, answers, onAsk, onExample }: {
   server: ServerState; answers: Answers | null; onAsk: (q: string) => void; onExample: (a: PreparedAnswer) => void
 }) {
   const examples = answers?.answers ?? []
+  const draft = useState('')
+  const box = useRef<HTMLTextAreaElement>(null)
+  const locked = server === 'off' || server === 'budget'
+  const fill = (q: string) => {
+    draft[1](q)
+    box.current?.focus()
+  }
   return (
     <div className="flex w-full max-w-[720px] flex-1 flex-col gap-10 px-6 pt-[88px] pb-6 max-sm:pt-12">
       <div className="flex flex-col gap-[14px]">
@@ -147,11 +195,30 @@ function Home({ server, answers, onAsk, onExample }: {
         <p className="max-w-[520px] text-[16px] leading-[1.65] text-muted">조사 기록 안에서만 답하고, 문장마다 출처를 붙입니다. 근거가 없으면 없다고 답합니다.</p>
       </div>
       <div className="flex w-full flex-col gap-[10px]">
-        <AskBoxHome server={server} onSubmit={onAsk} />
+        <AskBoxHome server={server} onSubmit={onAsk} draft={draft} inputRef={box} />
         <p className="px-[6px] text-[13px] leading-[1.6] text-faint">
           <span className="font-medium text-muted">물을 수 있는 것</span> 분야 · 시기 · 장소(포럼, 텔레그램, 랜섬웨어) · 행위자. 피해 조직의 이름으로는 찾을 수 없어요.
         </p>
       </div>
+      {/* 키워드 버튼. 무엇을 물을지 모를 때 누르면 질문 칸에 물음 하나가 채워진다 */}
+      <section className="-mt-4 flex w-full flex-col gap-3" aria-label="키워드로 시작하기">
+        <h2 className="text-[12px] leading-none font-medium tracking-[1.2px] text-muted">키워드로 시작하기</h2>
+        <div className="flex flex-wrap gap-2">
+          {STARTERS.map((k) => (
+            <button
+              key={k.label}
+              type="button"
+              disabled={locked}
+              onClick={() => fill(k.question)}
+              title={k.question}
+              className="flex items-center gap-[7px] rounded-full border border-line-card bg-chip px-[13px] py-2 text-[13.5px] leading-none whitespace-nowrap text-body transition-colors enabled:cursor-pointer enabled:hover:border-accent/45 enabled:hover:text-accent-strong disabled:opacity-45"
+            >
+              <span className="size-[6px] shrink-0 rounded-full bg-accent" />
+              {k.label}
+            </button>
+          ))}
+        </div>
+      </section>
       {examples.length > 0 && (
         <section className="flex w-full flex-col gap-3" aria-label="예시 질문">
           <h2 className="text-[12px] leading-none font-medium tracking-[1.2px] text-muted">예시 질문</h2>
