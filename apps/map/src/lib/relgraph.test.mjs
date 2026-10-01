@@ -173,6 +173,28 @@ test('확대해도 1단계 라벨이 바깥 선 라벨에 밀리지 않는다', 
   assert.deepEqual(ids(placeLabels(list, 125, [])), ['inner']);
 });
 
+test('only 를 주면 배율과 상관없이 부른 선과 강조 · 고른 선만 단다 (팀 피드백 1)', () => {
+  const list = spread().map((c) => (c.id === 'f' ? { ...c, force: true } : c));
+  // 아무것도 안 부르면 고른 선만 — 기본으로 숨긴다
+  assert.deepEqual(ids(placeLabels(list, 100, [], { only: new Set() })), ['f']);
+  // 배율이 커도 마찬가지다 — 9/28 규칙이면 200% 에서 여덟 다 단다
+  assert.deepEqual(ids(placeLabels(list, 200, [], { only: new Set() })), ['f']);
+  // 부른 선은 바깥 선이어도, 건수가 작아도 단다
+  assert.deepEqual(ids(placeLabels(list, 50, [], { only: new Set(['d', 'o2']) })), ['d', 'f', 'o2']);
+});
+
+test('부른 라벨은 이름이나 다른 라벨을 못 피해도 단다 — 피할 자리가 있으면 그리로', () => {
+  const name = { x: -80, y: -20, w: 160, h: 40 };
+  const m = cand('m', 1, { spots: [{ x: 0, y: 0 }, { x: 0, y: 10 }] });
+  assert.deepEqual(placeLabels([m], 100, [name], { only: new Set(['m']) }).get('m'), { x: 0, y: 0 });
+  const movable = cand('m', 1, { spots: [{ x: 0, y: 0 }, { x: 0, y: 200 }] });
+  assert.deepEqual(placeLabels([movable], 100, [name], { only: new Set(['m']) }).get('m'), { x: 0, y: 200 });
+  // 둘을 같이 부르면 라벨끼리는 피해 본다
+  const two = [cand('a', 5, { x: 0 }), cand('b', 4, { spots: [{ x: 10, y: 0 }, { x: 10, y: 60 }] })];
+  const got = placeLabels(two, 100, [], { only: new Set(['a', 'b']) });
+  assert.deepEqual(got.get('b'), { x: 10, y: 60 });
+});
+
 test('범례 밀기 — 범례 밑으로 들어간 만큼, 오른쪽이 넘치지 않을 만큼만', () => {
   const vb = { w: 1000, h: 620 };
   // 판 크기를 모르면 안 민다
