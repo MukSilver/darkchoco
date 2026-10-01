@@ -442,6 +442,19 @@
   --t-island-actor-side: #26282a; /* Initial Access Brokers */
 }
 /*
+ * 영토 경계 — 같은 섬 안의 영토를 가르는 선. **섬 색에 흰색을 많이 섞은 연한 선이다** (2026-10-01 팀
+ * 피드백 3 — 「첫 화면에서 섬이 한 덩어리로 보인다. 세계 지도의 국경처럼 연한 선으로 나눠 달라」).
+ * 9/29 에는 옆면(한 단계 진한) 색이었는데, 칸마다 그어진 어두운 칸 선(`--t-border-hex`)과 같은
+ * 어두운 쪽이라 첫 화면에서 영토 경계가 칸 선에 묻혔다. 밝은 선은 칸 선과 갈려 경계만 떠 보인다
+ */
+:root {
+  --t-island-forum-edge: color-mix(in srgb, var(--t-island-forum) 30%, #ffffff);
+  --t-island-ransomware-edge: color-mix(in srgb, var(--t-island-ransomware) 30%, #ffffff);
+  --t-island-telegram-edge: color-mix(in srgb, var(--t-island-telegram) 30%, #ffffff);
+  --t-island-actor-edge: color-mix(in srgb, var(--t-island-actor) 30%, #ffffff);
+}
+
+/*
  * 마우스를 올린 영토 윗면. **섬 색에 흰색을 섞어 밝힌다** (2026-09-28 최현서 6번 — 전에는
  * 섬 색 90% + 옆면 10% 라 원래 색과 거의 같아 바로 알아채기 어려웠다). 테두리는 아래
  * `--t-hex-hover-edge` 다. 고른 영토는 채움을 안 바꾸고 `--t-hex-selected-edge` 윤곽선으로

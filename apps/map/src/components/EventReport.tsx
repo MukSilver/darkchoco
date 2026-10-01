@@ -185,7 +185,9 @@ export default function EventReport({
           <div className="flex flex-wrap gap-s2">
             {model.chips.map((c) => (
               <Chip key={c.label} tone={c.tone}>
-                {c.tag ? <span className="font-mono font-semibold">{c.label}</span> : c.label}
+                {/* 사건 번호 칩은 작게 남긴다 — 국민일보 · 팀이 「이 사건」 을 가리킬 때 쓴다. 목록 줄에서는 뺐다
+                    (2026-10-01 팀 피드백 4 「사건 목록의 내부 ID 제거」) */}
+                {c.tag ? <span className="font-mono text-[10px]">{c.label}</span> : c.label}
               </Chip>
             ))}
           </div>
@@ -227,7 +229,6 @@ export default function EventReport({
                         {x.title}
                         <span className="text-label"> · {x.place}</span>
                       </span>
-                      <span className="shrink-0 font-mono text-[10px] text-label">{x.id}</span>
                       {x.conf && <Chip tone={CONF_CHIP[x.conf]}>{CONF_LABEL[x.conf]}</Chip>}
                     </button>
                   </li>
@@ -244,7 +245,6 @@ export default function EventReport({
                         {r.route}
                         <span className="text-label"> · {r.kind}</span>
                       </span>
-                      <span className="shrink-0 font-mono text-[10px] text-label">{r.id}</span>
                       <Chip tone={CONF_CHIP[r.conf]}>{CONF_LABEL[r.conf]}</Chip>
                       <span aria-hidden className="shrink-0 text-[11px] text-label">
                         관계 탭 ›
