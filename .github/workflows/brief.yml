@@ -1,0 +1,100 @@
+name: 디코 아침 브리핑
+
+# 지난 하루 수집 DB 에 새로 들어온 사건을 디스코드 브리핑 채널에 한 번 올립니다 (2026-10-01).
+# 코드와 까닭은 `skills/collect/brief.py` 에 있습니다.
+#
+# ## 지금은 손으로만 돕니다
+#
+# 올리는 시각과 문안(목록 · 집계 꼴)은 최현서가 정합니다. 정한 뒤에 schedule 을 더합니다.
+# 기본은 **보내지 않습니다.** 보내지 않는 판은 문안 건수를 세고 웹후크가 브리핑 채널을 가리키는지만 봅니다.
+#
+# ## 보내기 전에 웹후크를 확인합니다
+#
+# 웹후크 주소를 GET 하면 디스코드가 그 웹후크의 채널 번호를 돌려줍니다(글은 안 올라감). 브리핑 채널이
+# 아니면 보내지 않고 실패로 끝냅니다. 9/22 에 받은 옛 웹후크는 다른 채널이었습니다.
+#
+# ## 로그에는 건수와 「맞음 / 틀림」 만
+#
+# 레포가 공개라 Actions 로그를 누구나 봅니다. `--요약만` 을 빼지 마십시오. 웹후크 주소는 비밀값으로만
+# 넘기고 어디에도 찍지 않습니다. 문안 미리보기는 노션 토큰이 있는 PC 에서 `python skills/collect/brief.py` 로 봅니다.
+#
+# ## 넣어야 하는 비밀값 둘
+#
+#   NOTION_TOKEN      노션 통합 토큰(읽기만 씁니다)
+#   DISCORD_WEBHOOK   브리핑 채널 웹후크 주소
+
+on:
+  workflow_dispatch:
+    # 입력 이름은 영문 · 숫자 · - · _ 만 됩니다 (places.yml 머리말)
+    inputs:
+      send:
+        description: "디코에 실제로 보낼지. 끄면 문안 건수와 웹후크 채널 확인만"
+        type: boolean
+        default: false
+      form:
+        description: "문안 꼴. list = 줄마다 번호 · 업종 · 국가 · 규모, summary = 차 있는 칸으로 묶어 셈"
+        type: choice
+        default: list
+        options: [list, summary]
+
+concurrency:
+  group: brief
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  brief:
+    name: 브리핑
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 부품 설치
+        run: pip install -e packages
+
+      - name: 비밀값을 파일로
+        env:
+          TOKEN_VALUE: ${{ secrets.NOTION_TOKEN }}
+        run: |
+          set -e
+          mkdir -p "$RUNNER_TEMP/cfg"
+          if [ -z "$TOKEN_VALUE" ]; then
+            echo "::error::NOTION_TOKEN 이 없습니다"
+            exit 1
+          fi
+          printf '%s' "$TOKEN_VALUE" > "$RUNNER_TEMP/cfg/notion_token"
+          chmod 600 "$RUNNER_TEMP/cfg/notion_token"
+
+      - name: 브리핑
+        env:
+          NOTION_TOKEN_FILE: ${{ runner.temp }}/cfg/notion_token
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          SEND: ${{ inputs.send && 'yes' || 'no' }}
+          FORM_INPUT: ${{ inputs.form }}
+        run: |
+          set -e
+          case "${FORM_INPUT:-list}" in
+            summary) FORM=집계 ;;
+            *)       FORM=목록 ;;
+          esac
+          if [ -z "$DISCORD_WEBHOOK" ]; then
+            echo "::error::DISCORD_WEBHOOK 이 없습니다"
+            exit 1
+          fi
+          # **--요약만 을 빼지 마십시오.** 머리말에 이유가 있습니다
+          if [ "$SEND" = "yes" ]; then
+            python skills/collect/brief.py --요약만 --꼴 "$FORM" --보낸다
+          else
+            python skills/collect/brief.py --요약만 --꼴 "$FORM" --확인
+          fi
+
+      - name: 뒷정리
+        if: always()
+        run: rm -f "$RUNNER_TEMP/cfg/notion_token"
