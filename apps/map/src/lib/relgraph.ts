@@ -1,6 +1,10 @@
 /**
  * 관계도(`RelationTab`) 판 규칙 — 배율에 따른 라벨 고르기, 노드 이름 자리, 범례를 피하는 밀기.
  *
+ * **관계도는 지금 라벨을 기본으로 숨긴다** (2026-10-01 팀 피드백 1, `placeLabels` 의 `only`). 마우스를
+ * 올린 선 · 노드에 닿은 선과 강조 · 고른 선만 단다. 아래 배율 규칙은 `only` 없이 부를 때의 것으로,
+ * 기본안이 바뀌면 되돌릴 수 있게 남겨 둔다.
+ *
  * **라벨은 배율에 따라 단다** (2026-09-28 최현서 5번 — 「선과 관계는 늘 보이되, 확대했을 땐
  * 모두 보이고, 줄였을 땐 주요 관계만 글자를 표시」).
  *
@@ -159,15 +163,22 @@ function hits(a: Rect, b: Rect): boolean {
 
 /**
  * 라벨 자리 정하기. 단 라벨의 id → 알약 가운데 자리. 없는 id 는 안 단다.
- * `obstacles` 는 노드 이름 · 육각형 자리(`nodeBoxes`), `fit` 은 `labelScale` 과 같다
+ * `obstacles` 는 노드 이름 · 육각형 자리(`nodeBoxes`), `fit` 은 `labelScale` 과 같다.
+ *
+ * **`only` 를 주면 배율 규칙 대신 그 선만 단다** (2026-10-01 팀 피드백 1 — 「글자가 선을 가려 한눈에
+ * 안 들어온다」). 관계도는 기본으로 라벨을 숨기고, 마우스를 올린 선 · 노드에 닿은 선을 여기 넘긴다.
+ * 강조 · 고른 선(`force`)은 그대로 늘 단다. 부른 라벨은 겹쳐도 단다 — 사람이 보려고 올린 것이다.
+ * `only` 가 없으면 9/28 배율 규칙(`wantedLabels`) 그대로다
  */
 export function placeLabels(
   cands: readonly LabelCand[],
   zoom: number,
   obstacles: readonly Rect[],
-  { fit = 1, top = LABEL_TOP }: { fit?: number; top?: number } = {},
+  { fit = 1, top = LABEL_TOP, only }: { fit?: number; top?: number; only?: ReadonlySet<string> } = {},
 ): Map<string, Pt> {
-  const want = wantedLabels(cands, zoom, top);
+  const want = only
+    ? new Set(cands.filter((c) => c.force || only.has(c.id)).map((c) => c.id))
+    : wantedLabels(cands, zoom, top);
   const major = topInner(cands, top);
   const k = labelScale(zoom, fit);
   const m = LABEL_GAP * k;
@@ -203,7 +214,8 @@ export function placeLabels(
     // 라벨끼리만 피해 단다. 100% 이상에서 걸치게 두면 2단계에서 라벨이 노드 이름 · 부제를 덮었다
     // (2026-09-28 최현서 5번이 짚은 바로 그것) — 확대하면 사이가 벌어져 다시 보인다
     if (!at && c.force) at = c.spots[0];
-    if (!at && zoom < 100 && major.has(c.id)) at = c.spots.find(clearOfLabels);
+    if (!at && only?.has(c.id)) at = c.spots.find(clearOfLabels) ?? c.spots[0];
+    if (!at && !only && zoom < 100 && major.has(c.id)) at = c.spots.find(clearOfLabels);
     if (!at) continue;
     placed.push(box(at));
     out.set(c.id, at);

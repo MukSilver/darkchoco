@@ -307,6 +307,9 @@ export default function RelationTab(p: RelationTabProps) {
   const edgeHover = (id: string) => ({
     onMouseEnter: () => setHoverEdge(id),
     onMouseLeave: () => setHoverEdge((h) => (h === id ? null : h)),
+    // 라벨을 기본으로 숨기므로 키보드로 옮겨 온 선도 라벨을 부른다 (2026-10-01 팀 피드백 1)
+    onFocus: () => setHoverEdge(id),
+    onBlur: () => setHoverEdge((h) => (h === id ? null : h)),
   });
 
   /*
@@ -465,6 +468,20 @@ export default function RelationTab(p: RelationTabProps) {
   );
   // 단 라벨의 id → 알약 가운데. 없는 선은 라벨 없이 선만 그린다. 늘 다는 선은 위 `focus` 와
   // 같은 규칙(고른 선이 먼저, 없으면 강조한 선)으로 id 에서 바로 고른다
+  // 라벨은 기본으로 숨긴다 — 마우스를 올린 선 · 노드에 닿은 선만 부른다 (2026-10-01 팀 피드백 1 「글자가 선을
+  // 가려 한눈에 안 들어온다」, `placeLabels` 의 `only`). 고른 · 강조한 선은 아래 `force` 로 늘 단다. 키보드로
+  // 선에 옮겨 와도 부른다(`edgeHover` 의 onFocus)
+  const shown = useMemo(
+    () =>
+      new Set(
+        graph.edges
+          .filter(
+            ({ v }) => v.rel.id === hoverEdge || (!!hoverNode && (v.rel.from === hoverNode || v.rel.to === hoverNode)),
+          )
+          .map(({ v }) => v.rel.id),
+      ),
+    [graph, hoverEdge, hoverNode],
+  );
   const labelAt = useMemo(() => {
     const drawn = (id: string | null) => !!id && graph.edges.some((e) => e.v.rel.id === id);
     const focusId = drawn(p.selected) ? p.selected : drawn(p.highlight) ? p.highlight : null;
@@ -480,9 +497,9 @@ export default function RelationTab(p: RelationTabProps) {
       })),
       view.zoom,
       obstacles,
-      { fit },
+      { fit, only: shown },
     );
-  }, [graph, obstacles, view.zoom, fit, p.selected, p.highlight, p.pair, p.center]);
+  }, [graph, obstacles, view.zoom, fit, p.selected, p.highlight, p.pair, p.center, shown]);
   // 알약은 확대해도 그림만큼 커지지 않는다 — 화면에서 설계 크기에 닿으면 그 크기를 지킨다 (`labelScale`)
   const labelK = labelScale(view.zoom, fit);
   // 범례를 피해 민다. 밀기로 모자라면(섬 간 보기 · 2단계처럼 넓은 그래프) 범례 오른쪽에 맞게 조금 줄인다
@@ -735,9 +752,9 @@ export default function RelationTab(p: RelationTabProps) {
                 {/*
                   선 라벨 — 「Recruitment 14건」 (설계서 4.3.6). 고른 선은 칠하고, 강조한 선은
                   테두리만 진하게 한다 (4.3.3 ① 「'Recruitment 14건' 강조 테두리」).
-                  어느 선에 라벨을 달지는 배율이 정한다 (`placeLabels` — 100% 는 지금까지처럼 1단계 선 전부,
-                  줄이면 건수 상위만, 125% 이상은 2단계 바깥 선까지. 강조 · 고른 선은 늘). 라벨끼리나
-                  노드 이름과 겹치면 선을 따라 옮기고, 못 옮기면 뺀다 (2026-09-28 최현서 5번).
+                  라벨은 기본으로 숨기고 마우스를 올린 선 · 노드에 닿은 선과 강조 · 고른 선에만 단다
+                  (2026-10-01 팀 피드백 1, 위 `shown`). 9/28 에는 배율이 정했다(100% 는 1단계 선 전부, 줄이면
+                  건수 상위만, 125% 이상은 바깥 선까지 — 최현서 5번). 라벨끼리나 노드 이름과 겹치면 선을 따라 옮긴다.
                   마우스를 올리면(선이든 라벨이든) 바탕이 한 단계 밝고 테두리가 관계 색이 된다 (최현서 1번)
                 */}
                 {graph.edges.map(({ v }) => {
@@ -1165,13 +1182,9 @@ export default function RelationTab(p: RelationTabProps) {
                   ? "선택한 관계선 강조 · 나머지 흐리게 · 근거 팝오버"
                   : hi
                     ? "강조된 관계선 클릭 → 근거(Evidence) 표시"
-                    : view.zoom < 100
-                      ? "줄여 보는 중 · 건수가 큰 관계만 라벨 표시"
-                      : p.depth === 2
-                        ? view.zoom >= 125
-                          ? `2단계 확장 · 바깥 선 라벨까지 표시${rest ? ` · 건수가 적은 ${rest}곳은 뺐습니다` : ""}`
-                          : `2단계 확장 · 바깥 선은 누르거나 125% 이상 확대하면 라벨 표시${rest ? ` · 건수가 적은 ${rest}곳은 뺐습니다` : ""}`
-                        : "관계선 클릭 → 근거(Evidence) 표시"}
+                    : p.depth === 2
+                      ? `2단계 확장 · 선이나 노드에 마우스를 올리면 관계 이름${rest ? ` · 건수가 적은 ${rest}곳은 뺐습니다` : ""}`
+                      : "선이나 노드에 마우스를 올리면 관계 이름 · 선 클릭 → 근거(Evidence)"}
           </span>
         </div>
 
