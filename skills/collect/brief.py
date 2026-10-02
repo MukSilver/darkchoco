@@ -1,16 +1,21 @@
-"""디코 아침 브리핑 — 지난 하루 수집 DB 에 새로 들어온 사건을 웹후크로 한 번 올린다 (2026-10-01).
+"""디코 아침 브리핑 — 지난 하루 수집 DB 에 새로 들어온 사건을 웹후크로 한 번 올린다 (2026-10-01 · 꼴 10/02).
 
-    python skills/collect/brief.py                    미리보기. 문안을 화면에 낸다 — 이 PC 에서만 쓴다
+    python skills/collect/brief.py                    미리보기. 문안을 화면에 낸다 — **이 PC 에서만 쓴다(조직명이 나온다)**
     python skills/collect/brief.py --요약만            공개 로그용. 건수만 낸다
     python skills/collect/brief.py --확인              웹후크가 브리핑 채널을 가리키는지 본다(글은 안 올라감)
     python skills/collect/brief.py --보낸다            확인이 맞을 때만 한 번 보낸다
-    python skills/collect/brief.py --꼴 집계           대안 꼴. 줄마다 적지 않고 차 있는 칸으로 묶어 센다
 
-## 무엇을 싣나
+## 무엇을 싣나 — 최현서 10/02
 
-수집 DB 에서 **지난 24시간 안에 만든 줄**이다. 줄마다 사건 ID · 산업 분야 · 국가 · 주장 규모만 싣는다.
-**조직명 · 자료 제목 · 게시자 핸들 · 주소는 안 싣는다.** 사건 X(한국과 무관)는 건수에만 넣고 목록에서 뺀다.
-디스코드 한 메시지 상한(2000자) 안에 들도록 목록을 자르고 「외 N건」 을 붙인다.
+수집 DB 에서 **지난 24시간 안에 만든 줄**을 한 줄에 하나씩 「LEAK-번호 · 조직명 · 행위자 · 한국 여부」 로 싣는다.
+
+    조직명     「대상 조직」 칸 그대로. 브리핑 채널은 팀원만 본다(9/22 「디코에는 기업명이 나가도 된다」).
+               지도 · 레포에는 여전히 안 낸다. **개인 이름으로 보이는 값은 가린다.** 이미 * 로 가린 값은 그대로 둔다
+    행위자     게시자 핸들, 없으면 게시처(랜섬 그룹 · 포럼). 가해 쪽 이름만 — 알림을 전한 텔레그램 채널은 안 싣는다
+    한국 여부  「한국 관련」 이 직접 · 간접일 때만 「한국 직접」 · 「한국 간접」. 미확인이면 칸째 뺀다
+
+검토 상태는 안 싣는다(새로 들어온 줄은 늘 미검토). 사건 X 는 목록에서 뺀다. 디스코드 한 메시지 상한(2000자) 안에
+들도록 앞쪽 줄만 싣고 「그 밖 N건은 대시보드에서」 로 줄인다. 디스코드 서식 글자(* _ ~ ` | >)는 무력화한다.
 
 ## 웹후크는 먼저 확인한다
 
@@ -23,21 +28,21 @@
 `hub/` 는 조사 대상에 요청을 보내지 못하게 지킨다(test_직접호출금지). 디스코드 웹후크는 조사 대상이 아니라 우리 채널이라
 그 지킴과 상관이 없지만, 예외를 늘리지 않으려고 디스코드로 보내는 다른 도구(`notify.py`) 옆에 둔다.
 
-## 값은 어디에도 찍지 않는다
+## 값 · 문안은 로그에 찍지 않는다
 
 웹후크 주소는 환경변수 `DISCORD_WEBHOOK`(Actions 비밀값) 또는 `~/.config/darkchoco/discord_webhook` 에서 읽는다.
-**레포가 공개라 Actions 로그를 누구나 본다.** 로그에는 건수와 「맞음 / 틀림」 만 찍는다(`--요약만`).
-보낼 때 멘션을 끈다(allowed_mentions). 노션 칸 글에 `@everyone` 이 있어도 아무도 안 불린다.
+**레포가 공개라 Actions 로그를 누구나 본다.** 로그에는 건수와 「맞음 / 틀림」 만 찍는다(`--요약만`). 보내기가 실패해도
+상태 코드나 예외 이름만 찍고 보낸 내용은 안 찍는다. 보낼 때 멘션을 끈다(allowed_mentions).
 """
 from __future__ import annotations
 
 import argparse
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.request
-from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -53,6 +58,35 @@ KST = timezone(timedelta(hours=9))
 상한 = 1900                    # 디스코드 한 메시지 2000자. 여유를 둔다
 TIMEOUT = 15
 웹후크파일 = Path.home() / ".config" / "darkchoco" / "discord_webhook"
+가림말 = "(개인 이름으로 보여 가림)"
+
+# 핸들 자리에 적힌 「없음」 표시. hub/events/publisher.py 의 자리표시와 같다
+자리표시 = frozenset({"-", "--", "?", "n/a", "na", "none", "null", "unknown", "없음", "미상", "해당 없음"})
+
+# 조직으로 읽히는 말. 이 말이 있으면 사람 이름으로 안 본다. **모르면 가리는 쪽**이라 넓게 잡는다
+_조직말 = re.compile(
+    r"(?i)\b(inc|llc|llp|lp|ltd|ltda|limited|corp|corporation|co|company|companies|gmbh|kg|ohg|ag|se|sa|sas|sarl|srl|"
+    r"spa|bv|nv|plc|pty|kk|oy|ab|as|aps|cv|group|holding|holdings|hospital|clinic|klinik|medical|medicine|health|"
+    r"healthcare|dental|dentistry|pharmacy|pharma\w*|lab|labs|laboratory|laboratories|university|universidad|"
+    r"universit\w+|college|school|schule|academy|institute|instituto|bank|banco|capital|finance|financial|insurance|"
+    r"service|services|servicios|solutions|soluciones|systems|sistemas|tech|technology|technologies|technik|"
+    r"software|data|digital|network|networks|industries|industry|industrial|manufacturing|foundation|stiftung|"
+    r"association|verein|society|center|centre|centro|zentrum|partners|partner|law|legal|attorneys|lawyers|"
+    r"rechtsanw\w+|logistics|logistik|transport\w*|shipping|freight|energy|power|electric|motors|automotive|auto|"
+    r"international|global|worldwide|enterprises|enterprise|consulting|consultants|beratung|studio|agency|church|"
+    r"city|county|state|department|ministry|government|council|municipality|gemeinde|club|hotel|hotels|restaurant|"
+    r"store|stores|shop|market|supply|supplies|distribution|distributors|wholesale|retail|trading|construction|"
+    r"builders|bau|engineering|architects|architekten|realty|properties|property|immobilien|estate|management|"
+    r"media|press|publishing|verlag|marketing|design|security|science|sciences|research|biotech|bio|chemical|"
+    r"chemicals|foods|food|farm|farms|agro|steel|metal|metals|plastics|textile|apparel|fashion|travel|tours|"
+    r"airlines|air|marine|mining|oil|gas|water|telecom|communications|cpa|accounting|steuerberatung|praxis|pc|pa|"
+    r"dds|md|psc)\b")
+_한글조직말 = re.compile(
+    r"(주식회사|\(주\)|㈜|유한|병원|의원|치과|한의원|약국|학교|대학|학원|회사|그룹|센터|협회|재단|은행|공사|공단|연구소|"
+    r"연구원|법인|조합|상사|산업|전자|건설|무역|물산|교회|시청|구청|군청|보험|증권|카드|캐피탈|저축|신협|농협|수협|"
+    r"몰|마트|스토어|쇼핑|미디어|방송|신문|엔터|테크|솔루션|시스템|네트웍스|소프트|코리아|월드|글로벌|인터내셔널)")
+_사람토막 = re.compile(r"(?:Dr|Mr|Mrs|Ms|Prof)\.?|[A-Z][a-z]+(?:[-'][A-Z][a-z]+)*\.?|[A-Z]\.")
+_서식 = re.compile(r"([\\*_~`|>])")
 
 
 def 글자(p: dict, 칸: str) -> str:
@@ -87,71 +121,76 @@ def 새줄들(n: Notion, 지금: datetime, 시간: int = 24) -> list[dict]:
         cursor = res.get("next_cursor")
 
 
+def 개인이름같나(값: str) -> bool:
+    """대상 조직 칸 값이 개인 이름으로 보이나. **모르면 가리는 쪽이다.** 이미 * 로 가린 값은 그대로 둔다."""
+    s = (값 or "").strip()
+    if not s or "*" in s:
+        return False
+    if "@" in s:
+        return True                                     # 메일 주소
+    if re.search(r"\d", s) or re.search(r"[A-Za-z0-9-]\.[A-Za-z]{2,}\b", s):
+        return False                                    # 숫자 · 도메인이 있으면 조직
+    if re.fullmatch(r"[가-힣]{2,4}", s):
+        return not _한글조직말.search(s)                  # 「홍길동」 꼴
+    토막 = s.replace(",", " ").split()
+    if 2 <= len(토막) <= 4 and not _조직말.search(s):
+        return all(_사람토막.fullmatch(t) for t in 토막)  # 「John A. Smith」 꼴
+    return False
+
+
+def 무력화(s: str) -> str:
+    """디스코드 서식 글자를 글자 그대로 보이게 한다. * 로 가린 이름이 굵은 글씨가 되지 않게."""
+    return _서식.sub(r"\\\1", s)
+
+
+def 행위자(p: dict) -> str:
+    """게시자 핸들, 없으면 게시처. 텔레그램 주소 꼴은 알림을 전한 채널이라 안 싣는다."""
+    for 칸 in ("게시자 핸들", "게시처"):
+        v = 글자(p, 칸)
+        낮춤 = v.lower()
+        if not v or 낮춤 in 자리표시 or "t.me/" in 낮춤 or "telegram.me/" in 낮춤:
+            continue
+        return v
+    return ""
+
+
+def 한줄(p: dict) -> tuple[str, bool]:
+    """(목록 한 줄, 개인 이름이라 가렸나)."""
+    조직 = 글자(p, "대상 조직")
+    가림 = 개인이름같나(조직)
+    칸 = [글자(p, "사건 ID") or "번호 없음",
+         가림말 if 가림 else 무력화(조직 or "조직명 빈칸"),
+         무력화(행위자(p) or "행위자 모름")]
+    한국 = 글자(p, "한국 관련")
+    if 한국 in ("직접", "간접"):
+        칸.append(f"한국 {한국}")
+    return "· " + " · ".join(칸), 가림
+
+
 def 문안(줄들: list[dict], 지금: datetime) -> tuple[str, dict]:
-    """(디스코드에 올릴 글, 건수). **조직명 · 제목 · 핸들 · 주소는 안 싣는다.**"""
-    셈 = Counter(글자(p, "검토 여부") or "빈칸" for p in 줄들)
+    """(디스코드에 올릴 글, 건수). 한 줄에 「LEAK-번호 · 조직명 · 행위자 · 한국 여부」. 건수에는 이름이 없다."""
+    X = sum(1 for p in 줄들 if 글자(p, "검토 여부") == "사건 X")
     목록 = [p for p in 줄들 if 글자(p, "검토 여부") != "사건 X"]
-    머리 = (f"**다크초코 아침 브리핑** · {지금.astimezone(KST):%m/%d %H:%M} KST 기준 · 지난 24시간\n"
-          f"새로 들어온 사건 {len(줄들)}건 — "
-          + " · ".join(f"{k} {v}" for k, v in sorted(셈.items(), key=lambda kv: (-kv[1], kv[0]))))
-    if not 줄들:
-        return 머리 + "\n새로 들어온 사건이 없습니다.", dict(셈)
-    꼬리말 = "\n(사건 X 는 목록에서 뺐습니다. 조직명은 대시보드에서 봅니다)"
+    머리 = (f"**다크초코 아침 브리핑** · {지금.astimezone(KST):%m/%d %H:%M} KST 기준 · "
+          f"지난 24시간 새로 들어온 사건 {len(목록)}건" + (f" (한국과 무관한 {X}건은 뺐습니다)" if X else ""))
+    셈 = {"새 줄": len(줄들), "사건 X": X, "목록": len(목록), "실린 줄": 0, "가린 줄": 0}
+    if not 목록:
+        return 머리 + "\n새로 들어온 사건이 없습니다.", 셈
     줄글 = []
     for p in 목록:
-        칸 = [글자(p, "사건 ID") or "번호 없음", 글자(p, "산업 분야") or "업종 —",
-             글자(p, "국가") or "국가 —", (글자(p, "주장 규모") or "규모 —")[:40]]
-        줄글.append("· " + " · ".join(칸))
+        글, 가림 = 한줄(p)
+        줄글.append(글)
+        셈["가린 줄"] += int(가림)
     본문 = 머리 + "\n"
-    실린 = 0
     for i, 줄 in enumerate(줄글):
         남은 = len(줄글) - i
-        뒤 = f"\n외 {남은 - 1}건" if 남은 > 1 else ""
-        if len(본문) + len(줄) + 1 + len(뒤) + len(꼬리말) > 상한:
-            본문 += f"외 {남은}건\n"
+        꼬리 = f"그 밖 {남은 - 1}건은 대시보드에서" if 남은 > 1 else ""
+        if len(본문) + len(줄) + 1 + len(꼬리) > 상한:
+            본문 += f"그 밖 {남은}건은 대시보드에서\n"
             break
         본문 += 줄 + "\n"
-        실린 += 1
-    return 본문.rstrip("\n") + 꼬리말, dict(셈) | {"목록": len(줄글), "실린 줄": 실린}
-
-
-def 번호범위(번호들: list[str]) -> str:
-    """LEAK-344 ~ LEAK-370 (27건) 꼴. 번호를 못 읽으면 앞의 몇 개만."""
-    수 = sorted(int(x.split("-")[-1]) for x in 번호들 if x.split("-")[-1].isdigit())
-    if not 수:
-        return "—"
-    머리 = 번호들[0].rsplit("-", 1)[0] if "-" in 번호들[0] else "LEAK"
-    if len(수) == 1:
-        return f"{머리}-{수[0]}"
-    빈 = (수[-1] - 수[0] + 1) - len(수)
-    return f"{머리}-{수[0]} ~ {머리}-{수[-1]}" + (f" 사이 {len(수)}건(빈 번호 {빈})" if 빈 else f" ({len(수)}건)")
-
-
-def 집계문안(줄들: list[dict], 지금: datetime, 위: int = 5) -> tuple[str, dict]:
-    """대안 꼴. 줄마다 적지 않고 차 있는 칸으로 묶어 센다. 게시처는 가해 쪽(랜섬 그룹 · 포럼) 이름이다."""
-    셈 = Counter(글자(p, "검토 여부") or "빈칸" for p in 줄들)
-    머리 = (f"**다크초코 아침 브리핑** · {지금.astimezone(KST):%m/%d %H:%M} KST 기준 · 지난 24시간\n"
-          f"새로 들어온 사건 {len(줄들)}건 — "
-          + " · ".join(f"{k} {v}" for k, v in sorted(셈.items(), key=lambda kv: (-kv[1], kv[0]))))
-    if not 줄들:
-        return 머리 + "\n새로 들어온 사건이 없습니다.", dict(셈)
-
-    def 줄(이름, c: Counter) -> str:
-        항목 = c.most_common()
-        글 = " · ".join(f"{k} {v}" for k, v in 항목[:위])
-        return f"{이름}  {글}" + (f" · 그 밖 {sum(v for _, v in 항목[위:])}" if len(항목) > 위 else "")
-
-    찬 = sum(1 for p in 줄들 if 글자(p, "산업 분야") or 글자(p, "국가") or 글자(p, "주장 규모"))
-    글 = "\n".join([
-        머리,
-        "사건 번호  " + 번호범위([글자(p, "사건 ID") for p in 줄들 if 글자(p, "사건 ID")]),
-        줄("한국 관련", Counter(글자(p, "한국 관련") or "빈칸" for p in 줄들)),
-        줄("들어온 길", Counter(글자(p, "소스") or "빈칸" for p in 줄들)),
-        줄("게시처", Counter(글자(p, "게시처") or "빈칸" for p in 줄들)),
-        f"업종 · 국가 · 규모가 찬 줄  {찬} / {len(줄들)}",
-        "(조직명은 대시보드에서 봅니다)",
-    ])
-    return 글[:상한], dict(셈)
+        셈["실린 줄"] += 1
+    return 본문.rstrip("\n"), 셈
 
 
 def 웹후크() -> str:
@@ -178,7 +217,7 @@ def 채널확인(주소: str, opener=None) -> bool:
     except urllib.error.HTTPError as e:
         print(f"웹후크 확인 실패: HTTP {e.code}")
         return False
-    except (urllib.error.URLError, OSError, ValueError) as e:
+    except Exception as e:  # noqa: BLE001  예외 글에 주소가 섞일 수 있어 이름만 찍는다
         print(f"웹후크 확인 실패: {type(e).__name__}")
         return False
     맞음 = str(정보.get("channel_id") or "") == 브리핑채널
@@ -187,6 +226,7 @@ def 채널확인(주소: str, opener=None) -> bool:
 
 
 def 보내기(주소: str, 글: str, opener=None) -> bool:
+    """한 번 보낸다. **실패해도 보낸 내용과 디스코드가 돌려준 본문은 안 찍는다** — 상태 코드와 예외 이름만."""
     몸 = {"content": 글, "allowed_mentions": {"parse": []}}
     req = urllib.request.Request(주소, method="POST", data=json.dumps(몸).encode("utf-8"),
                                  headers={"Content-Type": "application/json", "User-Agent": "darkchoco-brief"})
@@ -196,7 +236,7 @@ def 보내기(주소: str, 글: str, opener=None) -> bool:
     except urllib.error.HTTPError as e:
         print(f"보내기 실패: HTTP {e.code}")
         return False
-    except (urllib.error.URLError, OSError) as e:
+    except Exception as e:  # noqa: BLE001  예외 글에 보낸 내용이 섞일 수 있어 이름만 찍는다
         print(f"보내기 실패: {type(e).__name__}")
         return False
     print(f"보냄 · {len(글)}자" if ok else "보내기 실패")
@@ -208,16 +248,13 @@ def main(argv=None) -> int:
     ap.add_argument("--요약만", action="store_true", help="건수만 낸다. 공개 로그에서 쓴다")
     ap.add_argument("--확인", action="store_true", help="웹후크가 브리핑 채널을 가리키는지 본다. 틀리면 실패")
     ap.add_argument("--보낸다", action="store_true", help="확인이 맞을 때만 한 번 보낸다")
-    ap.add_argument("--꼴", choices=("목록", "집계"), default="목록",
-                    help="목록: 줄마다 번호 · 업종 · 국가 · 규모(기본안). 집계: 차 있는 칸으로 묶어 센다(대안)")
     a = ap.parse_args(argv)
 
     지금 = datetime.now(KST)
     줄들 = 새줄들(Notion(verbose=False), 지금)
-    글, 셈 = (집계문안 if a.꼴 == "집계" else 문안)(줄들, 지금)
+    글, 셈 = 문안(줄들, 지금)
     if a.요약만:
-        print("새로 들어온 줄 %d · %s · 문안 %d자" % (
-            len(줄들), " · ".join(f"{k} {v}" for k, v in 셈.items()), len(글)))
+        print("%s · 문안 %d자" % (" · ".join(f"{k} {v}" for k, v in 셈.items()), len(글)))
     else:
         print(글)
     if not (a.확인 or a.보낸다):
