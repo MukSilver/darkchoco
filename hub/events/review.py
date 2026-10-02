@@ -52,6 +52,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from collections import Counter
 from datetime import datetime, timedelta, timezone
@@ -111,11 +112,28 @@ def 자리(a) -> Path:
     return p
 
 
-def 날자리(a) -> Path:
-    날 = a.날 or datetime.now(KST).strftime("%Y%m%d")
-    p = 자리(a) / 날
-    p.mkdir(exist_ok=True)
-    return p
+def _판번호(d: Path) -> int:
+    return int(d.name.split("-")[1]) if "-" in d.name else 1
+
+
+def 날자리(a, 새판: bool = False) -> Path:
+    """그날 판 폴더. **하루에 여러 판이 돌 수 있다**(사람이 시킨 판과 07:12 예약 판). 그래서 YYYYMMDD,
+    YYYYMMDD-2, … 로 나눈다. 「대상」(새판=True)은 마지막 판에 이미 결과가 있으면 새 판을 연다.
+    「결과」 · 「반영」 은 그날 마지막 판을 쓴다. 한 폴더를 두 판이 같이 쓰면 앞 판의 「적용됨」 기록에
+    걸려 뒤 판이 멈춘다. --날 을 주면 그 폴더를 그대로 쓴다."""
+    if a.날:
+        p = 자리(a) / a.날
+        p.mkdir(exist_ok=True)
+        return p
+    날 = datetime.now(KST).strftime("%Y%m%d")
+    판들 = sorted((d for d in 자리(a).glob(날 + "*") if d.is_dir() and re.fullmatch(날 + r"(-\d+)?", d.name)),
+               key=_판번호)
+    마지막 = 판들[-1] if 판들 else None
+    if 마지막 is None or (새판 and (마지막 / "사건검토_결과.json").is_file()):
+        n = 1 if 마지막 is None else _판번호(마지막) + 1
+        마지막 = 자리(a) / (날 if n == 1 else "%s-%d" % (날, n))
+        마지막.mkdir(exist_ok=True)
+    return 마지막
 
 
 def 읽기(p: Path, 기본):
@@ -160,7 +178,7 @@ def 재료(p: dict) -> dict:
 
 
 def 대상(a) -> int:
-    d = 날자리(a)                     # 자리부터 본다. 레포 안이면 노션에 붙기 전에 멈춘다
+    d = 날자리(a, 새판=True)           # 자리부터 본다. 레포 안이면 노션에 붙기 전에 멈춘다
     기록 = 읽기(자리(a) / "판정기록.json", {})
     뺄 = 보류(a)
     줄들 = 노션().query_all(수집DS())
