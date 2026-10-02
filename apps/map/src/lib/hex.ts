@@ -325,16 +325,17 @@ export function growIslands(
     };
   });
 
-  // 씨앗에서 가까운 칸부터 먹되 잡음을 섞는다. 안 섞으면 섬이 정확한 원이 되어
+  // 씨앗에서 가까운 칸부터 먹되 잡음을 조금 섞는다. 안 섞으면 섬이 정확한 원이 되어
   // 지도가 아니라 벤 다이어그램처럼 보인다. 잡음 폭을 거리에 비례시켜야
-  // 씨앗 근처가 너덜거리지 않는다.
+  // 씨앗 근처가 너덜거리지 않는다. 폭은 거리의 ±5% 다 — 옛 지도에서 옮긴 ±17% 는 가장자리가
+  // 너무 들쭉날쭉했다 (2026-10-03 최현서 — 「섬 모양도 모여 있는 게 좋겠다」)
   const costOf = (g: Growth, c: number, r: number): number => {
     const k = key(c, r);
     const memo = g.cost.get(k);
     if (memo !== undefined) return memo;
     const p = cellToXY(c, r, 1);
     const d = dist(p.x, p.y, g.sx, g.sy);
-    const v = d + wobble(c, r, g.idx * 977 + 13) * Math.max(1.6, d * 0.34);
+    const v = d + wobble(c, r, g.idx * 977 + 13) * Math.max(0.5, d * 0.1);
     g.cost.set(k, v);
     return v;
   };
@@ -409,11 +410,15 @@ function fillShortfall(state: Growth[], taken: Set<string>, cols: number, rows: 
  * 섬이 받은 칸을 영토들에게 비중대로 나눈다.
  *
  * **영토는 자기 섬 밖으로 나가면 안 된다.** 나가면 색이 같은 칸이 남의 섬에
- * 박혀 「섬 = 성격이 같은 영토의 묶음」(설계서 2.1)이 깨진다. allow 집합으로 막는다.
+ * 박혀 「섬 = 성격이 같은 영토의 묶음」(설계서 2.1)이 깨진다. 섬이 받은 칸만 나눈다.
  *
- * 큰 영토부터 놓고, 씨앗은 **이미 찬 칸에서 가장 먼 빈 칸**으로 고른다. 그래야
- * 영토들이 섬 안에서 서로 밀어내며 골고루 퍼진다. 가운데부터 차례로 놓으면
- * 나중 영토가 초승달 모양으로 가장자리를 두른다.
+ * **영토마다 칸이 한 덩어리로 모인다** (2026-10-03 최현서 — 「각 이름표 셀도 전부 모여 있는 게
+ * 좋겠다」). 섬을 영토 무리 둘로 비중대로 자르고, 자른 쪽을 다시 자르기를 되풀이한다(`bisect`).
+ * 자를 때마다 두 쪽이 다 이어지는 방향을 고른다. 전에는 영토마다 씨앗에서 번지며 남의 영토 칸을
+ * 건너 자랐고, 모자라면 떨어진 빈 칸으로 채워 한 영토가 여러 조각으로 흩어졌다.
+ *
+ * 섬보다 많이 달라고 하면 큰 영토부터 섬 크기까지만 준다. 덜 달라고 하면 섬 가운데에
+ * 모인 칸만 쓰고 가장자리를 비운다.
  *
  * @param islandCells 그 섬이 받은 칸 (growIslands 의 결과 한 항목)
  * @param want        영토 id → 받을 칸 수 (설계서 3.4 의 H(T))
@@ -425,97 +430,128 @@ export function splitTerritories(
   const out: Record<string, Cell[]> = {};
   for (const id of Object.keys(want)) out[id] = [];
 
-  const allow = new Set(islandCells.map(([c, r]) => key(c, r)));
   // 입력 차례에 기대지 않도록 칸도 한 번 세운다. 같은 칸 묶음이면 순서가 달라도
   // 같은 그림이 나와야 한다.
-  const cells = [...islandCells].sort((a, b) => a[1] - b[1] || a[0] - b[0]);
-  const used = new Set<string>();
+  const cells = [...islandCells].sort(byRowCol);
+  if (cells.length === 0) return out;
 
+  // 받을 칸 — 큰 영토부터, 섬 크기를 넘지 않게
+  const items: { id: string; need: number }[] = [];
+  let left = cells.length;
   for (const { id, need } of demandOrder(want)) {
-    const free = cells.filter(([c, r]) => !used.has(key(c, r)));
-    if (free.length === 0) continue;
-
-    const seed = pickSeed(free, cells, used);
-    const got = growWithin(seed, need, used, allow);
-    for (const [c, r] of got) used.add(key(c, r));
-
-    // 앞 영토가 섬을 갈라놓아 씨앗에서 못 닿는 주머니가 생길 수 있다.
-    // 그때만 남은 칸에서 가까운 것을 채운다. 섬 밖으로는 여전히 안 나간다.
-    if (got.length < need) {
-      const seedXY = cellToXY(seed[0], seed[1], 1);
-      const pool = cells
-        .filter(([c, r]) => !used.has(key(c, r)))
-        .map((cell) => {
-          const p = cellToXY(cell[0], cell[1], 1);
-          return { cell, d: dist(p.x, p.y, seedXY.x, seedXY.y) };
-        })
-        .sort((a, b) => a.d - b.d || a.cell[1] - b.cell[1] || a.cell[0] - b.cell[0]);
-      for (const { cell } of pool) {
-        if (got.length >= need) break;
-        used.add(key(cell[0], cell[1]));
-        got.push(cell);
-      }
-    }
-    out[id] = got;
+    const n = Math.min(need, left);
+    if (n <= 0) continue;
+    items.push({ id, need: n });
+    left -= n;
   }
+  const total = cells.length - left;
+  bisect(total < cells.length ? core(cells, total) : cells, items, out);
   return out;
 }
 
-/** 이미 찬 칸에서 가장 먼 빈 칸. 아직 아무것도 안 찼으면 한가운데 것. */
-function pickSeed(free: Cell[], cells: Cell[], used: Set<string>): Cell {
-  const fallback = free[Math.floor(free.length / 2)] ?? free[0];
-  if (used.size === 0) return fallback as Cell;
-
-  const usedXY = cells.filter(([c, r]) => used.has(key(c, r))).map(([c, r]) => cellToXY(c, r, 1));
-  let best: Cell = free[0] as Cell;
-  let bestD = -1;
-  for (const cell of free) {
-    const p = cellToXY(cell[0], cell[1], 1);
-    let d = Infinity;
-    for (const u of usedXY) d = Math.min(d, dist(p.x, p.y, u.x, u.y));
-    if (d > bestD) {
-      bestD = d;
-      best = cell;
-    }
-  }
-  return best;
+function byRowCol(a: Cell, b: Cell): number {
+  return a[1] - b[1] || a[0] - b[0];
 }
 
 /**
- * 씨앗에서 이웃으로 번지며 count 칸을 먹는다. allow 밖으로는 안 나간다.
- *
- * 이미 임자가 있는 칸이라도 이웃은 큐에 넣는다. 그래야 장애물을 돌아 자란다.
+ * 자르는 방향 여섯 — 육각 격자의 축(0° · 60° · 120°)과 그 사이(30° · 90° · 150°).
+ * cos · sin 대신 정확한 값을 쓴다. Math.sqrt 는 IEEE-754 가 결과를 한 값으로 못박는다
  */
-function growWithin(seed: Cell, count: number, used: Set<string>, allow: Set<string>): Cell[] {
+const S3 = Math.sqrt(3) / 2;
+const CUT_DIRS: readonly [number, number][] = [
+  [1, 0],
+  [0.5, S3],
+  [-0.5, S3],
+  [0, 1],
+  [S3, 0.5],
+  [-S3, 0.5],
+];
+
+/** 칸 묶음이 이웃으로 다 이어져 있나 */
+function joined(cells: readonly Cell[]): boolean {
+  if (cells.length <= 1) return true;
+  const set = new Set(cells.map(([c, r]) => key(c, r)));
+  const seen = new Set([key(cells[0][0], cells[0][1])]);
+  const stack: Cell[] = [cells[0]];
+  while (stack.length > 0) {
+    const [c, r] = stack.pop() as Cell;
+    for (const [nc, nr] of neighbors(c, r)) {
+      const k = key(nc, nr);
+      if (set.has(k) && !seen.has(k)) {
+        seen.add(k);
+        stack.push([nc, nr]);
+      }
+    }
+  }
+  return seen.size === cells.length;
+}
+
+/**
+ * 영토 무리를 둘로 나눠 칸을 비중대로 자르고, 양쪽을 다시 자른다.
+ *
+ * 무리는 큰 영토부터 합이 작은 쪽에 넣어 고르게 나눈다. 칸은 방향마다 그 방향으로 늘어놓아
+ * 앞 무리 몫만큼 자른다. 덩어리가 길게 뻗은 방향부터 보고, 두 쪽이 다 이어지는 첫 방향을 쓴다
+ * — 그래야 영토가 길쭉해지지 않고 한 덩어리로 남는다. 어느 방향도 안 되면(섬 가장자리가 아주
+ * 들쭉날쭉할 때) 가장 길게 뻗은 방향으로 자른다
+ */
+function bisect(cells: Cell[], items: { id: string; need: number }[], out: Record<string, Cell[]>): void {
+  if (items.length === 0 || cells.length === 0) return;
+  if (items.length === 1) {
+    out[items[0].id] = [...cells].sort(byRowCol);
+    return;
+  }
+  const a: typeof items = [];
+  const b: typeof items = [];
+  let sa = 0;
+  let sb = 0;
+  for (const it of items) {
+    if (sa <= sb) {
+      a.push(it);
+      sa += it.need;
+    } else {
+      b.push(it);
+      sb += it.need;
+    }
+  }
+  const xy = new Map(cells.map((cell) => [key(cell[0], cell[1]), cellToXY(cell[0], cell[1], 1)]));
+  const at = (cell: Cell) => xy.get(key(cell[0], cell[1])) as Point;
+  const orders = CUT_DIRS.map(([ux, uy]) => {
+    const along = (cell: Cell) => at(cell).x * ux + at(cell).y * uy;
+    const across = (cell: Cell) => -at(cell).x * uy + at(cell).y * ux;
+    const sorted = [...cells].sort((p, q) => along(p) - along(q) || across(p) - across(q) || byRowCol(p, q));
+    return { sorted, spread: along(sorted[sorted.length - 1]) - along(sorted[0]) };
+  });
+  // 길게 뻗은 방향부터. 같으면 표의 차례
+  const ranked = orders.map((o, i) => ({ ...o, i })).sort((p, q) => q.spread - p.spread || p.i - q.i);
+  const pick = ranked.find((o) => joined(o.sorted.slice(0, sa)) && joined(o.sorted.slice(sa))) ?? ranked[0];
+  bisect(pick.sorted.slice(0, sa), a, out);
+  bisect(pick.sorted.slice(sa), b, out);
+}
+
+/**
+ * 섬 가운데에 모인 n 칸. 영토 합이 섬보다 작을 때 쓴다. 무게중심에서 가까운 칸부터 이웃으로
+ * 번져 모으므로 이어진 한 덩어리다
+ */
+function core(cells: Cell[], n: number): Cell[] {
+  const pts = cells.map((cell) => cellToXY(cell[0], cell[1], 1));
+  const mx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+  const my = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+  const allow = new Map(cells.map((cell, i) => [key(cell[0], cell[1]), { cell, d: dist(pts[i].x, pts[i].y, mx, my) }]));
+  const order = [...allow.values()].sort((p, q) => p.d - q.d || byRowCol(p.cell, q.cell));
+  const start = order[0].cell;
   const got: Cell[] = [];
-  if (count <= 0) return got;
-
-  const s = cellToXY(seed[0], seed[1], 1);
-  const memo = new Map<string, number>();
-  const costOf = (c: number, r: number): number => {
-    const k = key(c, r);
-    const m = memo.get(k);
-    if (m !== undefined) return m;
-    const p = cellToXY(c, r, 1);
-    const v = dist(p.x, p.y, s.x, s.y);
-    memo.set(k, v);
-    return v;
-  };
-
-  const front: Cell[] = [seed];
-  const seen = new Set([key(seed[0], seed[1])]);
-
-  while (front.length > 0 && got.length < count) {
-    front.sort((a, b) => costOf(a[0], a[1]) - costOf(b[0], b[1]) || a[1] - b[1] || a[0] - b[0]);
-    const cur = front.shift();
-    if (!cur) break;
-    const k = key(cur[0], cur[1]);
-    if (allow.has(k) && !used.has(k)) got.push(cur);
-    for (const nb of neighbors(cur[0], cur[1])) {
-      const nk = key(nb[0], nb[1]);
-      if (allow.has(nk) && !seen.has(nk)) {
-        seen.add(nk);
-        front.push(nb);
+  const seen = new Set([key(start[0], start[1])]);
+  const front: { cell: Cell; d: number }[] = [order[0]];
+  while (front.length > 0 && got.length < n) {
+    front.sort((p, q) => p.d - q.d || byRowCol(p.cell, q.cell));
+    const cur = front.shift() as { cell: Cell; d: number };
+    got.push(cur.cell);
+    for (const [nc, nr] of neighbors(cur.cell[0], cur.cell[1])) {
+      const k = key(nc, nr);
+      const hit = allow.get(k);
+      if (hit && !seen.has(k)) {
+        seen.add(k);
+        front.push(hit);
       }
     }
   }
