@@ -80,7 +80,7 @@ def channels(given: str) -> list[str]:
 def one(f: Fetcher, s: Store, chan: str, today: str, dry: bool) -> dict:
     """채널 하나. 못 본 것도 왜인지 적어 돌려준다."""
     r = {"채널": chan, "글": 0, "새 것": 0, "종류": {}, "막힌 것": "", "쪽": 0}
-    # 첫 쪽이 꽉 찼고 12시간 안이면 거슬러 한 쪽씩 더 읽는다(채널당 8쪽). telegram_web.쪽들 (2026-09-29)
+    # 첫 쪽이 꽉 찼고 12시간 안이면 거슬러 한 쪽씩 더 읽는다(채널당 12쪽). telegram_web.쪽들 (2026-09-29)
     try:
         posts, why, r["쪽"] = 쪽들(f, chan)
     except Exception as e:
