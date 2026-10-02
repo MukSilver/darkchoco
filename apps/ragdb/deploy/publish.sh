@@ -3,6 +3,7 @@
 #
 #   deploy/publish.sh            지난번에 올린 판과 지금 판이 다를 때만 올린다
 #   deploy/publish.sh --force    판이 같아도 올린다 (화면 코드만 바뀌었을 때)
+#   THEME=blue deploy/publish.sh --force    남색 A안으로 구워 다른 주소(ragdb-web-blue)에 올린다. 색 안을 견주어 볼 때 쓴다
 #
 # 올리는 것: web/dist (화면) 와 그 안의 data/ (스냅샷: current.json, 지금 판 폴더).
 # 스냅샷은 snapshot.py 의 반출 관문을 통과한 것만 data/snapshot 에 있다. 여기서는 관문을 다시 보고 통과할 때만 올린다.
@@ -18,7 +19,9 @@ PY=".venv/bin/python"
 SNAP="data/snapshot"
 [ -f "$SNAP/current.json" ] || { echo "스냅샷이 없다 ($SNAP/current.json). refresh.py 를 먼저 돌린다"; exit 1; }
 VERSION="$("$PY" -c "import json,sys; print(json.load(open(sys.argv[1], encoding='utf-8'))['version'])" "$SNAP/current.json")"
-LAST_FILE="data/published_version.txt"
+# 색 안. 비우면 기본(B안, ragdb-web). 값을 주면 그 색으로 구워 ragdb-web-{값} 에 올리고, 올린 판도 따로 적는다
+THEME="${THEME:-}"
+LAST_FILE="data/published_version${THEME:+_$THEME}.txt"
 LAST="$(cat "$LAST_FILE" 2>/dev/null || true)"
 
 if [ "${1:-}" != "--force" ] && [ "$VERSION" = "$LAST" ]; then
@@ -39,13 +42,13 @@ set +a
 
 cd web
 [ -d node_modules ] || npm ci
-npm run build
+VITE_THEME="$THEME" npm run build
 rm -rf dist/data
 mkdir -p dist/data
 cp "../$SNAP/current.json" dist/data/
 cp -r "../$SNAP/$VERSION" "dist/data/$VERSION"
-npx wrangler deploy
+npx wrangler deploy ${THEME:+--name "ragdb-web-$THEME"}
 cd ..
 
 echo "$VERSION" > "$LAST_FILE"
-echo "올렸다: 판 $VERSION"
+echo "올렸다: 판 $VERSION${THEME:+ (색 안 $THEME)}"

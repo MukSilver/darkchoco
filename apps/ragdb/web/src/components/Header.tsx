@@ -61,7 +61,7 @@ export function Banner({ server }: { server: ServerState }) {
   if (server === 'off') {
     return (
       <div className="shrink-0 border-b border-danger bg-danger px-6 py-[10px]">
-        <p className="text-[13px] leading-normal font-semibold text-[#1f0406]">지금은 새 질문을 받지 않아요. 예시 질문과 출처 원문은 그대로 볼 수 있어요.</p>
+        <p className="text-[13px] leading-normal font-semibold text-on-danger">지금은 새 질문을 받지 않아요. 예시 질문과 출처 원문은 그대로 볼 수 있어요.</p>
       </div>
     )
   }

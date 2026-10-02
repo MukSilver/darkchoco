@@ -4,8 +4,15 @@ import tailwindcss from '@tailwindcss/vite'
 
 // 화면 (설계서 「개발 스택」: React + Vite + TS + Tailwind). 개발 중에는 /api 를 질의 서버(127.0.0.1:8787)로,
 // /data 를 배치가 구운 스냅샷 폴더로 넘긴다. 배포는 Cloudflare 정적 호스팅이고 API 는 rag-api.도메인이다.
+// 색 안. 기본은 B안(라이트 블랙). VITE_THEME=blue 로 구우면 남색 A안이 된다 (src/index.css 의 [data-theme="blue"])
+const theme = process.env.VITE_THEME || 'black'
+
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    { name: 'ragdb-theme', transformIndexHtml: (html) => html.replace('<html lang="ko">', `<html lang="ko" data-theme="${theme}">`) },
+  ],
   // 작은 글꼴 조각을 CSS 안에 박지 않고 파일로 둔다. 박으면 응답 머리말의 font-src 'self' 에 막힌다 (public/_headers)
   build: { assetsInlineLimit: 0 },
   server: {
