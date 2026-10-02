@@ -38,7 +38,7 @@ import urllib.parse
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-LIMIT = 60_000          # 이보다 길면 브라우저 주소 칸에서 잘릴 수 있다
+LIMIT = 60_000          # 브라우저가 북마크에 저장하는 길이(저장길이) 기준. 넘으면 txt 를 안 쓴다
 NODE_TIMEOUT = 30
 
 # 킷 목록은 build_kit.py 가 들고 있다. 여기서 또 적지 않는다
@@ -70,6 +70,19 @@ def escape_percent(url: str) -> str:
     `%` 만 바꾸면 열한 자에 스물두 자가 는다."""
     head, code = url[:len("javascript:")], url[len("javascript:"):]
     return head + code.replace("%", "%25")
+
+
+def 저장길이(url: str) -> int:
+    """브라우저가 북마크에 저장하는 길이. **txt 길이와 다르다.**
+
+    `javascript:` 주소를 북마크에 넣을 때 브라우저는 ASCII 밖 글자를 UTF-8 퍼센트 인코딩으로 바꿔
+    저장한다. 한글 한 글자가 `%EA%B0%80` 아홉 자가 된다. 파이어폭스 · Tor Browser 는 이 길이가
+    65,536 을 넘는 북마크를 저장하지 않는다(조용히 안 들어간다).
+
+    2026-10-02 에 이것으로 물렸다. 포럼 킷 txt 는 51,148자였지만 한글이 4,021자라 저장길이가
+    82,983자였다. 조사 킷은 31,956 → 46,973 이라 들어갔다. 9/22 판 포럼 킷은 40,833 → 61,235 였다.
+    전에는 txt 길이만 LIMIT 과 견주어 경고가 안 났다."""
+    return sum(1 if 0x20 <= ord(c) <= 0x7E else len(c.encode("utf-8")) * 3 for c in url)
 
 
 def minify(src: str) -> tuple[str, str]:
@@ -186,11 +199,15 @@ def build(js: Path, do_check: bool, raw: bool = False) -> bool:
                 break
         return False
 
-    warn = "  (주소 칸에서 잘릴 수 있다)" if len(one) > LIMIT else ""
+    저장 = 저장길이(one)
+    if 저장 > LIMIT:
+        print(f"  건너뜀  브라우저가 저장하는 길이 {저장:,}자가 {LIMIT:,}자를 넘는다(txt {len(one):,}자). 옛 txt를 그대로 둔다")
+        print(f"          한글 한 글자가 저장될 때 아홉 자가 된다. 파이어폭스 · Tor 는 65,536자 넘는 북마크를 안 받는다")
+        return False
     before = len(out.read_text(encoding="utf-8")) if out.exists() else 0
     out.write_text(one, encoding="utf-8")
     delta = f"{before:,} -> " if before else ""
-    print(f"  만듦    {out.name}  {delta}{len(one):,}자  [{how}]{warn}")
+    print(f"  만듦    {out.name}  {delta}{len(one):,}자 · 저장길이 {저장:,}자  [{how}]")
     return True
 
 

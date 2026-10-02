@@ -36,6 +36,7 @@ HERE = Path(__file__).resolve().parent
 # 설치 페이지가 없는 파일을 가리켰다.
 sys.path.insert(0, str(HERE))
 from build_kit import KITS as 킷표, 킷파일           # noqa: E402
+from build_bookmarklet import 저장길이                # noqa: E402  단추 옆에 저장 길이를 보인다
 
 KITS = [(킷파일(라벨)[:-3], v["이름"], v["설명"], v["핵심"])
         for 라벨, v in 킷표.items()]
@@ -141,7 +142,7 @@ def build() -> str:
             '<span class="size">%s자</span>'
             "</div>"
             % (" core" if core else "", html.escape(code, quote=True),
-               html.escape(name), html.escape(name), d, format(len(code), ",")))
+               html.escape(name), html.escape(name), d, format(저장길이(code), ",")))
 
     return """<!doctype html>
 <html lang="ko"><head><meta charset="utf-8">
@@ -170,10 +171,10 @@ def build() -> str:
 Safer 이상이면 JS 가 꺼져서 눌러도 아무 일이 안 일어난다.
 킷을 쓸 때만 내리고 평소에는 올려 두는 편이 낫다.
 <br><br>
-<b>길이에서도 막힌다.</b> 전에 모듈 다섯을 한 벌로 묶은 킷(73,767자)이
-저장이 안 되는 것을 확인했다. 2026-09-22 에 그것을 둘로 갈랐고
-<b>지금 둘 다 6만 자 아래다.</b> 그래서 길이 벽에 안 걸린다.
-자리 시험은 되는데 킷이 안 되면 길이가 아니라 다른 문제다.
+<b>길이에서도 막힌다.</b> 브라우저는 북마크를 저장할 때 한글 한 글자를 아홉 자로 바꾼다.
+파이어폭스 · Tor Browser 는 그렇게 바꾼 길이가 65,536자를 넘으면 저장하지 않는다.
+단추 옆 숫자가 그 저장 길이다. <b>6만 자를 넘는 킷은 파이어폭스 · Tor 에 안 들어간다.</b>
+크롬은 이 상한이 없어 들어간다.
 </div>
 
 <div class="step dash">
