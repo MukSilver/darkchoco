@@ -17,6 +17,12 @@
 검토 상태는 안 싣는다(새로 들어온 줄은 늘 미검토). 사건 X 는 목록에서 뺀다. 디스코드 한 메시지 상한(2000자) 안에
 들도록 앞쪽 줄만 싣고 「그 밖 N건은 대시보드에서」 로 줄인다. 디스코드 서식 글자(* _ ~ ` | >)는 무력화한다.
 
+## 끝에 대시보드 링크 — 최현서 10/02
+
+마지막 줄에 「자세한 내용: <대시보드 주소>」 를 붙인다. 주소는 환경변수 `DASH_URL`(Actions 비밀값)에서 읽는다.
+대시보드는 비밀번호로 잠근 내부 화면이라 주소를 레포에 적지 않는다. 없거나 https 가 아니면 그 줄을 뺀다.
+주소를 <> 로 감싸 디스코드가 미리보기 카드를 붙이지 않게 한다. 로그에는 「링크 있음 / 없음」 만 찍는다.
+
 ## 웹후크는 먼저 확인한다
 
 9/22 에 받은 옛 웹후크는 브리핑 채널이 아니라 「알림」 채널을 가리켰다. 그래서 **보내기 전에 웹후크 주소를 GET 한다.**
@@ -167,15 +173,18 @@ def 한줄(p: dict) -> tuple[str, bool]:
     return "· " + " · ".join(칸), 가림
 
 
-def 문안(줄들: list[dict], 지금: datetime) -> tuple[str, dict]:
-    """(디스코드에 올릴 글, 건수). 한 줄에 「LEAK-번호 · 조직명 · 행위자 · 한국 여부」. 건수에는 이름이 없다."""
+def 문안(줄들: list[dict], 지금: datetime, 링크: str = "") -> tuple[str, dict]:
+    """(디스코드에 올릴 글, 건수). 한 줄에 「LEAK-번호 · 조직명 · 행위자 · 한국 여부」. 건수에는 이름이 없다.
+
+    링크가 있으면 끝에 「자세한 내용: <링크>」 를 붙이고, 그 길이만큼 상한에서 미리 뺀다."""
     X = sum(1 for p in 줄들 if 글자(p, "검토 여부") == "사건 X")
     목록 = [p for p in 줄들 if 글자(p, "검토 여부") != "사건 X"]
     머리 = (f"**다크초코 아침 브리핑** · {지금.astimezone(KST):%m/%d %H:%M} KST 기준 · "
           f"지난 24시간 새로 들어온 사건 {len(목록)}건" + (f" (한국과 무관한 {X}건은 뺐습니다)" if X else ""))
     셈 = {"새 줄": len(줄들), "사건 X": X, "목록": len(목록), "실린 줄": 0, "가린 줄": 0}
+    끝 = f"\n자세한 내용: <{링크}>" if 링크 else ""
     if not 목록:
-        return 머리 + "\n새로 들어온 사건이 없습니다.", 셈
+        return 머리 + "\n새로 들어온 사건이 없습니다." + 끝, 셈
     줄글 = []
     for p in 목록:
         글, 가림 = 한줄(p)
@@ -185,12 +194,18 @@ def 문안(줄들: list[dict], 지금: datetime) -> tuple[str, dict]:
     for i, 줄 in enumerate(줄글):
         남은 = len(줄글) - i
         꼬리 = f"그 밖 {남은 - 1}건은 대시보드에서" if 남은 > 1 else ""
-        if len(본문) + len(줄) + 1 + len(꼬리) > 상한:
+        if len(본문) + len(줄) + 1 + len(꼬리) + len(끝) > 상한:
             본문 += f"그 밖 {남은}건은 대시보드에서\n"
             break
         본문 += 줄 + "\n"
         셈["실린 줄"] += 1
-    return 본문.rstrip("\n"), 셈
+    return 본문.rstrip("\n") + 끝, 셈
+
+
+def 대시보드링크() -> str:
+    """대시보드 주소(Actions 비밀값 DASH_URL). 없거나 https 꼴이 아니면 빈 글자. **주소는 찍지 않는다.**"""
+    v = (os.environ.get("DASH_URL") or "").strip()
+    return v if re.fullmatch(r"https://[^\s<>]+", v) else ""
 
 
 def 웹후크() -> str:
@@ -252,9 +267,11 @@ def main(argv=None) -> int:
 
     지금 = datetime.now(KST)
     줄들 = 새줄들(Notion(verbose=False), 지금)
-    글, 셈 = 문안(줄들, 지금)
+    링크 = 대시보드링크()
+    글, 셈 = 문안(줄들, 지금, 링크)
     if a.요약만:
-        print("%s · 문안 %d자" % (" · ".join(f"{k} {v}" for k, v in 셈.items()), len(글)))
+        print("%s · 링크 %s · 문안 %d자" % (" · ".join(f"{k} {v}" for k, v in 셈.items()),
+                                        "있음" if 링크 else "없음", len(글)))
     else:
         print(글)
     if not (a.확인 or a.보낸다):

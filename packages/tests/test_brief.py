@@ -127,6 +127,41 @@ def test_새_사건이_없으면_그렇게_적는다():
     assert "새로 들어온 사건이 없습니다" in 글
 
 
+# ── 4-1. 끝에 대시보드 링크 (10/02) ──────────────────────────
+가짜대시 = "https://fake-dash.example.test"
+
+
+def test_끝에_자세한_내용_링크를_붙인다():
+    글, _ = brief.문안([_줄(1)], 지금, 가짜대시)
+    assert 글.endswith(f"\n자세한 내용: <{가짜대시}>"), 글
+    글, _ = brief.문안([], 지금, 가짜대시)
+    assert 글.endswith(f"자세한 내용: <{가짜대시}>"), "새 사건이 없어도 링크는 붙는다"
+    글, _ = brief.문안([_줄(1)], 지금)
+    assert "자세한 내용" not in 글, "링크가 없으면 줄째 뺀다"
+
+
+def test_링크를_붙여도_상한_안이고_링크가_잘리지_않는다():
+    줄들 = [_줄(i, 조직="Very Long Organisation Holdings International " * 2) for i in range(1, 200)]
+    글, 셈 = brief.문안(줄들, 지금, 가짜대시)
+    assert len(글) <= brief.상한 and 글.endswith(f"<{가짜대시}>"), len(글)
+    남은 = re.search(r"그 밖 (\d+)건은 대시보드에서", 글)
+    assert 남은 and int(남은.group(1)) == 셈["목록"] - 셈["실린 줄"], (남은, 셈)
+
+
+def test_대시보드_링크는_https_꼴만_받는다():
+    옛 = brief.os.environ.get("DASH_URL")
+    try:
+        for 값, 기대 in ((가짜대시, 가짜대시), ("  " + 가짜대시 + "\n", 가짜대시), ("", ""),
+                         ("http://fake-dash.example.test", ""), ("https://a b", ""), ("https://x>y", "")):
+            brief.os.environ["DASH_URL"] = 값
+            assert brief.대시보드링크() == 기대, 값
+    finally:
+        if 옛 is None:
+            brief.os.environ.pop("DASH_URL", None)
+        else:
+            brief.os.environ["DASH_URL"] = 옛
+
+
 # ── 5. 로그에는 건수와 맞음 / 틀림만 ─────────────────────────
 class _응답:
     def __init__(self, 몸=b"", status=200):
@@ -160,6 +195,19 @@ def test_요약만은_건수만_찍는다():
     assert r == 0 and 찍힘.startswith("새 줄 2"), 찍힘
     for 안됨 in ("LEAK-41", "Acme", "John", "FakeGroup", "직접"):
         assert 안됨 not in 찍힘, (안됨, 찍힘)
+
+
+def test_요약만은_대시보드_주소를_안_찍고_있음만_찍는다():
+    옛새줄, 옛노션, 옛링크 = brief.새줄들, brief.Notion, brief.대시보드링크
+    brief.새줄들 = lambda n, 지금, 시간=24: [_줄(41)]
+    brief.Notion = lambda verbose=False: None
+    brief.대시보드링크 = lambda: 가짜대시
+    try:
+        r, 찍힘 = _찍힌것(brief.main, ["--요약만"])
+    finally:
+        brief.새줄들, brief.Notion, brief.대시보드링크 = 옛새줄, 옛노션, 옛링크
+    assert r == 0 and "링크 있음" in 찍힘, 찍힘
+    assert "fake-dash" not in 찍힘 and "https" not in 찍힘, 찍힘
 
 
 def test_웹후크_채널이_맞으면_맞음_틀리면_틀림만_찍는다():
@@ -226,11 +274,18 @@ def test_틀린_채널이면_보내지_않는다():
     assert r == 1 and 부른것 == [], (r, 부른것)
 
 
-def test_워크플로는_손으로만_돌고_기본은_안_보낸다():
+def test_워크플로는_매일_9시에_보내고_손으로는_기본이_안_보낸다():
     글 = (ROOT / ".github" / "workflows" / "brief.yml").read_text(encoding="utf-8")
-    assert "schedule:" not in 글, "예약은 최현서가 시각을 정한 뒤에 넣는다"
-    assert re.search(r"send:\s*\n(?:.*\n)*?\s*default: false", 글), "보내기는 기본으로 꺼져 있어야 한다"
+    # 10/02 최현서 「매일 아침 9시」. 예약이 2~6시간 늦게 깨서 05:00 KST 에 걸고 09:00 KST 까지 기다린다
+    assert re.search(r'(?m)^\s+- cron: "0 20 \* \* \*"$', 글), "예약은 20:00 UTC = 05:00 KST"
+    assert "if: github.event_name == 'schedule'" in 글 and "tomorrow 00:00" in 글, "예약 판은 09:00 KST 까지 기다린다"
+    분 = int(re.search(r"timeout-minutes:\s*(\d+)", 글).group(1))
+    assert 분 > 4 * 60, "05:00 에 바로 깨면 4시간을 기다린다. 그 전에 잘리면 안 된다"
+    assert "SEND: ${{ (github.event_name == 'schedule' || inputs.send) && 'yes' || 'no' }}" in 글, "예약 판은 보낸다"
+    assert re.search(r"send:\s*\n(?:.*\n)*?\s*default: false", 글), "손으로 돌릴 때 보내기는 기본으로 꺼져 있어야 한다"
     assert "DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}" in 글
+    assert "DASH_URL: ${{ secrets.DASH_URL }}" in 글, "대시보드 주소는 비밀값으로만 넘긴다"
+    assert "workers.dev" not in 글
     부르기 = re.findall(r"(?m)^\s+python skills/collect/brief\.py[^\n]*", 글)
     assert 부르기 and all("--요약만" in x for x in 부르기), 부르기
     assert "echo \"$DISCORD_WEBHOOK" not in 글 and "echo $DISCORD_WEBHOOK" not in 글
