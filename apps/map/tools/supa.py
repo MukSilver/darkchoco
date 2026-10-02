@@ -6,13 +6,18 @@
 (`NOTION_TOKEN_산출물.txt`)과 같은 꼴이다.
 
     ~/.config/darkchoco/SUPABASE_URL_산출물.txt
-    ~/.config/darkchoco/SUPABASE_SERVICE_KEY_산출물.txt
+    ~/.config/darkchoco/SUPABASE_MAP_READER_KEY_산출물.txt
+
+**열쇠는 읽기 전용 역할 `map_reader` 것이다** (2026-10-03 — 원천을 Supabase 로 옮기며 바꿈). darkchoco-data 의
+`migrations/0009_map_reader.sql` 이 만든 역할로, core 의 지도용 표 열둘과 map 표를 읽기만 한다. 열쇠는 그 저장소의
+`scripts/mint-key.mjs` 로 만든다(프로젝트 JWT 비밀값이 있어야 한다). 전권 열쇠(service_role)는 core 스키마
+권한이 없어 줄을 못 읽는다(42501).
 
 다른 자리에 두었으면 `DC_SUPABASE_URL_FILE` · `DC_SUPABASE_KEY_FILE` 로 알려 준다.
 **두 파일을 한 파일로 합치지 않는다** — 열쇠 사본이 늘어난다 (2026-09-23 최현서).
 
-**`SUPABASE_SERVICE_KEY` 는 전권 열쇠다.** 모든 표를 쓰고 지울 수 있고 권한
-설정(RLS)도 건너뛴다. 그래서 셋을 지킨다.
+읽기 전용 열쇠여도 셋을 지킨다. 9/23 연결 1단계에서는 전권 열쇠(모든 표를 쓰고 지울 수 있고
+권한 설정 RLS 도 건너뛴다)를 썼다.
 
   1. **GET 만 보낸다.** 요청을 만드는 곳이 `get()` 하나이고 메서드가 박혀 있다.
      POST · PATCH · DELETE 를 보내는 코드를 두지 않는다
@@ -20,8 +25,7 @@
      프로젝트 주소도 안 찍는다
   3. **열쇠 파일이 저장소 안에 있으면 멈춘다.** 저장소는 공개될 수 있다
 
-**나중에 읽기 전용 열쇠로 바꾼다** (2026-09-23 최현서). 그때는
-`KEY_FILE_DEFAULT` 한 줄과 열쇠 파일만 바꾼다.
+GitHub Actions 는 비밀값 `MAP_SUPABASE_URL` · `MAP_SUPABASE_KEY` 를 파일로 써서 위 환경변수로 알려 준다(`map.yml`).
 """
 
 from __future__ import annotations
@@ -40,9 +44,9 @@ CONFIG = Path.home() / ".config" / "darkchoco"
 URL_FILE_ENV = "DC_SUPABASE_URL_FILE"
 KEY_FILE_ENV = "DC_SUPABASE_KEY_FILE"
 
-#: 환경변수가 없을 때 보는 자리. 읽기 전용 열쇠로 바꿀 때 둘째 줄을 바꾼다
+#: 환경변수가 없을 때 보는 자리. 열쇠는 읽기 전용 역할(map_reader) 것이다
 URL_FILE_DEFAULT = CONFIG / "SUPABASE_URL_산출물.txt"
-KEY_FILE_DEFAULT = CONFIG / "SUPABASE_SERVICE_KEY_산출물.txt"
+KEY_FILE_DEFAULT = CONFIG / "SUPABASE_MAP_READER_KEY_산출물.txt"
 
 TIMEOUT = 20
 RETRIES = 2

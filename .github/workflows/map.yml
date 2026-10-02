@@ -1,6 +1,6 @@
 name: 지도 갱신
 
-# 노션에서 지도를 굽고 Cloudflare 에 배포합니다 (apps/map). **로컬 PC 가 필요 없습니다.**
+# 노션(또는 팀 Supabase)에서 지도를 굽고 Cloudflare 에 배포합니다 (apps/map). **로컬 PC 가 필요 없습니다.**
 #
 #   굽기(노션 읽기) → 구운 파일 확인 → bake:check · 시험 → 빌드 → 배포 → 배포 확인
 #
@@ -37,12 +37,27 @@ name: 지도 갱신
 #   DC_MAP_ADDRESS_DS       주소 변경 이력 DB ┘ (없어도 굽습니다. 포럼 옛 주소 별칭이 빕니다)
 #
 # 레포 Settings → Secrets and variables → Actions 에서 넣습니다.
+#
+# ## 원천 — 노션 또는 Supabase (2026-10-03 최현서)
+#
+# 레포 변수(Variables) `MAP_SOURCE` 가 정합니다. 없으면 `notion` 이고, `supabase` 로 두면 팀 Supabase
+# (darkchoco-data)의 core 표에서 굽습니다. 굽기 규칙 · 관문 · 반출 검사는 같습니다(tools/supa_source.py).
+# **되돌릴 때는 변수를 `notion` 으로 바꾸거나 지우면 됩니다.** Supabase 로 굽을 때는 비밀값 둘이 더 있어야 합니다.
+#
+#   MAP_SUPABASE_URL        darkchoco-data 프로젝트 주소
+#   MAP_SUPABASE_KEY        읽기 전용 역할 map_reader 열쇠 (darkchoco-data scripts/mint-key.mjs 로 만듦)
+#
+# 정제 배치(darkchoco-data refine.yml)가 끝나면 보내는 신호(repository_dispatch · data-updated)로도 굽습니다.
+# 그래야 Supabase 가 새로 바뀐 직후에 굽습니다. 예약 실행은 신호가 안 왔을 때를 받칩니다.
 
 on:
   schedule:
     # 하루 두 번. 게시처 조사(places.yml, UTC 03 · 15시, 최대 두 시간)가 끝난 뒤이고,
     # 수집(collect.yml, UTC 00 · 12시) 뒤입니다. KST 로는 14:30 · 02:30 입니다
     - cron: "30 5,17 * * *"
+  # 정제 배치가 끝나면 오는 신호. 가이드라인(guide.yml)과 같은 신호를 받습니다
+  repository_dispatch:
+    types: [data-updated]
   workflow_dispatch:
     # 입력 이름은 영문만 됩니다 (collect.yml 주석, 2026-09-08)
     inputs:
@@ -62,7 +77,9 @@ env:
   # 배포 주소. README 와 같습니다. 배포 확인 단계가 씁니다
   MAP_URL: https://darkchoco-map.h42381309.workers.dev
   # 예약 실행에는 inputs 가 없어 비므로 event_name 으로 가릅니다 (places.yml 과 같은 방식)
-  DEPLOY: ${{ github.event_name == 'schedule' && 'yes' || (inputs.deploy && 'yes' || 'no') }}
+  DEPLOY: ${{ (github.event_name == 'schedule' || github.event_name == 'repository_dispatch') && 'yes' || (inputs.deploy && 'yes' || 'no') }}
+  # 원천. 레포 변수가 없으면 노션이다 (위 「원천」)
+  MAP_SOURCE: ${{ vars.MAP_SOURCE || 'notion' }}
 
 jobs:
   bake-deploy:
@@ -96,6 +113,8 @@ jobs:
         # dc_notion 이 NOTION_TOKEN_FILE 을 먼저 봅니다 (packages/dc_notion/token.py)
         env:
           TOKEN_VALUE: ${{ secrets.MAP_NOTION_TOKEN }}
+          SUPA_URL: ${{ secrets.MAP_SUPABASE_URL }}
+          SUPA_KEY: ${{ secrets.MAP_SUPABASE_KEY }}
         run: |
           set -e
           mkdir -p "$RUNNER_TEMP/cfg"
@@ -105,11 +124,23 @@ jobs:
           fi
           printf '%s' "$TOKEN_VALUE" > "$RUNNER_TEMP/cfg/notion_token"
           chmod 600 "$RUNNER_TEMP/cfg/notion_token"
+          if [ "$MAP_SOURCE" = "supabase" ]; then
+            if [ -z "$SUPA_URL" ] || [ -z "$SUPA_KEY" ]; then
+              echo "::error::원천이 supabase 인데 MAP_SUPABASE_URL · MAP_SUPABASE_KEY 가 없습니다"
+              exit 1
+            fi
+            printf '%s' "$SUPA_URL" > "$RUNNER_TEMP/cfg/supa_url"
+            printf '%s' "$SUPA_KEY" > "$RUNNER_TEMP/cfg/supa_key"
+            chmod 600 "$RUNNER_TEMP/cfg/supa_url" "$RUNNER_TEMP/cfg/supa_key"
+          fi
+          echo "원천 $MAP_SOURCE"
 
       - name: 굽기
         # 건수만 찍습니다. 실패하면(허용 밖 칸 · 반출 검사) 파일을 안 쓰고 멈춥니다
         env:
           NOTION_TOKEN_FILE: ${{ runner.temp }}/cfg/notion_token
+          DC_SUPABASE_URL_FILE: ${{ runner.temp }}/cfg/supa_url
+          DC_SUPABASE_KEY_FILE: ${{ runner.temp }}/cfg/supa_key
           DC_PACKAGES: ${{ github.workspace }}/packages
           DC_MAP_COLLECT_DS: ${{ secrets.DC_MAP_COLLECT_DS }}
           DC_MAP_VERIFY_DS: ${{ secrets.DC_MAP_VERIFY_DS }}

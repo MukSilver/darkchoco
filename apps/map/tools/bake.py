@@ -2410,6 +2410,10 @@ def main() -> int:
     ap.add_argument("--out", default="src/data/map.json", help="쓸 자리")
     ap.add_argument("--check-only", action="store_true",
                     help="굽지 않고 이미 있는 파일만 검사합니다")
+    # 원천 — 노션(되돌릴 길로 남김) · Supabase core (2026-10-03 최현서). 굽기 규칙과 관문은 같다 (`supa_source.py`)
+    ap.add_argument("--source", choices=("notion", "supabase"),
+                    default=os.environ.get("MAP_SOURCE") or "notion",
+                    help="어디서 읽을지. 기본은 환경변수 MAP_SOURCE, 없으면 notion")
     args = ap.parse_args()
     out = Path(args.out)
 
@@ -2421,6 +2425,14 @@ def main() -> int:
         if not out.is_file():
             sys.exit(f"{out} 가 없습니다")
         data = json.loads(out.read_text(encoding="utf-8"))
+    elif args.source == "supabase":
+        # 노션 칸 읽기(`read_value`)는 그대로 쓰므로 dc_notion 은 얹는다. 노션에는 요청하지 않는다
+        _load_dc_notion()
+        import supa_source  # noqa: PLC0415
+
+        n = supa_source.SupaSource()
+        data = bake(n, {k: k for k in (*REQUIRED_SOURCES, *OPTIONAL_SOURCES)}, log)
+        log(f"원천 Supabase core · 가장 늦은 동기화 {(n.synced or '?')[:16]}Z")
     else:
         dc = _load_dc_notion()
         sources = load_sources()

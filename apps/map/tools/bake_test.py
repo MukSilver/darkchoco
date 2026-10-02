@@ -356,6 +356,78 @@ def test_운영_종료_날짜는_날짜만_읽고_같은_곳_두_줄이면_늦�
         assert len(bake.check(bad)) == 1, (v, bake.check(bad))
 
 
+def _supa_source():
+    spec = importlib.util.spec_from_file_location("supa_source", Path(__file__).with_name("supa_source.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_Supabase_원천은_굽기가_읽는_칸만_받는다():
+    # 2026-10-03 원천 옮기기. 허용 칸 · 맞추기 전용 · t.me 칸 밖은 요청에도 안 든다 — 샘플 · 주소 · 비고 등
+    ss = _supa_source()
+    ok = bake.ALLOWED_COLS | bake.MATCH_ONLY_COLS | bake.TME_ONLY_COLS
+    for key, spec in ss.TABLES.items():
+        assert key in (*bake.REQUIRED_SOURCES, *bake.OPTIONAL_SOURCES), key
+        for name in spec["cols"]:
+            assert name in ok, f"{key}: {name} 은 굽기 허용 칸이 아니다"
+            assert name not in bake.DENY_COLS, f"{key}: {name} 은 읽으면 안 되는 칸"
+    assert ss.FLAG[0] in bake.ALLOWED_COLS
+    # 굽기가 읽는 원천 열쇠가 다 짝이 있다
+    assert set(bake.REQUIRED_SOURCES) | set(bake.OPTIONAL_SOURCES) == set(ss.TABLES)
+
+
+def test_Supabase_줄은_노션_줄_꼴로_바뀐다():
+    ss = _supa_source()
+    cols = ss.TABLES["collect"]["cols"]
+    row = {"notion_id": "p-1", "db_flag": None, "case_no": 198, "posted_at": "2026-05-14T06:58:00+00:00",
+           "observed_at": "2026-05-14T06:58:00.5Z", "collected_on": "2026-05-15", "leaked_items": ["이름", "", None],
+           "same_as": ["p-2"], "file_count": 3, "venue": "", "korea": "직접"}
+    page = ss.to_page(row, cols)
+    p = page["properties"]
+    assert page["id"] == "p-1"
+    assert bake.unique_id(p["사건 ID"]) == "LEAK-198", "숫자만 온 사건 번호에 접두어를 붙인다"
+    assert bake.rel_ids(p["같은 사건"]) == ["p-2"]
+    assert p["게시 시각"]["date"]["start"] == "2026-05-14T06:58:00.000+00:00", "노션 날짜 꼴로"
+    assert p["관측 시각"]["date"]["start"] == "2026-05-14T06:58:00.500+00:00"
+    assert p["수집일"]["date"]["start"] == "2026-05-15"
+    assert [o["name"] for o in p["유출 항목"]["multi_select"]] == ["이름"]
+    assert p["게시처"]["rich_text"] == [], "빈 글은 노션처럼 빈 칸"
+    assert p["한국 관련"]["rich_text"][0]["plain_text"] == "직접"
+    assert p["DB 반영"]["checkbox"] is True, "스위치가 없는 DB 는 늘 참"
+    assert ss.to_page({**row, "db_flag": False}, cols)["properties"]["DB 반영"]["checkbox"] is False
+    assert p["사건 ID"]["unique_id"]["number"] == 198
+    inc = ss.to_page({"notion_id": "i-1", "inc_no": 7}, ss.TABLES["incident"]["cols"])
+    assert bake.unique_id(inc["properties"]["사건 ID"]) == "INC-7"
+
+
+def test_Supabase_원천은_표마다_나눠_받고_칸을_골라_받는다():
+    ss = _supa_source()
+    calls = []
+
+    def fake_get(path, profile=None):
+        calls.append((path, profile))
+        start = int(path.split("offset=")[1])
+        total = ss.PAGE + 3
+        return [{"notion_id": f"p-{i}", "name": f"F{i}", "synced_at": f"2026-10-0{1 + i % 2}T00:00:00+00:00"}
+                for i in range(start, min(total, start + ss.PAGE))]
+
+    src = ss.SupaSource(get=fake_get)
+    rows = src.query_all("forum")
+    assert len(rows) == ss.PAGE + 3 and len(calls) == 2, "PAGE 보다 많으면 다음 쪽을 받는다"
+    assert all(prof == "core" for _p, prof in calls)
+    sel = calls[0][0].split("select=")[1].split("&")[0].split(",")
+    assert "address" not in sel and "onion" not in sel and "note" not in sel, "주소 · 비고는 안 받는다"
+    assert {"notion_id", "db_flag", "name", "status", "size_note"} <= set(sel)
+    assert src.synced.startswith("2026-10-02")
+    try:
+        src.query_all("nope")
+    except KeyError:
+        pass
+    else:
+        raise AssertionError("짝이 없는 원천은 멈춘다")
+
+
 def json_copy(x):
     import json
     return json.loads(json.dumps(x))
