@@ -468,7 +468,9 @@ export default function HexMap({
             data-island={t.islandKey}
             d={cellsPath(t, layout.size)}
             fill={dim(t) ? `var(--t-island-${t.token}-dim)` : `var(--t-island-${t.token})`}
-            stroke="var(--t-border-hex)"
+            // 같은 영토 안 칸 사이는 옆면 색으로 가늘게 — 떠오른 영토 윗면과 같은 결이다. 행위자 섬은 옅은 회색.
+            // 영토 사이는 아래 경계선이 검게 덮는다 (2026-10-02 최현서, `tokens.css` 「영토 안 칸 선과 영토 경계」)
+            stroke={dim(t) ? "var(--t-border-hex)" : `var(--t-island-${t.token}-cell)`}
             strokeWidth={1}
             className={`${pointer} transition-colors`}
             {...keyProps(t.name, t.territoryId === entryId, t.territoryId)}
@@ -477,9 +479,9 @@ export default function HexMap({
         ))}
         {/*
           영토 경계 — 같은 섬 안의 영토도 가른다. 전에는 섬 칸이 모두 같은 색이라 이름표만 떠 있고 영토마다의
-          크기와 시점을 옮길 때의 변화를 알 수 없었다 (2026-09-29 최현서 v2 2번). 섬 색을 연하게 한 밝은
-          선으로 영토 둘레를 한 번 더 긋는다 — 9/29 의 옆면 색은 어두운 칸 선에 묻혀 첫 화면에서 안 보였다
-          (2026-10-01 팀 피드백 3, `tokens.css` 「영토 경계」). 흐린 영토는 옅게. 포인터는 안 받는다
+          크기와 시점을 옮길 때의 변화를 알 수 없었다 (2026-09-29 최현서 v2 2번). 검은 칸 선 색으로 영토
+          둘레를 굵게 한 번 더 긋고, 영토 안 칸 선은 위에서 옆면 색으로 가늘게 둔다 (2026-10-02 최현서 — 10/01
+          의 밝은 경계선은 한 칸짜리 영토가 많아 섬 전체가 밝은 격자로 보였다). 흐린 영토는 옅게. 포인터는 안 받는다
         */}
         {flat.map((t) => (
           <path
@@ -489,8 +491,8 @@ export default function HexMap({
             d={t.outline}
             fill="none"
             // 흐린 영토는 회색 — 섬 색 선을 옅게 그으면 흐린 칸 둘레에 섬 색이 되살아났다 (검토)
-            stroke={dim(t) ? "var(--t-border-strong)" : `var(--t-island-${t.token}-edge)`}
-            strokeWidth={1.8}
+            stroke={dim(t) ? "var(--t-border-strong)" : "var(--t-territory-edge)"}
+            strokeWidth={1.6}
             strokeLinejoin="round"
             opacity={dim(t) ? 0.7 : 1}
             className="pointer-events-none"
