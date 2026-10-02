@@ -491,8 +491,9 @@ export default function HexMap({
             d={t.outline}
             fill="none"
             // 흐린 영토는 회색 — 섬 색 선을 옅게 그으면 흐린 칸 둘레에 섬 색이 되살아났다 (검토)
+            // 영토 사이 선은 칸 선보다 조금 굵고 조금 밝다 — 1.6 굵기 칸 선 색은 두껍고 검게 보였다 (2026-10-02 최현서)
             stroke={dim(t) ? "var(--t-border-strong)" : "var(--t-territory-edge)"}
-            strokeWidth={1.6}
+            strokeWidth={dim(t) ? 1.6 : 1.2}
             strokeLinejoin="round"
             opacity={dim(t) ? 0.7 : 1}
             className="pointer-events-none"
@@ -582,7 +583,9 @@ export default function HexMap({
                   ? "var(--t-hex-selected-edge)"
                   : t.territoryId === hovered
                     ? "var(--t-hex-hover-edge)"
-                    : `var(--t-island-${t.token}-side)`
+                    : // 윗면 칸 사이는 고른 것이 없을 때의 영토 안 선과 같은 색 — 행위자 섬만 옆면이 거의 검정이라
+                      // 고를 때 검은 선으로 달라 보였다 (2026-10-02 최현서, `tokens.css` `-cell`)
+                      `var(--t-island-${t.token}-cell)`
               }
               strokeWidth={t.territoryId === selectedTerritory ? 2 : t.territoryId === hovered ? 1.4 : 1}
               className={pointer}
