@@ -206,6 +206,41 @@ test('4b. 섬보다 많이 달라고 하면 섬 크기까지만 준다', () => {
   assert.equal(got.Y.length, 5);
 });
 
+test('4d. 영토마다 칸이 한 덩어리로 모인다 (2026-10-03)', () => {
+  const DIRS_E = [[1, 0], [0, -1], [-1, -1], [-1, 0], [-1, 1], [0, 1]];
+  const DIRS_O = [[1, 0], [1, -1], [0, -1], [-1, 0], [0, 1], [1, 1]];
+  const joined = (cells) => {
+    if (cells.length <= 1) return true;
+    const set = new Set(cells.map(([c, r]) => key(c, r)));
+    const seen = new Set([key(...cells[0])]);
+    const st = [cells[0]];
+    while (st.length) {
+      const [c, r] = st.pop();
+      for (const [dc, dr] of (r & 1) === 0 ? DIRS_E : DIRS_O) {
+        const k = key(c + dc, r + dr);
+        if (set.has(k) && !seen.has(k)) {
+          seen.add(k);
+          st.push([c + dc, r + dr]);
+        }
+      }
+    }
+    return seen.size === cells.length;
+  };
+  // 큰 영토 하나와 한두 칸짜리가 많은 섬 — 전에는 작은 영토가 큰 영토 칸을 건너 흩어졌다
+  const want = { big: 60, mid: 30, a: 20, b: 15 };
+  for (let i = 0; i < 40; i++) want[`s${i}`] = 1 + (i % 4);
+  const island = growIslands({ R: Object.values(want).reduce((s, n) => s + n, 0) }).R; // 225칸 — 꽉 채움
+  const got = splitTerritories(island, want);
+  for (const [id, cells] of Object.entries(got)) {
+    assert.equal(cells.length, want[id], `${id} 칸 수`);
+    assert.ok(joined(cells), `${id} 가 여러 조각으로 흩어졌다`);
+  }
+  // 영토 합이 섬보다 작아도 쓴 칸끼리 모인다
+  const part = splitTerritories(island, { x: 30, y: 20 });
+  assert.ok(joined([...part.x, ...part.y]), '남는 칸은 가장자리로 간다');
+  assert.ok(joined(part.x) && joined(part.y));
+});
+
 test('4c. 빈 섬을 줘도 터지지 않는다', () => {
   assert.deepEqual(splitTerritories([], { A: 5 }), { A: [] });
 });
