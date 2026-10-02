@@ -40,8 +40,27 @@ npm run build        # out/ 에 정적 파일
 `data/` 규칙이 막는다.
 
 **화면은 노션을 직접 부르지 않는다.** 구운 파일만 읽는다. 화면에서 노션을 부르면 반출 관문이
-사라진다. 원천은 Supabase(`darkchoco-data` 의 `core` · `map`)로 옮길 예정이다 —
-`tools/supa.py` · `tools/supa_schema.py` 가 1단계(칸 목록)까지 되어 있다.
+사라진다.
+
+### 원천 — 노션 또는 Supabase (2026-10-03 최현서)
+
+    노션 ── 정제 배치(darkchoco-data, 하루 두 번) ──→ Supabase core
+      │                                                  │
+      └── bake.py --source notion          bake.py --source supabase ──┘
+
+굽기는 노션에서도, 팀 Supabase(`darkchoco-data` 의 `core` 표)에서도 읽는다. `--source` 또는 환경변수
+`MAP_SOURCE`(자동 갱신은 레포 변수 `MAP_SOURCE`)로 고르고, 기본은 노션이다 — **되돌릴 길로 남긴다.**
+
+- **굽기 규칙은 같다.** `tools/supa_source.py` 가 core 줄을 노션 줄 꼴로 바꿔 `bake()` 에 넣는다. 허용 칸 목록 ·
+  DB 반영 · 검토 여부 관문 · 반출 검사가 그대로 걸린다. Supabase 에서 받는 칸도 굽기 허용 칸뿐이다(`select=`)
+- **열쇠는 읽기 전용 역할 `map_reader` 것이다**(`tools/supa.py`, GET 만). darkchoco-data 의 `0009_map_reader.sql` 이
+  core 지도용 표 열둘과 map 표만 읽게 한다. 전권 열쇠는 core 스키마 권한이 없어 못 읽는다
+- **견주기** — `tools/bake_compare.py` 가 같은 때 두 원천으로 구워 영역 · 사건 · 관계선 · 공식 발표의 수와 번호를
+  견준다. 다른 사건은 「동기화 뒤 노션에서 바뀐 줄」 에서 나왔는지 갈라 「까닭 모름」 을 센다. 0 이어야 원천을 바꾼다
+- **노션과 다른 곳 둘** — ① 게시 시각이 UTC 로 온다. 노션에 한국 시각(+09:00)으로 적힌 사건은 같은 순간이지만
+  목록 줄 시각이 UTC 로 보인다. ② 날짜만 적힌 게시 시각이 그날 0시 UTC 시각으로 온다. 목록 줄에 「00:00」 이
+  붙는다. 둘 다 점수 · 분기는 같다(같은 순간). ③ 「운영 종료 날짜」 는 정제 배치가 아직 안 옮긴다
+- 자동 갱신은 정제 배치 신호(`repository_dispatch` · `data-updated`)로도 돈다 — Supabase 가 바뀐 직후에 굽는다
 
 ### 굽기
 
