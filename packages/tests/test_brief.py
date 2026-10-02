@@ -36,8 +36,8 @@ def _글(v):
     return [{"plain_text": v}] if v else []
 
 
-def _줄(번호, 조직="가짜조직주식회사", 핸들="FakeGroup", 게시처="fakegroup", 한국="미확인", 검토="미검토",
-       제목="가짜 유출 제목"):
+def _줄(번호, 조직="가짜조직주식회사", 핸들="FakeGroup", 게시처="fakegroup", 한국="직접", 검토="미검토",
+       제목="가짜 유출 제목", 근거="", 국가=""):
     return {"properties": {
         "사건 ID": {"type": "unique_id", "unique_id": {"prefix": "LEAK", "number": 번호}},
         "검토 여부": {"type": "select", "select": {"name": 검토}},
@@ -47,15 +47,18 @@ def _줄(번호, 조직="가짜조직주식회사", 핸들="FakeGroup", 게시�
         "한국 관련": {"type": "select", "select": {"name": 한국}},
         "자료 제목": {"type": "title", "title": _글(제목)},
         "게시 플랫폼": {"type": "rich_text", "rich_text": _글("t.me/fakechannel")},
+        "한국 관련 근거": {"type": "rich_text", "rich_text": _글(근거)},
+        "국가": {"type": "select", "select": {"name": 국가} if 국가 else None},
     }}
 
 
 # ── 1. 꼴 — LEAK-번호 · 조직명 · 행위자 · 한국 여부 ─────────────
 def test_한_줄_꼴():
-    글, 셈 = brief.문안([_줄(1, 조직="Acme Holdings", 한국="직접"), _줄(2, 조직="Beta Clinic")], 지금)
+    글, 셈 = brief.문안([_줄(1, 조직="Acme Holdings", 한국="직접"), _줄(2, 조직="Beta Clinic", 한국="간접")], 지금)
     assert "· LEAK-1 · Acme Holdings · FakeGroup · 한국 직접" in 글, 글
-    assert "· LEAK-2 · Beta Clinic · FakeGroup" in 글 and "LEAK-2 · Beta Clinic · FakeGroup · 한국" not in 글, 글
-    assert "새로 들어온 사건 2건" in 글 and 셈["실린 줄"] == 2, (글, 셈)
+    assert "· LEAK-2 · Beta Clinic · FakeGroup · 한국 간접" in 글, 글
+    assert "지난 24시간 새로 들어온 2건 중 한국 관련 2건" in 글 and 셈["실린 줄"] == 2, (글, 셈)
+    assert "목록에서 뺀 것" not in 글, "뺀 것이 없으면 그 줄도 없다"
 
 
 def test_한국은_직접_간접만_싣는다():
@@ -74,7 +77,8 @@ def test_검토_상태_제목_전한_채널은_안_싣는다():
 def test_사건_X_는_목록에서_빼고_머리에_건수만():
     글, 셈 = brief.문안([_줄(1), _줄(2, 검토="사건 X", 조직="Xco Holdings"), _줄(3)], 지금)
     assert "LEAK-2" not in 글 and "Xco Holdings" not in 글, 글
-    assert "새로 들어온 사건 2건 (한국과 무관한 1건은 뺐습니다)" in 글 and 셈["사건 X"] == 1, 글
+    assert "새로 들어온 3건 중 한국 관련 2건" in 글 and "목록에서 뺀 것: 한국과 무관(사건 X) 1건" in 글, 글
+    assert 셈["사건 X"] == 1, 셈
 
 
 # ── 2. 행위자 ────────────────────────────────────────────────
@@ -124,7 +128,41 @@ def test_디스코드_상한_안에서_자르고_그_밖_N건():
 
 def test_새_사건이_없으면_그렇게_적는다():
     글, _ = brief.문안([], 지금)
-    assert "새로 들어온 사건이 없습니다" in 글
+    assert "새로 들어온 0건 중 한국 관련 0건" in 글 and "한국 관련으로 보이는 새 사건이 없습니다" in 글, 글
+
+
+# ── 4-0. 목록에는 확실한 한국 건만 (10/02 최현서) ─────────────
+def test_갈래():
+    assert brief.갈래(_줄(1, 한국="직접")) == "목록"
+    assert brief.갈래(_줄(1, 한국="간접")) == "목록"
+    assert brief.갈래(_줄(1, 한국="미확인", 검토="사건 O")) == "목록", "사람이 사건 O 로 정한 줄은 싣는다"
+    assert brief.갈래(_줄(1, 한국="직접", 검토="사건 X")) == "무관", "사건 X 가 먼저다"
+    assert brief.갈래(_줄(1, 한국="미확인")) == "신호 없음"
+    assert brief.갈래(_줄(1, 한국="미확인", 근거="한국 도메인(.kr) — 본문")) == "미확인"
+    assert brief.갈래(_줄(1, 한국="미확인", 국가="일본")) == "미확인", "국가가 적혔으면 「국가 미상」 이 아니다"
+
+
+def test_확실한_한국_건만_싣고_나머지는_건수만():
+    줄들 = [_줄(1, 조직="Acme Holdings", 한국="직접"),
+           _줄(2, 조직="Unknownland Steel", 한국="미확인"),
+           _줄(3, 조직="Unknownland Foods", 한국="미확인"),
+           _줄(4, 조직="Weak Signal Corp", 한국="미확인", 근거="본문에 korea 한 번"),
+           _줄(5, 조직="Xco Holdings", 한국="미확인", 검토="사건 X")]
+    글, 셈 = brief.문안(줄들, 지금, "https://fake-dash.example.test")
+    assert "LEAK-1 · Acme Holdings" in 글, 글
+    for 안됨 in ("LEAK-2", "LEAK-3", "LEAK-4", "LEAK-5", "Unknownland", "Weak Signal", "Xco"):
+        assert 안됨 not in 글, (안됨, 글)
+    assert "새로 들어온 5건 중 한국 관련 1건" in 글, 글
+    assert ("목록에서 뺀 것: 국가 미상 · 한국 신호 없음 2건 · 한국 여부 미확인 1건 · 한국과 무관(사건 X) 1건"
+            in 글), 글
+    assert 글.endswith("자세한 내용: <https://fake-dash.example.test>"), "링크가 맨 끝이다"
+    assert (셈["신호 없음"], 셈["미확인"], 셈["사건 X"], 셈["목록"]) == (2, 1, 1, 1), 셈
+
+
+def test_목록이_비어도_뺀_건수와_링크는_적는다():
+    글, _ = brief.문안([_줄(1, 한국="미확인"), _줄(2, 한국="미확인")], 지금, "https://fake-dash.example.test")
+    assert "한국 관련으로 보이는 새 사건이 없습니다" in 글, 글
+    assert "국가 미상 · 한국 신호 없음 2건" in 글 and 글.endswith("<https://fake-dash.example.test>"), 글
 
 
 # ── 4-1. 끝에 대시보드 링크 (10/02) ──────────────────────────
