@@ -237,6 +237,27 @@ def test_적용한_기록은_다시_안_쓰고_되돌리기는_우리가_쓴_값
         assert review.값(n.줄["page-2"], "검토 여부") == "사건 O", "사람이 바꾼 줄은 그대로"
 
 
+def test_하루에_두_판이_돌면_두_번째_판은_새_폴더를_쓴다():
+    # 사람이 시킨 판 뒤에 07:12 예약 판이 같은 날 돌아도 앞 판의 「적용됨」 에 걸려 멈추지 않는다(10/03)
+    with _판([_줄(1), _줄(2)]) as (d, n):
+        f = d / "판정.json"
+        f.write_text(json.dumps({"rows": [_판정("LEAK-1")]}), encoding="utf-8")
+        _돌림("대상", "--자리", str(d))
+        _돌림("결과", str(f), "--자리", str(d), "--무인")
+        r, _ = _돌림("반영", "--자리", str(d), "--쓴다")
+        assert r == 0 and len(n.쓴것) == 1
+        n.줄["page-3"] = _줄(3)                                   # 그 사이 새 줄이 들어왔다
+        f.write_text(json.dumps({"rows": [_판정("LEAK-2"), _판정("LEAK-3")]}), encoding="utf-8")
+        r, 찍힘 = _돌림("대상", "--자리", str(d))
+        assert "오늘 판정 2줄" in 찍힘, 찍힘                      # LEAK-1 은 전에 판정함
+        _돌림("결과", str(f), "--자리", str(d), "--무인")
+        r, 찍힘 = _돌림("반영", "--자리", str(d), "--쓴다")
+        assert r == 0, 찍힘
+        판들 = sorted(p.name for p in d.iterdir() if p.is_dir())
+        assert len(판들) == 2 and 판들[1].endswith("-2"), 판들
+        assert [pid for pid, _ in n.쓴것] == ["page-1", "page-2", "page-3"], n.쓴것
+
+
 def test_확정대기는_전에_판정했고_아직_미검토인_줄만():
     줄들 = [_줄(1), _줄(2, 검토="사건 X"), _줄(3)]
     기록 = {"LEAK-1": {"날": "20261003", "판정": "사건 O", "확신": "높음"},
