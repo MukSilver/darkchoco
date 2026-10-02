@@ -442,16 +442,21 @@
   --t-island-actor-side: #26282a; /* Initial Access Brokers */
 }
 /*
- * 영토 경계 — 같은 섬 안의 영토를 가르는 선. **섬 색에 흰색을 많이 섞은 연한 선이다** (2026-10-01 팀
- * 피드백 3 — 「첫 화면에서 섬이 한 덩어리로 보인다. 세계 지도의 국경처럼 연한 선으로 나눠 달라」).
- * 9/29 에는 옆면(한 단계 진한) 색이었는데, 칸마다 그어진 어두운 칸 선(`--t-border-hex`)과 같은
- * 어두운 쪽이라 첫 화면에서 영토 경계가 칸 선에 묻혔다. 밝은 선은 칸 선과 갈려 경계만 떠 보인다
+ * 영토 안 칸 선과 영토 경계 — 고른 것이 없는 지도 (2026-10-02 최현서).
+ *
+ *     -cell            같은 영토 안의 칸 사이. 떠오른 영토 윗면처럼 옆면 색으로 가늘게 가른다
+ *     --t-territory-edge  영토와 영토 사이. 검은 칸 선 색(`--t-border-hex`)으로 굵게 긋는다
+ *
+ * **행위자 섬은 영토 안 선이 옅은 회색이다.** 행위자 옆면은 바탕과 같은 거의 검정이라, 섬 색을 조금 어둡게
+ * 한 회색을 쓴다. 10/01 에는 팀 피드백 3 으로 경계를 섬 색을 연하게 한 밝은 선으로 바꿨는데, 한 칸짜리
+ * 영토가 많아 섬 전체가 밝은 격자처럼 보이고 큰 영토 안만 검은 선이 남아 거꾸로 읽혔다
  */
 :root {
-  --t-island-forum-edge: color-mix(in srgb, var(--t-island-forum) 30%, #ffffff);
-  --t-island-ransomware-edge: color-mix(in srgb, var(--t-island-ransomware) 30%, #ffffff);
-  --t-island-telegram-edge: color-mix(in srgb, var(--t-island-telegram) 30%, #ffffff);
-  --t-island-actor-edge: color-mix(in srgb, var(--t-island-actor) 30%, #ffffff);
+  --t-island-forum-cell: var(--t-island-forum-side);
+  --t-island-ransomware-cell: var(--t-island-ransomware-side);
+  --t-island-telegram-cell: var(--t-island-telegram-side);
+  --t-island-actor-cell: color-mix(in srgb, var(--t-island-actor) 82%, #000000);
+  --t-territory-edge: var(--t-border-hex);
 }
 
 /*
