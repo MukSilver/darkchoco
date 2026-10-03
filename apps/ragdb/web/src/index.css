@@ -58,8 +58,7 @@
 
 /* 남색 A안. 구울 때 VITE_THEME=blue 를 주면 <html data-theme="blue"> 가 되고 (vite.config.ts) 아래 값이 위 값을 덮는다.
    배치와 문구는 같고 색과 글꼴만 다르다. */
-:root[data-theme="blue"],
-:root[data-theme="navy"] {
+:root[data-theme="blue"] {
   --color-page: #0a1020;
   --color-panel: #0d1526;
   --color-input: #111a2b;
@@ -95,9 +94,41 @@
   --font-sans: "Noto Sans KR Variable", "Noto Sans KR", -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
 }
 
-/* C안 (2026-10-03 팀원 제안): 남색 A안 바탕(10,16,32)에 옆 창(지난 질문·출처 패널)만 밝은 회청색(38,47,66). 나머지는 A안과 같다 */
-:root[data-theme="navy"] {
-  --color-panel: #262f42;
+/* C안 블랙 (2026-10-03 팀원 제안, 사진 기준): 거의 검은 바탕, 옆 창(지난 질문·출처 패널)은 어두운 회색, 강조는 파랑, 글꼴은 A안과 같은 Noto Sans KR */
+:root[data-theme="black"] {
+  --color-page: #0b0d12;
+  --color-panel: #262a33;
+  --color-input: #15181f;
+  --color-card: #181c24;
+  --color-chip: #20242e;
+
+  --color-line: #30353f;
+  --color-line-card: #282d37;
+  --color-divider: #1f232c;
+
+  --color-accent: #5b8def;
+  --color-accent-text: #8fb3ff;
+  --color-accent-strong: #b7cdff;
+  --color-highlight-text: #eaf0fb;
+
+  --color-strong: #f5f6f8;
+  --color-title: #e9ebef;
+  --color-answer: #dfe2e8;
+  --color-body: #c6cad3;
+  --color-muted: #9298a6;
+  --color-faint: #868c99;
+  --color-placeholder: #7b818e;
+
+  --color-mask-bg: #1a1d25;
+  --color-mask-line: #3a3f4b;
+  --color-mask-text: #b4bac6;
+
+  --color-offline: #868c99;
+  --color-danger: #f26d6d;
+  --color-on-danger: #4a0b0b;
+  --color-step-idle: #3a3f4b;
+
+  --font-sans: "Noto Sans KR Variable", "Noto Sans KR", -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
 }
 
 html, body, #root { height: 100%; }
