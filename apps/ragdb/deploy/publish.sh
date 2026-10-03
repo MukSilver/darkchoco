@@ -4,6 +4,7 @@
 #   deploy/publish.sh            지난번에 올린 판과 지금 판이 다를 때만 올린다
 #   deploy/publish.sh --force    판이 같아도 올린다 (화면 코드만 바뀌었을 때)
 #   THEME=blue deploy/publish.sh --force    남색 A안으로 구워 다른 주소(ragdb-web-blue)에 올린다. 색 안을 견주어 볼 때 쓴다
+#   THEME=navy deploy/publish.sh --force    C안(남색 바탕 + 회청 옆 창) → ragdb-web-navy
 #
 # 올리는 것: web/dist (화면) 와 그 안의 data/ (스냅샷: current.json, 지금 판 폴더).
 # 스냅샷은 snapshot.py 의 반출 관문을 통과한 것만 data/snapshot 에 있다. 여기서는 관문을 다시 보고 통과할 때만 올린다.

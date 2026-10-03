@@ -58,7 +58,8 @@
 
 /* 남색 A안. 구울 때 VITE_THEME=blue 를 주면 <html data-theme="blue"> 가 되고 (vite.config.ts) 아래 값이 위 값을 덮는다.
    배치와 문구는 같고 색과 글꼴만 다르다. */
-:root[data-theme="blue"] {
+:root[data-theme="blue"],
+:root[data-theme="navy"] {
   --color-page: #0a1020;
   --color-panel: #0d1526;
   --color-input: #111a2b;
@@ -92,6 +93,11 @@
   --color-step-idle: #33425f;
 
   --font-sans: "Noto Sans KR Variable", "Noto Sans KR", -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+}
+
+/* C안 (2026-10-03 팀원 제안): 남색 A안 바탕(10,16,32)에 옆 창(지난 질문·출처 패널)만 밝은 회청색(38,47,66). 나머지는 A안과 같다 */
+:root[data-theme="navy"] {
+  --color-panel: #262f42;
 }
 
 html, body, #root { height: 100%; }
