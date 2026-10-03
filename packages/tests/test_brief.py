@@ -312,14 +312,17 @@ def test_틀린_채널이면_보내지_않는다():
     assert r == 1 and 부른것 == [], (r, 부른것)
 
 
-def test_워크플로는_수집이_끝날_때마다_보내고_손으로는_기본이_안_보낸다():
+def test_워크플로는_수집_검증_뒤에_불리고_손으로는_기본이_안_보낸다():
     글 = (ROOT / ".github" / "workflows" / "brief.yml").read_text(encoding="utf-8")
-    # 10/03 최현서 「디코는 자동 수집 주기에 맞춰 매번」. 수집이 성공으로 끝나면 돈다
-    assert re.search(r'workflow_run:\s*\n\s+workflows: \["수집"\]\s*\n\s+types: \[completed\]', 글), "수집 워크플로가 끝나면 돈다"
-    assert "github.event.workflow_run.conclusion == 'success'" in 글, "수집이 실패한 판에는 안 보낸다"
-    assert "- cron:" not in 글, "옛 09:00 예약은 없앴다"
-    assert "SEND: ${{ (github.event_name == 'workflow_run' || inputs.send) && 'yes' || 'no' }}" in 글, "수집 뒤 판은 보낸다"
-    assert "--workflow brief.yml --status success" in 글, "범위는 지난 브리핑부터"
+    # 10/03 최현서 「디코는 자동 수집 주기에 맞춰 매번」 · 「검증 이후로」. 수집 또는 판정이 send=true 로 부른다
+    assert "workflow_run:" not in 글 and "- cron:" not in 글, "스스로 깨지 않는다. 수집 · 판정이 부른다"
+    assert "run-name: ${{ inputs.send && '브리핑 보냄' || '브리핑 시험' }}" in 글
+    assert "SEND: ${{ inputs.send && 'yes' || 'no' }}" in 글
+    assert 'select(.displayTitle == "브리핑 보냄" or .event == "schedule")' in 글, "범위는 마지막으로 보낸 판부터. 손 시험 판은 안 센다"
+    assert "CANDIDATES: ${{ inputs.candidates }}" in 글 and '--후보 "$CANDIDATES"' in 글, "후보 번호는 env 로만 넘긴다"
+    assert "${{ inputs.candidates }}\"" not in 글 and "python skills/collect/brief.py --후보 ${{" not in 글
+    수집 = (ROOT / ".github" / "workflows" / "collect.yml").read_text(encoding="utf-8")
+    assert "if: steps.fire.outputs.fired != 'yes'" in 수집 and "gh workflow run brief.yml" in 수집, "판정을 못 부른 판은 수집이 브리핑을 부른다"
     assert re.search(r"send:\s*\n(?:.*\n)*?\s*default: false", 글), "손으로 돌릴 때 보내기는 기본으로 꺼져 있어야 한다"
     assert "DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}" in 글
     assert "DASH_URL: ${{ secrets.DASH_URL }}" in 글, "대시보드 주소는 비밀값으로만 넘긴다"
@@ -337,6 +340,25 @@ def test_시작시각은_48시간_안의_지난_시각만_받는다():
     assert brief.시작시각("2026-09-30T00:00:00Z", 지금) is None, "48시간보다 오래면 지난 24시간으로"
     assert brief.시작시각("2026-10-04T00:00:00Z", 지금) is None, "미래는 안 받는다"
     assert brief.시작시각("2026-10-03T05:00:00", 지금) is None, "시간대가 없으면 안 받는다"
+
+
+def test_후보_번호는_LEAK_꼴만_열개까지():
+    assert brief.후보번호("LEAK-451,LEAK-460") == [451, 460]
+    assert brief.후보번호("") == []
+    assert brief.후보번호("LEAK-1, LEAK-1, x; rm -rf / LEAK-2") == [1, 2]
+    assert len(brief.후보번호(",".join(f"LEAK-{i}" for i in range(30)))) == brief.후보상한
+
+
+def test_AI_후보는_따로_싣고_목록과_겹치면_뺀다():
+    지금 = datetime(2026, 10, 3, 20, 0, tzinfo=brief.KST)
+    목록줄 = _줄(41, 조직="Acme Holdings", 한국="직접")
+    후보줄 = _줄(42, 조직="Beta Corp")
+    글, 셈 = brief.문안([목록줄], 지금, "", "10/03 14:00 뒤", [후보줄, 목록줄])
+    assert "AI 판정 한국 후보(사람 확정 전)" in 글 and "LEAK-42" in 글, 글
+    assert 글.count("LEAK-41") == 1, "목록에 이미 있는 줄은 후보에 다시 싣지 않는다"
+    assert 셈["AI 후보"] == 1
+    글0, 셈0 = brief.문안([], 지금, "", "10/03 14:00 뒤", [후보줄])
+    assert "LEAK-42" in 글0 and 셈0["AI 후보"] == 1, "새 줄이 없어도 후보는 싣는다"
 
 
 def test_머리에_범위를_적는다():
