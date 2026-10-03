@@ -319,10 +319,16 @@ def test_워크플로는_수집_검증_뒤에_불리고_손으로는_기본이_�
     assert "run-name: ${{ inputs.send && '브리핑 보냄' || '브리핑 시험' }}" in 글
     assert "SEND: ${{ inputs.send && 'yes' || 'no' }}" in 글
     assert 'select(.displayTitle == "브리핑 보냄" or .event == "schedule")' in 글, "범위는 마지막으로 보낸 판부터. 손 시험 판은 안 센다"
-    assert "CANDIDATES: ${{ inputs.candidates }}" in 글 and '--후보 "$CANDIDATES"' in 글, "후보 번호는 env 로만 넘긴다"
+    assert "CANDIDATES: ${{ steps.wait.outputs.candidates || inputs.candidates }}" in 글 and '--후보 "$CANDIDATES"' in 글, "후보 번호는 env 로만 넘긴다"
     assert "${{ inputs.candidates }}\"" not in 글 and "python skills/collect/brief.py --후보 ${{" not in 글
+    # 10/03 클라우드 판정은 GitHub 앱 권한이 없어(403) 이 워크플로를 못 부른다. 브리핑이 판정 끝을 기다린다
+    assert "if: inputs.wait_since != ''" in 글 and "REVIEW_TOKEN: ${{ secrets.REVIEW_REPO_TOKEN }}" in 글
+    assert "WAIT_SINCE: ${{ inputs.wait_since }}" in 글 and "${{ inputs.wait_since }}\"" not in 글, "wait_since 는 env 로만"
+    분 = int(re.search(r"timeout-minutes:\s*(\d+)", 글).group(1))
+    assert 분 >= 50, "판정을 최대 45분 기다린다"
     수집 = (ROOT / ".github" / "workflows" / "collect.yml").read_text(encoding="utf-8")
-    assert "if: steps.fire.outputs.fired != 'yes'" in 수집 and "gh workflow run brief.yml" in 수집, "판정을 못 부른 판은 수집이 브리핑을 부른다"
+    assert 'gh workflow run brief.yml -R "${{ github.repository }}" -f send=true -f wait_since="$FIRED_AT"' in 수집, "수집이 브리핑을 부른다"
+    assert "steps.fire.outputs.fired == 'yes' && steps.fire.outputs.at" in 수집
     assert re.search(r"send:\s*\n(?:.*\n)*?\s*default: false", 글), "손으로 돌릴 때 보내기는 기본으로 꺼져 있어야 한다"
     assert "DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}" in 글
     assert "DASH_URL: ${{ secrets.DASH_URL }}" in 글, "대시보드 주소는 비밀값으로만 넘긴다"

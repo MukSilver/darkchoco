@@ -216,7 +216,8 @@ jobs:
         # 2026-10-03 최현서 「자동 수집 뒤 검증도 매번」. 노션에 새 줄을 올렸을 때만 Claude 클라우드 예약(미검토 판정)을
         # 부릅니다. 판정은 비공개 저장소 darkchoco-review 의 ROUTINE.md 대로 돕니다(사건 X 만 노션에 씀).
         # **로그에는 새 줄 수와 응답 코드만 찍습니다.** 부르는 주소와 열쇠는 비밀값이고 어디에도 찍지 않습니다
-        # 판정을 부른 판은 판정이 끝날 때 판정 쪽이 브리핑을 부릅니다(최현서 10/03 「검증 뒤 알림」)
+        # 판정을 부른 판은 아래 「판정 끝 기다렸다 브리핑 부르기」 가 판정이 끝난 뒤 브리핑을 부릅니다(최현서 10/03 「검증 뒤 알림」).
+        # 클라우드 판정은 GitHub 앱 권한에 워크플로 부르기가 없어(403) 브리핑을 직접 못 부릅니다
         id: fire
         continue-on-error: true
         env:
@@ -227,6 +228,7 @@ jobs:
           n=${n:-0}
           if [ "$n" = "0" ]; then echo "새로 올린 줄이 없어 판정을 부르지 않습니다"; exit 0; fi
           if [ -z "$FIRE_URL" ] || [ -z "$FIRE_TOKEN" ]; then echo "판정 비밀값이 없어 건너뜁니다 (새 줄 $n)"; exit 0; fi
+          echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
           code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 -X POST "$FIRE_URL" \
             -H "Authorization: Bearer $FIRE_TOKEN" \
             -H "anthropic-beta: experimental-cc-routine-2026-04-01" \
@@ -237,15 +239,17 @@ jobs:
           case "$code" in 2*) echo "fired=yes" >> "$GITHUB_OUTPUT" ;; esac
 
       - name: 브리핑 부르기
-        # 판정을 부르지 않았거나 부르기에 실패한 판은 여기서 바로 브리핑을 부릅니다. 미리보기 판(노션에 안 올림)은 안 부릅니다
-        if: steps.fire.outputs.fired != 'yes'
+        # 노션에 올린 판마다 브리핑을 부릅니다. 미리보기 판(노션에 안 올림)은 안 부릅니다.
+        # 판정을 부른 판은 wait_since 를 넘겨, 브리핑이 판정 끝을 기다렸다가 보냅니다(최현서 10/03 「검증 뒤 알림」).
+        # 기다리는 일은 brief.yml 이 합니다. 이 작업은 40분 제한이 있어 여기서 기다리지 않습니다
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
+          FIRED_AT: ${{ steps.fire.outputs.fired == 'yes' && steps.fire.outputs.at || '' }}
         run: |
           if [ ! -f "$RUNNER_TEMP/push.log" ]; then echo "미리보기 판이라 브리핑을 부르지 않습니다"; exit 0; fi
-          gh workflow run brief.yml -R "${{ github.repository }}" -f send=true
-          echo "브리핑을 불렀습니다"
+          gh workflow run brief.yml -R "${{ github.repository }}" -f send=true -f wait_since="$FIRED_AT"
+          if [ -n "$FIRED_AT" ]; then echo "브리핑을 불렀습니다 (판정 끝을 기다렸다 보냄)"; else echo "브리핑을 불렀습니다"; fi
 
       - name: 게시 상태 추적
         # **`track.yml` 을 uses 로 부르려다 접었습니다.** 한 워크플로에 보통 job 과
