@@ -94,11 +94,12 @@ def test_텔레그램_주소_꼴은_행위자로_안_싣는다():
     assert "relaychannel" not in 줄 and "· qilin" in 줄, 줄
 
 
-# ── 3. 개인 이름은 가린다 ────────────────────────────────────
-def test_개인_이름으로_보이면_가린다():
-    for 이름 in ("John Smith", "Maria J. Lopez", "Dr. Alan Brown", "someone@example.test", "홍길동"):
+# ── 3. 이름은 가리지 않는다(10/03 최현서) ────────────────────────
+def test_조직명은_가리지_않고_그대로_싣는다():
+    # 「디코에 올라가는 건 뭔지 바로 알 수 있어야 한다」. 영어 두 낱말 조직명이 사람 이름으로 잘못 가려진 일이 있었다
+    for 이름 in ("Fake Young", "John Smith", "Maria J. Lopez", "홍길동"):
         줄, 가림 = brief.한줄(_줄(1, 조직=이름))
-        assert 가림 and brief.가림말 in 줄 and 이름 not in 줄, (이름, 줄)
+        assert not 가림 and brief.가림말 not in 줄 and 이름.split()[0] in 줄, (이름, 줄)
 
 
 def test_조직으로_보이면_안_가린다():
@@ -112,9 +113,10 @@ def test_이미_가린_값은_그대로_두고_서식을_무력화한다():
     assert not 가림 and "M\\*\\*\\*\\*n" in 줄, 줄
 
 
-def test_가린_줄을_센다():
+def test_가린_줄은_늘_0이다():
+    # 10/03 부터 가리지 않는다. 로그 꼴을 바꾸지 않으려고 칸은 남겨 둔다
     _, 셈 = brief.문안([_줄(1, 조직="John Smith"), _줄(2, 조직="Acme Holdings")], 지금)
-    assert 셈["가린 줄"] == 1, 셈
+    assert 셈["가린 줄"] == 0, 셈
 
 
 # ── 4. 2000자 ────────────────────────────────────────────────
