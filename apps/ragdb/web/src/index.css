@@ -94,10 +94,11 @@
   --font-sans: "Noto Sans KR Variable", "Noto Sans KR", -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
 }
 
-/* C안 블랙 (2026-10-03 팀원 제안, 사진 기준): 거의 검은 바탕, 옆 창(지난 질문·출처 패널)은 어두운 회색, 강조는 파랑, 글꼴은 A안과 같은 Noto Sans KR */
+/* 블랙 (2026-10-03 팀 결정, 기본안 = 피그마 D안): 거의 검은 바탕, 옆 창(지난 질문·출처 패널)은 바탕보다 살짝 밝은 검정, 강조는 파랑, 글꼴은 A안과 같은 Noto Sans KR.
+   출처 번호는 기본이 어두운 테두리이고 누른 것만 파랑이다 (components/Answer.tsx 의 Cite). */
 :root[data-theme="black"] {
   --color-page: #0b0d12;
-  --color-panel: #262a33;
+  --color-panel: #101218;
   --color-input: #15181f;
   --color-card: #181c24;
   --color-chip: #20242e;

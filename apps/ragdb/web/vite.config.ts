@@ -4,8 +4,8 @@ import tailwindcss from '@tailwindcss/vite'
 
 // 화면 (설계서 「개발 스택」: React + Vite + TS + Tailwind). 개발 중에는 /api 를 질의 서버(127.0.0.1:8787)로,
 // /data 를 배치가 구운 스냅샷 폴더로 넘긴다. 배포는 Cloudflare 정적 호스팅이고 API 는 rag-api.도메인이다.
-// 색 안. 기본은 B안(lightblack). VITE_THEME=blue 는 남색 A안, black 은 C안(검정 바탕 + 회색 옆 창) (src/index.css 의 [data-theme])
-const theme = process.env.VITE_THEME || 'lightblack'
+// 색 안. 기본은 블랙(D안, 2026-10-03 팀 결정). VITE_THEME=lightblack 은 B안, blue 는 남색 A안 (src/index.css 의 [data-theme])
+const theme = process.env.VITE_THEME || 'black'
 
 export default defineConfig({
   plugins: [
