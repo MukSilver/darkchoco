@@ -73,9 +73,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          s=$(gh run list -R "${{ github.repository }}" --workflow brief.yml --status success --limit 1 --json createdAt --jq '.[0].createdAt // ""' 2>/dev/null || true)
+          s=$(gh run list -R "${{ github.repository }}" --workflow brief.yml --status success --limit 30 --json createdAt,event --jq '[.[] | select(.event == "workflow_run" or .event == "schedule")][0].createdAt // ""' 2>/dev/null || true)
           echo "since=$s" >> "$GITHUB_OUTPUT"
           echo "지난 브리핑 시각: ${s:-없음(지난 24시간)}"
+          # 손으로 돌린 판(보내지 않는 시험)은 세지 않는다. 그 판을 세면 다음 자동 브리핑이 그 사이 줄을 건너뛴다
 
       - uses: actions/checkout@v4
 
