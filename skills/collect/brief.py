@@ -196,7 +196,31 @@ def 갈래(p: dict) -> str:
     return "미확인"
 
 
-def 문안(줄들: list[dict], 지금: datetime, 링크: str = "", 창: str = "지난 24시간") -> tuple[str, dict]:
+후보상한 = 10
+
+
+def 후보번호(값: str) -> list[int]:
+    """`--후보` 를 읽는다. 「LEAK-451,LEAK-460」 꼴의 번호만 받고 나머지 글자는 버린다. 겹친 번호는 하나로."""
+    out = []
+    for m in re.finditer(r"LEAK-(\d{1,6})", 값 or ""):
+        n = int(m.group(1))
+        if n not in out:
+            out.append(n)
+    return out[:후보상한]
+
+
+def 후보줄들(n: Notion, 번호들: list[int]) -> list[dict]:
+    """AI 판정이 한국 후보(사건 O 후보)로 본 줄. 사람이 확정하기 전이다."""
+    out = []
+    for 번호 in 번호들:
+        res = n.request("POST", f"/data_sources/{수집DS}/query",
+                        {"page_size": 1, "filter": {"property": "사건 ID", "unique_id": {"equals": 번호}}}) or {}
+        out.extend((res.get("results") or [])[:1])
+    return out
+
+
+def 문안(줄들: list[dict], 지금: datetime, 링크: str = "", 창: str = "지난 24시간",
+        후보: list[dict] | None = None) -> tuple[str, dict]:
     """(디스코드에 올릴 글, 건수). 한 줄에 「LEAK-번호 · 조직명 · 행위자 · 한국 여부」. 건수에는 이름이 없다.
 
     확실한 한국 건만 목록에 싣고 나머지는 건수만 적는다. 링크가 있으면 끝에 「자세한 내용: <링크>」 를
@@ -211,6 +235,16 @@ def 문안(줄들: list[dict], 지금: datetime, 링크: str = "", 창: str = "�
     셈 = {"새 줄": len(줄들), "사건 X": X, "신호 없음": 없음, "미확인": 미확인, "목록": len(목록),
          "실린 줄": 0, "가린 줄": 0}
     끝 = ("\n목록에서 뺀 것: " + " · ".join(뺀것) if 뺀것 else "") + (f"\n자세한 내용: <{링크}>" if 링크 else "")
+    목록번호 = {글자(p, "사건 ID") for p in 목록}
+    후보 = [p for p in (후보 or []) if 글자(p, "사건 ID") not in 목록번호 and 갈래(p) != "무관"]
+    셈["AI 후보"] = len(후보)
+    if 후보:
+        후보글 = []
+        for p in 후보:
+            글, 가림 = 한줄(p)
+            후보글.append(글)
+            셈["가린 줄"] += int(가림)
+        끝 = "\n**AI 판정 한국 후보(사람 확정 전)**\n" + "\n".join(후보글) + 끝
     if not 목록:
         return 머리 + "\n한국 관련으로 보이는 새 사건이 없습니다." + 끝, 셈
     줄글 = []
@@ -303,14 +337,18 @@ def main(argv=None) -> int:
     ap.add_argument("--확인", action="store_true", help="웹후크가 브리핑 채널을 가리키는지 본다. 틀리면 실패")
     ap.add_argument("--보낸다", action="store_true", help="확인이 맞을 때만 한 번 보낸다")
     ap.add_argument("--부터", default="", help="이 시각(ISO) 뒤에 만든 줄. 지난 브리핑 시각. 없거나 48시간보다 오래면 지난 24시간")
+    ap.add_argument("--후보", default="", help="AI 판정 한국 후보 LEAK 번호, 쉼표로. 「AI 판정 한국 후보(확정 전)」 로 싣는다")
     a = ap.parse_args(argv)
 
     지금 = datetime.now(KST)
     시작 = 시작시각(a.부터, 지금)
     창 = f"{시작.astimezone(KST):%m/%d %H:%M} 뒤" if 시작 else "지난 24시간"
-    줄들 = 새줄들(Notion(verbose=False), 지금, 시작=시작)
+    노션 = Notion(verbose=False)
+    줄들 = 새줄들(노션, 지금, 시작=시작)
+    번호들 = 후보번호(a.후보)
+    후보 = 후보줄들(노션, 번호들) if 번호들 else []
     링크 = 대시보드링크()
-    글, 셈 = 문안(줄들, 지금, 링크, 창)
+    글, 셈 = 문안(줄들, 지금, 링크, 창, 후보)
     if a.요약만:
         print("%s · 링크 %s · 문안 %d자" % (" · ".join(f"{k} {v}" for k, v in 셈.items()),
                                         "있음" if 링크 else "없음", len(글)))
