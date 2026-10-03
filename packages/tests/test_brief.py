@@ -224,7 +224,7 @@ def _찍힌것(f, *a, **k):
 
 def test_요약만은_건수만_찍는다():
     옛새줄, 옛노션 = brief.새줄들, brief.Notion
-    brief.새줄들 = lambda n, 지금, 시간=24: [_줄(41, 조직="Acme Holdings", 한국="직접"), _줄(42, 조직="John Smith")]
+    brief.새줄들 = lambda n, 지금, 시간=24, 시작=None: [_줄(41, 조직="Acme Holdings", 한국="직접"), _줄(42, 조직="John Smith")]
     brief.Notion = lambda verbose=False: None
     try:
         r, 찍힘 = _찍힌것(brief.main, ["--요약만"])
@@ -237,7 +237,7 @@ def test_요약만은_건수만_찍는다():
 
 def test_요약만은_대시보드_주소를_안_찍고_있음만_찍는다():
     옛새줄, 옛노션, 옛링크 = brief.새줄들, brief.Notion, brief.대시보드링크
-    brief.새줄들 = lambda n, 지금, 시간=24: [_줄(41)]
+    brief.새줄들 = lambda n, 지금, 시간=24, 시작=None: [_줄(41)]
     brief.Notion = lambda verbose=False: None
     brief.대시보드링크 = lambda: 가짜대시
     try:
@@ -302,7 +302,7 @@ def test_틀린_채널이면_보내지_않는다():
     옛 = (brief.채널확인, brief.보내기, brief.새줄들, brief.웹후크, brief.Notion)
     brief.채널확인 = lambda 주소, opener=None: False
     brief.보내기 = lambda *a, **k: 부른것.append(1) or True
-    brief.새줄들 = lambda n, 지금, 시간=24: [_줄(1)]
+    brief.새줄들 = lambda n, 지금, 시간=24, 시작=None: [_줄(1)]
     brief.웹후크 = lambda: 가짜주소
     brief.Notion = lambda verbose=False: None
     try:
@@ -312,14 +312,14 @@ def test_틀린_채널이면_보내지_않는다():
     assert r == 1 and 부른것 == [], (r, 부른것)
 
 
-def test_워크플로는_매일_9시에_보내고_손으로는_기본이_안_보낸다():
+def test_워크플로는_수집이_끝날_때마다_보내고_손으로는_기본이_안_보낸다():
     글 = (ROOT / ".github" / "workflows" / "brief.yml").read_text(encoding="utf-8")
-    # 10/02 최현서 「매일 아침 9시」. 예약이 2~6시간 늦게 깨서 05:00 KST 에 걸고 09:00 KST 까지 기다린다
-    assert re.search(r'(?m)^\s+- cron: "0 20 \* \* \*"$', 글), "예약은 20:00 UTC = 05:00 KST"
-    assert "if: github.event_name == 'schedule'" in 글 and "tomorrow 00:00" in 글, "예약 판은 09:00 KST 까지 기다린다"
-    분 = int(re.search(r"timeout-minutes:\s*(\d+)", 글).group(1))
-    assert 분 > 4 * 60, "05:00 에 바로 깨면 4시간을 기다린다. 그 전에 잘리면 안 된다"
-    assert "SEND: ${{ (github.event_name == 'schedule' || inputs.send) && 'yes' || 'no' }}" in 글, "예약 판은 보낸다"
+    # 10/03 최현서 「디코는 자동 수집 주기에 맞춰 매번」. 수집이 성공으로 끝나면 돈다
+    assert re.search(r'workflow_run:\s*\n\s+workflows: \["수집"\]\s*\n\s+types: \[completed\]', 글), "수집 워크플로가 끝나면 돈다"
+    assert "github.event.workflow_run.conclusion == 'success'" in 글, "수집이 실패한 판에는 안 보낸다"
+    assert "- cron:" not in 글, "옛 09:00 예약은 없앴다"
+    assert "SEND: ${{ (github.event_name == 'workflow_run' || inputs.send) && 'yes' || 'no' }}" in 글, "수집 뒤 판은 보낸다"
+    assert "--workflow brief.yml --status success" in 글, "범위는 지난 브리핑부터"
     assert re.search(r"send:\s*\n(?:.*\n)*?\s*default: false", 글), "손으로 돌릴 때 보내기는 기본으로 꺼져 있어야 한다"
     assert "DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}" in 글
     assert "DASH_URL: ${{ secrets.DASH_URL }}" in 글, "대시보드 주소는 비밀값으로만 넘긴다"
@@ -327,6 +327,22 @@ def test_워크플로는_매일_9시에_보내고_손으로는_기본이_안_보
     부르기 = re.findall(r"(?m)^\s+python skills/collect/brief\.py[^\n]*", 글)
     assert 부르기 and all("--요약만" in x for x in 부르기), 부르기
     assert "echo \"$DISCORD_WEBHOOK" not in 글 and "echo $DISCORD_WEBHOOK" not in 글
+
+
+def test_시작시각은_48시간_안의_지난_시각만_받는다():
+    지금 = datetime(2026, 10, 3, 20, 0, tzinfo=brief.KST)
+    assert brief.시작시각("2026-10-03T05:00:00Z", 지금) is not None
+    assert brief.시작시각("", 지금) is None
+    assert brief.시작시각("꼴이 틀림", 지금) is None
+    assert brief.시작시각("2026-09-30T00:00:00Z", 지금) is None, "48시간보다 오래면 지난 24시간으로"
+    assert brief.시작시각("2026-10-04T00:00:00Z", 지금) is None, "미래는 안 받는다"
+    assert brief.시작시각("2026-10-03T05:00:00", 지금) is None, "시간대가 없으면 안 받는다"
+
+
+def test_머리에_범위를_적는다():
+    지금 = datetime(2026, 10, 3, 20, 0, tzinfo=brief.KST)
+    글, _ = brief.문안([], 지금, "", "10/03 14:00 뒤")
+    assert "수집 브리핑" in 글 and "10/03 14:00 뒤 새로 들어온 0건" in 글, 글
 
 
 if __name__ == "__main__":
