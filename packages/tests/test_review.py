@@ -266,6 +266,13 @@ def test_확정대기는_전에_판정했고_아직_미검토인_줄만():
     assert "LEAK-1" in md and "LEAK-2" not in md and "LEAK-3" not in md, md
 
 
+
+def test_국가가_한국인_줄은_판정하지_않는다():
+    # 10/03 최현서 「국가 한국(korea, KR) 명시는 검증 생략」
+    assert review.한국명시("한국") and review.한국명시("KR") and review.한국명시(" Korea ") and review.한국명시("South Korea")
+    assert not review.한국명시("") and not review.한국명시("미국") and not review.한국명시("North Korea")
+
+
 if __name__ == "__main__":
     from dc_console import use_utf8
     use_utf8()

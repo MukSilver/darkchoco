@@ -1,6 +1,12 @@
-name: 디코 아침 브리핑
+name: 디코 수집 브리핑
 
-# 지난 하루 수집 DB 에 새로 들어온 사건을 디스코드 브리핑 채널에 한 번 올립니다 (2026-10-01).
+# 지난 브리핑 뒤 수집 DB 에 새로 들어온 사건을 디스코드 브리핑 채널에 올립니다 (2026-10-01).
+#
+# ## 수집이 끝날 때마다 보냅니다 — 최현서 10/03
+#
+# 「수집」 워크플로가 성공으로 끝나면 바로 돕니다(하루 네 번). 범위는 **지난 브리핑이 시작한 때부터** 입니다.
+# 그 시각은 이 워크플로의 마지막 성공 실행에서 읽습니다. 못 읽으면 지난 24시간입니다. 새 줄이 0건이어도 보냅니다.
+# 아래 「매일 09:00」 은 10/02 ~ 10/03 의 옛 방식입니다.
 # 코드와 까닭은 `skills/collect/brief.py` 에 있습니다.
 #
 # ## 매일 09:00 KST 에 보냅니다 — 최현서 10/02
@@ -34,8 +40,9 @@ name: 디코 아침 브리핑
 #   DASH_URL          대시보드 주소. 비밀번호로 잠근 내부 화면이라 레포에 적지 않습니다
 
 on:
-  schedule:
-    - cron: "0 20 * * *"
+  workflow_run:
+    workflows: ["수집"]
+    types: [completed]
   workflow_dispatch:
     # 입력 이름은 영문 · 숫자 · - · _ 만 됩니다 (places.yml 머리말)
     inputs:
@@ -50,25 +57,25 @@ concurrency:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   brief:
     name: 브리핑
     runs-on: ubuntu-latest
     # 05:00 KST 에 바로 깨면 4시간을 기다립니다. 그만큼 여유를 둡니다
-    timeout-minutes: 270
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    timeout-minutes: 15
     steps:
       # 예약 판만 기다립니다. 저녁(UTC)에 깼으면 다음 날 00:00 UTC = 09:00 KST 까지 잡니다
-      - name: 9시까지 기다림
-        if: github.event_name == 'schedule'
+      - name: 지난 브리핑 시각
+        id: since
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          if [ "$(date -u +%-H)" -ge 12 ]; then
-            left=$(( $(date -u -d 'tomorrow 00:00' +%s) - $(date -u +%s) ))
-            echo "09:00 KST 까지 ${left}초 기다립니다"
-            sleep "$left"
-          else
-            echo "09:00 KST 가 지나서 깼습니다. 바로 보냅니다"
-          fi
+          s=$(gh run list -R "${{ github.repository }}" --workflow brief.yml --status success --limit 1 --json createdAt --jq '.[0].createdAt // ""' 2>/dev/null || true)
+          echo "since=$s" >> "$GITHUB_OUTPUT"
+          echo "지난 브리핑 시각: ${s:-없음(지난 24시간)}"
 
       - uses: actions/checkout@v4
 
@@ -98,7 +105,8 @@ jobs:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           DASH_URL: ${{ secrets.DASH_URL }}
           # 예약 판은 보냅니다. 손으로 돌릴 때는 send 를 켜야 보냅니다
-          SEND: ${{ (github.event_name == 'schedule' || inputs.send) && 'yes' || 'no' }}
+          SEND: ${{ (github.event_name == 'workflow_run' || inputs.send) && 'yes' || 'no' }}
+          SINCE: ${{ steps.since.outputs.since }}
         run: |
           set -e
           if [ -z "$DISCORD_WEBHOOK" ]; then
@@ -107,9 +115,9 @@ jobs:
           fi
           # **--요약만 을 빼지 마십시오.** 머리말에 이유가 있습니다
           if [ "$SEND" = "yes" ]; then
-            python skills/collect/brief.py --요약만 --보낸다
+            python skills/collect/brief.py --요약만 --보낸다 ${SINCE:+--부터 "$SINCE"}
           else
-            python skills/collect/brief.py --요약만 --확인
+            python skills/collect/brief.py --요약만 --확인 ${SINCE:+--부터 "$SINCE"}
           fi
 
       - name: 뒷정리

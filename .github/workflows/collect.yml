@@ -205,11 +205,32 @@ jobs:
           fi
           DO_PUSH="${{ github.event_name == 'schedule' && 'yes' || inputs.push_to_notion }}"
           if [ "$DO_PUSH" = "yes" ] || [ "$DO_PUSH" = "true" ]; then
-            python hub/events/push.py --db "$RUNNER_TEMP/darkchoco.db" --kr --apply
+            python hub/events/push.py --db "$RUNNER_TEMP/darkchoco.db" --kr --apply | tee "$RUNNER_TEMP/push.log"
           else
             echo "미리보기만 합니다"
             python hub/events/push.py --db "$RUNNER_TEMP/darkchoco.db" --kr
           fi
+
+      - name: 클라우드 판정 부르기
+        # 2026-10-03 최현서 「자동 수집 뒤 검증도 매번」. 노션에 새 줄을 올렸을 때만 Claude 클라우드 예약(미검토 판정)을
+        # 부릅니다. 판정은 비공개 저장소 darkchoco-review 의 ROUTINE.md 대로 돕니다(사건 X 만 노션에 씀).
+        # **로그에는 새 줄 수와 응답 코드만 찍습니다.** 부르는 주소와 열쇠는 비밀값이고 어디에도 찍지 않습니다
+        continue-on-error: true
+        env:
+          FIRE_URL: ${{ secrets.CLAUDE_REVIEW_FIRE_URL }}
+          FIRE_TOKEN: ${{ secrets.CLAUDE_REVIEW_FIRE_TOKEN }}
+        run: |
+          n=$(grep -oE '[0-9]+줄을 올렸습니다' "$RUNNER_TEMP/push.log" 2>/dev/null | grep -oE '^[0-9]+' | tail -1 || true)
+          n=${n:-0}
+          if [ "$n" = "0" ]; then echo "새로 올린 줄이 없어 판정을 부르지 않습니다"; exit 0; fi
+          if [ -z "$FIRE_URL" ] || [ -z "$FIRE_TOKEN" ]; then echo "판정 비밀값이 없어 건너뜁니다 (새 줄 $n)"; exit 0; fi
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 -X POST "$FIRE_URL" \
+            -H "Authorization: Bearer $FIRE_TOKEN" \
+            -H "anthropic-beta: experimental-cc-routine-2026-04-01" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "Content-Type: application/json" \
+            -d "{\"text\": \"수집 뒤 판정 · 새 줄 $n\"}" || echo 000)
+          echo "새 줄 $n · 판정 부르기 응답 $code"
 
       - name: 게시 상태 추적
         # **`track.yml` 을 uses 로 부르려다 접었습니다.** 한 워크플로에 보통 job 과
@@ -238,4 +259,4 @@ jobs:
       - name: 표를 안 남긴다
         # 게시글 본문이 든 파일입니다. 아티팩트로도 안 남깁니다.
         if: always()
-        run: rm -f "$RUNNER_TEMP/darkchoco.db" "$RUNNER_TEMP/cfg/notion_token" "$RUNNER_TEMP/cfg/jina_key" "$RUNNER_TEMP/cfg/x_accounts"
+        run: rm -f "$RUNNER_TEMP/push.log" "$RUNNER_TEMP/darkchoco.db" "$RUNNER_TEMP/cfg/notion_token" "$RUNNER_TEMP/cfg/jina_key" "$RUNNER_TEMP/cfg/x_accounts"

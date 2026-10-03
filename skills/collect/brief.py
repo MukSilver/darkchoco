@@ -122,9 +122,9 @@ def 글자(p: dict, 칸: str) -> str:
     return ""
 
 
-def 새줄들(n: Notion, 지금: datetime, 시간: int = 24) -> list[dict]:
-    """지난 `시간` 안에 만든 수집 DB 줄. 만든 때 오래된 것부터."""
-    부터 = (지금 - timedelta(hours=시간)).astimezone(timezone.utc).isoformat(timespec="seconds")
+def 새줄들(n: Notion, 지금: datetime, 시간: int = 24, 시작: datetime | None = None) -> list[dict]:
+    """`시작` 뒤(없으면 지난 `시간` 안)에 만든 수집 DB 줄. 만든 때 오래된 것부터."""
+    부터 = (시작 or (지금 - timedelta(hours=시간))).astimezone(timezone.utc).isoformat(timespec="seconds")
     out, cursor = [], None
     while True:
         body = {"page_size": 100,
@@ -196,7 +196,7 @@ def 갈래(p: dict) -> str:
     return "미확인"
 
 
-def 문안(줄들: list[dict], 지금: datetime, 링크: str = "") -> tuple[str, dict]:
+def 문안(줄들: list[dict], 지금: datetime, 링크: str = "", 창: str = "지난 24시간") -> tuple[str, dict]:
     """(디스코드에 올릴 글, 건수). 한 줄에 「LEAK-번호 · 조직명 · 행위자 · 한국 여부」. 건수에는 이름이 없다.
 
     확실한 한국 건만 목록에 싣고 나머지는 건수만 적는다. 링크가 있으면 끝에 「자세한 내용: <링크>」 를
@@ -204,8 +204,8 @@ def 문안(줄들: list[dict], 지금: datetime, 링크: str = "") -> tuple[str,
     갈래들 = [갈래(p) for p in 줄들]
     목록 = [p for p, k in zip(줄들, 갈래들) if k == "목록"]
     없음, 미확인, X = (갈래들.count(k) for k in ("신호 없음", "미확인", "무관"))
-    머리 = (f"**다크초코 아침 브리핑** · {지금.astimezone(KST):%m/%d %H:%M} KST 기준 · "
-          f"지난 24시간 새로 들어온 {len(줄들)}건 중 한국 관련 {len(목록)}건")
+    머리 = (f"**다크초코 수집 브리핑** · {지금.astimezone(KST):%m/%d %H:%M} KST 기준 · "
+          f"{창} 새로 들어온 {len(줄들)}건 중 한국 관련 {len(목록)}건")
     뺀것 = [f"{이름} {n}건" for 이름, n in (("국가 미상 · 한국 신호 없음", 없음), ("한국 여부 미확인", 미확인),
                                         ("한국과 무관(사건 X)", X)) if n]
     셈 = {"새 줄": len(줄들), "사건 X": X, "신호 없음": 없음, "미확인": 미확인, "목록": len(목록),
@@ -286,17 +286,31 @@ def 보내기(주소: str, 글: str, opener=None) -> bool:
     return ok
 
 
+def 시작시각(값: str, 지금: datetime) -> datetime | None:
+    """`--부터` 를 읽는다. 비었거나 꼴이 틀리거나 미래거나 48시간보다 오래면 None(지난 24시간)."""
+    try:
+        t = datetime.fromisoformat((값 or "").strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if t.tzinfo is None or t > 지금 or 지금 - t > timedelta(hours=48):
+        return None
+    return t
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="디코 아침 브리핑")
     ap.add_argument("--요약만", action="store_true", help="건수만 낸다. 공개 로그에서 쓴다")
     ap.add_argument("--확인", action="store_true", help="웹후크가 브리핑 채널을 가리키는지 본다. 틀리면 실패")
     ap.add_argument("--보낸다", action="store_true", help="확인이 맞을 때만 한 번 보낸다")
+    ap.add_argument("--부터", default="", help="이 시각(ISO) 뒤에 만든 줄. 지난 브리핑 시각. 없거나 48시간보다 오래면 지난 24시간")
     a = ap.parse_args(argv)
 
     지금 = datetime.now(KST)
-    줄들 = 새줄들(Notion(verbose=False), 지금)
+    시작 = 시작시각(a.부터, 지금)
+    창 = f"{시작.astimezone(KST):%m/%d %H:%M} 뒤" if 시작 else "지난 24시간"
+    줄들 = 새줄들(Notion(verbose=False), 지금, 시작=시작)
     링크 = 대시보드링크()
-    글, 셈 = 문안(줄들, 지금, 링크)
+    글, 셈 = 문안(줄들, 지금, 링크, 창)
     if a.요약만:
         print("%s · 링크 %s · 문안 %d자" % (" · ".join(f"{k} {v}" for k, v in 셈.items()),
                                         "있음" if 링크 else "없음", len(글)))
